@@ -182,7 +182,14 @@ async function suite(runtime) {
   await req({ kind: 'session.send', params: { sessionId: sid, text: 'RUN-QUICK 跑一个工作流' } });
   const mainReq = await until(() => hits.find((h) => h.role === 'main'), 60_000);
   check('the main loop is offered the Workflow tool', mainReq?.tools?.includes('Workflow'), (mainReq?.tools ?? []).join(',').slice(0, 300));
+  // the turn that launched it ends while it runs (the composer is free again); the workflow's end starts a turn of its own
+  const launched = await resultOf(sid, from);
+  const whileRunning = wfOf(sid, 'e2e-flow')?.status === 'running';
+  check('the launching turn ends while the workflow still runs', !!launched && whileRunning, `${launched?.subtype} ${String(launched?.result ?? '').slice(0, 60)} · workflow ${wfOf(sid, 'e2e-flow')?.status}`);
   const done = await until(() => { const t = wfOf(sid, 'e2e-flow'); return t && t.status !== 'running' && t; }, 120_000);
+  const afterFrom = events.indexOf(events.find((e) => e.kind === 'session.event' && e.sessionId === sid && e.message === launched)) + 1;
+  const notified = await until(() => events.slice(afterFrom).find((e) => e.kind === 'session.event' && e.sessionId === sid && e.message.type === 'result')?.message, 60_000);
+  check('… and when it ends, a turn of its own answers the notification', /the workflow finished/.test(String(notified?.result ?? '')), String(notified?.result ?? notified?.subtype ?? '(no second result)').slice(0, 120));
   const wf = wfOf(sid, 'e2e-flow');
   check('background.changed carries the workflow by its name', !!wf, JSON.stringify(bgOf(sid)?.tasks.map((t) => ({ k: t.kind, n: t.name, d: t.description, s: t.status })) ?? null));
   check('… with its two phases', wf?.phases?.map((p) => p.title).join(',') === 'One,Two', JSON.stringify(wf?.phases));
@@ -201,7 +208,7 @@ async function suite(runtime) {
   check('background.history lists the finished run', runs?.some((r) => r.name === 'e2e-flow'), JSON.stringify(runs));
   const run = runs?.[0] ? await req({ kind: 'background.run', sessionId: sid, runId: runs[0].runId }) : null;
   check('… and background.run reads it back with its agents', run?.agents?.length === 3, JSON.stringify(run?.agents?.map((a) => [a.label, a.state])));
-  await resultOf(sid, from);
+  await until(() => events.some((e) => e.kind === 'session.state' && e.sessionId === sid && e.state === 'idle') && !events.slice(-3).some((e) => e.kind === 'session.state' && e.sessionId === sid && e.state === 'running'), 30_000);
 
   // ---- a slow workflow: the turn's Stop spares it, stopTask stops it ----
   from = events.length;

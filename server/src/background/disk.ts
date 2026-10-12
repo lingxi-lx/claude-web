@@ -8,7 +8,8 @@ import { findClaudeTranscript } from '../runtime/transcript-file.js';
 import { createBgState, mergeWorkflowProgress } from './registry.js';
 import type { BgRunSummary, BgStatus, BgTask } from './types.js';
 
-const RUN_ID = /^wf_[\w-]{1,80}$/;
+/** The official binary names a run `wf_xxxxxxxx-xxx`; our engine uses its task id, `w` + 8 characters. */
+const RUN_ID = /^w[\w-]{1,80}$/;
 const AGENT_ID = /^[\w-]{6,80}$/;
 const MAX_RUNS = 50;
 

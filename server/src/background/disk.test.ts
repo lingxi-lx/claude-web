@@ -33,6 +33,8 @@ beforeAll(() => {
   writeFileSync(path.join(dir, 'workflows', 'wf_974df824-3c8.json'), JSON.stringify(run()));
   writeFileSync(path.join(dir, 'workflows', 'wf_newer-1.json'), JSON.stringify(run({ startTime: 1788456000000, workflowName: 'newer', status: 'failed', error: 'boom' })));
   writeFileSync(path.join(dir, 'workflows', 'wf_broken-1.json'), '{ half');
+  // our engine names a run by its task id
+  writeFileSync(path.join(dir, 'workflows', 'w8voqywjg.json'), JSON.stringify(run({ runId: 'w8voqywjg', taskId: 'w8voqywjg', startTime: 1788400000000, workflowName: 'engine-run' })));
   writeFileSync(path.join(dir, 'workflows', 'notes.txt'), 'not a run');
   mkdirSync(path.join(dir, 'subagents', 'workflows', 'wf_974df824-3c8'), { recursive: true });
   const line = (type: string, text: string) => JSON.stringify({ type, uuid: `${type}-1`, sessionId: SID, timestamp: '2026-09-03T17:23:05.000Z', message: { role: type, content: [{ type: 'text', text }] } });
@@ -53,7 +55,7 @@ describe('background on disk', () => {
 
   it('lists the finished runs, newest first, skipping what does not parse', async () => {
     const runs = await listRuns(dir);
-    expect(runs.map((r) => r.runId)).toEqual(['wf_newer-1', 'wf_974df824-3c8']);
+    expect(runs.map((r) => r.runId)).toEqual(['wf_newer-1', 'wf_974df824-3c8', 'w8voqywjg']);
     expect(runs[1]).toEqual({ runId: 'wf_974df824-3c8', name: 'ui-benchmark-research', status: 'completed', startedAt: 1788455957884, durationMs: 226740, agentCount: 2, tokens: 454592, taskId: 'wilzb31ol' });
     expect(await listRuns(path.join(root, 'nowhere'))).toEqual([]);
   });
