@@ -54,3 +54,25 @@ brainstorm 里定下的（visual companion 的稿子在 `.superpowers/brainstorm
 - 其它 Agent（Codex 的子线程等）进办公室。
 - 远端对话的后台（v1）。
 - 终端里跑的 Claude Code 的工作流（它不经过我们，磁盘上跑的时候又没有阶段和名字）。
+
+## 6. 实施记录（2026-10-12～13，分支 `background-office`）
+
+做了什么：
+
+- 服务端 `server/src/background/`：`types.ts` / `registry.ts` / `disk.ts` / `service.ts`（请求的分发也在 `service.ts`，没有单独的 `handlers.ts`）。runner 加 `perTaskStopAffordance: true` 和 `hasBackgroundWork()`，pool 回收时跳过有后台任务的进程。联邦路由表加了 `background.history / run / transcript`。
+- 前端 `web/src/features/background/` 全套，接进图标栏（对话下面）、分区侧栏、手机抽屉、输入框、对话里的 Workflow 卡片、右侧面板「任务」、`store.interrupt` 的提示。
+- 和设计不一样的地方：
+  - 回合折起来时 Workflow 卡片在折叠里看不见，所以还在跑的工作流在回答下面再画一份（只在它还在跑时）。
+  - 页面标题是对话名（用户的字），用正文字体；「后台」两个字还是进了标题字的字表（`HEADING_STRINGS`），没在别处用。
+  - 动态的文字限一行 140 字、名字 40 字：真机上一个后台命令的「名字」就是整条命令行。
+  - 「项目」漏斗的菜单以前会伸到图标栏上（右对齐、比左边的空间宽），图标栏多了一个按钮后正好盖住「自动化」：侧栏菜单现在左边不越过侧栏。
+- 引擎（ccb fork）的 `workflow_progress`：另做，见下。
+
+验证：
+
+- 单测：服务端 `background/*.test.ts` 18 条、`runtime/pool.test.ts` 加一条；web `background/model.test.ts`、`office-layout.test.ts`、`contrast.test.ts`（`--agent-*` 在六个主题里对底色 ≥ 3:1）、`sidebar/place.test.ts` 加一条。web 全量 1636 条通过；服务端全量里 `session-runner.test.ts` 有 5 条在改动之前就失败（这台机器的环境，和这次无关）。
+- e2e `server/ws-phase25.mjs`，官方二进制 + 假上游：17/17（阶段、子代理、走完、动态、子代理对话、history / run、停止这一轮后工作流还在、`stopTask` 停掉、关进程后结束）。
+- 真机：用户的 anthropic.com 供应商（官方 API）+ 官方二进制 + claude-haiku-4-5，让模型开一个两阶段三个子代理的工作流：28 次推送，三个子代理从排队 / 在跑到完成都收到了，阶段名、模型、token、子代理对话、跑完的回看都对（约 4.8 万 token）。
+- ui-smoke 全量 361 项通过（含新加的「后台」一段）。截图看过：深色 / 浅色整页、对话里的胶囊和 Workflow 卡片、右侧面板「任务」、手机宽度。
+
+没验的：macOS / Linux；手机上真机；远端（`peer_`）对话；几十个子代理的大工作流在真机上的样子（排位有单测）。
