@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyBg, createBgState, endRunning, snapshotBg, MAX_EVENTS, SNAPSHOT_EVENTS } from './registry.js';
+import { applyBg, createBgState, endRunning, snapshotBg, MAX_EVENTS, MAX_EVENT_TEXT, SNAPSHOT_EVENTS } from './registry.js';
 
 const T0 = 1_790_000_000_000;
 const sys = (subtype: string, o: Record<string, unknown>) => ({ type: 'system', subtype, uuid: 'u', session_id: 's', ...o });
@@ -50,6 +50,17 @@ describe('background registry', () => {
     expect(t).toMatchObject({ status: 'completed', endedAt: T0 + 4000, summary: 'done' });
     // what was still queued / running when the workflow ended is settled with it
     expect(t.agents.map((a) => a.state)).toEqual(['done', 'done', 'done', 'failed', 'done']);
+  });
+
+  it('a feed line is one short line', () => {
+    const s = createBgState('s1');
+    applyBg(s, sys('task_started', { task_id: 'wf1', description: 'x', task_type: 'local_workflow' }), T0);
+    applyBg(s, progress([agent(1, { state: 'progress', agentId: 'q', lastToolSummary: `line one
+${'x'.repeat(300)}` })]), T0 + 1);
+    const e = snapshotBg(s).events.find((x) => x.tone === 'tool')!;
+    expect(e.text.length).toBe(MAX_EVENT_TEXT);
+    expect(e.text.startsWith('line one x')).toBe(true);
+    expect(e.text.endsWith('…')).toBe(true);
   });
 
   it('a reused result says so', () => {

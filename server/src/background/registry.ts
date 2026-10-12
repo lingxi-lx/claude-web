@@ -39,8 +39,12 @@ function event(s: BgState, e: BgEvent) {
   if (s.allEvents.length > MAX_EVENTS) s.allEvents.splice(0, s.allEvents.length - MAX_EVENTS);
 }
 
+/** A feed line is one line: a summary can be a paragraph. */
+export const MAX_EVENT_TEXT = 140;
+const clip = (t: string) => (t.length > MAX_EVENT_TEXT ? `${t.slice(0, MAX_EVENT_TEXT - 1)}…` : t);
+
 function agentEvent(s: BgState, t: BgTask, a: BgAgent, now: number, tone: BgEvent['tone'], text: string) {
-  event(s, { at: now, taskId: t.id, agent: a.key, who: a.label, color: a.color, text, tone });
+  event(s, { at: now, taskId: t.id, agent: a.key, who: a.label, color: a.color, text: clip(text.replace(/\s+/g, ' ').trim()), tone });
 }
 
 function beat(a: BgAgent, calls: number | undefined, now: number) {
