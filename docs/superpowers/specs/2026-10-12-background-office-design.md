@@ -66,12 +66,16 @@ brainstorm 里定下的（visual companion 的稿子在 `.superpowers/brainstorm
   - 页面标题是对话名（用户的字），用正文字体；「后台」两个字还是进了标题字的字表（`HEADING_STRINGS`），没在别处用。
   - 动态的文字限一行 140 字、名字 40 字：真机上一个后台命令的「名字」就是整条命令行。
   - 「项目」漏斗的菜单以前会伸到图标栏上（右对齐、比左边的空间宽），图标栏多了一个按钮后正好盖住「自动化」：侧栏菜单现在左边不越过侧栏。
-- 引擎（ccb fork）的 `workflow_progress`：另做，见下。
+- 引擎（ccb fork，`claude-web` 分支的 253d39f0 + 87f9cb9d，版本 2.8.4-cw.3，fork 的 `CLAUDE-WEB.md`「后台」一节）：
+  - 工作流按官方的形状发 `task_started` / `task_progress`（带 `workflow_progress`）/ `task_notification`。
+  - **一轮答完就结束**：cw.2 只要有后台任务在跑就把这一轮的 `result` 扣到它们跑完，输入框整段工作流都是「运行中」，按停止等不到 result 就被强制重开进程、后台全没了。cw.3 在流式输入下一轮结束就发 result，后台任务的通知在空闲时自己开一轮。`-p` 一次性的行为没变。
+  - 跑完写官方格式的 `workflows/<runId>.json`。和官方不一样：runId 是任务 id（`w` + 8 位），所以 `disk.ts` 的 `RUN_ID` 放宽到两种都认；工作流子代理的 transcript 平铺在 `subagents/agent-<id>.jsonl`（`findAgentFile()` 本来就先找这里）。
+  - `perTaskStopAffordance` 收下但不用做什么：这个分支的 interrupt 本来就不停后台任务（卡住的是上面那个扣着的 result）。
 
 验证：
 
 - 单测：服务端 `background/*.test.ts` 18 条、`runtime/pool.test.ts` 加一条；web `background/model.test.ts`、`office-layout.test.ts`、`contrast.test.ts`（`--agent-*` 在六个主题里对底色 ≥ 3:1）、`sidebar/place.test.ts` 加一条。web 全量 1636 条通过；服务端全量里 `session-runner.test.ts` 有 5 条在改动之前就失败（这台机器的环境，和这次无关）。
-- e2e `server/ws-phase25.mjs`，官方二进制 + 假上游：17/17（阶段、子代理、走完、动态、子代理对话、history / run、停止这一轮后工作流还在、`stopTask` 停掉、关进程后结束）。
+- e2e `server/ws-phase25.mjs`，两个运行内核（我们的引擎 cw.3 本地包、官方二进制）+ 假上游：38/38（每个内核 19 项：发起工作流的那一轮在工作流跑着时就结束、结束后通知自己开一轮、阶段、子代理、走完、动态、子代理对话、history / run、停止这一轮后工作流还在、`stopTask` 停掉、关进程后结束）。
 - 真机：用户的 anthropic.com 供应商（官方 API）+ 官方二进制 + claude-haiku-4-5，让模型开一个两阶段三个子代理的工作流：28 次推送，三个子代理从排队 / 在跑到完成都收到了，阶段名、模型、token、子代理对话、跑完的回看都对（约 4.8 万 token）。
 - ui-smoke 全量 361 项通过（含新加的「后台」一段）。截图看过：深色 / 浅色整页、对话里的胶囊和 Workflow 卡片、右侧面板「任务」、手机宽度。
 
