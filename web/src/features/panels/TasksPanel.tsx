@@ -54,7 +54,7 @@ function Background({ sessionId }: { sessionId: string }) {
           </div>
           {t.kind === 'workflow' && t.agents.map((a) => (
             <button key={a.key} className="bg-tagent" style={{ '--c': agentColor(a.color) } as React.CSSProperties} onClick={() => pick(a.key, t.id)} title={a.lastSummary ?? a.label}>
-              <CharacterIcon color={a.color} type={a.agentType} state={a.state} size={16} />
+              <CharacterIcon color={a.color} type={a.agentType} state={a.state} size={16} still />
               <span className="l">{a.label}</span>
               <span className={clsx('st', a.state)}>{agentStateText(a)}</span>
             </button>

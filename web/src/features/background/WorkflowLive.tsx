@@ -32,7 +32,7 @@ export function WorkflowLive({ toolUseId }: { toolUseId: string }) {
             <div className="bg-wf-chips">
               {agents.map((a) => (
                 <span key={a.key} className={clsx('bg-wf-chip', a.state)} style={{ '--c': agentColor(a.color) } as React.CSSProperties} title={`${a.label} · ${agentStateText(a)}${a.lastSummary ? ` · ${a.lastSummary}` : ''}`}>
-                  <CharacterIcon color={a.color} type={a.agentType} state={a.state} size={16} />
+                  <CharacterIcon color={a.color} type={a.agentType} state={a.state} size={16} still />
                   <span className="l">{a.label}</span>
                 </span>
               ))}
