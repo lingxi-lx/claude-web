@@ -778,6 +778,19 @@ spec 和实施记录：`docs/superpowers/specs/2026-10-10-ui-structure/design.md
   - 「操控电脑现在用不了……`featureArgs()` 不再传它……`capabilities.ts` 的那一行带 `unavailable`」→ Windows 上能用了（见上）；`--computer-use-mcp` 仍然不传，`unavailable` 只在服务端不是 Windows 时出现。
   - 「设置 → 联网：搜索引擎和密钥」→ 「用什么搜索」下拉（自动 / DuckDuckGo / Bing / Google / Yahoo / 百度 / Brave Search），只有 Brave 要密钥。
 
+## 后台：在跑的子代理和工作流（2026-10-12）
+
+spec 和实施记录：`docs/superpowers/specs/2026-10-12-background-office-design.md`，计划 `docs/superpowers/plans/2026-10-12-background-office.md`。用户要「和 Claude Code desktop 一样能看到后端子代理在跑」，样子照一段「代理办公室」视频（brainstorm 时定了：办公室 + 指挥台，整页 + 右侧面板缩小版，跟着主题，停止只停这一轮，所有子代理和后台命令都算）。
+
+- **数据全来自 SDK 流**：`task_started`（`task_type`：`local_workflow` + `workflow_name` / `local_agent` + `subagent_type`、`is_backgrounded` / `local_bash`）→ `task_progress` → `task_updated` → `task_notification`。**工作流的进度不在 sdk.d.ts 里**：官方二进制在 `task_progress` 上带 `workflow_progress`，是完整列表（不是增量）：`{type:'workflow_phase', index, title}` 和 `{type:'workflow_agent', index, label, phaseIndex, phaseTitle, agentId?, model, state: 'start'|'progress'|'done'|'error', queuedAt, startedAt?, tokens?, toolCalls?, lastToolName?, lastToolSummary?, durationMs?, cached?, error?, promptPreview, …}`（读它的 bundle 和本机 60 个跑完的工作流核对的）；`start` 没有 `startedAt` 是排队。状态变化时立刻发，只有进度时约 1 秒一次。跑完写 `<对话目录>/workflows/<runId>.json`（含 `workflowProgress`、`phases`、`taskId`），每个子代理的 transcript 在 `<对话目录>/subagents/workflows/<runId>/agent-<agentId>.jsonl`；`<对话目录>` = transcript 去掉 `.jsonl`（`runtime/transcript-file.ts` 的 `findClaudeTranscript`）。
+- **服务端 `server/src/background/`**：`registry.ts`（纯：一条消息 → 登记表 + 动态；`ambient` / `skip_transcript` 的任务不算；子代理按出现顺序拿颜色 1…10；动态文字一行、≤ 140 字；快照不带 `promptPreview`）、`disk.ts`（跑完的工作流、子代理 transcript；`runId` / `agentId` 先过正则）、`service.ts`（`BackgroundService`：订阅 pool 的 `message` / `state`，`closed` / `error` / `starting`（重开进程）时把还在跑的标成「已停止 · 进程结束了」；每个对话第一次变化立刻推、之后 1 秒最多一次 `background.changed`（整份这个对话的快照）；结束的对话留 24 小时、最多 50 个）。请求 `background.list / history / run / transcript`，停止沿用 `session.stopTask`。联邦：list 只给本机，其余三个转发。
+- **停止只停这一轮**：runner 的 SDK 选项 `perTaskStopAffordance: true`。没声明时 CLI 按「用户没有别的办法停后台任务」处理，打断会连后台工作流一起杀（以前就是这样）。phase 25 在官方二进制上实测：`session.interrupt` 之后工作流的子代理请求还开着，`session.stopTask` 才停掉。强制停止（8 s 不回 → 重开进程）仍会带走后台任务。
+- **有后台任务的进程不回收**：runner 记着这个进程还在跑的任务（`background_tasks_changed` 是电平信号，`task_started` / `task_notification` 兜底，重开进程清空），`hasBackgroundWork()` 为真时 pool 的 `reap()` 跳过它——以前闲置 30 分钟会把正在跑的工作流一起关掉，它的结果（CLI 用一个 task notification 自己开一轮）永远等不到。
+- **前端 `web/src/features/background/`**：`state.ts`（小 zustand + `registerPage('background')`，连上 / 重连时 `background.list`；`window.__cwBackground.inject(session)` / `open(sid)` 是调试入口，ui-smoke 用它）、`model.ts`（纯：胶囊文字、计数、状态词）、`office-layout.ts`（纯：等距 2:1 投影，每个阶段一排工位、「子代理」一排、后台命令在后墙角的机器位，一排最多 6 个、一个阶段最多 24 个，多的立一块「还有 N 个」）、`Office` / `CommandGraph` / `AgentCards` / `EventFeed` / `Character`（只收 props，不碰 store）、`BackgroundPage`（整页，懒加载）/ `BackgroundSide`（分区侧栏：在跑 · 结束了 · 这个对话跑过的工作流）/ `AgentDrawer`（点角色：`background.transcript` → `applyTranscript` → `ItemList`，在跑时 3 秒重读）/ `BackgroundPill`（输入框上方）/ `WorkflowLive`（对话里 Workflow 卡片顶上，脚本折进「脚本」）。右侧面板「任务」的「子代理 / 后台调用树」只在没有后台数据时（其它 agent）才画。
+- **样式** `styles/background.css`（办公室、角色、关系图、卡片、动态）+ `styles/background-page.css`（页面布局、抽屉、胶囊、Workflow 卡片、任务面板），`main.tsx` 里排在 `rail.css` 后面。颜色 `--agent-1..10`（每个主题对 `--bg` / `--bg-1` ≥ 3:1，`contrast.test.ts` 查），办公室表面 `--office-*`（浅色和 paper 是白天，其余是夜里）。角色上的字是 `color-mix(var(--c) 70%, var(--ink-1))`（纯色只保证 3:1）。页面标题是对话名（用户的字），不用标题字体。
+- **踩过的坑**：官方二进制的工作流子代理请求**可能带着父对话的上下文**（判断「这是哪个子代理的请求」要看最后一条用户消息，不能看全部）；子代理请求不一定是流式的。本机开发 shell 继承了已安装桌面版的 `CLAUDE_WEB_DIST`（指向 `Program Files\Claude Web\resources\app.asar\web\dist`），自己起 server 截图时要 `env -u CLAUDE_WEB_DIST`，不然页面是「web/dist not built」。
+- **调试 / 验证**：`node server/ws-phase25.mjs`（e2e 默认列表里，自己起 server，`PHASE25_RUNTIMES=ccb,claude`）：真运行内核 + 假 Anthropic 上游（主对话回 Workflow 工具调用、子代理回固定文字、带 SLOW 的子代理请求一直挂着），两个运行内核各跑一遍：阶段和子代理、走完、动态、读子代理对话、history / run、停止这一轮后工作流还在、stopTask 停掉、关进程后标成停止。ui-smoke 的「background」一段用注入的快照。截图：`window.__cwBackground.inject(...)` + `open(sid)`。
+
 ## 结构
 
 - `server/src/protocol.ts` — 前后端共享协议类型（web 通过 `@shared` 别名引用）
@@ -790,3 +803,4 @@ spec 和实施记录：`docs/superpowers/specs/2026-10-10-ui-structure/design.md
 - `server/src/web/` — 联网：搜索、`web` MCP 服务器、给内置浏览器派活；浏览器本身在 `web/src/features/browser/`
 - `server/src/computer/` — 操控电脑（Windows）：`computer` MCP 服务器、授权闸、PowerShell helper、向用户要授权的接口；对话里的文字和授权卡在 `web/src/features/computer/` 和 `chat/PermissionCards.tsx`
 - `web/src/features/rail/`、`web/src/features/sections/` — 图标栏和分区页
+- `server/src/background/`、`web/src/features/background/` — 后台：在跑的子代理、工作流、后台命令（登记表、办公室、关系图）

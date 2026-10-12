@@ -34,7 +34,11 @@ function nextColor(s: BgState): number {
   return c;
 }
 
+/** Who said it, in the feed: a background command's description is its whole command line. */
+export const MAX_EVENT_WHO = 40;
+
 function event(s: BgState, e: BgEvent) {
+  if (e.who.length > MAX_EVENT_WHO) e.who = `${e.who.slice(0, MAX_EVENT_WHO - 1)}…`;
   s.allEvents.push(e);
   if (s.allEvents.length > MAX_EVENTS) s.allEvents.splice(0, s.allEvents.length - MAX_EVENTS);
 }

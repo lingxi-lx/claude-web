@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyBg, createBgState, endRunning, snapshotBg, MAX_EVENTS, MAX_EVENT_TEXT, SNAPSHOT_EVENTS } from './registry.js';
+import { applyBg, createBgState, endRunning, snapshotBg, MAX_EVENTS, MAX_EVENT_TEXT, MAX_EVENT_WHO, SNAPSHOT_EVENTS } from './registry.js';
 
 const T0 = 1_790_000_000_000;
 const sys = (subtype: string, o: Record<string, unknown>) => ({ type: 'system', subtype, uuid: 'u', session_id: 's', ...o });
@@ -61,6 +61,12 @@ ${'x'.repeat(300)}` })]), T0 + 1);
     expect(e.text.length).toBe(MAX_EVENT_TEXT);
     expect(e.text.startsWith('line one x')).toBe(true);
     expect(e.text.endsWith('…')).toBe(true);
+  });
+
+  it('a background command's whole command line is not the feed's name for it', () => {
+    const s = createBgState('s1');
+    applyBg(s, sys('task_started', { task_id: 'b1', description: `find /c/Users -name "*x*" ${'y'.repeat(80)}`, task_type: 'local_bash' }), T0);
+    expect(snapshotBg(s).events[0].who.length).toBe(MAX_EVENT_WHO);
   });
 
   it('a reused result says so', () => {
