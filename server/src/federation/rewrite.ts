@@ -19,6 +19,8 @@ const FORWARD = new Set<ClientRequest['kind']>([
   'session.rename', 'session.delete',
   // read on the machine that has the transcript / the files
   'usage.session', 'files.changed', 'files.diff',
+  // 后台: a remote conversation's finished runs and sub-agent transcripts are on that machine's disk
+  'background.history', 'background.run', 'background.transcript',
 ]);
 /** Batch requests: split per machine (local ids stay here, each peer gets its own), results merged. */
 const SPLIT = new Set<ClientRequest['kind']>(['library.archive', 'library.delete']);

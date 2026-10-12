@@ -25,6 +25,8 @@ vi.mock('./session-runner.js', async () => {
     }
     getHistory() { return []; }
     getPendingPermissions() { return []; }
+    bg = false;
+    hasBackgroundWork() { return this.bg; }
     async close() {
       this.closeCalls++;
       await new Promise((r) => setTimeout(r, 5));
@@ -117,6 +119,17 @@ describe('RunnerPool', () => {
     (p as any).reap();
     expect(rs.filter((r) => r.closeCalls).map((r) => r.sessionId)).toEqual(['cap-0', 'cap-1', 'cap-2']);
     expect(busy.closeCalls).toBe(0);
+  });
+
+  it('an idle process with background work (a workflow, a background agent) is not reaped', () => {
+    const p = pool();
+    const bg: any = p.open({ sessionId: 'bg', cwd: '/x' });
+    const plain: any = p.open({ sessionId: 'plain-bg', cwd: '/x' });
+    for (const r of [bg, plain]) { r.state = 'idle'; r.lastActivity = Date.now() - 5 * 3600_000; }
+    bg.bg = true;
+    (p as any).reap();
+    expect(bg.closeCalls).toBe(0);
+    expect(plain.closeCalls).toBe(1);
   });
 
   it('the reaper uses the per-session TTL', () => {

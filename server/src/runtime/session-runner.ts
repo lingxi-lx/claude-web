@@ -353,6 +353,9 @@ export class SessionRunner extends EventEmitter {
       includeHookEvents: true,
       forwardSubagentText: true,
       agentProgressSummaries: true,
+      // 后台: every background task has its own Stop (the 后台 page, the task panel, a workflow card), so the turn's
+      // Stop only stops the turn — without this the CLI kills running workflows / background agents with it
+      perTaskStopAffordance: true,
       settingSources: ['user', 'project', 'local'],
       ...(this.nextFlag ? { settings: this.nextFlag.file } : {}),
       pathToClaudeCodeExecutable: exe,
@@ -497,6 +500,7 @@ export class SessionRunner extends EventEmitter {
       this.emit('info', this.info);
       if (!busy) this.setState('idle');
     }
+    this.trackBackground(m);
     if (m.type === 'system' && m.subtype === 'session_state_changed') {
       this.setState(m.state === 'running' ? 'running' : m.state === 'requires_action' ? 'waiting' : 'idle');
     }
@@ -669,6 +673,34 @@ export class SessionRunner extends EventEmitter {
     return this.state === 'running' || this.state === 'waiting';
   }
 
+  /** Tasks of this process still going (sub-agents, workflows, background commands; not the ambient watchers). */
+  private bgLive = new Set<string>();
+
+  private trackBackground(m: SDKMessage) {
+    if (m.type !== 'system') return;
+    const x = m as any;
+    if (x.subtype === 'background_tasks_changed' && Array.isArray(x.tasks)) {
+      // the CLI's level signal: what runs in the background now (a foreground task in flight keeps the turn busy anyway)
+      for (const id of [...this.bgLive]) if (!x.tasks.some((t: any) => t?.task_id === id)) this.bgLive.delete(id);
+      for (const t of x.tasks) if (typeof t?.task_id === 'string' && t.ambient !== true) this.bgLive.add(t.task_id);
+    } else if (x.subtype === 'task_started' && typeof x.task_id === 'string' && x.ambient !== true && x.skip_transcript !== true) {
+      this.bgLive.add(x.task_id);
+    } else if (x.subtype === 'task_notification' && typeof x.task_id === 'string') {
+      this.bgLive.delete(x.task_id);
+    } else if (x.subtype === 'task_updated' && typeof x.task_id === 'string' && ['completed', 'failed', 'killed'].includes(x.patch?.status)) {
+      this.bgLive.delete(x.task_id);
+    }
+  }
+
+  /**
+   * Work still going in this process after its turn ended — a workflow, a background sub-agent or command (后台).
+   * The pool does not reap such a process: it would take that work down with it, and its result (a task
+   * notification starting a turn of its own) would never come.
+   */
+  hasBackgroundWork(): boolean {
+    return this.bgLive.size > 0;
+  }
+
   /** Resolves true once the turn is over (a result put the state back to idle) or the process was replaced / closed. */
   private settles(q: Query, ms: number): Promise<boolean> {
     const over = () => this.closed || this.q !== q || !this.busy();
@@ -802,6 +834,7 @@ export class SessionRunner extends EventEmitter {
     }
     await this.endProcess(oldChild);
     if (this.closed) return; // closed while the old process was shutting down: don't spawn an orphan
+    this.bgLive.clear(); // the old process's background went with it
     this.setState('starting');
     this.start(this.hasTranscript ? { resume: this.sessionId, extraArgs: { ...this.extraArgs } } : { sessionId: this.sessionId, extraArgs: { ...this.extraArgs } });
   }
