@@ -19,6 +19,7 @@ import './styles/phone.css';
 import './styles/phone-sheet.css';
 import './styles/phone-menus.css';
 import './styles/rail.css';
+import './styles/background-page.css';
 import './styles/corners.css';
 
 document.documentElement.dataset.theme = useStore.getState().theme;

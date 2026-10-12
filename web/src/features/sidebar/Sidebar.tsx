@@ -22,6 +22,7 @@ import { closeDrawer } from './menus';
 import { anchoredMenuOpen } from '@/ui/menus';
 import { openAutomation } from '@/features/automation/state';
 import { openExtensions } from '@/features/extensions/state';
+import { openBackground } from '@/features/background/state';
 import { useSection } from '@/features/sections';
 import type { ProjectMenuId, ProjectsHeadId, RowId, SectionId, TopId } from './entries';
 
@@ -221,6 +222,8 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
         {mobile && <>
           <button className="nav" data-id={top('search')} title="搜索对话、命令和设置" onClick={() => { useStore.setState({ paletteOpen: true }); closeDrawer(); }}><Icon name="search" size={16} />搜索<span className="k">{modKey} K</span></button>
           {/* 自动化 → the automation page (定时任务 · 目标 · 编排, spec §5.9) over the main area, on the tab shown last */}
+          {/* 后台 → what runs besides the turns (sub-agents, workflows, background commands), spec 2026-10-12 */}
+          <button className={clsx('nav', section === 'background' && 'active')} data-id={top('background')} title="在跑的子代理、工作流和后台命令" aria-pressed={section === 'background'} onClick={() => { setMenu(null); openBackground(); }}><Icon name="office" size={16} />后台</button>
           <button className={clsx('nav', section === 'automation' && 'active')} data-id={top('automation')} title="定时任务、目标、编排" aria-pressed={section === 'automation'} onClick={() => { setMenu(null); openAutomation(); }}><Icon name="tasks" size={16} />自动化</button>
           <button className={clsx('nav', section === 'extensions' && 'active')} data-id={top('extensions')} title="连接器、Skills、插件" aria-pressed={section === 'extensions'} onClick={() => { setMenu(null); openExtensions(); }}><Icon name="extensions" size={16} />扩展</button>
         </>}

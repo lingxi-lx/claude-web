@@ -100,5 +100,5 @@
   "bell": "bell",
   "bolt": "zap",
 
-  "extensions": "blocks", "gauge": "gauge", "pinOff": "pin-off", "calendar": "calendar-clock", "puzzle": "puzzle", "library": "library", "sparkle": "sparkle", "cursor": "mouse-pointer-click", "database": "database", "link": "link"
+  "extensions": "blocks", "gauge": "gauge", "pinOff": "pin-off", "calendar": "calendar-clock", "puzzle": "puzzle", "library": "library", "sparkle": "sparkle", "cursor": "mouse-pointer-click", "database": "database", "link": "link", "office": "radar"
 }

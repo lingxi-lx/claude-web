@@ -26,6 +26,8 @@ import { captionHeightAt, captionRow } from '@/features/workbench/tab-row';
 import { installZoom, useZoom } from '@/ui/zoom';
 import { MOBILE_QUERY, drawerYields } from '@/ui/viewport';
 import { installAutomation } from '@/features/automation/state';
+import { installBackground } from '@/features/background/state';
+import { BackgroundSide } from '@/features/background/BackgroundSide';
 import { installBrowserHost } from '@/features/browser/host';
 import { useSection } from '@/features/sections';
 import { Rail } from '@/features/rail/Rail';
@@ -63,6 +65,7 @@ function SidebarColumn() {
   return (
     <div className="sidebar has-resizer" ref={el}>
       <div className="sb-sect" data-section="chat" hidden={section !== 'chat'}><ErrorBoundary area="侧栏"><Sidebar onNew={() => runCommand('new')} /></ErrorBoundary></div>
+      {seen.includes('background') && <div className="sb-sect" data-section="background" hidden={section !== 'background'}><ErrorBoundary area="侧栏 · 后台"><BackgroundSide /></ErrorBoundary></div>}
       {seen.includes('automation') && <div className="sb-sect" data-section="automation" hidden={section !== 'automation'}><ErrorBoundary area="侧栏 · 自动化"><AutomationSide /></ErrorBoundary></div>}
       {seen.includes('extensions') && <div className="sb-sect" data-section="extensions" hidden={section !== 'extensions'}><ErrorBoundary area="侧栏 · 扩展"><ExtensionsSide /></ErrorBoundary></div>}
       <div
@@ -89,6 +92,7 @@ export function App() {
   useEffect(() => useStore.subscribe((s, p) => { if (drawerYields(p, s)) useStore.setState({ sidebarOpen: false }); }), []);
   useEffect(() => installOrchestra(), []);
   useEffect(() => installAutomation(), []);
+  useEffect(() => installBackground(), []);
   // this window as the browser an Agent's web tools work in (the desktop app only)
   useEffect(() => installBrowserHost(), []);
   useEffect(() => installZoom(), []);

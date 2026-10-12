@@ -107,6 +107,8 @@ export const EMPTY = {
   artifacts: { what: '生成的文件', when: 'Claude 新建了文件' },
   tasksNoChat: { what: '打开对话', when: '打开一个对话', subject: '它的子代理、后台任务和计划' },
   tasks: { what: '子代理或后台任务', when: 'Claude 派出子代理、在后台跑命令' },
+  // 后台
+  background: { what: '在跑的子代理', when: '对话里派出子代理、跑工作流或后台命令' },
   // the automation page
   schedules: { what: '定时任务', when: '设好时间和提示词' },
   scheduleRuns: { what: '运行记录', when: '定时任务跑过一次' },

@@ -26,6 +26,10 @@ import { MOBILE_QUERY } from '@/ui/viewport';
 import type { SheetDetent } from '@/ui/sheet-snap';
 import { haptic } from '@/ui/haptics';
 
+/** 后台 fills this in (features/background/state.ts — it imports the store, not the other way round): what kept running after the turn's Stop. */
+let bgStopNote: (sessionId: string) => string | null = () => null;
+export function setBgStopNote(fn: (sessionId: string) => string | null): void { bgStopNote = fn; }
+
 export type PanelId = import('@/model/layout').PanelId;
 
 export interface QueuedMessage { id: string; text: string; images?: { mediaType: string; data: string }[]; attachments?: AttachmentRef[] }
@@ -925,6 +929,9 @@ export const useStore = create<State>((set, get) => ({
     }
     // nothing runs on the server for it any more: end the turn this window still shows (store/stop.ts)
     if (stopFoundNothing(reply)) set((s) => bump(s, sessionId, (x) => { applyMessage(x.conv, staleStopResult(sessionId)); x.state = 'idle'; }));
+    // 后台: the turn's Stop spares the background work (perTaskStopAffordance) — say where it is stopped
+    const note = bgStopNote(sessionId);
+    if (note) get().toast(note, true);
   },
 
   async respondPermission(requestId, response) {

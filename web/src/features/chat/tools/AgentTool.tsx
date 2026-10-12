@@ -1,3 +1,4 @@
+import { WorkflowLive } from '@/features/background/WorkflowLive';
 import { useState } from 'react';
 import type { ToolUseBlock } from '@/model/conversation';
 import { useStore } from '@/store';
@@ -133,7 +134,11 @@ export function WorkflowBody({ t }: { t: ToolUseBlock }) {
   const r = t.result;
   return (
     <>
-      {inp.script ? <CodeBlock code={String(inp.script)} lang="javascript" title={inp.name ? `workflow · ${inp.name}` : 'workflow'} maxLines={80} /> : <div className="jt"><JsonTree value={inp} /></div>}
+      {/* 后台: its agents as it runs, and the way to the office */}
+      <WorkflowLive toolUseId={t.id} />
+      {inp.script
+        ? <details className="bg-wf-script"><summary>脚本</summary><CodeBlock code={String(inp.script)} lang="javascript" title={inp.name ? `workflow · ${inp.name}` : 'workflow'} maxLines={80} /></details>
+        : <div className="jt"><JsonTree value={inp} /></div>}
       {r && (r.isError ? <ErrorPre text={r.content} /> : <Expandable text={r.content} lines={30}>{(v) => <CodeBlock code={v} lang="plaintext" title="结果" wrap />}</Expandable>)}
     </>
   );

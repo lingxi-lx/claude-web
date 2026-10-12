@@ -3,9 +3,10 @@ import { PANELS, type PanelId } from '@/model/layout';
 import type { IconName } from '@/ui/icons';
 import type { Section } from '@/features/sections/pages';
 
-/** The three sections, top to bottom. `automation` keeps the id the sidebar's row had. */
+/** The sections, top to bottom. `automation` keeps the id the sidebar's row had. */
 export const RAIL_SECTIONS: { id: Section; label: string; icon: IconName; tip: string }[] = [
   { id: 'chat', label: '对话', icon: 'chat', tip: '对话' },
+  { id: 'background', label: '后台', icon: 'office', tip: '后台：在跑的子代理、工作流和后台命令' },
   { id: 'automation', label: '自动化', icon: 'tasks', tip: '自动化：定时任务、目标、编排' },
   { id: 'extensions', label: '扩展', icon: 'extensions', tip: '扩展：连接器、Skills、插件' },
 ];
