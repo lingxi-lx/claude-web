@@ -54,6 +54,14 @@ const lastToolResult = (j) => {
   if (last?.role !== 'user' || !Array.isArray(last.content)) return null;
   return last.content.find((b) => b?.type === 'tool_result') ?? null;
 };
+/** The user content of the request's current turn: every user message after the last assistant one (an engine may
+ *  add a reminder of its own after the user's words). */
+const turnText = (j) => {
+  const msgs = j.messages ?? [];
+  let i = msgs.length;
+  while (i > 0 && msgs[i - 1].role !== 'assistant') i--;
+  return msgs.slice(i).filter((m) => m.role === 'user').map((m) => textOf(m.content)).join('\n');
+};
 const json = (s, status, o) => s.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(o));
 
 function sse(s, j, blocks, stop) {
@@ -88,7 +96,9 @@ function anthropic(q, s, j, h) {
       setTimeout(() => { if (held.delete(s)) plain('agent-ok (slow)'); }, 45_000);
       return;
     }
-    return plain('agent-ok');
+    // a moment of work, so a push (1 s apart at most) finds it running
+    setTimeout(() => plain('agent-ok'), 1500);
+    return;
   }
   if (!j.stream) return plain('side:ok');
   h.role = 'main';
@@ -97,7 +107,7 @@ function anthropic(q, s, j, h) {
     if (tr.tool_use_id === 'toolu_wf_slow') return sse(s, j, [{ type: 'tool_use', id: 'toolu_wait', name: 'Bash', input: { command: 'node -e "setTimeout(()=>{},30000)"', description: 'Wait a while' } }], 'tool_use');
     return sse(s, j, [{ type: 'text', text: `main: after ${tr.tool_use_id}` }], 'end_turn');
   }
-  const lastUser = textOf((j.messages ?? []).at(-1)?.content);
+  const lastUser = turnText(j);
   if (/RUN-QUICK/.test(lastUser)) return sse(s, j, [{ type: 'tool_use', id: 'toolu_wf_quick', name: 'Workflow', input: { script: QUICK } }], 'tool_use');
   if (/RUN-SLOW/.test(lastUser)) return sse(s, j, [{ type: 'tool_use', id: 'toolu_wf_slow', name: 'Workflow', input: { script: SLOW } }], 'tool_use');
   return sse(s, j, [{ type: 'text', text: 'main:ok' }], 'end_turn');
