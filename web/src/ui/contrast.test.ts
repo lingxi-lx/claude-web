@@ -73,6 +73,23 @@ describe('every theme: diff numbers and auxiliary text', () => {
   }
 });
 
+// 后台 (spec 2026-10-12 §3): each agent's character, card edge and graph node is drawn in its own --agent-n. Those are
+// graphical objects (WCAG 1.4.11): ≥ 3:1 on the page (--bg) and the shell (--bg-1) in every theme, and ten different
+// colours (the eleventh agent repeats the first).
+describe('every theme: the ten agent colours (WCAG 1.4.11)', () => {
+  const AGENTS = Array.from({ length: 10 }, (_, i) => `agent-${i + 1}`);
+  for (const [name, t] of Object.entries(ALL)) {
+    describe(name, () => {
+      for (const a of AGENTS) {
+        for (const g of ['bg', 'bg-1']) {
+          it(`--${a} on --${g} ≥ 3:1`, () => expect(pair(t, a, g)).toBeGreaterThanOrEqual(3));
+        }
+      }
+      it('ten distinct colours', () => expect(new Set(AGENTS.map((a) => t[a]?.toLowerCase())).size).toBe(10));
+    });
+  }
+});
+
 describe('helpers', () => {
   it('agree with known WCAG values', () => {
     expect(contrast('#000', '#fff')).toBeCloseTo(21, 5);
