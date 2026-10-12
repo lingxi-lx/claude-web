@@ -13,10 +13,12 @@ const SIDE_GAP = 8;
  * with a max height. Right-aligned to the anchor's right edge (6px in, clear of the row's ··· button) by
  * default, left-aligned on request; always inside the window.
  *
+ * `minLeft`: the leftmost the menu may start (the sidebar's own left edge: not over the icon rail).
+ *
  * `side: 'right'`: beside the anchor instead (the icon rail's menus) — its top edge level with the anchor's, or its
  * bottom edge with `prefer: 'up'` (a menu at the foot of the rail).
  */
-export function placeFixed(a: AnchorRect, size: { w: number; h: number }, view: { vw: number; vh: number }, o: { align?: 'left' | 'right'; prefer?: 'down' | 'up'; side?: 'right' } = {}): MenuSpot {
+export function placeFixed(a: AnchorRect, size: { w: number; h: number }, view: { vw: number; vh: number }, o: { align?: 'left' | 'right'; prefer?: 'down' | 'up'; side?: 'right'; minLeft?: number } = {}): MenuSpot {
   const { w, h } = size, { vw, vh } = view;
   if (o.side === 'right') {
     const sx = Math.max(EDGE, Math.min(a.right + SIDE_GAP, vw - w - EDGE));
@@ -24,7 +26,8 @@ export function placeFixed(a: AnchorRect, size: { w: number; h: number }, view: 
     return { left: sx, top: Math.max(EDGE, Math.min(o.prefer === 'up' ? a.bottom - h : a.top, vh - h - EDGE)) };
   }
   const x = o.align === 'left' ? a.left : a.right - w - 6;
-  const left = Math.max(EDGE, Math.min(x, vw - w - EDGE));
+  // `minLeft`: a sidebar menu stays off the icon rail beside it (its buttons stay reachable while the menu is open)
+  const left = Math.max(o.minLeft ?? EDGE, Math.min(x, vw - w - EDGE));
   const below = h <= vh - a.bottom - EDGE, above = h <= a.top - EDGE;
   const down = { left, top: a.bottom + GAP }, up = { left, top: a.top - h - GAP };
   if (o.prefer === 'up') { if (above) return up; if (below) return down; }

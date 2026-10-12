@@ -39,7 +39,8 @@ export function useAnchoredMenu(ref: React.RefObject<HTMLElement | null>, onClos
     const place = () => {
       Object.assign(el.style, { position: 'fixed', right: 'auto', bottom: 'auto', maxHeight: '' });
       const a = anchor.getBoundingClientRect(), size = { w: el.offsetWidth, h: el.scrollHeight };
-      const spot = placeFixed(a, size, { vw: window.innerWidth, vh: window.innerHeight }, opts.current);
+      const side = anchor.closest('.sidebar')?.getBoundingClientRect();
+      const spot = placeFixed(a, size, { vw: window.innerWidth, vh: window.innerHeight }, { ...opts.current, ...(side && opts.current.side !== 'right' ? { minLeft: Math.max(8, Math.round(side.left) + 4) } : {}) });
       el.style.left = `${spot.left}px`;
       el.style.top = `${spot.top}px`;
       if (spot.maxHeight) el.style.maxHeight = `${spot.maxHeight}px`;
