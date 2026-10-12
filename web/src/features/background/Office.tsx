@@ -16,7 +16,9 @@ const pts = (p: number[][]) => p.map(([x, y]) => `${x},${y}`).join(' ');
 /** The wall screen's edge: a point `f` (0…1) along its lower edge, lifted `up` px. */
 const onScreen = (l: OfficeLayout, f: number, up = 0): Pt => ({ x: l.screen.x + f * l.screen.w, y: l.screen.y - (f * l.screen.w) / 2 - up });
 /** A character's head, where the lines reach. */
-const head = (p: Pt): Pt => ({ x: p.x, y: p.y - 13 });
+/** Characters are drawn larger than the desks' own scale: in a room this size the people are what you look at. */
+const CHAR = 1.4;
+const head = (p: Pt): Pt => ({ x: p.x, y: p.y - 13 * CHAR });
 const curve = (a: Pt, b: Pt) => `M${a.x},${a.y} Q${(a.x + b.x) / 2 - 14},${(a.y + b.y) / 2 + 10} ${b.x},${b.y}`;
 
 /** Enter / Space on a focusable picture element = a click. */
@@ -187,10 +189,10 @@ export function Office({ session, taskId, onPick }: { session: BgSession; taskId
             <g key={p.id} className="bg-walk" style={{ transform: `translate(${p.at.x}px, ${p.at.y}px)` }}>
               <g className={clsx('bg-char', `is-${a.state}`)} style={{ '--c': agentColor(a.color) } as CSSProperties} role="button" tabIndex={0} aria-label={label} onClick={() => onPick(a.key, p.task.id)} onKeyDown={pressKeys(() => onPick(a.key, p.task.id))}>
                 <title>{agentTip(p.task, a)}</title>
-                <rect className="bg-hit" x={-17} y={-28} width={34} height={p.queued ? 34 : 46} />
-                <ellipse className="bg-ring" cx={0} cy={-8} rx={17} ry={16} />
-                <Character color={a.color} type={a.agentType} state={a.state} />
-                {!p.queued && <text className="bg-char-name" y={15}>{clip(a.label, 14)}</text>}
+                <rect className="bg-hit" x={-24} y={-40} width={48} height={p.queued ? 46 : 62} />
+                <ellipse className="bg-ring" cx={0} cy={-11} rx={23} ry={22} />
+                <Character color={a.color} type={a.agentType} state={a.state} size={CHAR} />
+                {!p.queued && <text className="bg-char-name" y={18}>{clip(a.label, 14)}</text>}
               </g>
             </g>
           );

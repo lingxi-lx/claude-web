@@ -87,7 +87,7 @@
 .bg-ring { fill: none; stroke: var(--focus-ring); stroke-width: 1.6; opacity: 0; transition: opacity var(--dur-fast) var(--ease-out); }
 .bg-char:hover .bg-ring { opacity: 1; stroke: var(--edge-strong); }
 .bg-char:focus-visible .bg-ring { opacity: 1; stroke: var(--focus-ring); }
-.bg-char-name { fill: color-mix(in oklab, var(--c) 70%, var(--ink-1)); font-size: 11px; font-weight: 600; text-anchor: middle; }
+.bg-char-name { fill: color-mix(in oklab, var(--c) 70%, var(--ink-1)); font-size: 12.5px; font-weight: 600; text-anchor: middle; }
 
 /* ---- the 指挥台 (CommandGraph.tsx) ---- */
 .bg-graph { min-width: 0; }
