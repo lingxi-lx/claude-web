@@ -8,11 +8,12 @@ import { openBackground, useBackground } from './state';
 /**
  * In a conversation's Workflow card: the workflow's agents as it runs — a chip each, in its colour, by phase — and
  * 打开 to the 后台 page on it. Nothing while 后台 has not heard of this workflow (an old transcript, an older server).
+ * `onlyRunning`: under a folded turn (the card itself is in the fold) — only while the workflow still runs.
  */
-export function WorkflowLive({ toolUseId }: { toolUseId: string }) {
+export function WorkflowLive({ toolUseId, onlyRunning }: { toolUseId: string; onlyRunning?: boolean }) {
   const sessionId = useScopedSessionId();
   const task = useBackground((s) => (sessionId ? s.sessions[sessionId]?.tasks.find((t) => t.toolUseId === toolUseId) : undefined));
-  if (!sessionId || !task) return null;
+  if (!sessionId || !task || (onlyRunning && task.status !== 'running')) return null;
   const running = task.agents.filter((a) => a.state === 'running').length;
   const done = task.agents.filter((a) => a.state === 'done').length;
   const phases = task.phases?.length ? task.phases : [{ index: 0, title: '' }];

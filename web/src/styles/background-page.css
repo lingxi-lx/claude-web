@@ -89,6 +89,10 @@ span.bg-chip { padding: 0 2px 0 0; }
 @container (max-width: 900px) { .bg-stage { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 1100px) { .bg-stage { grid-template-columns: minmax(0, 1fr); } .bg-board.with-drawer { grid-template-columns: minmax(0, 1fr); } .bg-drawer { position: fixed; right: 12px; top: 72px; bottom: 12px; width: min(420px, calc(100vw - 24px)); max-height: none; z-index: 30; } }
 .app.mobile .bg-body { padding: 0 var(--sp-3) var(--sp-4); }
+/* a phone's header row: the buttons are their icons (the words in their titles), the line under the title is one line */
+.bg-page .over-head-in .btn { white-space: nowrap; }
+.app.mobile .bg-page .over-head-in .btn .l { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.app.mobile .bg-page .over-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app.mobile .bg-drawer { inset: auto 0 0 0; top: 64px; width: auto; border-radius: var(--r-xl) var(--r-xl) 0 0; }
 
 :root[data-reduce-motion='1'] :is(.bg-pill, .bg-pill-dots i, .bg-wf.live .bg-wf-head .t::before) { animation: none; }

@@ -151,10 +151,10 @@ export function BackgroundPage() {
       onTab={(id) => selectBackground(id)}
       actions={selected ? (
         <>
-          {!runId && running.length > 1 && <button className="btn sm" onClick={() => { for (const t of running) stopTask(selected, t.id); }}><Icon name="stop" size={12} />全部停止</button>}
-          {!runId && running.length === 1 && <button className="btn sm" onClick={() => stopTask(selected, running[0].id)}><Icon name="stop" size={12} />停止{KIND_LABEL[running[0].kind]}</button>}
-          {runId && <button className="btn sm" onClick={() => selectBackground(selected)}>回到现在</button>}
-          <button className="btn sm" onClick={toChat}><Icon name="chat" size={13} />回到对话</button>
+          {!runId && running.length > 1 && <button className="btn sm" title="全部停止" onClick={() => { for (const t of running) stopTask(selected, t.id); }}><Icon name="stop" size={12} /><span className="l">全部停止</span></button>}
+          {!runId && running.length === 1 && <button className="btn sm" title={`停止${KIND_LABEL[running[0].kind]}`} onClick={() => stopTask(selected, running[0].id)}><Icon name="stop" size={12} /><span className="l">停止{KIND_LABEL[running[0].kind]}</span></button>}
+          {runId && <button className="btn sm" title="回到现在" onClick={() => selectBackground(selected)}><Icon name="office" size={13} /><span className="l">回到现在</span></button>}
+          <button className="btn sm" title="回到对话" onClick={toChat}><Icon name="chat" size={13} /><span className="l">回到对话</span></button>
         </>
       ) : undefined}
     >
