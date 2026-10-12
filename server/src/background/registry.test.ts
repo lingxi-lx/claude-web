@@ -63,7 +63,7 @@ ${'x'.repeat(300)}` })]), T0 + 1);
     expect(e.text.endsWith('…')).toBe(true);
   });
 
-  it('a background command's whole command line is not the feed's name for it', () => {
+  it('a background command\'s whole command line is not the feed\'s name for it', () => {
     const s = createBgState('s1');
     applyBg(s, sys('task_started', { task_id: 'b1', description: `find /c/Users -name "*x*" ${'y'.repeat(80)}`, task_type: 'local_bash' }), T0);
     expect(snapshotBg(s).events[0].who.length).toBe(MAX_EVENT_WHO);
