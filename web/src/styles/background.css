@@ -17,10 +17,13 @@
 .bg-hat .bg-brim { fill: none; stroke: color-mix(in oklab, var(--c) 42%, var(--office-pupil)); stroke-width: 1.8; stroke-linecap: round; }
 .bg-tag circle { fill: var(--office-eye); stroke: color-mix(in oklab, var(--office-pupil) 45%, transparent); stroke-width: 0.7; }
 .bg-tag text { fill: var(--office-pupil); font-family: var(--font); font-size: 6px; font-weight: 700; text-anchor: middle; }
-/* done / failed: a badge ringed in the page's colour (≥ 3:1 against every agent colour, contrast.test.ts) */
+/* done / failed / stopped: a badge ringed in the page's colour (≥ 3:1 against every agent colour, contrast.test.ts) */
 .bg-badge circle { stroke: var(--bg); stroke-width: 1.4; }
 .bg-badge.done circle { fill: var(--c); }
 .bg-badge.failed circle { fill: var(--err); }
+.bg-badge.stopped circle { fill: var(--ink-4); }
+/* stopped before it finished: in the picture, but faded (not a failure: no red) */
+.bg-fig.is-stopped .bg-body { opacity: 0.55; }
 .bg-badge path { fill: none; stroke: var(--bg); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .bg-bob { animation: bg-bob 1.8s ease-in-out infinite; }
 @keyframes bg-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
@@ -95,7 +98,7 @@
 .bg-orbit { fill: none; stroke: var(--edge-subtle); stroke-width: 1; }
 .bg-edge { stroke: var(--c); stroke-width: 1.2; stroke-linecap: round; }
 .bg-edge.is-done { opacity: 0.45; }
-.bg-edge.is-queued { stroke: var(--edge-strong); stroke-dasharray: 2 4; }
+.bg-edge:is(.is-queued, .is-stopped) { stroke: var(--edge-strong); stroke-dasharray: 2 4; }
 .bg-edge.is-failed { stroke: var(--err); stroke-dasharray: 3 3; opacity: 0.6; }
 .bg-hub rect { fill: var(--surface-elev); stroke: var(--accent); stroke-width: 1.2; }
 .bg-hub-name { fill: var(--accent-text); font-size: 11px; font-weight: 600; text-anchor: middle; }
@@ -104,13 +107,13 @@
 .bg-node.shell { cursor: default; }
 .bg-node:focus-visible { outline: none; }
 .bg-node-dot { fill: var(--c); }
-.bg-node.is-queued .bg-node-dot { opacity: 0.4; }
+.bg-node:is(.is-queued, .is-stopped) .bg-node-dot { opacity: 0.4; }
 .bg-node.is-failed .bg-node-dot { stroke: var(--err); stroke-width: 2.2; }
 .bg-node-mark { fill: none; stroke: var(--bg); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .bg-node-glow { fill: var(--c); opacity: 0.2; animation: bg-halo 1.8s ease-in-out infinite; }
 @keyframes bg-halo { 0%, 100% { opacity: 0.12; } 50% { opacity: 0.32; } }
 .bg-node-label { fill: color-mix(in oklab, var(--c) 70%, var(--ink-1)); font-weight: 600; text-anchor: middle; }
-.bg-node.is-queued .bg-node-label { fill: var(--ink-4); font-weight: 400; }
+.bg-node:is(.is-queued, .is-stopped) .bg-node-label { fill: var(--ink-4); font-weight: 400; }
 .bg-node.is-failed .bg-node-label { fill: var(--err); }
 .bg-node.shell .bg-node-label { fill: var(--ink-3); font-weight: 400; }
 .bg-node-ring { fill: none; stroke: var(--focus-ring); stroke-width: 1.6; opacity: 0; transition: opacity var(--dur-fast) var(--ease-out); }
@@ -137,6 +140,7 @@ button.bg-card:active { transform: scale(0.985); }
 .bg-bar { position: relative; height: 3px; margin: 4px 0 3px; overflow: hidden; border-radius: 2px; background: var(--layer-selected); }
 .bg-bar > span { position: absolute; inset: 0; border-radius: inherit; background: var(--c); transform-origin: left center; transition: transform var(--dur-slower) var(--ease-out); }
 .bg-card.is-failed .bg-bar > span { background: var(--err); }
+.bg-card.is-stopped .bg-bar > span { background: var(--ink-4); }
 .bg-bar.indet > span { animation: bg-indet 1.6s var(--ease-in-out) infinite; }
 @keyframes bg-indet { from { transform: translateX(-40%) scaleX(0.4); } to { transform: translateX(100%) scaleX(0.4); } }
 .bg-card-foot { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: var(--fs-meta); color: var(--ink-3); }

@@ -79,11 +79,12 @@ html[data-density='compact'] .msg.assistant { margin: 0; }
 .turn.folded.open > .turn-body { border-left: 0; padding-left: 0; margin: 0; animation: none; }
 
 /* the same motion for anything else that opens under its row (a step's detail, a merged row's steps, the thinking
-   text) — Fold.tsx; its content is only in the page while it is open or moving */
-.fold { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: 1fr; transition: grid-template-rows 340ms var(--ease-sheet), opacity 220ms var(--ease-out); }
-.fold.shut { grid-template-rows: 0fr; opacity: 0; }
-.fold > .fold-in { min-width: 0; min-height: 0; }
-.fold.moving > .fold-in { overflow: hidden; }
+   text) — Fold.tsx; its content is only in the page while it is open or moving. Not `.fold`: that is the sidebar's
+   foldable section heading (`.sb-sec-h.fold`), which a grid here stacked into a column (2026-10-13, 其它文件夹 · 150 · ›) */
+.fold-box { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: 1fr; transition: grid-template-rows 340ms var(--ease-sheet), opacity 220ms var(--ease-out); }
+.fold-box.shut { grid-template-rows: 0fr; opacity: 0; }
+.fold-box > .fold-in { min-width: 0; min-height: 0; }
+.fold-box.moving > .fold-in { overflow: hidden; }
 
 /* ---------- step rows ---------- */
 /* One row per step, 30px: a 16px slot that says where the step is, the verb, the target in a small mono chip, and
@@ -107,6 +108,7 @@ html[data-density='compact'] .tl-rows > .tl:not(:last-child)::after { top: 21px;
 .sgw.pending { color: var(--ink-5); }
 .sgw.waiting { color: var(--warn); }
 .sgw.failed { color: var(--err); }
+.sgw.stopped { color: var(--ink-4); }
 .sgw .spin { display: block; width: 13px; height: 13px; border-radius: 50%; border: 1.5px solid var(--edge-strong); border-top-color: var(--ink-2); animation: step-spin 0.7s linear infinite; }
 @keyframes step-spin { to { transform: rotate(360deg); } }
 /* the step finished in view: its icon takes the spinner's place with a little bounce */
@@ -133,10 +135,10 @@ html[data-density='compact'] .tl-rows > .tl:not(:last-child)::after { top: 21px;
 .tool-head.grp.open > .chev, .tl.open > .tl-head .chev { transform: rotate(90deg); }
 
 /* what opens under a row sits under the verb; the dashed line runs past it on the left */
-.tl > .fold .tool-out { margin: 2px 0 8px 26px; }
+.tl > .fold-box .tool-out { margin: 2px 0 8px 26px; }
 .tool-out > .tool-body { border: 0; margin: 0; padding: 0; }
 .tool-out > .tool-children { border: 0; margin: 8px 0 0; padding: 0; background: transparent; }
-.tl.group > .fold > .fold-in > .tl-rows { margin-left: 26px; }
+.tl.group > .fold-box > .fold-in > .tl-rows { margin-left: 26px; }
 .tl-sub { margin: 0 0 4px 26px; padding: 2px 8px; border-radius: var(--r-sm); font-size: var(--fs-meta); color: var(--ink-3); transition: background-color 150ms, color 150ms; }
 .tl-sub:hover { background: var(--layer-hover); color: var(--ink-1); transition-duration: 0s; }
 
@@ -214,7 +216,7 @@ div.code { border: 0; border-radius: var(--r-lg); background-color: var(--surfac
    once under the system's preference; what is left for here is the system's preference and what neither covers:
    the transitions written with their own length, a press that scales, and the spinner (a loop). */
 @media (prefers-reduced-motion: reduce) {
-  .turn-body, .fold, .turn-sum .chev, .tool-head .chev, .tl-head .chev { transition-duration: 0s; }
+  .turn-body, .fold-box, .turn-sum .chev, .tool-head .chev, .tl-head .chev { transition-duration: 0s; }
   .sgw .spin { animation: none; }
 }
 :root[data-reduce-motion='1'] .sgw .spin { animation: none; }

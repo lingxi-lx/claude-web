@@ -13,10 +13,22 @@ export interface BgState extends BgSession {
   nextColor: number;
   /** every event kept (the snapshot carries the last SNAPSHOT_EVENTS) */
   allEvents: BgEvent[];
+  /** Foreground steps the CLI tracks as tasks (`isForeground`), by task id: kept out of the picture until the CLI
+   *  moves one to the background (task_updated patch.is_backgrounded), when it shows up as if it had started then. */
+  held: Map<string, { m: any; at: number }>;
 }
 
+/** At most this many held foreground steps (they go when they end; a lost notification must not grow the map). */
+const MAX_HELD = 64;
+
+/** A step something waits on, not background work: a command the turn or a sub-agent runs in the foreground
+ *  (official 2.1.283 reports a long `sleep` as a local_bash task with is_backgrounded false — a workflow agent's one
+ *  owned_by_subagent), or a sub-agent's own foreground sub-agent. The turn's foreground sub-agents stay (spec: 前台后台
+ *  都算); a step shown as a 后台命令 would not be one, and its Stop would cut the step short. */
+export const isForeground = (m: any): boolean => m?.is_backgrounded === false && (m.task_type === 'local_bash' || m.owned_by_subagent === true);
+
 export function createBgState(sessionId: string): BgState {
-  return { sessionId, updatedAt: 0, tasks: [], events: [], nextColor: 0, allEvents: [] };
+  return { sessionId, updatedAt: 0, tasks: [], events: [], nextColor: 0, allEvents: [], held: new Map() };
 }
 
 const kindOf = (type: unknown, subagentType: unknown): BgKind =>
@@ -117,7 +129,9 @@ export function mergeWorkflowAgent(s: BgState, t: BgTask, e: any, now: number, q
     changed = true;
     if (!quiet && state === 'running') agentEvent(s, t, a, now, 'tool', summary);
   }
-  if (state !== a.state) {
+  // a task that has ended keeps how its agents ended: a progress list arriving late does not put them back to work
+  const late = t.status !== 'running' && (state === 'queued' || state === 'running') && a.state !== 'queued' && a.state !== 'running';
+  if (state !== a.state && !late) {
     const was = a.state;
     a.state = state;
     changed = true;
@@ -151,12 +165,15 @@ export function mergeWorkflowProgress(s: BgState, t: BgTask, list: unknown[], no
 }
 
 /** The end of a task settles what of it was still going: running → its outcome, queued → done / failed with it. */
-function settleAgents(s: BgState, t: BgTask, now: number, ok: boolean, why?: string) {
+/** The agents still queued or at work when their task ends end with it: done, failed, or — the task stopped — stopped
+ *  (a workflow the user stopped did not fail; its agents' cards and faces must not say it did). */
+function settleAgents(t: BgTask, now: number, status: BgStatus, why?: string) {
+  const to: BgAgentState = status === 'completed' ? 'done' : status === 'stopped' ? 'stopped' : 'failed';
   for (const a of t.agents) {
-    if (a.state === 'done' || a.state === 'failed') continue;
-    a.state = ok ? 'done' : 'failed';
+    if (a.state !== 'queued' && a.state !== 'running') continue;
+    a.state = to;
     a.endedAt = now;
-    if (!ok && why && !a.error) a.error = why;
+    if (to === 'failed' && why && !a.error) a.error = why;
   }
 }
 
@@ -168,10 +185,19 @@ function endTask(s: BgState, t: BgTask, status: BgStatus, now: number, summary?:
   t.endedAt = now;
   if (summary) t.summary = summary;
   if (reason) t.reason = reason;
-  settleAgents(s, t, now, status === 'completed', reason ?? (status === 'stopped' ? '工作流停了' : undefined));
+  settleAgents(t, now, status, reason);
   const who = t.kind === 'workflow' ? (t.name ?? t.description) : t.agents[0]?.label ?? t.description;
   const text = reason ? `${END_TEXT[status]} · ${reason}` : END_TEXT[status];
   event(s, { at: now, taskId: t.id, ...(t.agents.length === 1 && t.kind === 'agent' ? { agent: t.agents[0].key, color: t.agents[0].color } : {}), who, text, tone: END_TONE[status] });
+}
+
+/** A task comes into the picture: started at `at`, its 开始 in the feed at `now` (later for a step moved to the background). */
+function startTask(s: BgState, m: any, at: number, now = at): BgTask {
+  const t = newTask(s, m, at, kindOf(m.task_type, m.subagent_type));
+  const a = t.agents[0];
+  const text = t.kind === 'workflow' ? `工作流 ${t.name ?? t.description} 开始` : t.kind === 'shell' ? `开始运行：${t.description}` : '开始';
+  event(s, { at: now, taskId: t.id, ...(a ? { agent: a.key, color: a.color } : {}), who: a?.label ?? t.name ?? t.description, text, tone: 'start' });
+  return t;
 }
 
 /** Apply one SDK message. Returns true when the conversation's background changed. */
@@ -188,10 +214,12 @@ function applyTaskMessage(s: BgState, m: any, now: number): boolean {
     case 'task_started': {
       if (m.ambient === true || m.skip_transcript === true) return false;
       if (t) return false;
-      t = newTask(s, m, now, kindOf(m.task_type, m.subagent_type));
-      const a = t.agents[0];
-      const text = t.kind === 'workflow' ? `工作流 ${t.name ?? t.description} 开始` : t.kind === 'shell' ? `开始运行：${t.description}` : '开始';
-      event(s, { at: now, taskId: t.id, ...(a ? { agent: a.key, color: a.color } : {}), who: a?.label ?? t.name ?? t.description, text, tone: 'start' });
+      if (isForeground(m)) {
+        if (s.held.size >= MAX_HELD) s.held.delete(s.held.keys().next().value!);
+        s.held.set(m.task_id, { m, at: now });
+        return false;
+      }
+      t = startTask(s, m, now);
       return true;
     }
     case 'task_progress': {
@@ -229,7 +257,17 @@ function applyTaskMessage(s: BgState, m: any, now: number): boolean {
       return changed;
     }
     case 'task_updated': {
-      if (!t || !m.patch) return false;
+      if (!m.patch) return false;
+      const held = !t ? s.held.get(m.task_id) : undefined;
+      if (held) {
+        // a held foreground step: it shows up once it is moved to the background; one that ends is let go
+        if (statusOf(m.patch.status) && m.patch.status !== 'running') { s.held.delete(m.task_id); return false; }
+        if (m.patch.is_backgrounded !== true) return false;
+        s.held.delete(m.task_id);
+        t = startTask(s, { ...held.m, is_backgrounded: true, ...(str(m.patch.description) ? { description: m.patch.description } : {}) }, held.at, now);
+        return true;
+      }
+      if (!t) return false;
       let changed = false;
       if (str(m.patch.description) && m.patch.description !== t.description) { t.description = m.patch.description; changed = true; }
       if (typeof m.patch.is_backgrounded === 'boolean' && m.patch.is_backgrounded !== t.backgrounded) { t.backgrounded = m.patch.is_backgrounded; changed = true; }
@@ -238,7 +276,7 @@ function applyTaskMessage(s: BgState, m: any, now: number): boolean {
       return changed;
     }
     case 'task_notification': {
-      if (!t) return false;
+      if (!t) { s.held.delete(m.task_id); return false; }
       const st = statusOf(m.status) ?? 'completed';
       if (t.status !== 'running') {
         // a task_updated already ended it: keep the notification's summary
@@ -254,6 +292,7 @@ function applyTaskMessage(s: BgState, m: any, now: number): boolean {
 
 /** The CLI process went away (closed, crashed, restarted): its background work went with it. */
 export function endRunning(s: BgState, reason: string, now: number): boolean {
+  s.held.clear();
   let changed = false;
   for (const t of s.tasks) {
     if (t.status !== 'running') continue;

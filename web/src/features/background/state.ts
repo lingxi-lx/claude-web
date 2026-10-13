@@ -6,7 +6,7 @@ import { hideSheet, setBgStopNote, useStore } from '@/store';
 import { ws } from '@/ws/client';
 import { closeOtherPages, registerPage } from '@/features/sections/pages';
 import { markPageOpened } from '@/features/automation/state';
-import { hasLive, sortSessions, stopNote } from './model';
+import { hasLive, reopenRun, sortSessions, stopNote } from './model';
 
 export interface BgDrawer { sessionId: string; taskId: string; agentKey: string; runId?: string }
 
@@ -47,7 +47,7 @@ export function openBackground(sessionId?: string, taskId?: string): boolean {
     seen: true,
     selected,
     taskId: sessionId ? taskId : s.taskId,
-    runId: sessionId ? undefined : s.runId,
+    runId: reopenRun({ asked: sessionId, selected, was: s.selected, runId: s.runId, sessions: s.sessions }),
     drawer: sessionId && s.drawer?.sessionId !== sessionId ? undefined : s.drawer,
   }));
   if (useStore.getState().mobile) { useStore.setState({ sidebarOpen: false }); hideSheet(); }

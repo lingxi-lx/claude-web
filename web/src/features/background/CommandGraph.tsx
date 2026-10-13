@@ -17,8 +17,8 @@ interface Node { id: string; task: BgTask; agent?: BgAgent; state: State; x: num
 const W = 320;
 /** One orbit is enough up to this many; past it the rest go on an inner one. */
 const ONE_ORBIT = 12;
-/** A command's status as a node: stopped is neither done nor failed, so it is just dim. */
-const SHELL_STATE: Record<BgTask['status'], State> = { running: 'running', completed: 'done', failed: 'failed', stopped: 'queued' };
+/** A command's status as a node: stopped is neither done nor failed, so it is just dim (as a stopped agent is). */
+const SHELL_STATE: Record<BgTask['status'], State> = { running: 'running', completed: 'done', failed: 'failed', stopped: 'stopped' };
 
 export function CommandGraph({ session, taskId, compact, onPick }: { session: BgSession; taskId?: string; compact?: boolean; onPick: Pick }) {
   const tasks = taskId ? session.tasks.filter((t) => t.id === taskId) : session.tasks;
@@ -71,7 +71,7 @@ export function CommandGraph({ session, taskId, compact, onPick }: { session: Bg
 const edgeColor = (n: { agent?: BgAgent }) => ({ '--c': n.agent ? agentColor(n.agent.color) : 'var(--office-machine)' }) as CSSProperties;
 
 function GraphNode({ n, cy, compact, onPick }: { n: Node; cy: number; compact: boolean; onPick: Pick }) {
-  const r = (compact ? { running: 7.5, done: 6.5, queued: 6, failed: 6.5 } : { running: 9, done: 8, queued: 7, failed: 8 })[n.state];
+  const r = (compact ? { running: 7.5, done: 6.5, queued: 6, failed: 6.5, stopped: 6 } : { running: 9, done: 8, queued: 7, failed: 8, stopped: 7 })[n.state];
   const a = n.agent;
   const name = a ? a.label : n.task.description;
   const labelled = !(compact && n.inner);

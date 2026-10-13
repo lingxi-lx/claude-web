@@ -1,6 +1,7 @@
 // 后台's cast (spec 2026-10-12 §3): a blob in its agent's colour, its accessory by agent type — none for a workflow's
 // agents, glasses for Explore, a cap for Plan, a badge with the first letter for any other type — and its state in its
-// face: bobbing at work, relaxed (leaning back, a check) when done, an x when it failed. A background command is a
+// face: bobbing at work, relaxed (leaning back, a check) when done, an x when it failed, eyes shut and a grey pause
+// badge when its task was stopped before it finished. A background command is a
 // little machine, not a character. `Character` / `Machine` are SVG groups (base centre at 0, 0) to place in a picture;
 // the `…Icon` versions are inline SVGs for cards and lists.
 import type { CSSProperties } from 'react';
@@ -27,7 +28,7 @@ export interface CharacterProps {
 
 function Eyes({ state }: { state: BgAgentState }) {
   if (state === 'done') return <path className="bg-lids" d="M-6.2,-8.4 q2.2,-2.4 4.4,0 M1.8,-8.4 q2.2,-2.4 4.4,0" />;
-  if (state === 'failed') return <path className="bg-lids" d="M-6,-8.6 h4 M2,-8.6 h4" />;
+  if (state === 'failed' || state === 'stopped') return <path className="bg-lids" d="M-6,-8.6 h4 M2,-8.6 h4" />;
   return (
     <g>
       <circle className="bg-eye" cx={-4} cy={-9} r={2.6} />
@@ -81,6 +82,14 @@ function Badge({ state }: { state: BgAgentState }) {
       <g className="bg-badge failed">
         <circle cx={10} cy={-18.5} r={5} />
         <path d="M8.2,-20.3 l3.6,3.6 M11.8,-20.3 l-3.6,3.6" />
+      </g>
+    );
+  }
+  if (state === 'stopped') {
+    return (
+      <g className="bg-badge stopped">
+        <circle cx={10} cy={-18.5} r={5} />
+        <path d="M8.6,-20.6 v4.2 M11.4,-20.6 v4.2" />
       </g>
     );
   }

@@ -52,6 +52,7 @@ export async function listRuns(dir: string): Promise<BgRunSummary[]> {
 export function taskFromRun(j: any, runId: string): BgTask {
   const s = createBgState('run');
   const startedAt = typeof j.startTime === 'number' ? j.startTime : Date.parse(j.timestamp ?? '') || 0;
+  const reason = runError(j.error, j.status);
   const t: BgTask = {
     id: typeof j.taskId === 'string' ? j.taskId : runId,
     kind: 'workflow',
@@ -63,15 +64,25 @@ export function taskFromRun(j: any, runId: string): BgTask {
     ...(typeof j.durationMs === 'number' ? { endedAt: startedAt + j.durationMs } : {}),
     ...(typeof j.totalTokens === 'number' ? { tokens: j.totalTokens } : {}),
     ...(typeof j.totalToolCalls === 'number' ? { toolUses: j.totalToolCalls } : {}),
-    ...(typeof j.error === 'string' ? { reason: j.error } : {}),
+    ...(reason ? { reason } : {}),
     agents: [],
     runId,
   };
   if (Array.isArray(j.phases)) t.phases = j.phases.map((p: any, i: number) => ({ index: i + 1, title: String(p?.title ?? `阶段 ${i + 1}`) }));
   mergeWorkflowProgress(s, t, Array.isArray(j.workflowProgress) ? j.workflowProgress : [], t.endedAt ?? startedAt, true);
-  // a run that ended with agents still marked running / queued: they ended with it
-  for (const a of t.agents) if (a.state === 'running' || a.state === 'queued') a.state = t.status === 'completed' ? 'done' : 'failed';
+  // a run that ended with agents still marked running / queued: they ended with it (a killed run's are stopped)
+  for (const a of t.agents) if (a.state === 'running' || a.state === 'queued') a.state = t.status === 'completed' ? 'done' : t.status === 'stopped' ? 'stopped' : 'failed';
   return t;
+}
+
+/** A run file's `error` is the thrown error's stack (2026-10-13, official 2.1.283: a stopped workflow's is
+ *  「Error: Workflow aborted」 and the Bun stack under it): its first line, without the `Error: ` the stack starts with —
+ *  and nothing for a run the user stopped (being stopped is the status, not a reason). */
+export function runError(error: unknown, status: unknown): string | undefined {
+  if (typeof error !== 'string') return undefined;
+  const line = (error.split('\n').find((l) => l.trim()) ?? '').trim().replace(/^Error:\s*/, '');
+  if (!line || (status === 'killed' && /^(workflow )?(aborted|killed|cancell?ed|stopped)\b/i.test(line))) return undefined;
+  return line.length > 200 ? `${line.slice(0, 199)}…` : line;
 }
 
 export async function readRun(dir: string, runId: string): Promise<BgTask | null> {

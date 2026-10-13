@@ -4,10 +4,12 @@
 import type { ToolUseBlock } from '@/model/conversation';
 import { fmtDuration } from '@/model/turn';
 
-/** done · active (running, or its input still streaming) · pending (called, not started) · failed · waiting on the user */
-export type StepState = 'done' | 'active' | 'pending' | 'failed' | 'waiting';
+/** done · active (running, or its input still streaming) · pending (called, not started) · failed · stopped (cut off
+ *  when the turn was stopped) · waiting on the user */
+export type StepState = 'done' | 'active' | 'pending' | 'failed' | 'stopped' | 'waiting';
 
-export function stepState(t: Pick<ToolUseBlock, 'id' | 'status'>, waiting?: ReadonlySet<string>): StepState {
+export function stepState(t: Pick<ToolUseBlock, 'id' | 'status' | 'stopped'>, waiting?: ReadonlySet<string>): StepState {
+  if (t.stopped) return 'stopped';
   if (t.status === 'error') return 'failed';
   if (t.status !== 'done' && waiting?.has(t.id)) return 'waiting';
   if (t.status === 'running' || t.status === 'streaming') return 'active';

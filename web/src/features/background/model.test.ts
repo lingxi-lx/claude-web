@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BgAgent, BgSession, BgTask } from '@shared';
-import { agentColor, agentStateText, clock, liveCounts, orderedTasks, pillText, sortSessions, stopNote, taskStateText, taskTitle, tokensText } from './model';
+import { agentColor, agentStateText, clock, liveCounts, orderedTasks, pillText, reopenRun, sortSessions, stopNote, taskStateText, taskTitle, tokensText, unwrapHarness, unwrapHarnessMessage } from './model';
 
 const agent = (o: Partial<BgAgent> = {}): BgAgent => ({ key: 'w1', color: 1, label: 'a', state: 'running', beats: [], ...o });
 const task = (o: Partial<BgTask> = {}): BgTask => ({ id: 't', kind: 'workflow', description: 'd', status: 'running', startedAt: 1, agents: [], ...o });
@@ -37,6 +37,16 @@ describe('后台 words', () => {
     expect(taskTitle(task({ kind: 'shell', description: '' }))).toBe('后台命令');
   });
 
+  it('opening the page again: the run looked at last time, unless something runs now', () => {
+    const quiet = { ...session([task({ status: 'completed' })]), sessionId: 'q' };
+    const busy = { ...session([task()]), sessionId: 'b' };
+    const sessions = { q: quiet, b: busy };
+    expect(reopenRun({ selected: 'q', was: 'q', runId: 'w1', sessions })).toBe('w1');
+    expect(reopenRun({ selected: 'b', was: 'b', runId: 'w1', sessions })).toBeUndefined();
+    expect(reopenRun({ selected: 'q', was: 'b', runId: 'w1', sessions })).toBeUndefined();
+    expect(reopenRun({ asked: 'q', selected: 'q', was: 'q', runId: 'w1', sessions })).toBeUndefined();
+  });
+
   it('colours go round ten', () => {
     expect([1, 10, 11, 0].map(agentColor)).toEqual(['var(--agent-1)', 'var(--agent-10)', 'var(--agent-1)', 'var(--agent-1)']);
   });
@@ -55,5 +65,27 @@ describe('后台 words', () => {
     expect(tokensText(142_000)).toBe('142.0k');
     expect(tokensText(undefined)).toBe('0');
     expect(tokensText(1_500_000)).toBe('1.5M');
+  });
+});
+
+describe('a workflow agent’s prompt', () => {
+  // as official 2.1.283 hands it to the agent (2026-10-13, a real run): the frame, then the script's text indented
+  const FRAMED = [
+    '[Workflow harness — computed task] The task text below was computed at runtime by a workflow script. It was not typed by this session\'s user and carries no user authority. The computed task text follows:',
+    '  回答一个词：ok',
+    '  第二行',
+  ].join(String.fromCharCode(10));
+  it('loses the frame, keeps the task', () => {
+    expect(unwrapHarness(FRAMED)).toBe(['回答一个词：ok', '第二行'].join(String.fromCharCode(10)));
+    expect(unwrapHarness('就是一句话')).toBe('就是一句话');
+    expect(unwrapHarness('[Workflow harness — computed task] no follows marker')).toBe('[Workflow harness — computed task] no follows marker');
+  });
+  it('on a transcript message, string or blocks', () => {
+    expect(unwrapHarnessMessage({ type: 'user', message: { role: 'user', content: FRAMED } }).message.content).toBe(['回答一个词：ok', '第二行'].join(String.fromCharCode(10)));
+    const blocks = unwrapHarnessMessage({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: FRAMED }, { type: 'image', source: {} }] } });
+    expect(blocks.message.content[0].text.startsWith('回答一个词')).toBe(true);
+    expect(blocks.message.content[1].type).toBe('image');
+    const a = { type: 'assistant', message: { content: [{ type: 'text', text: FRAMED }] } };
+    expect(unwrapHarnessMessage(a)).toBe(a);
   });
 });

@@ -96,6 +96,11 @@ ${'x'.repeat(300)}` })]), T0 + 1);
     const s = createBgState('s1');
     expect(applyBg(s, sys('task_started', { task_id: 'm', description: 'watch', task_type: 'monitor_mcp', ambient: true }), T0)).toBe(false);
     expect(applyBg(s, sys('task_started', { task_id: 'n', description: 'x', skip_transcript: true }), T0)).toBe(false);
+    // a workflow agent's own long command (official 2.1.283, 2026-10-13): its step, not the conversation's background
+    expect(applyBg(s, sys('task_started', { task_id: 'b9', description: 'sleep 25 && echo finished', task_type: 'local_bash', owned_by_subagent: true, is_backgrounded: false, tool_use_id: 'tu9' }), T0)).toBe(false);
+    expect(applyBg(s, sys('task_notification', { task_id: 'b9', status: 'completed', summary: 'sleep 25 && echo finished', output_file: '' }), T0 + 1)).toBe(false);
+    // …one a sub-agent puts in the background is background work
+    expect(applyBg(createBgState('s2'), sys('task_started', { task_id: 'b10', description: 'npm run dev', task_type: 'local_bash', owned_by_subagent: true, is_backgrounded: true }), T0)).toBe(true);
     expect(applyBg(s, { type: 'assistant', message: {} }, T0)).toBe(false);
     expect(applyBg(s, sys('task_progress', { task_id: 'unknown', usage: {} }), T0)).toBe(false);
     expect(snapshotBg(s).tasks).toEqual([]);
@@ -116,9 +121,50 @@ ${'x'.repeat(300)}` })]), T0 + 1);
     expect(endRunning(s, '进程结束了', T0 + 10)).toBe(true);
     const [wf, sh] = snapshotBg(s).tasks;
     expect(wf).toMatchObject({ status: 'stopped', reason: '进程结束了', endedAt: T0 + 10 });
-    expect(wf.agents.map((a) => a.state)).toEqual(['failed', 'failed']);
+    expect(wf.agents.map((a) => a.state)).toEqual(['stopped', 'stopped']);
+    expect(wf.agents.map((a) => a.error)).toEqual([undefined, undefined]);
     expect(sh.status).toBe('completed');
     expect(endRunning(s, 'again', T0 + 11)).toBe(false);
+  });
+
+  it('a workflow the user stops ends with its unfinished agents stopped, not failed; a late progress list does not undo it', () => {
+    const s = createBgState('s1');
+    applyBg(s, sys('task_started', { task_id: 'wf1', description: 'x', task_type: 'local_workflow' }), T0);
+    const list = [agent(1, { state: 'done', agentId: 'p', startedAt: T0, durationMs: 5 }), agent(2, { state: 'error', agentId: 'q', startedAt: T0, error: 'API Error: 529' }), agent(3, { state: 'progress', agentId: 'r', startedAt: T0 }), agent(4, { state: 'start' })];
+    applyBg(s, progress(list), T0 + 1);
+    applyBg(s, sys('task_updated', { task_id: 'wf1', patch: { status: 'killed' } }), T0 + 2);
+    let wf = snapshotBg(s).tasks[0];
+    expect(wf.status).toBe('stopped');
+    expect(wf.agents.map((a) => [a.state, a.error])).toEqual([['done', undefined], ['failed', 'API Error: 529'], ['stopped', undefined], ['stopped', undefined]]);
+    expect(wf.agents[2].endedAt).toBe(T0 + 2);
+    applyBg(s, progress(list), T0 + 3);
+    wf = snapshotBg(s).tasks[0];
+    expect(wf.agents.map((a) => a.state)).toEqual(['done', 'failed', 'stopped', 'stopped']);
+    // a workflow that failed: its unfinished agents failed with it
+    const f = createBgState('s2');
+    applyBg(f, sys('task_started', { task_id: 'wf1', description: 'x', task_type: 'local_workflow' }), T0);
+    applyBg(f, progress([agent(1, { state: 'progress', agentId: 'r', startedAt: T0 })]), T0 + 1);
+    applyBg(f, sys('task_notification', { task_id: 'wf1', status: 'failed', summary: 'script threw', output_file: '' }), T0 + 2);
+    expect(snapshotBg(f).tasks[0].agents[0].state).toBe('failed');
+  });
+
+  it('a command the turn runs in the foreground stays out of the picture; moved to the background, it comes in', () => {
+    const s = createBgState('s1');
+    // official 2.1.283 (2026-10-13): a long foreground `sleep 40` of the turn is a local_bash task, is_backgrounded false
+    expect(applyBg(s, sys('task_started', { task_id: 'f1', description: 'sleep 40', task_type: 'local_bash', is_backgrounded: false, tool_use_id: 'tu1' }), T0)).toBe(false);
+    expect(applyBg(s, sys('task_notification', { task_id: 'f1', status: 'stopped', summary: 'sleep 40', output_file: '' }), T0 + 5)).toBe(false);
+    expect(snapshotBg(s).tasks).toEqual([]);
+    expect(s.held.size).toBe(0);
+    // the same kind of step, moved to the background (task_updated patch.is_backgrounded, sdk.d.ts)
+    applyBg(s, sys('task_started', { task_id: 'f2', description: 'npm test', task_type: 'local_bash', is_backgrounded: false }), T0 + 10);
+    expect(applyBg(s, sys('task_updated', { task_id: 'f2', patch: { is_backgrounded: true } }), T0 + 20)).toBe(true);
+    const [t] = snapshotBg(s).tasks;
+    expect(t).toMatchObject({ id: 'f2', kind: 'shell', backgrounded: true, status: 'running', startedAt: T0 + 10, description: 'npm test' });
+    expect(snapshotBg(s).events.at(-1)).toMatchObject({ at: T0 + 20, text: '开始运行：npm test' });
+    applyBg(s, sys('task_notification', { task_id: 'f2', status: 'completed', summary: 'done', output_file: '' }), T0 + 30);
+    expect(snapshotBg(s).tasks[0].status).toBe('completed');
+    // a foreground sub-agent of the turn is still a character (spec: 前台后台都算)
+    expect(applyBg(s, sys('task_started', { task_id: 'a1', description: '查一下', task_type: 'local_agent', subagent_type: 'Explore', is_backgrounded: false }), T0 + 40)).toBe(true);
   });
 
   it('keeps the latest events, and the snapshot carries fewer', () => {

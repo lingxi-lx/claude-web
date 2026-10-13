@@ -14,11 +14,12 @@ const live = (i: Item) => (i.kind === 'agent' ? i.agent.state === 'running' : i.
 const SHELL_WORD: Record<BgTask['status'], string> = { running: '在跑', completed: '完成', failed: '失败', stopped: '已停止' };
 
 /** How far along the bar is, 0…1: a running agent's time so far against the longest-running agent of its task (never
- *  quite full: full means done), done / failed full, queued empty. */
+ *  quite full: full means done), done / failed full, queued empty, stopped where it was when it stopped. */
 function progress(a: BgAgent, now: number, longest: number): number {
   if (a.state === 'done' || a.state === 'failed') return 1;
   if (a.state === 'queued' || !a.startedAt) return 0;
-  return 0.06 + 0.82 * Math.min(1, Math.max(0, now - a.startedAt) / Math.max(1, longest));
+  const until = a.state === 'stopped' ? (a.endedAt ?? now) : now;
+  return 0.06 + 0.82 * Math.min(1, Math.max(0, until - a.startedAt) / Math.max(1, longest));
 }
 
 export function AgentCards({ session, taskId, onPick, max = 15 }: { session: BgSession; taskId?: string; onPick: Pick; max?: number }) {

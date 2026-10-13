@@ -31,7 +31,9 @@ beforeAll(() => {
   mkdirSync(path.join(dir, 'workflows'), { recursive: true });
   writeFileSync(path.join(proj, `${SID}.jsonl`), '{}\n');
   writeFileSync(path.join(dir, 'workflows', 'wf_974df824-3c8.json'), JSON.stringify(run()));
-  writeFileSync(path.join(dir, 'workflows', 'wf_newer-1.json'), JSON.stringify(run({ startTime: 1788456000000, workflowName: 'newer', status: 'failed', error: 'boom' })));
+  writeFileSync(path.join(dir, 'workflows', 'wf_newer-1.json'), JSON.stringify(run({ startTime: 1788456000000, workflowName: 'newer', status: 'failed', error: 'Error: boom\n    at S (B:/~BUN/root/chunk-7dvkmj58.js:78:5225)\n    at run (unknown)' })));
+  // stopped by the user (official 2.1.283, 2026-10-13): status killed, the abort's stack as the error, agents left in progress
+  writeFileSync(path.join(dir, 'workflows', 'wf_killed-1.json'), JSON.stringify(run({ startTime: 1788455000000, workflowName: 'killed', status: 'killed', error: 'Error: Workflow aborted\n    at S (B:/~BUN/root/chunk-7dvkmj58.js:78:5225)\n    at abort (unknown)', workflowProgress: [{ type: 'workflow_agent', index: 1, label: 'slow-a', state: 'progress', startedAt: 1788455000100, agentId: 'a1' }] })));
   writeFileSync(path.join(dir, 'workflows', 'wf_broken-1.json'), '{ half');
   // our engine names a run by its task id
   writeFileSync(path.join(dir, 'workflows', 'w8voqywjg.json'), JSON.stringify(run({ runId: 'w8voqywjg', taskId: 'w8voqywjg', startTime: 1788400000000, workflowName: 'engine-run' })));
@@ -55,7 +57,7 @@ describe('background on disk', () => {
 
   it('lists the finished runs, newest first, skipping what does not parse', async () => {
     const runs = await listRuns(dir);
-    expect(runs.map((r) => r.runId)).toEqual(['wf_newer-1', 'wf_974df824-3c8', 'w8voqywjg']);
+    expect(runs.map((r) => r.runId)).toEqual(['wf_newer-1', 'wf_974df824-3c8', 'wf_killed-1', 'w8voqywjg']);
     expect(runs[1]).toEqual({ runId: 'wf_974df824-3c8', name: 'ui-benchmark-research', status: 'completed', startedAt: 1788455957884, durationMs: 226740, agentCount: 2, tokens: 454592, taskId: 'wilzb31ol' });
     expect(await listRuns(path.join(root, 'nowhere'))).toEqual([]);
   });
@@ -69,6 +71,10 @@ describe('background on disk', () => {
     const failed = (await readRun(dir, 'wf_newer-1'))!;
     expect(failed).toMatchObject({ status: 'failed', reason: 'boom' });
     expect(failed.agents[1].state).toBe('failed');
+    const killed = (await readRun(dir, 'wf_killed-1'))!;
+    expect(killed.status).toBe('stopped');
+    expect(killed.reason).toBeUndefined();
+    expect(killed.agents.map((a) => a.state)).toEqual(['stopped']);
     expect(await readRun(dir, '../secret')).toBeNull();
     expect(await readRun(dir, 'wf_missing')).toBeNull();
   });

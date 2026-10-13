@@ -5,8 +5,9 @@
 /** What a task is: a workflow (`local_workflow`), one sub-agent (`local_agent`), a background command (`local_bash`), anything else. */
 export type BgKind = 'workflow' | 'agent' | 'shell' | 'other';
 export type BgStatus = 'running' | 'completed' | 'failed' | 'stopped';
-/** A workflow agent's `start` before it has an agent id is queued; `progress` is running. */
-export type BgAgentState = 'queued' | 'running' | 'done' | 'failed';
+/** A workflow agent's `start` before it has an agent id is queued; `progress` is running. `stopped`: its task was
+ *  stopped (by the user, or with the CLI process) before it finished — not a failure. */
+export type BgAgentState = 'queued' | 'running' | 'done' | 'failed' | 'stopped';
 
 /** One character in the office: a workflow's agent, or the agent a `local_agent` task is. */
 export interface BgAgent {

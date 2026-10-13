@@ -5,7 +5,7 @@ import { applyTranscript, createConversation } from '@/model/conversation';
 import { ItemList } from '@/features/chat/ChatView';
 import { Icon } from '@/ui/icons';
 import { CharacterIcon } from './Character';
-import { agentColor, agentStateText, clock, KIND_LABEL, tokensText } from './model';
+import { agentColor, agentStateText, clock, KIND_LABEL, tokensText, unwrapHarnessMessage } from './model';
 import { closeAgent, stopTask } from './state';
 
 /** How often a running agent's conversation is read again while it is open. */
@@ -34,7 +34,7 @@ export function AgentDrawer({ sessionId, task, agent }: { sessionId: string; tas
   const conv = useMemo(() => {
     if (!msgs) return null;
     const c = createConversation();
-    applyTranscript(c, msgs as any[], { live: running });
+    applyTranscript(c, (msgs as any[]).map(unwrapHarnessMessage), { live: running });
     return c;
   }, [msgs, running]);
   const facts = [

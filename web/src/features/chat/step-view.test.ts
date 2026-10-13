@@ -6,6 +6,7 @@ describe('stepState', () => {
   it('one state per step, the same ones as before the refresh', () => {
     expect(stepState(t('done'))).toBe('done');
     expect(stepState(t('error'))).toBe('failed');
+    expect(stepState({ ...t('error'), stopped: true })).toBe('stopped');
     expect(stepState(t('running'))).toBe('active');
     expect(stepState(t('streaming'))).toBe('active');
     expect(stepState(t('pending'))).toBe('pending');

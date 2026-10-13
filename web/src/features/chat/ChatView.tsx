@@ -122,7 +122,7 @@ function Steps({ tools, version }: { tools: ToolUseBlock[]; version: number }) {
   const touch = useContext(TurnTouchCtx);
   const inlineDiffs = useStore((s) => s.settings['ui.inlineDiffs'] === true);
   const running = tools.some((t) => t.status === 'running' || t.status === 'pending' || t.status === 'streaming');
-  const failed = tools.some((t) => t.status === 'error');
+  const failed = tools.some((t) => t.status === 'error' && !t.stopped);
   // by step id; a merged row is `g:<its first step's id>`
   const [opened, setOpened] = useState<Record<string, boolean>>({});
   const [all, setAll] = useState(false);

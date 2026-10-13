@@ -32,6 +32,8 @@ function useNow(on: boolean): number {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     if (!on) return;
+    // the page stays mounted while closed: on reopening, the time it was last closed would show for a second
+    setNow(Date.now());
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [on]);

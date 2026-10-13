@@ -23,6 +23,17 @@ export function liveCounts(s: BgSession | undefined): LiveCounts {
 
 export const hasLive = (s: BgSession | undefined) => liveCounts(s).tasks > 0;
 
+/**
+ * The finished run the page shows when it opens again: a conversation asked for (the pill, a card's 在「后台」里看)
+ * is its present; back from the rail it is the run looked at last time — unless that was another conversation's, or
+ * this one has work running now (a real desktop run, 2026-10-13, reopened onto a finished run while a new workflow ran
+ * in the same conversation — the sidebar said 在跑, the page said 完成).
+ */
+export function reopenRun(o: { asked?: string; selected?: string; was?: string; runId?: string; sessions: Record<string, BgSession> }): string | undefined {
+  if (o.asked || !o.runId || o.selected !== o.was) return undefined;
+  return hasLive(o.selected ? o.sessions[o.selected] : undefined) ? undefined : o.runId;
+}
+
 /** The composer's pill: null when nothing runs. 「后台 · 1 个工作流 · 2 个在跑」 */
 export function pillText(s: BgSession | undefined): string | null {
   const c = liveCounts(s);
@@ -44,6 +55,7 @@ export function agentStateText(a: BgAgent): string {
     case 'running': return '在跑';
     case 'done': return a.cached ? '用了上次的结果' : '完成';
     case 'failed': return '失败';
+    case 'stopped': return '已停止';
   }
 }
 
@@ -70,6 +82,33 @@ export const agentColor = (n: number) => `var(--agent-${((Math.max(1, n) - 1) % 
 /** Conversations with something running first, then the rest; newest change first in each. */
 export function sortSessions(list: BgSession[]): BgSession[] {
   return [...list].sort((a, b) => Number(hasLive(b)) - Number(hasLive(a)) || b.updatedAt - a.updatedAt);
+}
+
+const HARNESS = '[Workflow harness — computed task]';
+const FOLLOWS = 'The computed task text follows:';
+
+/**
+ * A workflow agent's prompt as the person reading its conversation wants it: official 2.1.283 hands each agent the
+ * script's text inside a frame («[Workflow harness — computed task] The task text below was computed at runtime by a
+ * workflow script… The computed task text follows:» and the text, every line indented by two spaces) — the frame is
+ * for the model. Anything not in that frame is given back as it is.
+ */
+export function unwrapHarness(text: string): string {
+  if (!text.startsWith(HARNESS)) return text;
+  const at = text.indexOf(FOLLOWS);
+  if (at < 0) return text;
+  const body = text.slice(at + FOLLOWS.length).replace(/^\r?\n/, '');
+  const out = body.split('\n').map((l) => (l.startsWith('  ') ? l.slice(2) : l)).join('\n').trim();
+  return out || text;
+}
+
+/** The same, on a transcript message: its text blocks (or string content) unwrapped. */
+export function unwrapHarnessMessage(m: any): any {
+  if (m?.type !== 'user' || !m.message) return m;
+  const c = m.message.content;
+  if (typeof c === 'string') return c.startsWith(HARNESS) ? { ...m, message: { ...m.message, content: unwrapHarness(c) } } : m;
+  if (!Array.isArray(c) || !c.some((b) => b?.type === 'text' && typeof b.text === 'string' && b.text.startsWith(HARNESS))) return m;
+  return { ...m, message: { ...m.message, content: c.map((b) => (b?.type === 'text' && typeof b.text === 'string' ? { ...b, text: unwrapHarness(b.text) } : b)) } };
 }
 
 /** 3:12 / 1:02:03 */
