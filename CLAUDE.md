@@ -83,6 +83,7 @@ npm run dev          # 开发：server tsx watch + vite :5173（代理 /ws 到 3
 | [rail-sections-web](docs/notes/rail-sections-web.md) | 图标栏 / 分区 / 联网（2026-10-10，界面第二轮） | 图标栏、分区页、扩展页、强度按钮、浏览器标签、web MCP |
 | [search-computer](docs/notes/search-computer.md) | 搜索在内置浏览器里 / 网页上的鼠标键盘 / 操控电脑（2026-10-10，用户要求） | 浏览器里搜索、browser_computer、操控电脑（computer MCP） |
 | [background](docs/notes/background.md) | 后台：在跑的子代理和工作流（2026-10-12） | 后台：子代理 / 工作流的数据来源、服务端、前端、调试 |
+| [cafe](docs/notes/cafe.md) | 后台 · 网吧（2026-10-13） | 等距像素网吧、角色格式、捏角色的 skill 和工具、模拟与渲染 |
 
 ## 结构
 
@@ -96,4 +97,5 @@ npm run dev          # 开发：server tsx watch + vite :5173（代理 /ws 到 3
 - `server/src/web/` — 联网：搜索、`web` MCP 服务器、给内置浏览器派活；浏览器本身在 `web/src/features/browser/`
 - `server/src/computer/` — 操控电脑（Windows）：`computer` MCP 服务器、授权闸、PowerShell helper、向用户要授权的接口；对话里的文字和授权卡在 `web/src/features/computer/` 和 `chat/PermissionCards.tsx`
 - `web/src/features/rail/`、`web/src/features/sections/` — 图标栏和分区页
-- `server/src/background/`、`web/src/features/background/` — 后台：在跑的子代理、工作流、后台命令（登记表、办公室、关系图）
+- `server/src/background/`、`web/src/features/background/` — 后台：在跑的子代理、工作流、后台命令（登记表、卡片、关系图）
+- `server/src/characters/`、`web/src/features/cafe/` — 网吧：角色格式（`core/`，web 经 `@characters`）、角色库、捏角色的工具和 skill、Canvas 网吧
