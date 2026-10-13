@@ -16,6 +16,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { CHARACTER_TOOLS } from '../characters/tool-defs.js';
 
 const PROTOCOL_VERSION = '2025-06-18';
 /** Longer than the server's own bounds (30 s for the browser, a few engines × 15 s for a search). */
@@ -143,6 +144,8 @@ export const TOOLS = [
     },
     annotations: { title: 'Mouse and keyboard in the browser', readOnlyHint: false, openWorldHint: true },
   },
+  // 网吧's character tools (characters/tool-defs.ts): answered by the character library, not by 联网
+  ...CHARACTER_TOOLS,
 ];
 
 interface ToolAnswer { content: unknown[]; isError?: boolean }

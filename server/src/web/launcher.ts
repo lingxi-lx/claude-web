@@ -120,8 +120,12 @@ export function webClaudeMcpServer(t: WebMcpTarget, execPath = process.execPath)
 
 /** Tools Claude runs without asking, as `allowedTools`: the search, only while the server is handed out. */
 export function webAllowedTools(): string[] {
-  return enabled && endpoint ? [WEB_SEARCH_TOOL] : [];
+  return enabled && endpoint ? [WEB_SEARCH_TOOL, ...CHARACTER_FREE_TOOLS] : [];
 }
+
+/** 网吧's character tools that only touch the character library (drafts the user watches, a save): not asked about one by
+ *  one. Giving a character to someone changes the user's settings — character_assign is asked like any tool. */
+export const CHARACTER_FREE_TOOLS = ['mcp__web__character_guide', 'mcp__web__character_draft', 'mcp__web__character_save', 'mcp__web__character_list'];
 
 /** ACP `session/new` / `session/load` take the list inline, env as name/value pairs. */
 export function webAcpMcpServers(t: WebMcpTarget, execPath = process.execPath) {

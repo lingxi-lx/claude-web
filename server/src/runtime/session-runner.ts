@@ -12,7 +12,8 @@ import { loopbackNoProxy, providerEnv, type SessionProvider } from '../providers
 import { ccbAccountEnv, ccbMisthinks, ccbModel, isChatModel, modelCaps, modelLabel, modelsFor, preferredRuntime, providerModelId, supportsUltracode, webCapsEnv } from '../models/catalog.js';
 import { turnShare, type RunningTotals } from '../usage/turn-cost.js';
 import { claudeMcpServer } from '../memory/launcher.js';
-import { webAllowedTools, webClaudeMcpServer } from '../web/launcher.js';
+import { webAllowedTools, webClaudeMcpServer, webMcpEnabled } from '../web/launcher.js';
+import { cafePluginDir } from '../characters/tools.js';
 import { computerAllowedTools, computerClaudeMcpServer } from '../computer/launcher.js';
 import { ENGINE_SEARCH_TOOL, engineSearchOff, userPickedSearchAdapter } from '../web/engine-search.js';
 import { markUnknownCost } from '../usage/pricing.js';
@@ -344,6 +345,9 @@ export class SessionRunner extends EventEmitter {
       // 联网 (`web`: search + the built-in browser) goes in the same way (web/launcher.ts).
       // 操控电脑 (`computer`: the whole desktop, computer/launcher.ts) only for a conversation that has it switched on.
       mcpServers: { ...claudeMcpServer({ cwd: this.cwd, sessionId: this.sessionId, agent: 'claude' }), ...webClaudeMcpServer({ sessionId: this.sessionId }), ...computer },
+      // 网吧's cafe-character skill, as a local plugin (both runtimes load it: 2026-10-13), only while the `web` server
+      // that answers its character_* tools is handed out
+      ...(webMcpEnabled() && cafePluginDir() ? { plugins: [{ type: 'local' as const, path: cafePluginDir()! }] } : {}),
       // searching only reads: 每步询问 does not ask for every search (the browser tools follow the permission mode).
       // The computer tools are not asked about one by one either: the user approves the applications, in the app
       // (computer/access.ts), and the server's own gate holds every action to that.
