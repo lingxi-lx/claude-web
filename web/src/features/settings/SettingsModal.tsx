@@ -57,6 +57,8 @@ const CONTROLS: Record<EntryId, (e: EntryMeta) => ReactNode> = {
   'ui.confirmExit': (e) => <Toggle k={e.id} def label={e.label} />,
   'ui.softwareRender': (e) => <Toggle k={e.id} label={e.label} />,
   'orchestra.maxParallel': (e) => <NumberSelect k={e.id} def={3} label={e.label} options={[1, 2, 3, 4, 6, 8]} />,
+  'cafe.rate': (e) => <NumberSelect k={e.id} def={5} label={e.label} options={[0, 2, 3, 5, 8, 10, 15]} />,
+  'cafe.sound': (e) => <Toggle k={e.id} label={e.label} />,
   'ui.theme': (e) => <ThemeSwatches label={e.label} />,
   'ui.zoom': (e) => <ZoomControl label={e.label} />,
   'ui.fontSize': (e) => <NumberSelect k={e.id} def={14} label={e.label} options={FONT_SIZES} />,

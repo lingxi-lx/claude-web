@@ -28,6 +28,7 @@ import { MOBILE_QUERY, drawerYields } from '@/ui/viewport';
 import { installAutomation } from '@/features/automation/state';
 import { installBackground } from '@/features/background/state';
 import { installCafe } from '@/features/cafe/state';
+import { CharacterLibrary } from '@/features/cafe/CharacterLibrary';
 import { BackgroundSide } from '@/features/background/BackgroundSide';
 import { installBrowserHost } from '@/features/browser/host';
 import { useSection } from '@/features/sections';
@@ -274,6 +275,7 @@ export function App() {
       <ErrorBoundary area="图片查看" floating><ImageViewer /></ErrorBoundary>
       <ErrorBoundary area="接一个模型" floating><ConnectModelHost /></ErrorBoundary>
       <ErrorBoundary area="应用更新" floating><UpdatePrompt /></ErrorBoundary>
+      <ErrorBoundary area="角色库" floating><CharacterLibrary /></ErrorBoundary>
       <ErrorBoundary area="对话框" floating><DialogHost /></ErrorBoundary>
     </div>
   );

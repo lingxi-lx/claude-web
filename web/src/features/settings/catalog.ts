@@ -19,7 +19,7 @@ export const SETTINGS_GROUPS: { id: SettingsGroupId; l: string }[] = [
 /** One setting row (a meta.json key). */
 export type EntryId =
   | 'ui.defaultMode' | 'autoContinueOnReset' | 'ui.showThinking' | 'ui.diffMode' | 'ui.inlineDiffs' | 'ui.workbench' | 'ui.autoSave'
-  | 'ui.notifications' | 'ui.closeToTray' | 'ui.confirmExit' | 'ui.softwareRender' | 'orchestra.maxParallel'
+  | 'ui.notifications' | 'ui.closeToTray' | 'ui.confirmExit' | 'ui.softwareRender' | 'orchestra.maxParallel' | 'cafe.rate' | 'cafe.sound'
   | 'ui.theme' | 'ui.zoom' | 'ui.fontSize' | 'ui.density' | 'ui.cjkFont' | 'ui.reduceMotion' | 'ui.haptics';
 
 /** One part of a page: a component with its own requests (a list, a form, a status block). */
@@ -106,6 +106,8 @@ const GENERAL: EntryMeta[] = [
   { id: 'ui.notifications', block: '提醒与窗口', label: '桌面通知', hint: '对话需要你确认，或者任务完成时提醒你。', keywords: 'notification 通知' },
   { id: 'ui.closeToTray', block: '提醒与窗口', label: '关闭窗口时留在托盘', hint: '桌面版：关掉最后一个窗口不退出，任务在后台继续跑，从托盘图标回来。', keywords: 'tray minimize close 托盘 最小化' },
   { id: 'ui.confirmExit', block: '提醒与窗口', label: '退出前确认', hint: '有运行中的对话或没保存的文件时先问一句。', keywords: 'quit exit close 退出 关闭 确认' },
+  { id: 'cafe.rate', block: '后台网吧', label: '网费（每小时）', hint: '网吧里座位牌上的网费，纯属好玩；真正的 token 用量和估算费用在悬停和小票里。', keywords: 'cafe 网吧 网费 价格 后台 background' },
+  { id: 'cafe.sound', block: '后台网吧', label: '结账的声音', hint: '客人结账时收银机「叮」一声。', keywords: 'cafe 网吧 声音 sound 结账' },
   { id: 'ui.softwareRender', more: true, label: '软件渲染（桌面版）', hint: '显卡驱动异常导致黑屏 / 闪烁时打开，重启后生效。', keywords: 'gpu render 黑屏 闪烁 disable-gpu 显卡' },
   { id: 'orchestra.maxParallel', more: true, label: '编排并发上限', hint: '一次编排里同时执行的任务 / 比选数（等你审批的不占名额）。', keywords: 'orchestra workflow parallel 编排 并发 多 agent' },
 ];

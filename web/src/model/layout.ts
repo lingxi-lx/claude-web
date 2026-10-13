@@ -3,7 +3,7 @@
 
 import type { IconName } from '@/ui/icons';
 
-export type PanelId = 'tasks' | 'files' | 'explorer' | 'usage' | 'config' | 'terminal' | 'inspector' | 'mission' | 'goals' | 'android' | 'memory' | 'orchestra' | 'board' | 'browser';
+export type PanelId = 'tasks' | 'files' | 'explorer' | 'usage' | 'config' | 'terminal' | 'inspector' | 'mission' | 'goals' | 'android' | 'memory' | 'orchestra' | 'board' | 'browser' | 'cafe';
 /** A chat tile's view: the conversation (`live`) or one of the per-session workbench views. */
 export const WORKBENCH_TABS = ['live', 'changes', 'git', 'files', 'search', 'schedules', 'artifacts', 'board'] as const;
 export type WorkbenchTab = (typeof WORKBENCH_TABS)[number];
@@ -40,6 +40,7 @@ export const PANELS: { id: PanelId; title: string; icon: IconName; tier: PanelTi
   { id: 'browser', title: '浏览器', icon: 'web', tier: 'core', keepAlive: true },
   { id: 'inspector', title: '详情', icon: 'inspector', tier: 'extra' },
   { id: 'board', title: 'Issue 与 PR', icon: 'board', tier: 'extra' },
+  { id: 'cafe', title: '网吧', icon: 'cafe', tier: 'extra' },
   { id: 'android', title: 'Android', icon: 'android', tier: 'workbench' },
 ];
 /** The fixed tabs of the default right panel, in row order (审阅 · 文件 · 终端 · 浏览器 · 任务). */

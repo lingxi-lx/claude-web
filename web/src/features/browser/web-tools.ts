@@ -2,7 +2,7 @@
 // and what a permission card asks. Pure.
 import type { IconName } from '@/ui/icons';
 
-export const WEB_TOOLS = ['web_search', 'browser_open', 'browser_read', 'browser_find', 'browser_click', 'browser_type', 'browser_press_key', 'browser_scroll', 'browser_back', 'browser_screenshot', 'browser_computer'] as const;
+export const WEB_TOOLS = ['web_search', 'browser_open', 'browser_read', 'browser_find', 'browser_click', 'browser_type', 'browser_press_key', 'browser_scroll', 'browser_back', 'browser_screenshot', 'browser_computer', 'character_guide', 'character_draft', 'character_save', 'character_assign', 'character_list'] as const;
 export type WebTool = (typeof WEB_TOOLS)[number];
 
 /** `mcp__web__browser_open` (Claude), `web__browser_open` / `web.browser_open` / the bare name (other agents) → the tool. */
@@ -38,7 +38,22 @@ export function webToolLabel(tool: WebTool, input: Record<string, unknown> | und
     case 'browser_back': return { icon: 'web', verb: '返回上一页', arg: '' };
     case 'browser_screenshot': return { icon: 'image', verb: '给网页截图', arg: '' };
     case 'browser_computer': return computerLabel(input);
+    // 网吧's characters (server/src/characters/tool-defs.ts) ride on the same server
+    case 'character_guide': return { icon: 'user', verb: '看捏角色的说明', arg: '' };
+    case 'character_draft': { const c = input?.character as Record<string, unknown> | undefined; return { icon: 'user', verb: '画角色草稿:', arg: str(c, 'name') || str(c, 'id') }; }
+    case 'character_save': return { icon: 'user', verb: '保存角色:', arg: str(input, 'id') };
+    case 'character_assign': return { icon: 'user', verb: input?.id === null ? '收回角色:' : '把角色给:', arg: input?.id === null ? targetText(str(input, 'target')) : `${str(input, 'id')} → ${targetText(str(input, 'target'))}` };
+    case 'character_list': return { icon: 'user', verb: '看角色库', arg: '' };
   }
+}
+
+/** `type:Explore` → 「Explore 类子代理」 */
+function targetText(t: string): string {
+  if (t === 'admin') return '网管';
+  if (t === 'default') return '所有客人';
+  if (t.startsWith('type:')) return `${t.slice(5)} 类子代理`;
+  if (t.startsWith('name:')) return `叫 ${t.slice(5)} 的客人`;
+  return t;
 }
 
 const at = (v: unknown) => (Array.isArray(v) && v.length === 2 && v.every((n) => typeof n === 'number') ? `(${Math.round(v[0] as number)}, ${Math.round(v[1] as number)})` : '');
@@ -85,5 +100,7 @@ export function webToolAsk(tool: WebTool, input: Record<string, unknown> | undef
       if (action === 'mouse_move') return `${agent} 想在网页上移动鼠标`;
       return `${agent} 想用鼠标点网页上的一个位置`;
     }
+    case 'character_assign': return input?.id === null ? `${agent} 想把${targetText(str(input, 'target'))}换回默认形象` : `${agent} 想把角色 ${str(input, 'id')} 给${targetText(str(input, 'target'))}`;
+    case 'character_guide': case 'character_draft': case 'character_save': case 'character_list': return `${agent} 想改网吧的角色库`;
   }
 }
