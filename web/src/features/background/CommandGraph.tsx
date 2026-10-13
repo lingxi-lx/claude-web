@@ -7,8 +7,7 @@ import type { BgAgent, BgSession, BgTask } from '@shared';
 import { clsx } from '@/util';
 import { agentColor, agentStateText, taskStateText } from './model';
 import { agentTip } from './Character';
-import { clip, textWidth } from './office-layout';
-import { pressKeys } from './Office';
+import { clip, pressKeys, textWidth } from './text';
 
 type Pick = (agentKey: string, taskId: string) => void;
 type State = BgAgent['state'];

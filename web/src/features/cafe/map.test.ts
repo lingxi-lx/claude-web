@@ -44,12 +44,12 @@ describe('buildMap', () => {
     const many = Array.from({ length: 70 }, (_, i) => agent(`a${i}`, { phase: 1 }));
     const m = buildMap(sess([wf('w', many)]), NOW);
     expect(m.seats.filter((s) => s.key)).toHaveLength(MAX_ROWS * SEATS_PER_ROW);
-    expect(m.overflow).toBe(6);
+    expect(m.overflow).toBe(70 - MAX_ROWS * SEATS_PER_ROW);
     expect(m.full).toBe(true);
   });
   it('commands are machines in the VIP room; a task that ended long ago is gone', () => {
     const m = buildMap(sess([shell('b1'), sub('old', { status: 'completed', endedAt: NOW - KEEP_ENDED_MS - 1 }), sub('new', { status: 'completed', endedAt: NOW - 1000 })]), NOW);
-    expect(m.machines).toEqual([{ taskId: 'b1', u: 33, v: 2 }]);
+    expect(m.machines).toEqual([{ taskId: 'b1', u: 27, v: 2 }]);
     expect(m.seats.filter((s) => s.key).map((s) => s.key)).toEqual(['new/new']);
   });
   it('every seat, spot and the queue can be reached from the door, along free tiles', () => {

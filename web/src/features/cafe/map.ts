@@ -4,16 +4,16 @@
 //
 //   u  0– 5  service band: the toilet in the back corner, the snack corner along the left wall, the power-bank
 //            cabinet, the front desk with the admin behind it, the door at the front
-//   u  7–30  rows of seats: a row is 8 desks along u at one v; the desk at v, its chair at v + 1, an aisle after
-//   u 32–39  the VIP room behind glass at the back (the background commands' machines), the smoking balcony in front
+//   u  7–24  rows of seats: a row is 6 desks along u at one v; the desk at v, its chair at v + 1, an aisle after
+//   u 26–33  the VIP room behind glass at the back (the background commands' machines), the smoking balcony in front
 //
 // v 0–2 is the aisle along the back wall (the neon sign, the big screen, the window). Rows start at v = 3 and take 4
 // tiles each; after the last one, 4 tiles of front aisle. At least 18 deep, so the service band fits.
 import type { BgAgent, BgSession, BgTask } from '@shared';
 import type { Facing } from '@characters';
 
-export const COLS = 40;
-export const SEATS_PER_ROW = 8;
+export const COLS = 34;
+export const SEATS_PER_ROW = 6;
 export const MAX_ROWS = 8;
 export const MIN_ROWS = 2;
 /** A task that ended is kept on the plan this long: its guests walk to the desk, pay and leave. */
@@ -58,7 +58,9 @@ export interface CafeMap {
   /** Guests beyond the last seat. */
   overflow: number;
   full: boolean;
-  /** The glass walls (VIP: u 32–39 × v 0–7; the balcony: u 32 from `smokeV`, with a door). */
+  /** The glass walls (VIP: u 26–33 × v 0–7; the balcony: u 26 from `smoke.v0`, with a door). */
+  /** What hangs on the back-right wall, as u ranges: the big screen, the window. */
+  wall: { screen: [number, number]; window: [number, number] };
   vip: { u0: number; u1: number; v0: number; v1: number };
   smoke: { u0: number; u1: number; v0: number; v1: number; doorV: number };
 }
@@ -134,7 +136,7 @@ export function buildMap(s: BgSession | undefined, now: number): CafeMap {
   const door = { u: 2, v: front };
   const queue = [{ u: 4, v: front - 1 }, { u: 5, v: front - 1 }, { u: 6, v: front - 1 }, { u: 4, v: front }, { u: 5, v: front }, { u: 6, v: front }];
   // the back wall's aisle: guests stop to look at the big screen / out of the window
-  spots.push({ u: 14, v: 1, facing: 'ne', use: 'stand' }, { u: 24, v: 1, facing: 'ne', use: 'stand' });
+  spots.push({ u: 11, v: 1, facing: 'ne', use: 'stand' }, { u: 20, v: 1, facing: 'ne', use: 'stand' });
 
   // seats
   const seats: Seat[] = [];
@@ -152,20 +154,20 @@ export function buildMap(s: BgSession | undefined, now: number): CafeMap {
       seats.push({ ...(m ? { key: guestKey(m.taskId, m.a.key), taskId: m.taskId } : {}), no: no++, row: r, u, v, chair: { u, v: v + 1 } });
     }
     // a pair of chat spots in the aisle after the row
-    spots.push({ u: SEAT_U0 + 10, v: v + 2, facing: 'se', use: 'chat' }, { u: SEAT_U0 + 11, v: v + 2, facing: 'sw', use: 'chat' });
+    spots.push({ u: SEAT_U0 + 7, v: v + 2, facing: 'se', use: 'chat' }, { u: SEAT_U0 + 8, v: v + 2, facing: 'sw', use: 'chat' });
   }
   for (const p of plan.slice(nRows)) overflow += p.agents.length;
 
   // the VIP room (no one walks in) and its machines; the smoking balcony with a glass wall and a door
-  const vip = { u0: 32, u1: 39, v0: 0, v1: 7 };
+  const vip = { u0: 26, u1: 33, v0: 0, v1: 7 };
   block(vip.u0, vip.v0, vip.u1 - vip.u0 + 1, vip.v1 - vip.v0 + 1);
-  const machines: Machine[] = tasks.filter((t) => t.kind === 'shell').slice(0, 8).map((t, i) => ({ taskId: t.id, u: 33 + (i % 4) * 2, v: i < 4 ? 2 : 5 }));
-  const smoke = { u0: 33, u1: 39, v0: front - 6, v1: front, doorV: front - 3 };
-  for (let v = smoke.v0; v <= smoke.v1; v++) if (v !== smoke.doorV) block(32, v);
-  spots.push({ u: 35, v: front - 3, facing: 'sw', use: 'smoke' }, { u: 37, v: front - 4, facing: 'sw', use: 'smoke' }, { u: 36, v: front - 1, facing: 'ne', use: 'smoke' });
-  furniture.push({ kind: 'fan', u: 38, v: smoke.v0 });
+  const machines: Machine[] = tasks.filter((t) => t.kind === 'shell').slice(0, 8).map((t, i) => ({ taskId: t.id, u: 27 + (i % 4) * 2, v: i < 4 ? 2 : 5 }));
+  const smoke = { u0: 27, u1: 33, v0: front - 6, v1: front, doorV: front - 3 };
+  for (let v = smoke.v0; v <= smoke.v1; v++) if (v !== smoke.doorV) block(26, v);
+  spots.push({ u: 29, v: front - 3, facing: 'sw', use: 'smoke' }, { u: 31, v: front - 4, facing: 'sw', use: 'smoke' }, { u: 30, v: front - 1, facing: 'ne', use: 'smoke' });
+  furniture.push({ kind: 'fan', u: 32, v: smoke.v0 });
 
-  return { cols, rows: depth, walk, seats, spots, machines, rowLabels, furniture, door, counter, admin, queue, overflow, full: overflow > 0, vip, smoke };
+  return { cols, rows: depth, walk, seats, spots, machines, rowLabels, furniture, door, counter, admin, queue, overflow, full: overflow > 0, vip, smoke, wall: { screen: [9, 15], window: [17, 24] } };
 }
 
 export const walkable = (m: CafeMap, u: number, v: number) => u >= 0 && v >= 0 && u < m.cols && v < m.rows && m.walk[v * m.cols + u] === 1;

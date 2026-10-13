@@ -27,6 +27,7 @@ import { installZoom, useZoom } from '@/ui/zoom';
 import { MOBILE_QUERY, drawerYields } from '@/ui/viewport';
 import { installAutomation } from '@/features/automation/state';
 import { installBackground } from '@/features/background/state';
+import { installCafe } from '@/features/cafe/state';
 import { BackgroundSide } from '@/features/background/BackgroundSide';
 import { installBrowserHost } from '@/features/browser/host';
 import { useSection } from '@/features/sections';
@@ -93,6 +94,7 @@ export function App() {
   useEffect(() => installOrchestra(), []);
   useEffect(() => installAutomation(), []);
   useEffect(() => installBackground(), []);
+  useEffect(() => installCafe(), []);
   // this window as the browser an Agent's web tools work in (the desktop app only)
   useEffect(() => installBrowserHost(), []);
   useEffect(() => installZoom(), []);
