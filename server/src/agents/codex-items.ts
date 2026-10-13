@@ -49,12 +49,19 @@ export function codexItemMessages(synth: MessageSynth, seen: CodexItemState, ite
   return out;
 }
 
+/** Marks a conversation whose last turn another program (Codex's desktop app or CLI) is still running: the last message
+ *  of a read, after that turn's messages so far. The view keeps the turn open and says where it runs. */
+export const ELSEWHERE = 'cw_elsewhere';
+export const elsewhereMessage = (sessionId: string, agent: string) => ({ type: 'system', subtype: ELSEWHERE, agent, session_id: sessionId });
+
 /**
  * A page of `thread/turns/list` turns, already reversed into chronological order, → the SDK-shaped
  * messages for the transcript view. Historical replay only wants terminal messages (no
- * `stream_event` streaming scaffolding), so every item is treated as already `completed`.
+ * `stream_event` streaming scaffolding), so every item that is not still `inProgress` is treated as `completed`.
+ * `running`: the last turn is still going somewhere else (also when its status is `inProgress`) — it gets no result
+ * (no 「0s · 3 步」 footer under half a turn) and the read ends with `elsewhereMessage`.
  */
-export function codexTurnsToMessages(sessionId: string, turns: any[], model?: string): any[] {
+export function codexTurnsToMessages(sessionId: string, turns: any[], model?: string, running = false): any[] {
   const synth = new MessageSynth(sessionId, model ?? '');
   const seen: CodexItemState = new Map();
   const out: any[] = [];
@@ -69,8 +76,12 @@ export function codexTurnsToMessages(sessionId: string, turns: any[], model?: st
         }
         case 'agentMessage': out.push(...synth.text(item.text ?? '')); break;
         case 'reasoning': out.push(...synth.delta('thinking', [...(item.summary ?? []), ...(item.content ?? [])].join('\n'))); break;
-        default: out.push(...codexItemMessages(synth, seen, item, true)); break;
+        default: out.push(...codexItemMessages(synth, seen, item, item.status !== 'inProgress')); break;
       }
+    }
+    if (turn === turns[turns.length - 1] && (running || turn.status === 'inProgress')) {
+      out.push(elsewhereMessage(sessionId, 'codex'));
+      break;
     }
     out.push(...synth.endTurn({ ok: turn.status === 'completed' || turn.status === 'interrupted', error: turn.error?.message }));
   }

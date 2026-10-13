@@ -1,6 +1,6 @@
 // Codex session source: lists/reads/manages `codex app-server` threads over its official JSON-RPC
 // API (no direct file access — constraints.md). See task-3-brief.md for the wire shapes.
-import { existsSync } from 'node:fs';
+import { existsSync, promises as fsp } from 'node:fs';
 import { codexTurnsToMessages } from '../agents/codex-items.js';
 import { JsonRpcProcess } from '../agents/jsonrpc.js';
 import type { AgentKind, SessionSummary, SourceCaps, SourceStatus } from '../protocol.js';
@@ -27,6 +27,39 @@ const NO_PAGING = /experimentalApi|not supported|unknown method|method not found
 /** How long a thread that could not be read stays out of the list (a thread that was about to get its first message comes back). */
 export const GONE_HIDE_MS = 10 * 60_000;
 export const THREAD_GONE = 'THREAD_GONE';
+/** A rollout whose last turn started this long ago without an end is a Codex that died mid-turn, not one still going. */
+export const ROLLOUT_STALE_MS = 30 * 60_000;
+/** How much of a rollout's end is looked at for the last turn's start and end. */
+const ROLLOUT_TAIL = 256 * 1024;
+
+/**
+ * Whether the rollout's last turn has started and not ended (`task_started` after the last `task_complete` /
+ * `turn_aborted`): Codex's desktop app or CLI is in the middle of it (user report: the view showed half a turn as
+ * done while Codex was still thinking). Only the tail of the file is given.
+ */
+export function rolloutTurnOpen(tail: string): boolean {
+  const start = tail.lastIndexOf('"type":"task_started"');
+  return start >= 0 && Math.max(tail.lastIndexOf('"type":"task_complete"'), tail.lastIndexOf('"type":"turn_aborted"')) < start;
+}
+
+async function rolloutOpen(file: string | undefined, now = Date.now()): Promise<boolean> {
+  if (!file) return false;
+  let fh: Awaited<ReturnType<typeof fsp.open>> | undefined;
+  try {
+    fh = await fsp.open(file, 'r');
+    const st = await fh.stat();
+    if (now - st.mtimeMs > ROLLOUT_STALE_MS) return false;
+    const len = Math.min(st.size, ROLLOUT_TAIL);
+    const buf = Buffer.alloc(len);
+    await fh.read(buf, 0, len, st.size - len);
+    return rolloutTurnOpen(buf.toString('utf8'));
+  } catch {
+    return false;
+  } finally {
+    await fh?.close().catch(() => {});
+  }
+}
+
 const goneError = () => Object.assign(new Error('Codex 里读不到这个对话：它可能已经在 Codex 里删除了，或者刚创建、还没保存第一条消息。'), { code: THREAD_GONE });
 
 // Thread.source (per `codex app-server generate-ts`) is `"cli"|"vscode"|"exec"|"appServer"|
@@ -126,7 +159,9 @@ export class CodexSource implements SessionSource {
       const limit = o.limit ?? 20;
       const r = await this.rpc.request<any>('thread/turns/list', { threadId: nativeId, itemsView: 'full', sortDirection: 'desc', limit, cursor: o.cursor }, 30_000);
       const turns = (r?.data ?? []).slice().reverse();
-      return { messages: codexTurnsToMessages(id, turns), next: r?.nextCursor ?? undefined };
+      // the newest page: is its last turn still going in Codex's own app / CLI?
+      const running = !o.cursor && await this.threadPath(nativeId).then(rolloutOpen);
+      return { messages: codexTurnsToMessages(id, turns, undefined, running), next: r?.nextCursor ?? undefined };
     } catch (e: any) {
       if (isNotInstalled(e)) return { messages: [] };
       const msg = String(e?.message ?? e);
@@ -134,7 +169,7 @@ export class CodexSource implements SessionSource {
       if (!o.cursor && (e?.code === -32601 || NO_PAGING.test(msg) || GONE.test(msg))) {
         try {
           const r = await this.rpc.request<any>('thread/read', { threadId: nativeId, includeTurns: true }, 60_000);
-          return { messages: codexTurnsToMessages(id, r?.thread?.turns ?? []) };
+          return { messages: codexTurnsToMessages(id, r?.thread?.turns ?? [], undefined, await rolloutOpen(r?.thread?.path)) };
         } catch (e2: any) {
           if (GONE.test(msg) || GONE.test(String(e2?.message ?? ''))) throw this.markGone(nativeId);
           if (e?.code === -32601 && e2?.code === -32601) return { messages: [] }; // too old for either: nothing to show
@@ -143,6 +178,17 @@ export class CodexSource implements SessionSource {
       }
       if (GONE.test(msg)) throw this.markGone(nativeId);
       throw e;
+    }
+  }
+
+  /** The thread's rollout file (undefined when the app-server does not say). */
+  private async threadPath(nativeId: string): Promise<string | undefined> {
+    try {
+      const r = await this.rpc.request<any>('thread/read', { threadId: nativeId, includeTurns: false }, 15_000);
+      const p = r?.thread?.path;
+      return typeof p === 'string' && p ? p : undefined;
+    } catch {
+      return undefined;
     }
   }
 

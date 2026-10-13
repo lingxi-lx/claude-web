@@ -128,7 +128,12 @@ export interface Conversation {
   retracted: Set<string>;
   /** the last transcript timestamp applied (a thinking line's time is counted from it) */
   lastTs?: string;
+  /** the last turn is still running in another program (Codex's own app / CLI): the read ended with `cw_elsewhere` */
+  elsewhere?: { agent: string };
 }
+
+/** The marker a read ends with when another program is in the middle of its last turn (server `codex-items.ts`). */
+export const ELSEWHERE = 'cw_elsewhere';
 
 export function createConversation(): Conversation {
   return { items: [], toolIndex: new Map(), tasks: new Map(), streaming: new Map(), compacting: false, retracted: new Set() };
@@ -177,6 +182,12 @@ function findItem(c: Conversation, parent: string | null | undefined, pred: (i: 
 export function applyMessage(c: Conversation, m: any): void {
   if (m && m.type !== 'stream_event') c.lastEventAt = clock();
   else if (m?.type === 'stream_event') c.lastEventAt = clock();
+  if (m?.type === 'system' && m.subtype === ELSEWHERE) {
+    c.elsewhere = { agent: typeof m.agent === 'string' ? m.agent : '' };
+    return;
+  }
+  // anything after it: this window has the conversation again
+  if (c.elsewhere) c.elsewhere = undefined;
   dispatch(c, m);
   if (typeof m?.timestamp === 'string') c.lastTs = m.timestamp;
 }
@@ -677,7 +688,8 @@ function applySystem(c: Conversation, m: any) {
  */
 export function applyTranscript(c: Conversation, msgs: any[], opts?: { live?: boolean }) {
   for (const m of msgs) applyMessage(c, m);
-  if (opts?.live) {
+  // a turn another program is still in: as if it ran here (its steps keep their spinners, it does not fold)
+  if (opts?.live || c.elsewhere) {
     // the replay stamped turnStartedAt with the replay clock; the transcript knows better
     let turn = 0;
     for (let i = c.items.length - 1; i >= 0; i--) {

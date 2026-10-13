@@ -10,6 +10,7 @@ import path from 'node:path';
 import type { AgentKind, SessionSummary, SourceStatus } from '../protocol.js';
 import { watchTree, type TreeWatcher } from '../runtime/watch-tree.js';
 import type { AgentTranscripts, Head } from '../agents/transcript.js';
+import { ELSEWHERE } from '../agents/codex-items.js';
 import type { MetaStore } from '../meta/store.js';
 import { dataDir } from '../files/service.js';
 import { INDEX_TEXT_MAX, LibraryIndex } from './index-db.js';
@@ -51,6 +52,18 @@ function promptOf(m: any): string | null {
   if (!Array.isArray(ct) || ct.some((b: any) => b?.type === 'tool_result')) return null;
   const t = ct.filter((b: any) => b?.type === 'text').map((b: any) => b.text ?? '').join('').trim();
   return t || null;
+}
+
+/**
+ * A read whose last turn another program is still running (it ends with the `cw_elsewhere` marker): the finished part,
+ * and that turn from its prompt on (marker included). The open turn never goes into the mirror — the prompts anchor
+ * the next sync, so half a turn appended there would keep the rest of it out for good.
+ */
+export function splitInFlight(msgs: any[]): { done: any[]; inflight: any[] } {
+  if (msgs.at(-1)?.subtype !== ELSEWHERE) return { done: msgs, inflight: [] };
+  let i = msgs.length - 1;
+  while (i > 0 && !promptOf(msgs[i])) i--;
+  return promptOf(msgs[i]) ? { done: msgs.slice(0, i), inflight: msgs.slice(i) } : { done: [], inflight: msgs };
 }
 
 /**
@@ -407,7 +420,9 @@ export class LibraryService extends EventEmitter {
     if (r.head && !r.head.imported) {
       // nothing here drives it: turns written from the agent's own CLI since are only in the agent's store
       if (!this.opts.isLive?.(id)) await this.syncMirror(id).catch(() => 0);
-      return { messages: await this.transcripts.load(id) };
+      // …and a turn it is still in the middle of is shown, not kept
+      const inflight = this.opts.isLive?.(id) ? [] : this.inflight.get(id) ?? [];
+      return { messages: [...(await this.transcripts.load(id)), ...inflight.map((m) => ({ ...m, session_id: id }))] };
     }
     if (!r.source || !r.nativeId) throw new Error('这个对话的来源没有加入对话库');
     try {
@@ -424,6 +439,8 @@ export class LibraryService extends EventEmitter {
   }
 
   private syncing = new Map<string, Promise<number>>();
+  /** Per mirrored conversation: the turn Codex is still running elsewhere, as of the last sync (not in the mirror). */
+  private inflight = new Map<string, any[]>();
   /**
    * A Codex conversation started here and continued in the Codex CLI (`codex resume <thread>`): those turns are only in
    * Codex's thread — the mirror this app reads (agents/<id>.jsonl) has the turns that went through here, so they never
@@ -449,9 +466,13 @@ export class LibraryService extends EventEmitter {
     const mirror = await this.transcripts.load(id);
     let thread: any[] = [];
     let cursor: string | undefined;
+    this.inflight.delete(id);
     for (let i = 0; i < SYNC_PAGES; i++) {
       const page = await src.read(head.nativeSessionId, { cursor, limit: READ_PAGE });
-      thread = [...page.messages, ...thread]; // each page is chronological; a later page is older
+      // the newest page may end in a turn Codex is still running: shown by read(), never appended
+      const { done, inflight } = i === 0 ? splitInFlight(page.messages) : { done: page.messages, inflight: [] };
+      if (inflight.length) this.inflight.set(id, inflight);
+      thread = [...done, ...thread]; // each page is chronological; a later page is older
       const extra = turnsAfter(mirror, thread);
       if (extra) {
         for (const m of extra) this.transcripts.append(id, { ...m, session_id: id });

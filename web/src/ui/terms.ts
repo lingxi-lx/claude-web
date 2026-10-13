@@ -66,8 +66,12 @@ export function effortTitle(level: string | null | undefined, note?: string): st
 
 export const ULTRACODE = {
   label: TERMS.ultracode,
-  desc: '最深的思考，并把任务拆给多个子任务同时做；更慢，更费额度',
-  title: `${TERMS.ultracode}（ultracode）：最深思考 + 自动拆成并行子任务，更慢、更费额度。对整个对话生效`,
+  desc: '大任务用：它先拆成几块，分给几个子代理同时做，你在「后台」看进度。小问题别开，更慢、更费额度',
+  title: `${TERMS.ultracode}（ultracode）：给大任务用。打开后说一件大一点的事（比如「把登录模块重构一下，顺便补测试」），它会先拆成几块，分给几个子代理同时做，最后汇总给你；进度在「后台」看。想得最深，更慢、更费额度。对整个对话生效，再点一次关掉`,
+  /** said once when it is switched on: what to do next */
+  on: `${TERMS.ultracode}已打开：说一件大一点的事，它会拆开分给几个子代理同时做，进度在「后台」看`,
+  /** the composer's placeholder while it is on */
+  placeholder: '说一件大一点的事，比如「把登录模块重构一下，顺便补测试」——它会分给几个子代理同时做',
 } as const;
 
 /**

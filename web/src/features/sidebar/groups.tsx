@@ -22,8 +22,8 @@ export function ProjectMenu({ w, onClose }: { w: Workspace; onClose: () => void 
       <button data-id={id('terminal')} onClick={act(() => st.openTile({ id: `t${Date.now()}`, kind: 'term', cwd: w.path }, 'tab'))}><Icon name="terminal" size={14} /> 在这里开终端</button>
       <div className="menu-sep" />
       <button data-id={id('rename')} onClick={act(async () => { const n = await dlg.prompt('项目名称', w.name); if (n) await ws.request({ kind: 'workspaces.rename', id: w.id, name: n }); })}><Icon name="edit" size={14} /> 重命名</button>
-      <button data-id={id('explorer')} onClick={act(() => ws.request({ kind: 'shell.open', path: w.path }))}><Icon name="folder" size={14} /> 在资源管理器打开</button>
-      <button data-id={id('vscode')} onClick={act(() => ws.request({ kind: 'shell.open', path: w.path, app: 'code' }))}><Icon name="keyboard" size={14} /> 在 VS Code 打开</button>
+      <button data-id={id('explorer')} onClick={act(() => ws.request({ kind: 'shell.open', path: w.path }).catch((e) => useStore.getState().toast(e.message)))}><Icon name="folder" size={14} /> 在资源管理器打开</button>
+      <button data-id={id('vscode')} onClick={act(() => ws.request({ kind: 'shell.open', path: w.path, app: 'code' }).catch((e) => useStore.getState().toast(e.message)))}><Icon name="keyboard" size={14} /> 在 VS Code 打开</button>
       <div className="menu-sep" />
       <button data-id={id('remove')} className="danger" onClick={act(() => ws.request({ kind: 'workspaces.remove', id: w.id }))}><Icon name="close" size={14} /> 从侧栏移除项目（不删文件）</button>
     </Menu>

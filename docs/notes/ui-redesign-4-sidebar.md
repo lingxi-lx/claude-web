@@ -17,3 +17,4 @@ spec §5.1 / §4.2 / `mock-home.png`。全部在 `web/src/features/sidebar/`。
   - 菜单根元素写 `title=""`：否则行上的 tooltip（首条消息全文）会从菜单项上冒出来（空 title 截断继承）。
 - 样式在 `styles.css` 末尾 `/* ---- redesign phase 4: sidebar ---- */`；来源 chip / 筛选框 / 发现横幅 / 子任务与机器徽标的旧规则已删。行高 32（手机 40）、导航 34、账户行 60；行缩进是 `--row-indent`（项目下 34、平铺 10、子对话 52），紧凑密度也用它。
 - 调试：`window.__store.setState` 伪造 `open[sid]` 的 `state` / `pending` 就能看到「需要你」和行尾状态（ui-smoke 就这么测）；`librarySources` 里塞一个 `detected && !joined` 的来源就能看到发现提示；`sessions` 里塞带 `peer` / `childCount` / `live` 的假行就能看到其它电脑、分叉箭头、其它文件夹的 spinner（服务端一发 `sessions.changed` / `library.changed` 就会被冲掉，要稳就像 ui-smoke 那样用 `__store.subscribe` 重新套）。ui-smoke 里侧栏这段接在右侧面板那段后面、自己一个块作用域（两段的辅助函数重名），开头先确认没有残留的 `.menu`。
+- **项目只收自己文件夹里的对话**（2026-10-14 用户报告：把用户目录设为项目后，所有子文件夹的对话都挤在它下面，Claude 官方应用是每个文件夹一组）：`features/paths.ts` 的 `projectFor()`（同一目录，`samePath`），侧栏和首页都用它；以前是「最长前缀」。子文件夹的对话进「其它文件夹」各自一组。编排 worktree 仍靠 `groupCwd` 归回运行目录。

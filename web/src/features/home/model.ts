@@ -6,7 +6,7 @@ import type { IconName } from '@/ui/icons';
 import { isArchived } from '@/features/sidebar/filter';
 import { rowStatus } from '@/features/sidebar/status';
 import { basename } from '@/util';
-import { isWithin } from '@/features/paths';
+import { projectFor } from '@/features/paths';
 import { nextRunText, scheduleText } from '@/features/automation/schedule-text';
 
 // ---------------------------------------------------------------------------------------------------- greeting
@@ -145,7 +145,7 @@ export function waitingText(pending: readonly { toolName: string }[]): string {
 }
 
 function projectOf(cwd: string, workspaces: HomeInput['workspaces']): string {
-  const w = [...workspaces].sort((a, b) => b.path.length - a.path.length).find((x) => isWithin(cwd, x.path));
+  const w = projectFor(cwd, workspaces);
   return w?.name ?? (basename(cwd) || cwd);
 }
 

@@ -2,13 +2,32 @@ import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { codexItemMessages, codexTurnsToMessages, type CodexItemState } from './codex-items.js';
+import { ELSEWHERE, codexItemMessages, codexTurnsToMessages, type CodexItemState } from './codex-items.js';
 import { MessageSynth } from './normalize.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fixture = JSON.parse(fs.readFileSync(path.join(here, '__fixtures__', 'codex-turns.json'), 'utf8'));
 
 describe('codexTurnsToMessages', () => {
+  it('a last turn still going in Codex (inProgress, or running said by the rollout) gets no result, its running step none, and the read ends with the marker', () => {
+    const turn = (id: string, status: string, items: any[]) => ({ id, status, items });
+    const ask = (text: string) => ({ type: 'userMessage', id: `u-${text}`, content: [{ type: 'text', text }] });
+    const cmd = (id: string, status: string) => ({ type: 'commandExecution', id, command: 'npm test', status, aggregatedOutput: status === 'completed' ? 'ok' : '', exitCode: status === 'completed' ? 0 : null });
+    const turns = [turn('t1', 'completed', [ask('one'), cmd('c1', 'completed')]), turn('t2', 'inProgress', [ask('two'), cmd('c2', 'inProgress')])];
+    const msgs = codexTurnsToMessages('codex-x', turns);
+    expect(msgs.filter((m: any) => m.type === 'result')).toHaveLength(1);
+    expect(msgs.at(-1)).toMatchObject({ type: 'system', subtype: ELSEWHERE, agent: 'codex' });
+    const results = msgs.filter((m: any) => m.type === 'user' && m.message.content[0]?.type === 'tool_result').map((m: any) => m.message.content[0].tool_use_id);
+    expect(results).toEqual(['c1']);
+    // the app-server says interrupted / completed, the rollout says it still runs: the same
+    const said = codexTurnsToMessages('codex-x', [turns[0], turn('t2', 'interrupted', [ask('two')])], undefined, true);
+    expect(said.filter((m: any) => m.type === 'result')).toHaveLength(1);
+    expect(said.at(-1)?.subtype).toBe(ELSEWHERE);
+    // nothing running: every turn ends, no marker
+    const done = codexTurnsToMessages('codex-x', [turns[0]]);
+    expect(done.at(-1)?.type).toBe('result');
+  });
+
   it('converts a page of turns (newest-first from the API) into chronological SDK-shaped messages', () => {
     // thread/turns/list returns newest-first; callers reverse into chronological order before converting.
     const turns = [...fixture.data].reverse();

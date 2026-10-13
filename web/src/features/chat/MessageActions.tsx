@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { AssistantItem, UserItem } from '@/model/conversation';
 import { groupTurns } from '@/model/turn';
 import { buildHtml, downloadHtml } from '@/model/export';
-import { useStore } from '@/store';
+import { isLastPrompt, useStore } from '@/store';
 import { clsx } from '@/util';
 import { Icon } from '@/ui/icons';
 import { imeComposing } from '@/ui/ime';
@@ -64,11 +64,12 @@ export function UserActions({ it, sessionId, onEdit }: { it: UserItem; sessionId
   const st = useStore.getState;
   const o = useSession(sessionId);
   const busy = o && (o.state === 'running' || o.state === 'waiting' || o.state === 'starting');
+  const last = !!o && isLastPrompt(o.conv.items, it.id);
   return (
     <div className="msg-actions" role="toolbar" aria-label="这条消息的操作">
       <button title="复制" aria-label="复制" onClick={() => navigator.clipboard.writeText(it.text)}><Icon name="copy" size={14} /></button>
       <button title="编辑并重新发送（从这里分叉）" aria-label="编辑" disabled={!!busy} onClick={onEdit}><Icon name="edit" size={14} /></button>
-      <button title="用同样的消息重跑（从这里分叉）" aria-label="重跑" disabled={!!busy} onClick={() => st().rerun(sessionId, it.id).catch((e) => st().toast(e.message))}><Icon name="refresh" size={14} /></button>
+      <button title={last ? '用同样的消息再问一次' : '用同样的消息重跑（从这里分叉出新对话）'} aria-label="重跑" disabled={!!busy} onClick={() => st().rerun(sessionId, it.id).catch((e) => st().toast(e.message))}><Icon name="refresh" size={14} /></button>
       <button title="从这条消息之前分叉出新对话" aria-label="分叉" onClick={() => st().forkAt(sessionId, it.id).catch((e) => st().toast(e.message))}><Icon name="branch" size={14} /></button>
       <button title="导出这一轮为 HTML" aria-label="分享本轮" onClick={(e) => shareTurn(sessionId, turnIdOf(e.currentTarget, sessionId, it.id) ?? it.id)}><Icon name="share" size={14} /></button>
     </div>

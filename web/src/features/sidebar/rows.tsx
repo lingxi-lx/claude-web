@@ -36,8 +36,8 @@ function SidebarMenuExtra({ s, onClose }: { s: SessionSummary; onClose: () => vo
       <button data-id={id('open-split')} onClick={act(split)}><Icon name="splitRight" size={14} /> 在右侧{TERMS.pane}打开</button>
       {effectiveCaps(s).resume && <button data-id={id('resume')} onClick={act(() => st.openSession({ sessionId: s.sessionId, cwd: s.cwd }).catch((e) => st.toast(e.message)))}><Icon name="play" size={14} /> 恢复运行</button>}
       <button data-id={id('pin')} onClick={act(() => st.setSessionMeta(s.sessionId, { pinned: !meta.pinned }))}><Icon name="pin" size={14} /> {meta.pinned ? '取消置顶' : '置顶'}</button>
-      {!s.peer && <button data-id={id('explorer')} onClick={act(() => ws.request({ kind: 'shell.open', path: s.cwd }))}><Icon name="folder" size={14} /> 在资源管理器打开</button>}
-      {!s.peer && <button data-id={id('vscode')} onClick={act(() => ws.request({ kind: 'shell.open', path: s.cwd, app: 'code' }))}><Icon name="keyboard" size={14} /> 在 VS Code 打开</button>}
+      {!s.peer && <button data-id={id('explorer')} onClick={act(() => ws.request({ kind: 'shell.open', path: s.cwd }).catch((e) => useStore.getState().toast(e.message)))}><Icon name="folder" size={14} /> 在资源管理器打开</button>}
+      {!s.peer && <button data-id={id('vscode')} onClick={act(() => ws.request({ kind: 'shell.open', path: s.cwd, app: 'code' }).catch((e) => useStore.getState().toast(e.message)))}><Icon name="keyboard" size={14} /> 在 VS Code 打开</button>}
       {open && open.state !== 'history' && <button data-id={id('stop')} onClick={act(() => st.closeSession(s.sessionId))}><Icon name="stop" size={14} /> 结束进程</button>}
       <div className="menu-sep" />
     </>

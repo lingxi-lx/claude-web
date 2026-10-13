@@ -44,3 +44,18 @@ describe('attachmentFolderPath', () => {
     expect(attachmentFolderPath('/root/x/top/y/top/z', 'other', 'top')).toBe('/root/x/top/y/top');
   });
 });
+
+describe('projectFor (a conversation is listed under the folder it ran in)', () => {
+  const ws = [{ id: 'home', path: 'C:\\Users\\me' }, { id: 'app', path: '/proj/app' }];
+  it('the same folder, whatever the separators, trailing slash or (Windows) case', async () => {
+    const { projectFor } = await import('./paths');
+    expect(projectFor('c:/users/ME/', ws)?.id).toBe('home');
+    expect(projectFor('/proj/app', ws)?.id).toBe('app');
+  });
+  it('a folder under a project is not that project (each folder on its own, like Claude’s app)', async () => {
+    const { projectFor } = await import('./paths');
+    expect(projectFor('C:\\Users\\me\\dashboard', ws)).toBeUndefined();
+    expect(projectFor('/proj/app2', ws)).toBeUndefined();
+    expect(projectFor('', ws)).toBeUndefined();
+  });
+});

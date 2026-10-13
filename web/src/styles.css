@@ -489,7 +489,7 @@ button.link:hover { text-decoration: underline; }
 .toggle:active:not(:disabled)::after { width: 19px; }
 .toggle.on:active:not(:disabled)::after { transform: translateX(13px); }
 .toggle:disabled { opacity: 0.4; cursor: default; }
-textarea.code { width: 100%; min-height: 240px; background: var(--fill-subtle); border: 1px solid transparent; border-radius: var(--r-lg); padding: 10px; font-family: var(--mono); font-size: 13px; }
+textarea.code { width: 100%; min-height: 240px; margin: 0; overflow: auto; resize: vertical; background: var(--fill-subtle); border: 1px solid transparent; border-radius: var(--r-lg); padding: 10px; font-family: var(--mono); font-size: 13px; }
 input.field, select.field, textarea.field { background: var(--fill-subtle); border: 1px solid transparent; border-radius: var(--r-row); padding: 5px 9px; font-size: var(--fs-base); transition: background var(--dur-fast) var(--ease-out); }
 input.field:hover, select.field:hover, textarea.field:hover { background: color-mix(in oklab, var(--fg) 6%, transparent); }
 input.field:focus-visible, select.field:focus-visible, textarea.field:focus-visible, textarea.code:focus-visible, .modal input:focus-visible, .modal select:focus-visible, .modal textarea:focus-visible { outline: 1.5px solid var(--focus-ring); outline-offset: 0; background: var(--surface-0); }

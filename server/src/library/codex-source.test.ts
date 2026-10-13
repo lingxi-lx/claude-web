@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { CodexSource } from './codex-source.js';
+import { CodexSource, rolloutTurnOpen } from './codex-source.js';
 import { libraryId } from './ids.js';
 import { LazyRpc } from './lazy-rpc.js';
 import { JsonRpcProcess } from '../agents/jsonrpc.js';
@@ -177,5 +177,15 @@ describe('CodexSource (mock app-server)', () => {
       await rpc.close();
       await fs.rm(countFile, { force: true });
     }
+  });
+});
+
+describe('rolloutTurnOpen', () => {
+  const ev = (type: string) => JSON.stringify({ type: 'event_msg', payload: { type } });
+  it('the last turn started and has not ended yet', () => {
+    expect(rolloutTurnOpen([ev('task_started'), ev('task_complete'), ev('task_started')].join(' '))).toBe(true);
+    expect(rolloutTurnOpen([ev('task_started'), ev('task_complete')].join(' '))).toBe(false);
+    expect(rolloutTurnOpen([ev('task_started'), ev('turn_aborted')].join(' '))).toBe(false);
+    expect(rolloutTurnOpen(ev('token_count'))).toBe(false);
   });
 });

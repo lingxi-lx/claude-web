@@ -23,7 +23,7 @@ import { blockRemoteOpen } from '@/features/remote-guard';
 import { openChangedFile } from '@/features/workbench/right-panel';
 import { waitingToolIds } from './permission-dock';
 import { ArrivalCtx, LiveCtx, StepStartCtx, TurnTouchCtx, WaitingCtx } from './turn-context';
-import { externalLive } from '@/store/external';
+import { externalLive, readsFromOutside } from '@/store/external';
 import { withExplanation } from '@errors';
 import { Fold, onScreen, reducedMotion, useEntrance, useFold } from './Fold';
 import { stepBusy, stepState } from './step-view';
@@ -242,7 +242,11 @@ function AttachmentChips({ atts }: { atts: NonNullable<UserItem['attachments']> 
   );
 }
 
+/** Who is running a turn elsewhere, for the line under it. */
+const AGENT_NAMES: Record<string, string> = { codex: 'Codex', claude: 'Claude Code', gemini: 'Gemini', opencode: 'OpenCode' };
+
 /** A referenced session. Red when it is gone from the library (deleted, or its source left) or failed to expand. */
+
 export function SessionRefChip({ a, onRemove }: { a: Attachment; onRemove?: () => void }) {
   const exists = useStore((s) => !!a.sessionId && s.sessions.some((x) => x.sessionId === a.sessionId));
   const bad = !exists || !!a.error;
@@ -551,7 +555,9 @@ export function ChatView() {
   // none yet (like the header)
   const listCwd = useStore((s) => (active && !active.cwd ? s.sessions.find((x) => x.sessionId === active.sessionId)?.cwd : undefined));
   // a turn a CLI / Codex is writing from outside counts as running too (its last tool keeps its spinner)
-  const live = !!active && (active.state === 'running' || active.state === 'waiting' || externalLive(active));
+  // …and so does one that Codex's own app / CLI says it is still in the middle of (user report: half a turn looked done)
+  const elsewhere = !!active && readsFromOutside(active) ? active.conv.elsewhere : undefined;
+  const live = !!active && (active.state === 'running' || active.state === 'waiting' || externalLive(active) || !!elsewhere);
   // What arrives live (ArrivalCtx): this render shows an event of a conversation that runs — its version moved while
   // the list is the same array as at the last commit (history loading, a reload and another conversation are new
   // arrays) with the same first item (an older page prepended is not an arrival). True for this render only.
@@ -644,6 +650,11 @@ export function ChatView() {
         {active.state === 'running' && !active.conv.streaming.size && (
           <div className="working">
             <span className="spinner" /> 处理中
+          </div>
+        )}
+        {(elsewhere || (readsFromOutside(active) && externalLive(active))) && (
+          <div className="working elsewhere" data-elsewhere={elsewhere?.agent ?? ''}>
+            <span className="spinner" /> {elsewhere ? `这一轮还在 ${AGENT_NAMES[elsewhere.agent] ?? '别的应用'} 里进行，做完会自动显示在这里` : '这个对话正在别处更新（终端或其它应用），这里会跟着显示'}
           </div>
         )}
         {active.state === 'starting' && (

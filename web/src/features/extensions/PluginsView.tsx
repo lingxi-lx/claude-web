@@ -5,6 +5,8 @@ import { clsx } from '@/util';
 import { Icon } from '@/ui/icons';
 import { dlg } from '@/ui/dialog';
 import { imeComposing } from '@/ui/ime';
+import { Segmented } from '@/ui/Segmented';
+import { shownPlugins, type Show } from './plugins-model';
 
 interface Plugin { id: string; version?: string; scope?: string; enabled?: boolean; manifest?: { name?: string; description?: string }; components?: { skills?: number; commands?: number; agents?: number; hooks?: boolean; mcp?: boolean } }
 interface Market { name: string; source?: { source?: string; repo?: string; url?: string; path?: string } }
@@ -33,6 +35,7 @@ export function PluginsView() {
   const [spec, setSpec] = useState('');
   const [mkSrc, setMkSrc] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
+  const [show, setShow] = useState<Show>('all');
   const reload = () => {
     ws.request<{ plugins: Plugin[] }>({ kind: 'config.plugins' }).then((r) => setPlugins(r.plugins ?? [])).catch((e) => { setPlugins((p) => p ?? []); toast(e.message); });
     ws.request<{ marketplaces: unknown }>({ kind: 'config.marketplaces' }).then((r) => {
@@ -55,9 +58,16 @@ export function PluginsView() {
   return (
     <div className="cx">
       <section className="cx-sec" data-id="installed">
-        <div className="cx-h"><h3>已安装</h3>{plugins && <span className="n">{plugins.length}</span>}</div>
+        <div className="cx-h">
+          <h3>已安装</h3>{plugins && <span className="n">{plugins.length}</span>}
+          <span className="grow" />
+          {plugins && plugins.length > 0 && (() => {
+            const on = plugins.filter((p) => p.enabled).length;
+            return <Segmented className="cx-seg" label="按状态筛选" arrows value={show} onChange={setShow} options={[{ value: 'all', label: '全部' }, { value: 'on', label: `已启用 ${on}` }, { value: 'off', label: `已停用 ${plugins.length - on}` }]} />;
+          })()}
+        </div>
         <div className="cx-grid one">
-          {(plugins ?? []).map((p) => {
+          {shownPlugins(plugins ?? [], show).map((p) => {
             const [name, market] = p.id.split('@');
             const parts = pluginParts(p.components);
             return (
@@ -75,6 +85,7 @@ export function PluginsView() {
         </div>
         {!plugins && <div className="cx-none">读取中…</div>}
         {plugins && !plugins.length && <div className="cx-none">还没有插件。在下面按「名字@市场」装一个。</div>}
+        {plugins && plugins.length > 0 && !shownPlugins(plugins, show).length && <div className="cx-none">{show === 'on' ? '没有启用的插件。' : '没有停用的插件。'}</div>}
         {plugins && plugins.length > 0 && <div className="cx-hint">启用、停用或安装之后，已经在跑的对话要重新开始才用得上（对话右上角 ··· →「结束进程」，再发一条消息）。</div>}
       </section>
 

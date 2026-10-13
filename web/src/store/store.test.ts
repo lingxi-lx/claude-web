@@ -415,3 +415,13 @@ describe('an open session remembers the worktree it was started in (re-review 3 
     expect('worktree' in useStore.getState().open.n2).toBe(false);
   });
 });
+
+describe('isLastPrompt (重跑 the last one asks again in place; an earlier one forks)', () => {
+  it('no message typed after it; meta lines (a /model output) do not count', async () => {
+    const { isLastPrompt } = await import('./index');
+    const items = [{ kind: 'user', id: 'u1' }, { kind: 'assistant', id: 'a1' }, { kind: 'user', id: 'u2' }, { kind: 'result', id: 'r' }, { kind: 'user', id: 'm', meta: true }];
+    expect(isLastPrompt(items, 'u2')).toBe(true);
+    expect(isLastPrompt(items, 'u1')).toBe(false);
+    expect(isLastPrompt(items, 'nope')).toBe(false);
+  });
+});

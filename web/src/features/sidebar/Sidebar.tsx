@@ -6,7 +6,7 @@ import { desktop } from '@/desktop';
 import { basename, clsx } from '@/util';
 import type { AgentKind, SessionSummary } from '@shared';
 import { Icon } from '@/ui/icons';
-import { isWithin } from '@/features/paths';
+import { projectFor } from '@/features/paths';
 import { agentOf, childrenOf, filterSessions, filterSummary, isArchived, machineCounts, renderedRows, sourceCounts } from './filter';
 import { capsIntersection, deleteSessions, setArchived } from './session-actions';
 import { rangeIds } from './status';
@@ -114,18 +114,17 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
   const pending = sources.filter((x) => x.kind !== 'claude' && x.detected && !x.joined && !x.dismissed);
   const pinned = visible.filter((s) => sessionMeta[s.sessionId]?.pinned);
 
-  // group by project (longest matching path wins), the rest by folder, other machines by machine
+  // group by project (the folder it ran in), the rest by folder, other machines by machine
   const grouped = useMemo(() => {
     const byWs = new Map<string, SessionSummary[]>();
     const other = new Map<string, SessionSummary[]>();
     const byPeer = new Map<string, SessionSummary[]>(); // other machines: their paths mean nothing here
-    const sorted = [...workspaces].sort((a, b) => b.path.length - a.path.length);
     for (const s of visible) {
       if (sessionMeta[s.sessionId]?.pinned) continue;
       if (s.peer) { (byPeer.get(s.peer.id) ?? byPeer.set(s.peer.id, []).get(s.peer.id)!).push(s); continue; }
       // orchestration worktrees live outside the repo: group them with the run's own directory
       const cwd = sessionMeta[s.sessionId]?.groupCwd ?? s.cwd ?? '';
-      const w = sorted.find((x) => isWithin(cwd, x.path)); // segment-bounded: /proj/app must not swallow /proj/app2
+      const w = projectFor(cwd, workspaces);
       const m = w ? byWs : other;
       const k = w ? w.id : cwd || '(未知目录)';
       (m.get(k) ?? m.set(k, []).get(k)!).push(s);

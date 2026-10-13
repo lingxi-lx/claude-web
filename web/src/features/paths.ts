@@ -26,6 +26,18 @@ export function isWithin(child: string, parent: string): boolean {
   return c === p || c.startsWith(p + '/');
 }
 
+/** The same directory (separators, a trailing slash and — for Windows paths — case aside). */
+export const samePath = (a: string, b: string) => isWithin(a, b) && isWithin(b, a);
+
+/**
+ * The project a conversation in `cwd` is listed under: the one whose folder it ran in — not one of its parent folders
+ * (user report: with the home folder as a project, every conversation in a folder under it was listed there, where
+ * Claude's own app lists each folder on its own). Conversations in a subfolder are that folder's.
+ */
+export function projectFor<W extends { path: string }>(cwd: string, workspaces: readonly W[]): W | undefined {
+  return cwd ? workspaces.find((w) => samePath(cwd, w.path)) : undefined;
+}
+
 /**
  * Where an uploaded folder attachment lives on disk. The server stores `<root>/<rel>` (rel with its
  * separators normalised to the platform's), so the folder is `dest` minus the rel suffix plus the

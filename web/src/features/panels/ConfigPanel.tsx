@@ -248,7 +248,7 @@ export function Settings() {
       </div>
       <div className="mono" style={{ fontSize: 12, color: 'var(--fg-2)', marginBottom: 4 }}>{data?.path}</div>
       {err && <div style={{ color: 'var(--red)', fontSize: 13 }}>{err}</div>}
-      <textarea className="code" value={text} onChange={(e) => setText(e.target.value)} spellCheck={false} />
+      <textarea className="code" style={{ height: 'min(60vh, 560px)' }} value={text} onChange={(e) => setText(e.target.value)} spellCheck={false} />
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
         <button className="btn sm primary" disabled={!data} onClick={save}>保存</button>
         <span style={{ fontSize: 13, color: 'var(--fg-2)' }}>{msg}</span>

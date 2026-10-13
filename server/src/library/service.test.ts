@@ -7,7 +7,7 @@ import type { SessionSource } from './types.js';
 import { LibraryIndex } from './index-db.js';
 import { AgentTranscripts } from '../agents/transcript.js';
 import { MetaStore } from '../meta/store.js';
-import { LibraryService } from './service.js';
+import { LibraryService, splitInFlight } from './service.js';
 
 const ALL: SourceCaps = { resume: true, rename: true, archive: true, delete: true, fork: true };
 
@@ -191,6 +191,29 @@ describe('LibraryService', () => {
       expect(await lib.syncMirror('uuid-g')).toBe(0);
       expect(await lib.syncMirror('uuid-i')).toBe(0);
       expect(codex.read).toHaveBeenCalledTimes(1);
+    });
+
+    it('a turn Codex is still in the middle of is shown by reads but never goes into the mirror (its rest would be lost)', async () => {
+      await mine();
+      const running = { type: 'system', subtype: 'cw_elsewhere', agent: 'codex', session_id: 'codex-t1' };
+      codex.read.mockImplementation(async () => ({ messages: [say('one', 'n1'), answer('1'), say('two', 'n2'), toolResult(), answer('2'), say('three', 'n3'), answer('half'), running] }));
+      expect(await lib.syncMirror('uuid-x')).toBe(0);
+      expect(prompts(await transcripts.load('uuid-x'))).toEqual(['one', 'two']);
+      const r = await lib.read('uuid-x');
+      expect(prompts(r.messages)).toEqual(['one', 'two', 'three']);
+      expect(r.messages.at(-1)).toMatchObject({ subtype: 'cw_elsewhere', session_id: 'uuid-x' });
+      // it finished: the whole turn goes in, and the marker is gone
+      codex.read.mockImplementation(async () => ({ messages: [say('one', 'n1'), answer('1'), say('two', 'n2'), toolResult(), answer('2'), say('three', 'n3'), answer('half'), answer('rest')] }));
+      const after = await lib.read('uuid-x');
+      expect(after.messages.filter((m: any) => m.type === 'assistant').map((m: any) => m.message.content[0].text)).toEqual(['1', '2', 'half', 'rest']);
+      expect(after.messages.some((m: any) => m.subtype === 'cw_elsewhere')).toBe(false);
+    });
+
+    it("splitInFlight: from the open turn's prompt on, or nothing to split", () => {
+      const m = { type: 'system', subtype: 'cw_elsewhere' };
+      expect(splitInFlight([say('a'), answer('1')])).toEqual({ done: [say('a'), answer('1')], inflight: [] });
+      expect(splitInFlight([say('a'), answer('1'), say('b'), toolResult(), answer('2'), m])).toEqual({ done: [say('a'), answer('1')], inflight: [say('b'), toolResult(), answer('2'), m] });
+      expect(splitInFlight([answer('x'), m])).toEqual({ done: [], inflight: [answer('x'), m] });
     });
 
     it('looks further back a page at a time until the last prompts show up', async () => {

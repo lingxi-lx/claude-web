@@ -95,8 +95,8 @@ export function CommandPalette() {
         { id: 's.export', label: '导出为 HTML', ic: 'share', group: '当前对话', run: () => shareConversation(active.sessionId) },
         // the per-session views that used to be the workbench tab row (改动 / Git / 文件 / 搜索 / 定时任务 / 生成的文件 / Issue 与 PR)
         ...viewCommands(!!parsePeerId(active.sessionId)).map<Cmd>((v) => ({ id: `s.${v.id}`, label: v.label, ic: v.icon, group: '当前对话', run: () => showView(v.view) })),
-        ...(parsePeerId(active.sessionId) ? [] : [{ id: 's.open', label: '在资源管理器打开目录', ic: 'folder' as const, group: '当前对话', run: () => void ws.request({ kind: 'shell.open', path: active.cwd }) },
-        { id: 's.code', label: '在 VS Code 打开目录', ic: 'keyboard' as const, group: '当前对话', run: () => void ws.request({ kind: 'shell.open', path: active.cwd, app: 'code' }) }]),
+        ...(parsePeerId(active.sessionId) ? [] : [{ id: 's.open', label: '在资源管理器打开目录', ic: 'folder' as const, group: '当前对话', run: () => void ws.request({ kind: 'shell.open', path: active.cwd }).catch((e) => useStore.getState().toast(e.message)) },
+        { id: 's.code', label: '在 VS Code 打开目录', ic: 'keyboard' as const, group: '当前对话', run: () => void ws.request({ kind: 'shell.open', path: active.cwd, app: 'code' }).catch((e) => useStore.getState().toast(e.message)) }]),
         live ? { id: 's.stop', label: '结束当前对话的进程', ic: 'stop', group: '当前对话', run: () => void st.closeSession(active.sessionId) } : { id: 's.resume', label: '恢复当前对话的进程', ic: 'play', group: '当前对话', run: () => void st.openSession({ sessionId: active.sessionId, cwd: active.cwd }) },
         ...(live ? [{ id: 's.compact', label: '/compact 压缩上下文', ic: 'copy' as const, group: '当前对话', run: () => void st.send(active.sessionId, '/compact') }] : []),
       );

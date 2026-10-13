@@ -676,6 +676,14 @@ export const useStore = create<State>((set, get) => ({
     const o = get().open[sessionId];
     const it = o?.conv.items.find((i) => i.id === userItemId);
     if (!o || it?.kind !== 'user') return;
+    // the last thing asked (a turn that failed, an answer to try again — user report: 重跑 opened a new conversation):
+    // asked again right here. An earlier one would leave the turns after it behind, so that one still forks.
+    if (isLastPrompt(o.conv.items, userItemId)) {
+      const images = it.images.map(dataUrlImage).filter((x): x is { mediaType: string; data: string } => !!x);
+      const atts = it.attachments?.filter((a) => a.path).map((a) => ({ kind: a.kind, name: a.name, path: a.path, size: a.size })) as AttachmentRef[] | undefined;
+      await get().send(sessionId, it.text, images.length ? images : undefined, false, atts?.length ? atts : undefined);
+      return;
+    }
     await get().editAndResend(sessionId, userItemId, it.text);
   },
 
@@ -993,6 +1001,17 @@ export const useStore = create<State>((set, get) => ({
     await get().openSession({ sessionId, cwd: o.cwd, resumeAt: messageUuid, ...forkCarry(sessionId) });
   },
 }));
+
+/** Whether `userItemId` is the conversation's last prompt (no message typed after it). */
+export function isLastPrompt(items: readonly { kind: string; id: string; meta?: boolean }[], userItemId: string): boolean {
+  const at = items.findIndex((i) => i.id === userItemId);
+  return at >= 0 && !items.slice(at + 1).some((i) => i.kind === 'user' && !i.meta);
+}
+
+const dataUrlImage = (u: string): { mediaType: string; data: string } | null => {
+  const m = /^data:([^;,]+);base64,(.*)$/s.exec(u);
+  return m ? { mediaType: m[1], data: m[2] } : null;
+};
 
 /**
  * What a fork of this conversation starts with, from whichever entry (a message's 分叉, the palette's

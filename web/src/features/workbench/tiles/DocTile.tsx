@@ -7,13 +7,12 @@ import type { Tile } from '@/model/layout';
 import type { FsOpenResult } from '@shared';
 import { MonacoEditor, type EditorHandle } from '@/features/editor/MonacoEditor';
 import { fileUrl, previewKind } from '@/features/editor/preview';
-import { isWithin } from '@/features/paths';
+import { samePath } from '@/features/paths';
 
 type DocTileModel = Extract<Tile, { kind: 'doc' }>;
 
 const isMd = (p: string) => /\.(md|mdx|markdown)$/i.test(p);
 /** Same file? Separator-agnostic; case-folded only for Windows-style paths (macOS / Linux names can differ by case alone). */
-const samePath = (a: string, b: string) => isWithin(a, b) && isWithin(b, a);
 
 /** Editable document tile: Monaco + autosave + disk-change detection; images / pdf / media get a preview instead. */
 export function DocTile({ tile }: { tile: DocTileModel }) {

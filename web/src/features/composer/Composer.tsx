@@ -33,7 +33,7 @@ import { providersLoaded, useGatewayStatus } from '@/features/models/data';
 import { needsModel, welcomeProvider } from './welcome-provider';
 import { connectModel, useConnect } from '@/features/providers/ConnectModel';
 import { dlg, useDialogStore } from '@/ui/dialog';
-import { DOCK_BLOCKED, DOCK_CARRIED, DOCK_ENTER_IGNORED, DOCK_PLACEHOLDER, DOCK_REQUEUED, DOCK_SEND, TERMS } from '@/ui/terms';
+import { DOCK_BLOCKED, DOCK_CARRIED, DOCK_ENTER_IGNORED, DOCK_PLACEHOLDER, DOCK_REQUEUED, DOCK_SEND, TERMS, ULTRACODE } from '@/ui/terms';
 import { showGoals } from '@/features/workbench/right-panel';
 import { ComposerBar } from './ComposerBar';
 import { PlusMenu } from './PlusMenu';
@@ -720,6 +720,8 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   ) : null;
 
   let model: React.ReactNode = null, effort: React.ReactNode = null, permission: React.ReactNode = null, meter: React.ReactNode = null, status: React.ReactNode = null;
+  // 深度编排 on: the placeholder says what to ask for (user report: the switch looked clear, but not how to use it)
+  let ultraOn = false;
   if (welcome) {
     const t = modelChipText({ agent: wKind, agentName: agent?.name, providers, providerId: provider?.id, model: wModel, builtin: wBuiltin, agentDefault: agent?.model || undefined, efforts: wEfforts, effort: wEffortOk, defaultEffort: wView.defaultLevel, ultracode: wUltracode && wUltra, accountDefault });
     model = (
@@ -735,6 +737,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
         onPick={pickWelcome}
       />
     );
+    ultraOn = wUltracode && wUltra;
     effort = (
       <EffortChip
         compact={mobile}
@@ -766,6 +769,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
         onPick={pickLive}
       />
     );
+    ultraOn = ultraOk && !!info.ultracode;
     effort = (
       <EffortChip
         compact={mobile}
@@ -805,6 +809,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
         onPick={(it) => pickResume(it, v)}
       />
     );
+    ultraOn = rUltraOk && !!v.ultracode;
     effort = (
       <EffortChip
         compact={mobile}
@@ -886,7 +891,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
             rows={1}
             value={text}
             disabled={disabled}
-            placeholder={disabled ? '对话已被删除，不能继续' : docked ? DOCK_PLACEHOLDER[dockKind(docked)](dockAgent) : welcome ? '描述一个任务，或者问个问题。输入 / 查看命令，拖入文件作为附件' : active?.state === 'history' ? '发送即可继续这个对话…' : busy ? '运行中，输入会排队 · Esc 中断' : `回复 ${info?.agentName && info.agent !== 'claude' ? info.agentName : 'Claude'}… 输入 / 查看命令，拖入文件作为附件`}
+            placeholder={disabled ? '对话已被删除，不能继续' : docked ? DOCK_PLACEHOLDER[dockKind(docked)](dockAgent) : welcome && !ultraOn ? '描述一个任务，或者问个问题。输入 / 查看命令，拖入文件作为附件' : busy ? '运行中，输入会排队 · Esc 中断' : ultraOn ? ULTRACODE.placeholder : active?.state === 'history' ? '发送即可继续这个对话…' : `回复 ${info?.agentName && info.agent !== 'claude' ? info.agentName : 'Claude'}… 输入 / 查看命令，拖入文件作为附件`}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={onKey}
             onPaste={onPaste}

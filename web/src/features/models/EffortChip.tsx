@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import type { EffortLevel } from '@shared';
 import { clsx } from '@/util';
 import { Icon } from '@/ui/icons';
+import { useStore } from '@/store';
 import { ErrorBoundary } from '@/ui/ErrorBoundary';
 import { EFFORT_DESC, EFFORT_LABEL, TERMS, ULTRACODE, effortTitle } from '@/ui/terms';
 import { Popover } from '@/features/composer/Popover';
@@ -66,7 +67,7 @@ export function EffortChip({ intelligence, ultracode, compact, disabled }: Effor
             {ultracode && (
               <>
                 {levels.length > 0 && <div className="menu-sep" />}
-                <button type="button" data-mi data-id={EFFORT_MENU_ID.ultracode} role="menuitemcheckbox" aria-checked={ultra} className={clsx('cm-it ultra', ultra && 'on')} title={ULTRACODE.title} disabled={ultracode.disabled} onClick={() => { close(true); ultracode.onChange(!ultra); }}>
+                <button type="button" data-mi data-id={EFFORT_MENU_ID.ultracode} role="menuitemcheckbox" aria-checked={ultra} className={clsx('cm-it ultra', ultra && 'on')} title={ULTRACODE.title} disabled={ultracode.disabled} onClick={() => { close(true); ultracode.onChange(!ultra); if (!ultra) useStore.getState().toast(ULTRACODE.on, true); }}>
                   <span className="cm-ck">{ultra ? <Icon name="check" size={13} /> : <Icon name="bolt" size={13} />}</span>
                   <span className="cm-tx">
                     <span className="cm-l">{ULTRACODE.label}</span>

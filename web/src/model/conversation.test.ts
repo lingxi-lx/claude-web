@@ -489,3 +489,19 @@ describe('prependTranscript (older history paging)', () => {
     expect(c.toolIndex.get('t1')!.status).toBe('done');
   });
 });
+
+describe('a turn another program is still in (cw_elsewhere)', () => {
+  it('the read ends with the marker: the conversation knows, the last turn stays live; anything after clears it', () => {
+    const c = createConversation();
+    applyTranscript(c, [
+      { type: 'user', uuid: 'u1', message: { role: 'user', content: 'go' } },
+      { type: 'assistant', uuid: 'a1', message: { id: 'm1', role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'npm test' } }] } },
+      { type: 'system', subtype: 'cw_elsewhere', agent: 'codex' },
+    ]);
+    expect(c.elsewhere).toEqual({ agent: 'codex' });
+    expect(c.items.some((i) => i.kind === 'system')).toBe(false);
+    expect(c.toolIndex.get('t1')?.status).not.toBe('done');
+    applyMessage(c, { type: 'user', uuid: 'u2', message: { role: 'user', content: 'next' } });
+    expect(c.elsewhere).toBeUndefined();
+  });
+});

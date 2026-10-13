@@ -165,6 +165,7 @@ html.desktop.mac .app.has-rail .sb-top, html.desktop.mac .app.has-rail .sect-top
 .cx-h .grow, .cx-foot .grow { flex: 1 1 auto; }
 .cx-h .link, .cx-foot .link { color: var(--ink-2); font-size: var(--fs-sm); }
 .cx-h .link:hover, .cx-foot .link:hover { color: var(--ink-1); }
+.cx-h .cx-seg { width: 264px; flex: 0 1 auto; }
 .cx-cats { display: flex; flex-wrap: wrap; gap: 2px; margin: 0 0 var(--sp-1) -12px; }
 .cx-cats .ht { height: 30px; padding: 0 12px; border-radius: var(--r-pill); font-size: var(--fs-sm); color: var(--ink-3); transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
 .cx-cats .ht:hover { color: var(--ink-1); background: var(--layer-hover); }
