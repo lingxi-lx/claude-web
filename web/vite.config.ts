@@ -13,6 +13,7 @@ export default defineConfig({
       '@errors': path.resolve(__dirname, '../server/src/errors/explain.ts'),
       // the phone shell's channel code (web-standard APIs only); index.ts, never the core's tests (they use node:*)
       '@anywhere': path.resolve(__dirname, '../server/src/remote/anywhere/core/index.ts'),
+      '@characters': path.resolve(__dirname, '../server/src/characters/core/index.ts'),
       '@': path.resolve(__dirname, 'src'),
     },
   },

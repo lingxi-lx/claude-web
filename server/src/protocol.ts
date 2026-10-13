@@ -11,6 +11,7 @@ import type { OrchestraEvent, OrchestraRequest } from './orchestra/types.js';
 export * from './orchestra/types.js';
 import type { BackgroundEvent, BackgroundRequest } from './background/types.js';
 export * from './background/types.js';
+export * from './characters/core/types.js';
 import type { LinkKind } from './remote/anywhere/core/link.js';
 export type { LinkKind } from './remote/anywhere/core/link.js';
 
