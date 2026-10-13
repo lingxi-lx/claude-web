@@ -1915,23 +1915,22 @@ function driver() {
           wc.sendInputEvent({ type: 'mouseMove', x: 900, y: 400 });
           await sleep(400);
           check('the funnel and + (打开文件夹) at rest are invisible (still there for Tab and the pointer), shown with the pointer over the sidebar', opRest === '0,0' && opHover === '1,1', JSON.stringify({ opRest, opHover }));
-          // final review §9 #5: no project yet but conversations in 其它文件夹 → the empty state points at their folders,
+          // final review §9 #5: no project yet but conversations in 文件夹 → the empty state points at their folders,
           // whose 「设为项目」 is written out at rest (no second 打开文件夹 button); with a project it is the hover icon again
           {
             const wsSaved = await js('JSON.stringify(window.__store.getState().workspaces)');
             const secSaved = await js('JSON.stringify(window.__store.getState().layout.sidebar?.sections ?? {})');
             await js(`window.__store.setState({ workspaces: [] })`);
-            // no fold recorded (re-review M-6: without projects 其它文件夹 starts open, and is still foldable)
-            await js(`(() => { const st = window.__store.getState(); const { __other, ...rest } = st.layout.sidebar?.sections ?? {}; st.dispatchLayout({ t: 'sidebar.set', patch: { sections: rest } }); })()`);
+            // no fold recorded
+            await js(`(() => { const st = window.__store.getState(); const { __older, ...rest } = st.layout.sidebar?.sections ?? {}; st.dispatchLayout({ t: 'sidebar.set', patch: { sections: rest } }); })()`);
             await sleep(400);
             const nc = await js(`(() => { const e = document.querySelector('.sidebar [data-id="projects"] .ws-empty'); const mk = document.querySelector('.sidebar [data-id="other"] .sb-group-head [data-id="make-project"]'); const h = document.querySelector('.sidebar [data-id="other"] > .sb-sec-h'); return { text: e?.textContent ?? null, button: !!e?.querySelector('button'), mk: mk?.textContent ?? null, mkShown: !!mk && mk.getBoundingClientRect().width > 20, head: h ? { role: h.getAttribute('role'), expanded: h.getAttribute('aria-expanded') } : null }; })()`);
             await shot('sidebar-newcomer');
-            await click('.sidebar [data-id="other"] > .sb-sec-h');
-            const folded = await waitFor(`document.querySelector('.sidebar [data-id="other"] > .sb-sec-h')?.getAttribute('aria-expanded') === 'false' && !document.querySelector('.sidebar [data-id="other"] .sb-group-head')`, 2000);
-            check('no project: 其它文件夹 starts open and still folds (re-review M-6)', !!nc.head && nc.head.role === 'button' && nc.head.expanded === 'true' && folded, JSON.stringify({ head: nc.head, folded }));
+            const groups = await js(`document.querySelectorAll('.sidebar [data-id="other"] > .sb-group').length`);
+            check('文件夹 (2026-10-14): a plain heading, every folder its own group right under it', !!nc.head && nc.head.role === null && groups >= 1, JSON.stringify({ head: nc.head, groups }));
             await js(`(() => { const st = window.__store.getState(); window.__store.setState({ workspaces: JSON.parse(${JSON.stringify(wsSaved)}) }); st.dispatchLayout({ t: 'sidebar.set', patch: { sections: JSON.parse(${JSON.stringify(secSaved)}) } }); })()`);
             await sleep(300);
-            check('no project, folders in 其它文件夹: 「把常用的文件夹设为项目」 with no button, the folder says 「设为项目」 at rest', !!nc.text && /把常用的文件夹设为项目/.test(nc.text) && !nc.button && nc.mk === '设为项目' && nc.mkShown, JSON.stringify(nc));
+            check('no project, folders in 文件夹: 「把常用的文件夹设为项目」 with no button, the folder says 「设为项目」 at rest', !!nc.text && /把常用的文件夹设为项目/.test(nc.text) && !nc.button && nc.mk === '设为项目' && nc.mkShown, JSON.stringify(nc));
           }
           await harvest();
           await shot('sidebar');
@@ -2279,14 +2278,11 @@ function driver() {
             const hintFit = await js(`(() => { const m = document.querySelector('.sidebar .sb-hint .msg'); if (!m) return null; const lh = parseFloat(getComputedStyle(m).lineHeight); const j = document.querySelector('.sidebar .sb-hint [data-id="library-join"]').getBoundingClientRect(); const h = document.querySelector('.sidebar .sb-hint').getBoundingClientRect(); return { text: m.textContent, lines: Math.round(m.clientHeight / lh), clipped: m.scrollHeight > m.clientHeight + 1, title: m.title.includes('Qwen Code'), joinInside: j.right <= h.right && j.width > 10 }; })()`);
             check('library hint: four agents → 「把 Codex 等工具里的对话也列在这里？」, not cut off, every name in the tooltip; 选择… stays whole', !!hintFit && hintFit.text === '把 Codex 等工具里的对话也列在这里？' && !hintFit.clipped && hintFit.lines <= 2 && hintFit.title && hintFit.joinInside, JSON.stringify(hintFit));
             await shot('sidebar-hint-wrap');
-            // 其它文件夹 starts folded when there are projects: its running conversation stays in view, the header spins
-            const other = { spin: await exists('.sidebar [data-id="other"] > .sb-sec-h .spin'), row: await exists('.sidebar [data-id="other"] .sb-kept [data-sid="smoke-elsewhere"] .st.run') };
-            check('folded 其它文件夹: the header spins and the running conversation stays listed under it', other.spin && other.row, JSON.stringify(other));
-            await js('document.querySelector(\'.sidebar [data-id="other"] > .sb-sec-h\')?.focus()');
-            await key('Space');
-            check('Space unfolds 其它文件夹 (its folders: 设为项目)', await waitFor('document.querySelector(\'.sidebar [data-id="other"] > .sb-sec-h\')?.getAttribute("aria-expanded") === "true" && !!document.querySelector(\'.sidebar [data-id="other"] .sb-group-head .acts [data-id="make-project"]\')', 3000));
+            // 文件夹 (2026-10-14): every folder its own group, open — the running conversation is listed in its folder's
+            // group, which offers 在这里新建对话 and 设为项目
+            const other = { row: await exists('.sidebar [data-id="other"] > .sb-group [data-sid="smoke-elsewhere"] .st.run'), acts: await exists('.sidebar [data-id="other"] > .sb-group .acts [data-id="make-project"]') && await exists('.sidebar [data-id="other"] > .sb-group .acts [data-id="new-here"]'), fold: await exists('.sidebar [data-id="other"] > .sb-sec-h[role="button"]') };
+            check('文件夹: the running conversation sits open in its own folder group (no fold over the section), 新建 / 设为项目 on the folder', other.row && other.acts && !other.fold, JSON.stringify(other));
             await harvest();
-            await click('.sidebar [data-id="other"] > .sb-sec-h');
             // a fork under its parent
             await click('.sidebar .sb-list [data-sid="smoke-parent"] [data-id="kids"]');
             check('the arrow before a parent lists its forks underneath', await waitFor('!!document.querySelector(\'.sidebar .sb-list [data-sid="smoke-child"].kid\')', 3000));

@@ -1477,7 +1477,12 @@ html[data-density='compact'] .sb-row.sess { height: 28px; padding: 0 10px 0 var(
 /* a conversation on another machine: the machine's name in gray before the status (not in that machine's own group) */
 .sb-row .peer-tag { flex: 0 1 auto; min-width: 0; max-width: 34%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--ink-4); }
 .sb-group.peer .sb-row .peer-tag { display: none; }
-/* folded 其它文件夹: a spinner while something in there runs; the current / running rows stay listed under it */
+/* 文件夹 → 更早的文件夹 (past the 10 most recent folders): a row like a folder's, the chevron first; folded, a spinner
+   while something in there runs and the current / running rows stay listed under it */
+.sb-sec-h.sb-older-h { height: 30px; margin-top: 2px; padding-left: 10px; gap: 6px; font-size: var(--fs-sm); letter-spacing: 0; color: var(--ink-3); }
+.sb-sec-h.sb-older-h:hover { background: var(--layer-hover); color: var(--ink-1); }
+.sb-sec-h.sb-older-h .n { color: var(--ink-4); font-variant-numeric: tabular-nums; }
+.sb-sec-h.sb-older-h .sec-chev { opacity: 1; }
 .sb-sec-h .spin { width: 11px; height: 11px; margin-left: 4px; border-radius: 50%; border: 1.6px solid var(--edge-default); border-top-color: var(--ink-2); animation: spin 0.9s linear infinite; flex: none; }
 .sb-rows.sb-kept { padding-bottom: 2px; }
 

@@ -3,7 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useStore } from '@/store';
 import { ws } from '@/ws/client';
 import { desktop } from '@/desktop';
-import { basename, clsx } from '@/util';
+import { clsx } from '@/util';
+import { folderLabels, splitFolders } from './folders';
 import type { AgentKind, SessionSummary } from '@shared';
 import { Icon } from '@/ui/icons';
 import { projectFor } from '@/features/paths';
@@ -132,17 +133,19 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
     return { byWs, other: [...other.entries()].sort((a, b) => b[1][0].lastModified - a[1][0].lastModified), peers: [...byPeer.entries()] };
   }, [visible, workspaces, sessionMeta]);
 
-  // 其它文件夹 starts folded when there are projects; with none it is all there is, so it starts open — still foldable
-  // (re-review M-6: dozens of CLI folders or hundreds of joined Codex conversations sit above 其它电脑), and a fold
-  // the user made before (`sections.__other`) keeps
-  const otherCollapsed = collapsed.__other ?? workspaces.length > 0;
+  // 文件夹: every folder with conversations on its own, newest first (2026-10-14 user report — like Claude's own app);
+  // past the first FOLDERS_SHOWN they wait under 「更早的文件夹」, folded unless the user opened it (`sections.__older`)
+  // (re-review M-6: dozens of CLI folders or hundreds of joined Codex conversations must not bury 其它电脑)
+  const folders = useMemo(() => splitFolders(grouped.other), [grouped]);
+  const labels = useMemo(() => folderLabels(grouped.other.map(([cwd]) => cwd), workspaces.map((w) => w.name)), [grouped, workspaces]);
+  const otherCollapsed = collapsed.__older ?? true;
   const busySet = useMemo(() => new Set(busy ? busy.split('|') : []), [busy]);
   const keep = useCallback((s: SessionSummary) => s.sessionId === activeId || busySet.has(s.sessionId) || s.live === 'running' || s.live === 'waiting', [activeId, busySet]);
   const kidsOf = useCallback((s: SessionSummary) => (expanded.has(s.sessionId) ? childrenOf(sessions, s.sessionId, { showArchived, meta: sessionMeta }) : []), [expanded, sessions, showArchived, sessionMeta]);
   const isBusy = useCallback((s: SessionSummary) => busySet.has(s.sessionId) || s.live === 'running' || s.live === 'waiting', [busySet]);
-  // folded 其它文件夹 still shows what must stay in view (the current conversation, running / waiting ones), like a
+  // folded 更早的文件夹 still shows what must stay in view (the current conversation, running / waiting ones), like a
   // group's page cut does; its header spins while something in there runs
-  const otherAll = useMemo(() => grouped.other.flatMap(([, a]) => a), [grouped]);
+  const otherAll = useMemo(() => folders.older.flatMap(([, a]) => a), [folders]);
   const otherKept = useMemo(() => (otherCollapsed ? otherAll.filter(keep) : []), [otherCollapsed, otherAll, keep]);
   const otherBusy = otherAll.some(isBusy);
   // someone new (final review §9 #5): no project yet → the empty state points at 其它文件夹's folders, whose 设为项目
@@ -155,10 +158,11 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
   const rendered = useMemo(() => renderedRows([
     { key: '__pinned', items: pinned, collapsed: !!collapsed.__pinned },
     ...workspaces.map((w) => ({ key: w.id, items: grouped.byWs.get(w.id) ?? [], collapsed: !!collapsed[w.id] })),
-    ...grouped.other.map(([cwd, arr]) => ({ key: cwd, items: arr, collapsed: otherCollapsed || !!collapsed[cwd] })),
+    ...folders.recent.map(([cwd, arr]) => ({ key: cwd, items: arr, collapsed: !!collapsed[cwd] })),
+    ...folders.older.map(([cwd, arr]) => ({ key: cwd, items: arr, collapsed: otherCollapsed || !!collapsed[cwd] })),
     { key: '__other_kept', items: otherKept, collapsed: false },
     ...grouped.peers.map(([id, arr]) => ({ key: `peer:${id}`, items: arr, collapsed: !!collapsed[`peer:${id}`] })),
-  ], shown as Record<string, number>, PAGE_FIRST, { keep, kids: kidsOf }), [pinned, workspaces, grouped, collapsed, otherCollapsed, otherKept, shown, keep, kidsOf]);
+  ], shown as Record<string, number>, PAGE_FIRST, { keep, kids: kidsOf }), [pinned, workspaces, grouped, folders, collapsed, otherCollapsed, otherKept, shown, keep, kidsOf]);
   const order = useMemo(() => rendered.map((s) => s.sessionId), [rendered]);
   const selected = useMemo(() => rendered.filter((s) => picked.has(s.sessionId)), [rendered, picked]);
   const allOn = rendered.length > 0 && selected.length === rendered.length;
@@ -202,6 +206,23 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
     busy: items.some(isBusy),
     emptyText: ql ? '没有匹配的对话' : narrowed ? '' : '还没有对话',
   });
+  // one folder of 文件夹: named like the folder (its parent's name after it when another one has the same name)
+  const folderGroup = (cwd: string, arr: SessionSummary[]) => (
+    <Group
+      key={cwd}
+      {...groupProps(cwd, arr)}
+      name={labels.get(cwd) ?? cwd}
+      icon="folder"
+      title={cwd}
+      className={clsx('other', spellMake && 'spelled')}
+      actions={spellMake
+        ? <button className="mk-proj" data-id={pm('make-project')} title={`设为项目：${cwd} 钉在「项目」里`} onClick={() => void addWorkspace(cwd).catch((e) => toast(e.message))}>设为项目</button>
+        : <>
+          <button className="icon-btn xs" data-id={pm('new-here')} title="在这里新建对话" aria-label="在这里新建对话" onClick={() => { void useStore.getState().openSession({ cwd }).catch((e) => toast(e.message)); closeDrawer(); }}><Icon name="edit" size={13} /></button>
+          <button className="icon-btn xs" data-id={pm('make-project')} title="设为项目（钉在上面）" aria-label="设为项目" onClick={() => void addWorkspace(cwd).catch((e) => toast(e.message))}><Icon name="pin" size={13} /></button>
+        </>}
+    />
+  );
   const top = (x: TopId) => x;
   const sec = (x: SectionId) => x;
   const head = (x: ProjectsHeadId) => x;
@@ -301,34 +322,28 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
         </div>
         {grouped.other.length > 0 && (
           <div className="sb-sec" data-id={sec('other')}>
-            <div className="sb-sec-h fold" role="button" tabIndex={0} aria-expanded={!otherCollapsed} onClick={() => toggleGroup('__other', otherCollapsed)} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggleGroup('__other', otherCollapsed); } }} title="不在任何项目里的对话，按文件夹">
-              <span>其它文件夹</span>
-              {otherCollapsed && (otherBusy ? <span className="spin" title="有对话在运行" /> : <span className="n">{otherAll.length}</span>)}
-              <Icon name={otherCollapsed ? 'chevronRight' : 'chevronDown'} size={12} className="sec-chev" />
-            </div>
-            {otherKept.length > 0 && (
-              <div className="sb-rows sb-kept" role="group" aria-label="其它文件夹里当前 / 运行中的对话">
-                {otherKept.map((s) => (
-                  <div key={s.sessionId} className="sb-row-wrap">
-                    <SessionRow s={s} ctx={ctx} flat />
-                    {expanded.has(s.sessionId) && kidsOf(s).map((k) => <SessionRow key={k.sessionId} s={k} ctx={ctx} depth={1} flat />)}
+            <div className="sb-sec-h" title="不在项目里的对话，每个文件夹一组，最近用过的在上面"><span>文件夹</span></div>
+            {folders.recent.map(([cwd, arr]) => folderGroup(cwd, arr))}
+            {folders.older.length > 0 && (
+              <>
+                <div className="sb-sec-h fold sb-older-h" data-id="older" role="button" tabIndex={0} aria-expanded={!otherCollapsed} onClick={() => toggleGroup('__older', otherCollapsed)} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggleGroup('__older', otherCollapsed); } }} title="更早用过的文件夹">
+                  <Icon name={otherCollapsed ? 'chevronRight' : 'chevronDown'} size={12} className="sec-chev" />
+                  <span>更早的文件夹</span>
+                  {otherCollapsed && (otherBusy ? <span className="spin" title="有对话在运行" /> : <span className="n">{folders.older.length}</span>)}
+                </div>
+                {otherKept.length > 0 && (
+                  <div className="sb-rows sb-kept" role="group" aria-label="更早的文件夹里当前 / 运行中的对话">
+                    {otherKept.map((s) => (
+                      <div key={s.sessionId} className="sb-row-wrap">
+                        <SessionRow s={s} ctx={ctx} flat />
+                        {expanded.has(s.sessionId) && kidsOf(s).map((k) => <SessionRow key={k.sessionId} s={k} ctx={ctx} depth={1} flat />)}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                )}
+                {!otherCollapsed && folders.older.map(([cwd, arr]) => folderGroup(cwd, arr))}
+              </>
             )}
-            {!otherCollapsed && grouped.other.map(([cwd, arr]) => (
-              <Group
-                key={cwd}
-                {...groupProps(cwd, arr)}
-                name={basename(cwd) || cwd}
-                icon="folder"
-                title={cwd}
-                className={clsx('other', spellMake && 'spelled')}
-                actions={spellMake
-                  ? <button className="mk-proj" data-id={pm('make-project')} title={`设为项目：${cwd} 里的对话归到「项目」下`} onClick={() => void addWorkspace(cwd).catch((e) => toast(e.message))}>设为项目</button>
-                  : <button className="icon-btn xs" data-id={pm('make-project')} title="设为项目" aria-label="设为项目" onClick={() => void addWorkspace(cwd).catch((e) => toast(e.message))}><Icon name="plus" size={13} /></button>}
-              />
-            ))}
           </div>
         )}
         {grouped.peers.length > 0 && (
