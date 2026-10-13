@@ -11,6 +11,12 @@ const CLAUDE_DEFAULT: [number, number, number, number] = [3, 15, 3.75, 0.3];
 
 export const isClaudeModel = (model: string) => /claude|fable|mythos|opus|sonnet|haiku/i.test(model);
 
+/** USD per million input tokens of a Claude model (网吧's rough per-seat estimate); undefined for other vendors' models. */
+export function claudeInputPrice(model: string | undefined): number | undefined {
+  if (!model || !isClaudeModel(model)) return undefined;
+  return (CLAUDE_PRICING.find(([re]) => re.test(model))?.[1] ?? CLAUDE_DEFAULT)[0];
+}
+
 /**
  * Estimated cost of Claude usage. Other vendors' models (gpt-*, deepseek-*, gemini-*, grok-*…) are 0: we keep
  * no price table for them (relays price them their own way), and a Claude price on them is simply wrong.
