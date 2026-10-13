@@ -37,6 +37,18 @@
   --shade: 0, 0, 0;      /* colour that shadows are cast in */
   --shade-a: 3;          /* shadow strength multiplier for this theme */
   --e1: 7%; --e2: 11%; --e3: 18%;   /* edge strengths (ink mixed into transparent): subtle / default / strong */
+  /* 后台's characters, one per agent in the order they appear (features/background): fills and strokes, ≥ 3:1 on
+     --bg and --bg-1 in every theme (contrast.test.ts). As text, mix them with ink (background.css does) */
+  --agent-1: #a3e635;    /* lime */
+  --agent-2: #fbbf24;    /* amber */
+  --agent-3: #2dd4bf;    /* teal */
+  --agent-4: #f472b6;    /* pink */
+  --agent-5: #60a5fa;    /* blue */
+  --agent-6: #a78bfa;    /* violet */
+  --agent-7: #fb923c;    /* orange */
+  --agent-8: #22d3ee;    /* cyan */
+  --agent-9: #e879f9;    /* fuchsia */
+  --agent-10: #4ade80;   /* green */
   color-scheme: dark;
 }
 :root[data-theme='light'] {
@@ -65,13 +77,24 @@
   --shade: 40, 30, 20;
   --shade-a: 1;
   --e1: 6%; --e2: 10%; --e3: 16%;
+  /* the same ten hues, deep enough for white paper */
+  --agent-1: #5b8c12;
+  --agent-2: #a67805;
+  --agent-3: #0f9488;
+  --agent-4: #de3f8a;
+  --agent-5: #3474e8;
+  --agent-6: #8457f0;
+  --agent-7: #e0560f;
+  --agent-8: #0a8fb0;
+  --agent-9: #c43ad6;
+  --agent-10: #15924a;
   color-scheme: light;
 }
 /* the other themes keep their own colours and their accent as the primary colour */
 :root[data-theme='dracula'] { --bg: #282a36; --bg-1: #21222c; --bg-2: #343746; --bg-3: #44475a; --bg-elev: #3b3e50; --line: #3a3d4d; --line-1: #4b4f63; --fg: #f8f8f2; --fg-1: #c9cbd6; --fg-2: #a0a4ba; --fg-3: #7d88b0; --accent: #bd93f9; --accent-text: #caa8fa; --accent-fg: #282a36; --primary: var(--accent); --primary-fg: #282a36; --user-bg: #343746; --green: #50fa7b; --red: #ff7b7b; --yellow: #f1fa8c; --blue: #8be9fd; --shade-a: 2; }
 :root[data-theme='nord'] { --bg: #2e3440; --bg-1: #272c36; --bg-2: #3b4252; --bg-3: #434c5e; --bg-elev: #414a5b; --line: #3b4252; --line-1: #4c566a; --fg: #eceff4; --fg-1: #d8dee9; --fg-2: #a7b1c2; --fg-3: #8e98ab; --accent: #88c0d0; --accent-text: #97cad9; --accent-fg: #2e3440; --primary: var(--accent); --primary-fg: var(--accent-fg); --user-bg: #3b4252; --green: #a3be8c; --red: #ee969d; --yellow: #ebcb8b; --blue: #81a1c1; --shade-a: 2; }
 :root[data-theme='tokyo-night'] { --bg: #1a1b26; --bg-1: #16161e; --bg-2: #24283b; --bg-3: #2f3349; --bg-elev: #2b2f45; --line: #262a3d; --line-1: #363b54; --fg: #c0caf5; --fg-1: #a9b1d6; --fg-2: #8f96bd; --fg-3: #7780a8; --accent: #7aa2f7; --accent-text: #7aa2f7; --accent-fg: #1a1b26; --primary: var(--accent); --primary-fg: var(--accent-fg); --user-bg: #24283b; --green: #9ece6a; --red: #f7768e; --yellow: #e0af68; --blue: #7dcfff; --shade-a: 2; }
-:root[data-theme='paper'] { --bg: #f7f3ea; --bg-1: #f1ece1; --bg-2: #e9e3d6; --bg-3: #ddd6c6; --bg-elev: #fffdf6; --line: #e2dccd; --line-1: #cfc7b4; --fg: #2b2620; --fg-1: #574f44; --fg-2: #6f6758; --fg-3: #877e6e; --accent: #b5563a; --accent-text: #9c4529; --accent-fg: #fff; --primary: var(--accent); --primary-fg: #fff; --user-bg: #ece5d5; --green: #2e6b33; --red: #a83a28; --yellow: #80560d; --blue: #2c5aa8; --shade: 92, 78, 56; --shade-a: 1; --e1: 6%; --e2: 10%; --e3: 16%; color-scheme: light; }
+:root[data-theme='paper'] { --bg: #f7f3ea; --bg-1: #f1ece1; --bg-2: #e9e3d6; --bg-3: #ddd6c6; --bg-elev: #fffdf6; --line: #e2dccd; --line-1: #cfc7b4; --fg: #2b2620; --fg-1: #574f44; --fg-2: #6f6758; --fg-3: #877e6e; --accent: #b5563a; --accent-text: #9c4529; --accent-fg: #fff; --primary: var(--accent); --primary-fg: #fff; --user-bg: #ece5d5; --green: #2e6b33; --red: #a83a28; --yellow: #80560d; --blue: #2c5aa8; --shade: 92, 78, 56; --shade-a: 1; --e1: 6%; --e2: 10%; --e3: 16%; --agent-1: #567f14; --agent-2: #966b06; --agent-3: #0e8579; --agent-4: #cc3a7e; --agent-5: #2f68d0; --agent-6: #7a4ee0; --agent-7: #cb4e10; --agent-8: #0a7f9e; --agent-9: #b034c2; --agent-10: #13823f; color-scheme: light; }
 
 /* ---- derived (theme-independent; reads the primitives above) ---- */
 :root {
@@ -191,6 +214,28 @@
   --fw-regular: 400;
   --fw-strong: 600;   /* the only two weights for text that can hold Chinese: Microsoft YaHei has no 500 */
 
+  /* 后台's office (features/background, styles/background.css): drawn from each theme's own surfaces. Here a night
+     office for the dark themes (the room darker than the page, the screens near black); light and paper replace it
+     with a daytime one just below. The characters wear --agent-1..10 (theme primitives above). */
+  --office-sky: color-mix(in oklab, var(--bg-1) 70%, black);      /* behind the room */
+  --office-floor: color-mix(in oklab, var(--bg) 96%, var(--fg));
+  --office-grid: var(--edge-subtle);
+  --office-wall-l: color-mix(in oklab, var(--bg) 55%, var(--bg-1));  /* the screen's wall */
+  --office-wall-r: color-mix(in oklab, var(--bg-1) 80%, var(--bg));  /* the door's wall */
+  --office-wall-edge: var(--edge-default);
+  --office-desk-top: color-mix(in oklab, var(--bg-3) 88%, var(--fg));
+  --office-desk-l: var(--bg-2);
+  --office-desk-r: color-mix(in oklab, var(--bg-2) 45%, var(--bg));
+  --office-screen: color-mix(in oklab, var(--bg-1) 55%, black);   /* monitors and the wall screen, switched off */
+  --office-screen-edge: var(--edge-strong);
+  --office-door: var(--office-screen);
+  --office-machine: var(--fg-3);
+  --office-term: var(--office-screen);                             /* a machine's little terminal */
+  --office-term-ink: var(--green);
+  --office-shadow: rgba(var(--shade), calc(0.12 * var(--shade-a)));
+  --office-eye: #ffffff;
+  --office-pupil: #1a1714;
+
   /* legacy aliases — kept so un-migrated rules keep rendering; removed when phase 3 of the refresh is done */
   --radius: var(--r-lg);
   --shadow: var(--elev-2);
@@ -200,6 +245,20 @@
   --dur-4: var(--dur-slower);
 }
 :root[data-density='compact'] { --shell-gap: 4px; --r-card: var(--r-lg); }
+/* the office by day: a lit paper floor on the shell's colour, walls a step darker, white monitors */
+:root[data-theme='light'], :root[data-theme='paper'] {
+  --office-sky: var(--bg-1);
+  --office-floor: var(--bg);
+  --office-wall-l: color-mix(in oklab, var(--bg-2) 50%, var(--bg-3));
+  --office-wall-r: color-mix(in oklab, var(--bg-3) 92%, var(--fg));
+  --office-desk-top: var(--bg-2);
+  --office-desk-l: color-mix(in oklab, var(--bg-3) 86%, var(--fg));
+  --office-desk-r: color-mix(in oklab, var(--bg-3) 78%, var(--fg));
+  --office-screen: var(--bg-elev);
+  --office-door: var(--bg-3);
+  --office-term: var(--fg);
+  --office-term-ink: color-mix(in oklab, var(--green) 40%, white);
+}
 
 /* 减少动态效果 (the setting, or the system's): colour and opacity still ease, briefly; nothing moves, blurs or loops */
 :root[data-reduce-motion='1'] { --dur-instant: 0s; --dur-fast: 80ms; --dur-base: 80ms; --dur-slow: 80ms; --dur-slower: 80ms; --dur-page: 80ms; }

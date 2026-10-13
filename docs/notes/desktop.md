@@ -1,0 +1,16 @@
+# 桌面版（desktop/）
+
+```
+npm run desktop         # 编译 server/web/desktop 后用源码起 Electron
+npm run build:desktop   # electron-builder → dist-desktop/ClaudeWeb-<ver>-win-x64.exe (NSIS) + ClaudeWeb-<ver>-portable.exe
+```
+
+- **窗口先开，server 后起**（2026-09-29）：`whenReady` 里先 `createWindow(null, 'main')` 显示一个 data: URL 的启动页（`splashUrl()`：主题色底 + 「正在启动…」，整页可拖动），`host.start()` 回来再 `loadURL` 真页面。以前窗口要等 server 起来（打包版 ~15 s）+ 页面 `ready-to-show` 才出现，这段时间再从开始菜单点一次，`second-instance` 找不到任何窗口可显示——用户看到的就是「打不开」。`--hidden`（开机自启）只作用于启动时建的那几个窗口（`createWindow` 的 `hidden` 参数；以前是建完再 `hide()`，但 `ready-to-show` 晚到又把它显示出来了）。
+- 壳只做四件事：`utilityProcess.fork(server/dist/index.js)`（PORT=0 自选端口 + 随机 token）、BrowserWindow 加载 `http://127.0.0.1:<port>/?token=…`、托盘/菜单/通知、`window.desktop` 桥（preload）。
+- **utilityProcess 里 `process.send` 不存在**，server 用 `process.parentPort.postMessage({type:'ready'})` 报告端口；别给它设 `ELECTRON_RUN_AS_NODE`（会让它拒绝 Chromium 参数直接退出）。
+- 前端通过 `web/src/desktop.ts` 判断是否在桌面壳里：选目录 / 打开路径 / 通知 / 菜单快捷键都走桥，浏览器模式退回原逻辑。`html.desktop` 类让每一栏的第一行成为可拖动标题栏（没有全局顶栏了，规则见「界面改版 阶段 0–1」），右上角那一行留 150px 给系统窗口按钮。
+- 打包后原生二进制在 `app.asar.unpacked`：`resolveClaudeExe()` 和 node-pty 加载都做了路径修正。
+- 日志：`%APPDATA%\claude-web\server.log`、`main.log`。
+- electron-builder 只打包**根 package.json 的 dependencies**（workspace 子包的不算），所以 server 的运行时依赖在根 package.json 里也列了一份；`npmRebuild: false`，node-pty 用自带 prebuilds（本机没有 VS Build Tools，rebuild 会失败）。
+- 调试打包后的 server：设 `CLAUDE_WEB_TOKEN=xxx` 起 `electron .`，然后浏览器开 `http://127.0.0.1:<port>/?token=xxx`（端口看 server.log）。
+- **应用自己的更新**（2026-09-30 用户要求：以前只有设置 → 高级 → 更新的按钮会去看，没人更新）：启动 15 s 后和每 4 小时检查一次（`flags.json` 的 `autoUpdate: false` 关掉，更新页有开关）。决定都在 `desktop/src/update-policy.ts`（纯函数，`update-policy.test.ts`，`npm test` 现在也跑 desktop）：`updateMode()` —— Windows 安装版（NSIS）是 `auto`（`autoDownload` + `autoInstallOnAppQuit`，下好后弹窗，「立即重启更新」= `quitAndInstall(true, true)` 静默安装再启动，「稍后」= 退出时自动装），其它都是 `manual`：macOS（没签名，Squirrel.Mac 拒绝安装）、免安装版（`PORTABLE_EXECUTABLE_FILE`；它没有 `app-update.yml`，所以 `setFeedURL` 显式给 github，只检查不下载）、Linux——弹窗给这台机器的文件链接（`manualDownloadUrl()`：Rosetta 下的 x64 版给 arm64 dmg）。发布说明里写 **`【必须更新】`**（`REQUIRED_MARK`，要原样这几个字）的版本弹窗没有「稍后」、Esc 不关；它的自动下载失败时退回手动下载。`releaseNotes`（GitHub 给的是 HTML）由 `notesText()` 转成纯文本。前端 `web/src/features/update/`（`model.ts` 的 `promptFor` / `promptCopy` + 测试，`UpdatePrompt.tsx` 只在 main 窗口画，`.dialog-bg` 在设置页之上；「稍后」按版本记在内存里 24 h，重启再问）。每一步写进 `main.log`（`[update] checking / available x / downloading x / downloaded x / installing x / error …`）。**端到端**：`CW_UPDATE_FEED=<generic feed>` 换掉 GitHub、`CW_UPDATE_FIRST_MS` 缩短首次检查；`scripts/smoke-packaged.mjs` 起一个广告 99.0.0 的本地 feed，断言 Windows 安装版下到 `downloaded`、macOS 只到 `available`、什么都不下（发版和手动触发的 Release workflow 都会跑）。用源码起（`electron .`）测下载要在仓库根放一个临时 `dev-app-update.yml`（`provider: generic`、`url`、`updaterCacheDirName`），测完删掉；别点「立即重启更新」（会运行 feed 里的假安装包）。**已经装了 v0.1.2 及更早版本的人要最后手动更新一次**，自动检查从带它的版本开始生效。更新日志在根目录 `CHANGELOG.md`（每个版本一节，发版时把「未发布」改成版本号）。

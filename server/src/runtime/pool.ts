@@ -223,6 +223,9 @@ export class RunnerPool extends EventEmitter {
     const idleClaude: [string, AgentDriver][] = [];
     for (const [id, r] of this.runners) {
       if (r.state !== 'idle') continue;
+      // 后台: a workflow / background agent / command still going in it — reaping would kill it, and its result
+      // (a task notification that starts a turn of its own) would never come
+      if (r instanceof SessionRunner && r.hasBackgroundWork()) continue;
       if (now - r.lastActivity > (this.ttl.get(r) ?? IDLE_TTL_MS)) void this.close(id).catch(() => { /* already gone */ });
       else if (r instanceof SessionRunner) idleClaude.push([id, r]);
     }

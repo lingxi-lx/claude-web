@@ -83,6 +83,8 @@ export interface WebDeps {
   fetchTimeoutMs?: number;
   /** how long the hosting window has for one result page (search.ts BROWSER_TIMEOUT_MS) */
   searchPageTimeoutMs?: number;
+  /** 网吧's `character_*` tools (characters/tools.ts), served by the same MCP process */
+  characterTool?: (tool: string, args: Record<string, unknown>) => Promise<ToolResult>;
 }
 
 interface KeptPage { url: string; title: string; text: string; elements: BrowserElement[]; at: number }
@@ -367,6 +369,7 @@ export class WebService extends EventEmitter {
   }
 
   private async run(sid: string, tool: string, a: Record<string, unknown>): Promise<ToolResult> {
+    if (tool.startsWith('character_') && this.d.characterTool) return this.d.characterTool(tool, a);
     const str = (k: string) => { const v = a[k]; if (typeof v !== 'string' || !v.trim()) throw new Error(`${tool} 需要参数 ${k}（字符串）`); return v; };
     const num = (k: string) => (typeof a[k] === 'number' && Number.isFinite(a[k]) ? (a[k] as number) : undefined);
     /** After an action the page is shown as a glance; without one, the host's note (or a plain "done"). */

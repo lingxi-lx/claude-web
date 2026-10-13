@@ -8,6 +8,7 @@ import { showPanel } from '@/features/workbench/right-panel';
 import { closePages, useSection, type Section } from '@/features/sections';
 import { openAutomation } from '@/features/automation/state';
 import { openExtensions } from '@/features/extensions/state';
+import { openBackground } from '@/features/background/state';
 import { useOrch, waitingOf } from '@/features/orchestra/state';
 import { Menu } from '@/features/sidebar/menus';
 import { AccountMenu } from '@/features/sidebar/account';
@@ -28,6 +29,7 @@ function RailBtn({ id, icon, tip, on, className, children, ...rest }: { id: stri
 
 const OPEN: Record<Section, () => void> = {
   chat: closePages,
+  background: () => { openBackground(); },
   automation: () => { openAutomation(); },
   extensions: () => { openExtensions(); },
 };

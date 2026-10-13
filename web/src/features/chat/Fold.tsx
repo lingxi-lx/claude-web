@@ -57,7 +57,7 @@ export function Fold({ open, animate = true, className, children }: { open: bool
   const { phase, ref } = useFold(open, animate);
   if (!foldShown(phase)) return null;
   return (
-    <div ref={ref} className={clsx('fold', foldClass(phase), className)}>
+    <div ref={ref} className={clsx('fold-box', foldClass(phase), className)}>
       <div className="fold-in">{children}</div>
     </div>
   );

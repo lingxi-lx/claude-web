@@ -50,7 +50,9 @@ import type { FederationService } from '../federation/service.js';
 import type { IncomingMessage } from 'node:http';
 import type { OrchestraService } from '../orchestra/service.js';
 import { parseProxySetting, proxy } from '../net/proxy.js';
+import { CharacterService, handleCharacters, isCharactersRequest } from '../characters/service.js';
 import { handleOrchestra, isOrchestraRequest } from '../orchestra/handlers.js';
+import { handleBackground, isBackgroundRequest, type BackgroundService } from '../background/service.js';
 import { isWebKeySetting, maskWebSettings, type WebService } from '../web/service.js';
 import { setWebMcpEnabled } from '../web/launcher.js';
 import type { ComputerAccess } from '../computer/access.js';
@@ -66,6 +68,9 @@ export interface Services {
   federation?: FederationService;
   /** Multi-agent orchestration (workflows / runs); requests routed by orchestra/handlers.ts */
   orchestra: OrchestraService;
+  /** 后台: every conversation's running sub-agents / workflows / commands (background/service.ts). */
+  background: BackgroundService;
+  characters: CharacterService;
   git: GitService;
   search: SearchService;
   skills: SkillsService;
@@ -167,6 +172,8 @@ export class Hub {
     s.federation?.on('event', (e: ServerEvent) => this.broadcast(e, true));
     s.orchestra.on('changed', (run, removed) => this.broadcast({ kind: 'orchestra.changed', run, removed }));
     s.orchestra.on('workflows', () => this.broadcast({ kind: 'orchestra.workflows.changed' }));
+    s.background.on('changed', (session) => this.broadcast({ kind: 'background.changed', session }));
+    s.characters.on('changed', () => this.broadcast({ kind: 'characters.changed' }));
   }
 
   /** `fromPeer`: re-broadcast of another machine's event — local clients only (two machines peering each other would echo forever). */
@@ -290,6 +297,8 @@ export class Hub {
     if (GOES_OUT.has(req.kind)) await proxy.refresh();
     if (isAgentConfigRequest(req)) return handleAgentConfig(s.agentConfig, req);
     if (isOrchestraRequest(req)) return handleOrchestra(s.orchestra, req);
+    if (isBackgroundRequest(req)) return handleBackground(s.background, req);
+    if (isCharactersRequest(req)) return handleCharacters(s.characters, req, this.peerConns.has(ws) || this.remoteConns.has(ws));
     switch (req.kind) {
       case 'sessions.list': {
         const all = await s.library.list();

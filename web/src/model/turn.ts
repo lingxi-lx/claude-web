@@ -107,6 +107,8 @@ export function turnSummary(t: Turn): TurnSummary {
     for (const b of it.blocks) {
       if (b.type !== 'tool_use') continue;
       tools++;
+      // cut off by the turn's Stop: it ran (a command, a search) but read and changed nothing — not a failure
+      if (b.stopped) { if (SHELL.has(b.name)) commands++; else if (SEARCH.has(b.name)) searches++; else if (!READ.has(b.name) && !EDIT.has(b.name)) others++; continue; }
       if (b.status === 'error' || b.result?.isError) { failed++; continue; }
       if (READ.has(b.name)) {
         const p = String(b.input.file_path ?? b.input.notebook_path ?? b.input.path ?? '');

@@ -347,7 +347,7 @@ describe('联网 through a running server', () => {
     expect(webAllowedTools()).toEqual([]);
     await until(() => b.events.filter((e) => e.kind === 'web.changed').length > n, 'web.changed after the switch');
     await a.req('settings.set', { key: 'web.mcp', value: true });
-    expect(webAllowedTools()).toEqual(['mcp__web__web_search']);
+    expect(webAllowedTools()).toEqual(['mcp__web__web_search', 'mcp__web__character_guide', 'mcp__web__character_draft', 'mcp__web__character_save', 'mcp__web__character_list']);
   });
 
   it('an engine that challenged is left out of the next searches until a 联网 setting is saved; a list about something else is not handed on', async () => {

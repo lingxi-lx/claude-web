@@ -84,7 +84,7 @@ function start(env: Record<string, string>) {
 }
 
 describe('the web MCP server over stdio', () => {
-  it('handshakes, lists the eleven tools, and carries each call to the server with the secret and the conversation id', async () => {
+  it('handshakes, lists the sixteen tools (eleven of 联网, five of 网吧), and carries each call to the server with the secret and the conversation id', async () => {
     const tokenFile = path.join(dir, 'secret.token');
     fs.writeFileSync(tokenFile, `${SECRET}\n`);
     hits.length = 0;
@@ -97,7 +97,7 @@ describe('the web MCP server over stdio', () => {
       m.notify('notifications/initialized');
       expect((await m.rpc('ping')).result).toEqual({});
       const tools = (await m.rpc('tools/list')).result.tools;
-      expect(tools.map((t: any) => t.name)).toEqual(['web_search', 'browser_open', 'browser_read', 'browser_find', 'browser_click', 'browser_type', 'browser_press_key', 'browser_scroll', 'browser_back', 'browser_screenshot', 'browser_computer']);
+      expect(tools.map((t: any) => t.name)).toEqual(['web_search', 'browser_open', 'browser_read', 'browser_find', 'browser_click', 'browser_type', 'browser_press_key', 'browser_scroll', 'browser_back', 'browser_screenshot', 'browser_computer', 'character_guide', 'character_draft', 'character_save', 'character_assign', 'character_list']);
       expect(hits).toHaveLength(0); // nothing so far needed the server
 
       const search = (await m.rpc('tools/call', { name: 'web_search', arguments: { query: 'node streams', count: 3 } })).result;
@@ -148,7 +148,7 @@ describe('the tool list', () => {
     }
     const readOnly = TOOLS.filter((t) => t.annotations.readOnlyHint).map((t) => t.name);
     // reading what is already open, and searching; opening an address or acting on a page is not read-only
-    expect(readOnly).toEqual(['web_search', 'browser_read', 'browser_find', 'browser_screenshot']);
+    expect(readOnly).toEqual(['web_search', 'browser_read', 'browser_find', 'browser_screenshot', 'character_guide', 'character_list']);
   });
 });
 

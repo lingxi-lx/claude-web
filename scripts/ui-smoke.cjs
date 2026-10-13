@@ -542,7 +542,7 @@ function driver() {
       // redesign phase 1: one pane, one tab, no workbench setting → no global top bar, no group bar, no tab strip, no panel rail
       if (E.SMOKE_READONLY !== '1') {
         const chrome = await js('({ wb: window.__store.getState().settings["ui.workbench"], topbar: !!document.querySelector(".topbar"), groupbar: !!document.querySelector(".groupbar"), strips: document.querySelectorAll(".tabstrip").length, rail: !!document.querySelector(".dock-rail"), iconRail: [...document.querySelectorAll(".rail .rail-main > [data-id], .rail .rail-main > .rail-anchor > [data-id]")].map((b) => b.dataset.id).join(" ") })');
-        check('default chrome: no top bar / group bar / tab strip / row of panel icons; the icon rail is 对话 · 自动化 · 扩展 · 更多', chrome.wb === false && !chrome.topbar && !chrome.groupbar && !chrome.strips && !chrome.rail && chrome.iconRail === 'chat automation extensions more', JSON.stringify(chrome));
+        check('default chrome: no top bar / group bar / tab strip / row of panel icons; the icon rail is 对话 · 后台 · 自动化 · 扩展 · 更多', chrome.wb === false && !chrome.topbar && !chrome.groupbar && !chrome.strips && !chrome.rail && chrome.iconRail === 'chat background automation extensions more', JSON.stringify(chrome));
         const quota = await js('[...document.querySelectorAll(".quota")].every((q) => q.closest(".sb-foot"))');
         check('the quota ring lives in the sidebar bottom row', quota);
       }
@@ -1901,8 +1901,8 @@ function driver() {
             for (const p of Object.keys(got)) for (const id of got[p]) if ((PLACES[p] || []).includes(id)) (seen[p] = seen[p] || new Set()).add(id);
           };
           const sb = await js(`({ chipRows: !!document.querySelector('.sidebar .sb-sources, .sidebar .src-chip, .sidebar .sb-search, .sidebar .lib-banner'), top: [...document.querySelectorAll('.sidebar .sb-top [data-id], .sidebar .sb-nav [data-id]')].map((e) => e.dataset.id), rail: [...document.querySelectorAll('.rail .rail-top > [data-id], .rail .rail-main > [data-id], .rail .rail-main > .rail-anchor > [data-id]')].map((e) => e.dataset.id), head: [...document.querySelectorAll('.sidebar [data-id="projects"] > .sb-sec-h [data-id]')].map((e) => e.dataset.id), account: [...document.querySelectorAll('.rail .rail-foot [data-id]')].map((e) => e.dataset.id), inSidebar: document.querySelectorAll('.sidebar .sb-account, .sidebar .sb-nav [data-id="automation"]').length, row: !!document.querySelector('.sidebar .sb-list [data-sid=' + ${JSON.stringify(SID)} + '] [data-id="status"]') })`);
-          check('sidebar: no chip / filter-box rows; 新对话 · 搜索; the rail: the switch · 对话 · 自动化 · 扩展 · 更多, at its foot 设置 and the account (connection); funnel + 打开文件夹 on 项目; the row ends in one status',
-            !sb.chipRows && has(sb.top, ['new', 'search']) && has(sb.rail, ['collapse', 'chat', 'automation', 'extensions', 'more']) && has(sb.head, ['filter', 'add-project']) && has(sb.account, ['account', 'connection', 'settings']) && sb.inSidebar === 0 && sb.row, JSON.stringify(sb));
+          check('sidebar: no chip / filter-box rows; 新对话 · 搜索; the rail: the switch · 对话 · 后台 · 自动化 · 扩展 · 更多, at its foot 设置 and the account (connection); funnel + 打开文件夹 on 项目; the row ends in one status',
+            !sb.chipRows && has(sb.top, ['new', 'search']) && has(sb.rail, ['collapse', 'chat', 'background', 'automation', 'extensions', 'more']) && has(sb.head, ['filter', 'add-project']) && has(sb.account, ['account', 'connection', 'settings']) && sb.inSidebar === 0 && sb.row, JSON.stringify(sb));
           // final review I3: 收起侧栏 shows with the pointer over the sidebar or the key focus on it, not at rest
           // (and the 项目 header's funnel and +, the same way)
           const collapseOp = () => js(`['.sb-sec-h [data-id="filter"]', '.sb-sec-h [data-id="add-project"]'].map((s) => getComputedStyle(document.querySelector('.sidebar ' + s)).opacity).join(',')`);
@@ -2346,9 +2346,9 @@ function driver() {
         await sleep(500);
         // ··· on the rail: the panels that are neither a fixed tab of the right panel nor a section
         await click('.rail [data-id="more"]');
-        const moreRows = (await waitFor(`document.querySelectorAll('.menu.rail-menu [data-id^="open-"]').length === 6`, 3000)) && await js(`[...document.querySelectorAll('.menu.rail-menu [data-id^="open-"]')].map((b) => b.dataset.id.slice(5)).join(',')`);
+        const moreRows = (await waitFor(`document.querySelectorAll('.menu.rail-menu [data-id^="open-"]').length === 7`, 3000)) && await js(`[...document.querySelectorAll('.menu.rail-menu [data-id^="open-"]')].map((b) => b.dataset.id.slice(5)).join(',')`);
         const hints = await js(`[...document.querySelectorAll('.menu.rail-menu .rm-t .h')].every((h) => h.scrollWidth <= h.clientWidth + 1)`);
-        check('rail ···: 总览 · 用量 · 记忆 · Issue 与 PR · Android · 配置中心, each with one line that is not cut off', moreRows === 'mission,usage,memory,board,android,config' && hints, JSON.stringify({ moreRows, hints }));
+        check('rail ···: 总览 · 网吧 · 用量 · 记忆 · Issue 与 PR · Android · 配置中心, each with one line that is not cut off', moreRows === 'mission,cafe,usage,memory,board,android,config' && hints, JSON.stringify({ moreRows, hints }));
         await shot('rail-more');
         await js(`document.querySelector('.menu.rail-menu [data-id="pin-usage"]').click()`);
         const pinned = await waitFor(`!!document.querySelector('.rail [data-id="panel-usage"]') && JSON.stringify(window.__store.getState().settings['ui.railPins']) === '["usage"]'`, 3000);
@@ -2412,6 +2412,58 @@ function driver() {
         check('behind 审阅 the browser stays laid out, unseen', behind);
         const bwErr = await noBoundary('.dock');
         check('浏览器 without error boundary', !bwErr, bwErr);
+      }
+
+      // ---- 后台 (spec 2026-10-12-background-office-design.md): a conversation's background put in through the debug
+      // hook (no CLI here; phase 25 drives the real thing) — the composer's pill, the page (cards, office, graph, feed),
+      // an agent's drawer, the task panel
+      if (E.SMOKE_READONLY !== '1' && E.SMOKE_SID) {
+        phase = 'background';
+        const bsid = JSON.stringify(E.SMOKE_SID);
+        await js(`(() => { window.__store.setState({ sidebarOpen: true }); window.__store.getState().dispatchLayout({ t: 'dock.set', patch: { open: false } }); })()`);
+        await js(`window.__store.getState().loadHistory(${bsid})`);
+        await waitFor(`!!document.querySelector('.pane.focused .composer textarea')`, 8000);
+        await js(`(() => { const now = Date.now(); const A = (key, color, label, phase, phaseTitle, state, o) => Object.assign({ key, color, label, phase, phaseTitle, state, model: 'claude-haiku-4-5', beats: state === 'running' ? [now - 30000, now - 9000] : [], agentId: state === 'queued' ? undefined : 'a' + key + '00000' }, o || {}); window.__cwBackground.inject({ sessionId: ${bsid}, updatedAt: now, tasks: [ { id: 'wf1', toolUseId: 'tu-wf', kind: 'workflow', description: 'smoke', name: 'smoke-flow', status: 'running', startedAt: now - 60000, phases: [{ index: 1, title: '一' }, { index: 2, title: '二' }], agents: [A('w1', 1, 'alpha', 1, '一', 'running', { lastSummary: '改了 a.ts' }), A('w2', 2, 'beta', 1, '一', 'done'), A('w3', 3, 'gamma', 2, '二', 'queued')] }, { id: 'ag1', kind: 'agent', description: '查一下', status: 'running', backgrounded: true, startedAt: now - 20000, agents: [A('ag1', 4, '查一下', undefined, undefined, 'running', { agentType: 'Explore' })] }, { id: 'sh1', kind: 'shell', description: 'npm run dev', status: 'running', backgrounded: true, startedAt: now - 90000, agents: [] } ], events: [ { at: now - 5000, taskId: 'wf1', agent: 'w1', who: 'alpha', color: 1, text: '改了 a.ts', tone: 'tool' } ] }); })()`);
+        const pill = (await waitFor(`!!document.querySelector('.pane.focused .composer .bg-pill')`, 4000)) && await js(`document.querySelector('.pane.focused .composer .bg-pill').textContent`);
+        check('后台: the composer\'s pill says what runs besides the turn', pill === '后台 · 1 个工作流 · 1 个子代理 · 1 条命令 · 2 个在跑', JSON.stringify(pill));
+        await shot('background-pill');
+        await click('.pane.focused .composer .bg-pill');
+        const up = await waitFor(`!!document.querySelector('.bg-page:not([hidden]) .cafe-canvas') && document.querySelectorAll('.bg-page .cafe-person').length >= 5`, 10000);
+        await sleep(600);
+        const sidSel = JSON.stringify(JSON.stringify(E.SMOKE_SID));
+        const page = await js(`(() => { const p = document.querySelector('.bg-page'); return { title: p.querySelector('.over-title h2')?.textContent, desc: p.querySelector('.over-sub, .over-desc')?.textContent ?? '', cards: p.querySelectorAll('.bg-card:not(.bg-card-more)').length, chars: p.querySelectorAll('.cafe-person').length, admin: !!p.querySelector('.cafe-person[aria-label^="网管"]'), lit: (() => { const c = p.querySelector('.cafe-canvas'); const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0, k = 0; for (let i = 0; i < d.length; i += 4 * 97) { k++; if (d[i] + d[i + 1] + d[i + 2] > 60) n++; } return Math.round((n / k) * 100); })(), nodes: p.querySelectorAll('.bg-graph-svg .bg-node').length, feed: p.querySelector('.bg-feed')?.textContent ?? '', chips: p.querySelectorAll('.bg-chips .bg-chip').length, rail: !!document.querySelector('.rail [data-id="background"].on'), side: !!document.querySelector('.sb-sect:not([hidden]) .bg-side .bg-srow.active[data-sid=' + ${sidSel} + ']') }; })()`);
+        check('the pill opens 后台 on this conversation: five cards (three of a workflow, a sub-agent, a command), four guests and the admin in the cafe (the picture drawn), a node each in the graph, the feed, a chip per task', up && page.title && page.title !== '后台' && /运行中/.test(page.desc) && page.cards === 5 && page.chars === 5 && page.admin && page.lit > 15 && page.nodes >= 4 && /alpha/.test(page.feed) && page.chips === 4 && page.rail && page.side, JSON.stringify(page));
+        const bgErr = await noBoundary('.bg-page');
+        check('后台 without error boundary', !bgErr, bgErr);
+        await shot('background-page');
+        await js(`document.querySelector('.bg-page .cafe-person[aria-label^="alpha"]').click()`);
+        const drawer = await waitFor(`/alpha/.test(document.querySelector('.bg-page .bg-drawer .bg-drawer-title .n')?.textContent ?? '')`, 4000);
+        check('a guest in the cafe opens their own conversation beside the board', drawer);
+        await shot('background-drawer');
+        await click('.bg-page .cafe-tools .btn');
+        const lib = (await waitFor(`!!document.querySelector('.cafe-lib')`, 3000)) && await js(`[...document.querySelectorAll('.cafe-lib .cafe-card')].map((c) => c.dataset.character).join(',')`);
+        check('网吧 → 角色库: the octopus and the admin, walking', lib === 'octopus,admin', JSON.stringify(lib));
+        await shot('cafe-library');
+        await key('Escape');
+        check('Esc closes the library, the page stays', await waitFor(`!document.querySelector('.cafe-lib') && !document.querySelector('.bg-page').hidden`, 2000));
+        await js(`document.querySelector('.bg-page').focus()`);
+        await key('Escape');
+        const drawerGone = await waitFor(`!document.querySelector('.bg-page .bg-drawer') && !document.querySelector('.bg-page').hidden`, 3000);
+        await key('Escape');
+        const pageGone = await waitFor(`document.querySelector('.bg-page').hidden === true && !!document.querySelector('.rail [data-id="chat"].on')`, 3000);
+        check('Esc closes the drawer first, then the page', drawerGone && pageGone, JSON.stringify({ drawerGone, pageGone }));
+        await js(`window.__store.getState().dispatchLayout({ t: 'dock.show', panel: 'tasks' })`);
+        const tasks = (await waitFor(`!!document.querySelector('.dock-panel[data-panel="tasks"]:not([hidden]) .bg-tasks .bg-graph-svg')`, 5000)) && await js(`(() => { const p = document.querySelector('.dock-panel[data-panel="tasks"] .bg-tasks'); return { tasks: p.querySelectorAll('.bg-ttask').length, agents: p.querySelectorAll('.bg-tagent').length, stops: p.querySelectorAll('.bg-ttask .btn.danger').length }; })()`);
+        check('右侧面板 → 任务: the small graph, the three tasks (a Stop each) and the workflow\'s agents', tasks && tasks.tasks === 3 && tasks.agents === 3 && tasks.stops === 3, JSON.stringify(tasks));
+        await shot('background-tasks');
+        await js(`window.__store.getState().dispatchLayout({ t: 'dock.show', panel: 'cafe' })`);
+        const panelCafe = await waitFor(`!!document.querySelector('.dock-panel[data-panel="cafe"]:not([hidden]) .cafe-canvas') && document.querySelectorAll('.dock-panel[data-panel="cafe"] .cafe-person').length >= 5`, 8000);
+        check('右侧面板 → 网吧: the same cafe, small, with its guests and the admin', panelCafe);
+        await shot('cafe-panel');
+        await js(`window.__store.getState().dispatchLayout({ t: 'dock.close', panel: 'cafe', workbench: false })`);
+        await js(`(() => { window.__cwBackground.inject({ sessionId: ${bsid}, updatedAt: Date.now(), tasks: [], events: [] }); window.__store.getState().dispatchLayout({ t: 'dock.set', patch: { open: false } }); })()`);
+        const pillGone = await waitFor(`!document.querySelector('.pane.focused .composer .bg-pill')`, 3000);
+        check('nothing running: no pill', pillGone);
       }
 
       {

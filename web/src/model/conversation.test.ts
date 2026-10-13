@@ -1,8 +1,9 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { applyMessage, applyTranscript, createConversation, decodeAttachments, sessionRefMarker, findChainUuidBefore, prependTranscript, setConversationClock, turnItems, walkTools, type AssistantItem, type Conversation, type UserItem } from './conversation';
+import { applyMessage, applyTranscript, createConversation, decodeAttachments, sessionRefMarker, shownErrors, findChainUuidBefore, prependTranscript, setConversationClock, turnItems, walkTools, type AssistantItem, type Conversation, type UserItem } from './conversation';
 import { credentialHint, noResponseHint } from './health';
+import { groupTurns, turnSummary } from './turn';
 
 const FIXTURE = path.join(__dirname, '__fixtures__', 'tools.jsonl');
 const USER_UUID = '11111111-2222-4333-8444-555555555555';
@@ -259,6 +260,48 @@ describe('user messages', () => {
     ] as any[]);
     const texts = c.items.filter((i) => i.kind === 'assistant').map((i) => (i as AssistantItem).blocks.map((b: any) => b.text).join(''));
     expect(texts).toEqual(['我是 Claude Opus 4.6', 'API Error: 429 Too Many Requests']);
+  });
+
+  it("a stopped turn: the CLI's interrupt note is not a message from the user, and its diagnostic is not an error text", () => {
+    const c = createConversation();
+    applyTranscript(c, [
+      { type: 'user', uuid: 'u1', parent_tool_use_id: null, message: { role: 'user', content: '在前台运行 sleep 60' } },
+      { type: 'user', uuid: 'u2', parent_tool_use_id: null, message: { role: 'user', content: [{ type: 'text', text: '[Request interrupted by user for tool use]' }] } },
+    ] as any[]);
+    expect(c.items.filter((i) => i.kind === 'user').map((i) => (i as any).text)).toEqual(['在前台运行 sleep 60']);
+    expect(c.items.at(-1)).toMatchObject({ kind: 'system', subtype: 'interrupted', text: '已中断' });
+    // the call it cut off is stopped, not failed: the step says 已停止, the turn summary does not count a failure
+    const s = createConversation();
+    applyTranscript(s, [
+      { type: 'user', uuid: 's1', parent_tool_use_id: null, message: { role: 'user', content: '在前台运行 sleep 60' } },
+      { type: 'assistant', uuid: 's2', parent_tool_use_id: null, message: { id: 'm1', role: 'assistant', content: [{ type: 'tool_use', id: 'b1', name: 'Bash', input: { command: 'sleep 60' } }] } },
+      { type: 'user', uuid: 's3', parent_tool_use_id: null, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'b1', is_error: true, content: "The user doesn't want to proceed with this tool use." }] } },
+      { type: 'user', uuid: 's4', parent_tool_use_id: null, message: { role: 'user', content: [{ type: 'text', text: '[Request interrupted by user for tool use]' }] } },
+    ] as any[]);
+    expect(s.toolIndex.get('b1')).toMatchObject({ status: 'error', stopped: true });
+    expect(turnSummary(groupTurns(s.items)[0])).toMatchObject({ commands: 1, failed: 0 });
+    // stopped while the model answered: an earlier call that failed stays failed
+    const f = createConversation();
+    applyTranscript(f, [
+      { type: 'user', uuid: 'f1', parent_tool_use_id: null, message: { role: 'user', content: '跑测试' } },
+      { type: 'assistant', uuid: 'f2', parent_tool_use_id: null, message: { id: 'm1', role: 'assistant', content: [{ type: 'tool_use', id: 'b2', name: 'Bash', input: { command: 'npm test' } }] } },
+      { type: 'user', uuid: 'f3', parent_tool_use_id: null, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'b2', is_error: true, content: 'exit 1' }] } },
+      { type: 'user', uuid: 'f4', parent_tool_use_id: null, message: { role: 'user', content: [{ type: 'text', text: '[Request interrupted by user]' }] } },
+    ] as any[]);
+    expect(f.toolIndex.get('b2')?.stopped).toBeUndefined();
+    expect(turnSummary(groupTurns(f.items)[0])).toMatchObject({ commands: 0, failed: 1 });
+    // a workflow agent aborted with its script: the same note, without "for tool use"
+    const a = createConversation();
+    applyTranscript(a, [
+      { type: 'user', uuid: 'v1', parent_tool_use_id: null, message: { role: 'user', content: 'Reply with exactly one word: ok' } },
+      { type: 'user', uuid: 'v2', parent_tool_use_id: null, message: { role: 'user', content: [{ type: 'text', text: '[Request interrupted by user]' }] } },
+    ] as any[]);
+    expect(a.items.map((i) => (i.kind === 'system' ? `system:${i.text}` : `${i.kind}:${(i as any).text}`))).toEqual(['user:Reply with exactly one word: ok', 'system:已中断']);
+    applyMessage(c, { type: 'result', subtype: 'error_during_execution', uuid: 'r1', is_error: true, errors: ['[ede_diagnostic] result_type=user last_content_type=n/a stop_reason=tool_use'], terminal_reason: 'aborted_tools', duration_ms: 6700, num_turns: 3 });
+    const r = c.items.at(-1) as any;
+    expect(r).toMatchObject({ kind: 'result', isError: true, errorKind: 'aborted' });
+    expect(r.text).toBeUndefined();
+    expect(shownErrors(['[ede_diagnostic] x', 'boom', ''])).toBe('boom');
   });
 });
 

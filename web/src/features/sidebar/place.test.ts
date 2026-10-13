@@ -8,6 +8,11 @@ describe('placeFixed: a sidebar menu next to its anchor, never clipped by the sc
   it('below the anchor, right edges aligned (6px in), by default', () => {
     expect(placeFixed(anchor(20, 100), { w: 180, h: 200 }, view)).toEqual({ left: 20 + 200 - 180 - 6, top: 132 });
   });
+  it('a menu wider than what is left of its anchor stops at the sidebar\'s edge, off the icon rail beside it', () => {
+    // the 项目 funnel (anchor right at 335), a 315-wide menu: right-aligned it would start at 14, over the rail
+    expect(placeFixed({ left: 315, top: 150, right: 335, bottom: 170 }, { w: 315, h: 320 }, view, { minLeft: 64 }).left).toBe(64);
+    expect(placeFixed({ left: 315, top: 150, right: 335, bottom: 170 }, { w: 315, h: 320 }, view).left).toBe(14);
+  });
   it('left-aligned when asked', () => {
     expect(placeFixed(anchor(20, 100), { w: 180, h: 200 }, view, { align: 'left' })).toEqual({ left: 20, top: 132 });
   });

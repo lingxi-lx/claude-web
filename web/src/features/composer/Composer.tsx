@@ -9,6 +9,7 @@ import { pickFolderFiles } from '@/model/attachment-filter';
 import { StatusStrip } from '@/features/chat/StatusStrip';
 import { QueueCards } from '@/features/chat/QueueCards';
 import { RunCard } from '@/features/chat/RunCard';
+import { BackgroundPill } from '@/features/background/BackgroundPill';
 import { PermissionDock, runDockPrimary } from '@/features/chat/PermissionCards';
 import { denyResponse, dockAction, dockDecide, dockKind, isSlashCommand, primaryKey, type DockSeen, type DockWhy } from '@/features/chat/permission-dock';
 import { attachmentFolderPath } from '@/features/paths';
@@ -840,6 +841,8 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
         {active && !welcome && <StatusStrip sessionId={active.sessionId} />}
         {/* what was sent while the turn runs waits here, a card each; 编辑 puts one back into the box */}
         {active && !welcome && <QueueCards key={active.sessionId} sessionId={active.sessionId} queue={active.queue} onEdit={(t) => { setText((cur) => (cur ? `${cur}\n${t}` : t)); ta.current?.focus(); }} />}
+        {/* 后台: a workflow / sub-agent / background command still going — the pill opens the 后台 page on it */}
+        {active && !welcome && <BackgroundPill sessionId={active.sessionId} />}
         {/* a docked card takes the run card's place (spec §4.2: 「等确认时被权限卡替代」) */}
         {active && !welcome && (docked
           ? <PermissionDock sessionId={active.sessionId} reason={text} onReasonUsed={() => onChange('')} scope={dockScope} note={dockNote} onDenyQueued={queuedOffer ? denyQueued : undefined} />

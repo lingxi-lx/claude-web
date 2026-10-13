@@ -50,6 +50,7 @@ function StepGlyph({ st, icon, spins, pop }: { st: StepState; icon: IconName; sp
   return (
     <span className={clsx('sgw', st)} aria-hidden>
       {st === 'failed' ? <Icon name="close" size={16} />
+        : st === 'stopped' ? <Icon name="stop" size={14} />
         : st === 'waiting' ? <Icon name="shield" size={16} />
           : st === 'done' ? <Icon name={icon} size={16} className={pop ? 'pop' : undefined} />
             : spins ? <span className="spin" />
@@ -94,6 +95,7 @@ export function ToolHead({ t, onToggle, open }: { t: ToolUseBlock; onToggle?: (b
   const pop = useJust(st === 'done', POP_MS);
   const took = st === 'done' ? stepDurationMs(t, { start: starts.get(t.id), watched }) : undefined;
   const end = st === 'failed' ? '失败'
+    : st === 'stopped' ? '已停止'
     : st === 'waiting' ? WAITING_FOR_YOU
       : t.status === 'running' ? (secs !== null ? (secs < 60 ? `${secs} 秒` : fmtDuration(secs * 1000)) : '运行中')
         // in a conversation that runs, the spinner says it; in one that does not, the step never got its turn
@@ -210,7 +212,7 @@ export const ToolCard = memo(function ToolCard({ t, version, bare }: { t: ToolUs
   const [open, setOpen] = useState<boolean | null>(null);
   const def = getToolDef(t.name);
   const isAgent = def.category === 'agent';
-  const defaultOpen = t.status === 'error' || (isAgent && t.status === 'running') || def.category === 'plan';
+  const defaultOpen = (t.status === 'error' && !t.stopped) || (isAgent && t.status === 'running') || def.category === 'plan';
   const show = bare || (open ?? defaultOpen);
   void version;
   const Body = def.Body;
@@ -224,7 +226,7 @@ export const ToolCard = memo(function ToolCard({ t, version, bare }: { t: ToolUs
 
   if (bare) return <div className="tool-out"><div className="tool-body"><Body t={t} /></div>{children}</div>;
   return (
-    <div className={clsx('tool', t.status === 'error' && 'error', (t.status === 'running' || t.status === 'pending') && 'running')}>
+    <div className={clsx('tool', t.status === 'error' && !t.stopped && 'error', (t.status === 'running' || t.status === 'pending') && 'running')}>
       <ToolHead t={t} open={show} onToggle={() => setOpen(!show)} />
       {show && <div className="tool-body"><Body t={t} /></div>}
       {children}

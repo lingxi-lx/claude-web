@@ -1,6 +1,8 @@
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { PermissionRequestEvent } from '@shared';
 import type { AssistantItem, Attachment, Block, Item, ResultItem, ThinkingBlock, ToolUseBlock, UserItem } from '@/model/conversation';
+import { walkTools } from '@/model/conversation';
+import { WorkflowLive } from '@/features/background/WorkflowLive';
 import { credentialHint, ERROR_HINT, ERROR_LABEL, noResponseHint } from '@/model/health';
 import { fmtSize } from '@/model/attachments';
 import type { FileChange } from '@/model/diffstat';
@@ -120,7 +122,7 @@ function Steps({ tools, version }: { tools: ToolUseBlock[]; version: number }) {
   const touch = useContext(TurnTouchCtx);
   const inlineDiffs = useStore((s) => s.settings['ui.inlineDiffs'] === true);
   const running = tools.some((t) => t.status === 'running' || t.status === 'pending' || t.status === 'streaming');
-  const failed = tools.some((t) => t.status === 'error');
+  const failed = tools.some((t) => t.status === 'error' && !t.stopped);
   // by step id; a merged row is `g:<its first step's id>`
   const [opened, setOpened] = useState<Record<string, boolean>>({});
   const [all, setAll] = useState(false);
@@ -449,6 +451,8 @@ function TurnView({ turn, last, live, version, sessionId, cwd }: { turn: Turn; l
   memo.current = turnMemo(memo.current, turn, done, turnStamp({ last, done, version }));
   const { parts, summary, changes } = memo.current;
   const fold = done && parts.work;
+  // 后台: a workflow this turn started may still run after the turn ended — its agents stay in sight when the turn folds
+  const workflows = useMemo(() => (fold ? [...walkTools(parts.process)].filter((x) => x.depth === 0 && x.tool.name === 'Workflow').map((x) => x.tool.id) : []), [fold, parts.process]);
   const key = `${sessionId}|${turn.id}`;
   const [choice, setChoice] = useState<boolean | undefined>(() => foldMemory.get(key));
   const moves = useMoves();
@@ -515,6 +519,7 @@ function TurnView({ turn, last, live, version, sessionId, cwd }: { turn: Turn; l
           {answerActions && <AssistantActions it={lastFinal} sessionId={sessionId} />}
         </div>
       )}
+      {fold && !open && workflows.map((id) => <WorkflowLive key={id} toolUseId={id} onlyRunning />)}
       {fold && parts.tail.length > 0 && <ItemList items={parts.tail} version={version} />}
     </div>
   );

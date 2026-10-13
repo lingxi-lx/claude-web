@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { CORE_PANELS, PANELS } from '@/model/layout';
 import { MAX_PINS, RAIL_MORE, RAIL_SECTIONS, railPanel, readPins, togglePin } from './rail-model';
 
-describe('the icon rail: three sections, the other panels behind ···', () => {
-  it('the sections are 对话 · 自动化 · 扩展, in that order', () => {
-    expect(RAIL_SECTIONS.map((s) => s.id)).toEqual(['chat', 'automation', 'extensions']);
-    expect(RAIL_SECTIONS.map((s) => s.label)).toEqual(['对话', '自动化', '扩展']);
+describe('the icon rail: four sections, the other panels behind ···', () => {
+  it('the sections are 对话 · 后台 · 自动化 · 扩展, in that order', () => {
+    expect(RAIL_SECTIONS.map((s) => s.id)).toEqual(['chat', 'background', 'automation', 'extensions']);
+    expect(RAIL_SECTIONS.map((s) => s.label)).toEqual(['对话', '后台', '自动化', '扩展']);
   });
   it('··· lists real panels, none of them a fixed tab of the right panel', () => {
     const ids = PANELS.map((p) => p.id);

@@ -913,7 +913,7 @@ describe('SessionRunner: 联网', () => {
         expect(Object.keys(o.mcpServers)).toEqual(['web']);
         expect(o.mcpServers.web.env).toMatchObject({ CW_WEB_URL: 'http://127.0.0.1:45678', CW_SESSION_ID: 'm2' });
         expect(JSON.stringify(o.mcpServers)).not.toContain('x'.repeat(64)); // this object ends up on the CLI's command line
-        expect(o.allowedTools).toEqual(['mcp__web__web_search']);
+        expect(o.allowedTools).toEqual(['mcp__web__web_search', 'mcp__web__character_guide', 'mcp__web__character_draft', 'mcp__web__character_save', 'mcp__web__character_list']);
         await r.close();
       } finally {
         configureWebMcp(null, dir);

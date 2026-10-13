@@ -9,6 +9,10 @@ export * from './federation/types.js';
 import type { PeerEvent, PeerRequest, SessionPeer } from './federation/types.js';
 import type { OrchestraEvent, OrchestraRequest } from './orchestra/types.js';
 export * from './orchestra/types.js';
+import type { BackgroundEvent, BackgroundRequest } from './background/types.js';
+import type { CharactersEvent, CharactersRequest } from './characters/core/types.js';
+export * from './background/types.js';
+export * from './characters/core/types.js';
 import type { LinkKind } from './remote/anywhere/core/link.js';
 export type { LinkKind } from './remote/anywhere/core/link.js';
 
@@ -585,6 +589,10 @@ export type ClientRequest =
   | AgentConfigRequest
   // ---- multi-agent orchestration ----
   | OrchestraRequest
+  // ---- 后台: running sub-agents / workflows / commands ----
+  | BackgroundRequest
+  // ---- 网吧: the character library ----
+  | CharactersRequest
 
   // ---- cross-machine sessions (federation) ----
   | PeerRequest;
@@ -625,7 +633,9 @@ export type ServerEvent =
   | { kind: 'web.changed' }
   | GatewayEvent
   | PeerEvent
-  | OrchestraEvent;
+  | OrchestraEvent
+  | BackgroundEvent
+  | CharactersEvent;
 
 // ---------- phase 3: files / search / git ----------
 export interface FsEntry { name: string; dir: boolean; size?: number; mtime?: number; symlink?: boolean }

@@ -2,6 +2,9 @@
   "$comment": "Our icon name → Lucide icon name (lucide-static). Read by scripts/gen-icons.mjs, which writes icons.generated.ts — run `node scripts/gen-icons.mjs` after editing. The brand / agent marks (claude, codex, gemini, qwen, kimi, opencode) are hand-drawn in icons.tsx and are not listed here. Two names share a Lucide icon only where they always shared a glyph (terminal / bash, android / device, files / write, monitor / machine).",
   "$fill": ["pin", "star", "thumbUp", "thumbDown"],
 
+  "cafe": "coffee",
+  "volume": "volume-2",
+  "volumeOff": "volume-x",
   "mission": "locate-fixed",
   "goals": "flag",
   "orchestra": "network",
@@ -100,5 +103,5 @@
   "bell": "bell",
   "bolt": "zap",
 
-  "extensions": "blocks", "gauge": "gauge", "pinOff": "pin-off", "calendar": "calendar-clock", "puzzle": "puzzle", "library": "library", "sparkle": "sparkle", "cursor": "mouse-pointer-click", "database": "database", "link": "link"
+  "extensions": "blocks", "gauge": "gauge", "pinOff": "pin-off", "calendar": "calendar-clock", "puzzle": "puzzle", "library": "library", "sparkle": "sparkle", "cursor": "mouse-pointer-click", "database": "database", "link": "link", "office": "radar"
 }

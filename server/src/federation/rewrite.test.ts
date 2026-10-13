@@ -40,6 +40,8 @@ describe('planRoute', () => {
       { kind: 'library.read', sessionId: 'peer_b1~s' }, { kind: 'session.contextUsage', sessionId: 'peer_b1~s' },
       { kind: 'session.stopTask', sessionId: 'peer_b1~s', taskId: 't' }, { kind: 'transcript.subagent', sessionId: 'peer_b1~s', agentId: 'a' },
       { kind: 'session.setEffort', sessionId: 'peer_b1~s', effort: 'high' }, { kind: 'session.setUltracode', sessionId: 'peer_b1~s', on: true },
+      { kind: 'background.history', sessionId: 'peer_b1~s' }, { kind: 'background.run', sessionId: 'peer_b1~s', runId: 'wf_1' },
+      { kind: 'background.transcript', sessionId: 'peer_b1~s', agentId: 'a1b2c3d4' },
     ];
     for (const r of routed) expect(planRoute(r).kind, r.kind).not.toBe('reject');
   });

@@ -32,6 +32,9 @@ export interface ToolUseBlock {
   children: Item[]; // subagent messages (parent_tool_use_id === id)
   progress?: { elapsed: number; summary?: string; lastTool?: string };
   status: 'streaming' | 'pending' | 'running' | 'done' | 'error';
+  /** cut off when its request was stopped (the CLI's interrupt note came after it): not a failure — the row says
+   *  已停止, the turn summary counts it as what it was */
+  stopped?: boolean;
   startedAt?: number;
 }
 export type Block = TextBlock | ThinkingBlock | ToolUseBlock;
@@ -504,14 +507,41 @@ function applyUser(c: Conversation, m: any) {
   const rawText = content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
   const images = contentImages(content);
   if (!rawText && !images.length) return;
+  // the CLI's own note when a request is stopped (official 2.1.283: "[Request interrupted by user for tool use]" on the
+  // stream when the turn is stopped mid tool call; "[Request interrupted by user]" in a workflow agent's transcript
+  // when its script fails and aborts it): not words the user typed, and not always the user's doing — a line, like
+  // the turn's 已中断 (an agent's drawer has no result line to say it)
+  if (!images.length && /^\[Request interrupted by user/.test(rawText.trim())) {
+    const list = containerFor(c, parent);
+    // "… for tool use": it cut calls off — the last step's that did not finish (their result is the CLI's refusal
+    // text, an error). Without it the stop came while the model answered: an earlier failure stays a failure
+    const last = /for tool use/.test(rawText) ? [...list].reverse().find((i) => i.kind === 'assistant' || (i.kind === 'user' && !i.meta)) : undefined;
+    if (last?.kind === 'assistant') {
+      for (const b of last.blocks) {
+        if (b.type !== 'tool_use' || (b.status === 'done' && !b.result?.isError)) continue;
+        b.stopped = true;
+        b.status = 'error';
+        if (c.runningTool?.id === b.id) c.runningTool = null;
+      }
+    }
+    list.push({ kind: 'system', id: m.uuid ?? `int-${clock()}`, ts: m.timestamp, subtype: 'interrupted', text: '已中断' });
+    return;
+  }
   const isMeta = m.isMeta || m.isSynthetic || /^<(command-name|local-command|system-reminder|task-notification)/.test(rawText.trim());
   const { text, attachments } = decodeAttachments(rawText);
   containerFor(c, parent).push({ kind: 'user', id: m.uuid ?? String(Math.random()), ts: m.timestamp, text, images, attachments: attachments.length ? attachments : undefined, meta: isMeta, raw: m });
   if (!parent && !isMeta) c.turnStartedAt = clock();
 }
 
+/** A result's `errors` as words for the user: the CLI also puts its own bookkeeping there (official 2.1.283 on a
+ *  stopped turn: "[ede_diagnostic] result_type=user last_content_type=n/a stop_reason=tool_use"), which is not one. */
+export function shownErrors(errors: unknown): string | undefined {
+  const list = (Array.isArray(errors) ? errors : []).filter((e): e is string => typeof e === 'string' && !!e.trim() && !e.startsWith('[ede_diagnostic]'));
+  return list.length ? list.join('; ') : undefined;
+}
+
 function applyResult(c: Conversation, m: any) {
-  const errText = m.is_error ? m.result ?? (m.errors ?? []).join('; ') : undefined;
+  const errText = m.is_error ? m.result ?? shownErrors(m.errors) : undefined;
   const r: ResultItem = {
     kind: 'result',
     id: m.uuid,

@@ -12,6 +12,7 @@ import { AUTOMATION_TAB_INFO, AUTOMATION_TITLE } from '@/features/automation/pag
 import { SCHEDULES_HERO } from '@/features/automation/templates';
 import { EXTENSIONS_TITLE, EXTENSION_TAB_INFO } from '@/features/extensions/page';
 import { STEP_TITLE } from '@/features/onboarding/steps';
+import { BG_TITLE } from '@/features/background/model';
 
 export const HEADING_STRINGS: readonly string[] = [...new Set([
   GREETING,
@@ -21,6 +22,7 @@ export const HEADING_STRINGS: readonly string[] = [...new Set([
   ...Object.values(AUTOMATION_TAB_INFO).map((t) => t.label),
   SCHEDULES_HERO.title,
   EXTENSIONS_TITLE,
+  BG_TITLE,
   ...Object.values(EXTENSION_TAB_INFO).map((t) => t.label),
   ...Object.values(STEP_TITLE),
 ])];
