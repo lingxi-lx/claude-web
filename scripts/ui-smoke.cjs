@@ -2346,9 +2346,9 @@ function driver() {
         await sleep(500);
         // ··· on the rail: the panels that are neither a fixed tab of the right panel nor a section
         await click('.rail [data-id="more"]');
-        const moreRows = (await waitFor(`document.querySelectorAll('.menu.rail-menu [data-id^="open-"]').length === 6`, 3000)) && await js(`[...document.querySelectorAll('.menu.rail-menu [data-id^="open-"]')].map((b) => b.dataset.id.slice(5)).join(',')`);
+        const moreRows = (await waitFor(`document.querySelectorAll('.menu.rail-menu [data-id^="open-"]').length === 7`, 3000)) && await js(`[...document.querySelectorAll('.menu.rail-menu [data-id^="open-"]')].map((b) => b.dataset.id.slice(5)).join(',')`);
         const hints = await js(`[...document.querySelectorAll('.menu.rail-menu .rm-t .h')].every((h) => h.scrollWidth <= h.clientWidth + 1)`);
-        check('rail ···: 总览 · 用量 · 记忆 · Issue 与 PR · Android · 配置中心, each with one line that is not cut off', moreRows === 'mission,usage,memory,board,android,config' && hints, JSON.stringify({ moreRows, hints }));
+        check('rail ···: 总览 · 网吧 · 用量 · 记忆 · Issue 与 PR · Android · 配置中心, each with one line that is not cut off', moreRows === 'mission,cafe,usage,memory,board,android,config' && hints, JSON.stringify({ moreRows, hints }));
         await shot('rail-more');
         await js(`document.querySelector('.menu.rail-menu [data-id="pin-usage"]').click()`);
         const pinned = await waitFor(`!!document.querySelector('.rail [data-id="panel-usage"]') && JSON.stringify(window.__store.getState().settings['ui.railPins']) === '["usage"]'`, 3000);
@@ -2460,6 +2460,7 @@ function driver() {
         const panelCafe = await waitFor(`!!document.querySelector('.dock-panel[data-panel="cafe"]:not([hidden]) .cafe-canvas') && document.querySelectorAll('.dock-panel[data-panel="cafe"] .cafe-person').length >= 5`, 8000);
         check('右侧面板 → 网吧: the same cafe, small, with its guests and the admin', panelCafe);
         await shot('cafe-panel');
+        await js(`window.__store.getState().dispatchLayout({ t: 'dock.close', panel: 'cafe', workbench: false })`);
         await js(`(() => { window.__cwBackground.inject({ sessionId: ${bsid}, updatedAt: Date.now(), tasks: [], events: [] }); window.__store.getState().dispatchLayout({ t: 'dock.set', patch: { open: false } }); })()`);
         const pillGone = await waitFor(`!document.querySelector('.pane.focused .composer .bg-pill')`, 3000);
         check('nothing running: no pill', pillGone);

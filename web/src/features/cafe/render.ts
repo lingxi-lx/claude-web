@@ -98,6 +98,30 @@ function hash(s: string): number {
   return h >>> 0;
 }
 
+let floorKey = '';
+let floorCan: HTMLCanvasElement | null = null;
+/** The floor of a plan as its own canvas: the tiles only change with the plan's size and its rows of seats. */
+function floorLayer(m: CafeMap, sz: { w: number; h: number }, o: [number, number]): HTMLCanvasElement {
+  const key = `${m.cols}x${m.rows}|${m.seats.map((s) => `${s.u},${s.v}`).join(';')}`;
+  if (floorCan && floorKey === key) return floorCan;
+  floorCan ??= document.createElement('canvas');
+  floorCan.width = sz.w;
+  floorCan.height = sz.h;
+  floorKey = key;
+  const c = floorCan.getContext('2d')!;
+  const [ox, oy] = o;
+  const rowAt = new Set<string>();
+  for (const s of m.seats) for (let v = s.v - 1; v <= s.v + 2; v++) for (let u = s.u - 1; u <= s.u + 2; u++) rowAt.add(`${u},${v}`);
+  for (let v = 0; v < m.rows; v++) for (let u = 0; u < m.cols; u++) {
+    const inRow = rowAt.has(`${u},${v}`);
+    const inVip = u >= m.vip.u0 && v <= m.vip.v1;
+    const onDeck = u >= m.smoke.u0 && v >= m.smoke.v0;
+    const col = onDeck ? ((u + v) % 2 ? '#4a3a2c' : '#433426') : inVip ? ((u + v) % 2 ? '#22303a' : '#1e2a33') : inRow ? ((u + v) % 2 ? P.carpet : P.carpetEdge) : ((u + v) % 2 ? P.floorA : P.floorB);
+    poly(c, [pt(ox, oy, u, v), pt(ox, oy, u + 1, v), pt(ox, oy, u + 1, v + 1), pt(ox, oy, u, v + 1)], col);
+  }
+  return floorCan;
+}
+
 interface Item { d: number; draw: () => void }
 
 export function render(out: Ctx, cw: number, ch: number, w: World, view: View, look: Look) {
@@ -164,15 +188,8 @@ export function render(out: Ctx, cw: number, ch: number, w: World, view: View, l
     onVWall(c, o, v0 + 0.3, v0 + 1.2, 22, 24, 'rgba(255,255,255,0.5)');
   }
 
-  // ---- floor ----
-  for (let v = 0; v < m.rows; v++) for (let u = 0; u < m.cols; u++) {
-    const [ox, oy] = o;
-    const inRow = m.seats.some((s) => v >= s.v - 1 && v <= s.v + 2 && u >= s.u - 1 && u <= s.u + 2);
-    const inVip = u >= m.vip.u0 && v <= m.vip.v1;
-    const onDeck = u >= m.smoke.u0 && v >= m.smoke.v0;
-    const col = onDeck ? ((u + v) % 2 ? '#4a3a2c' : '#433426') : inVip ? ((u + v) % 2 ? '#22303a' : '#1e2a33') : inRow ? ((u + v) % 2 ? P.carpet : P.carpetEdge) : ((u + v) % 2 ? P.floorA : P.floorB);
-    poly(c, [pt(ox, oy, u, v), pt(ox, oy, u + 1, v), pt(ox, oy, u + 1, v + 1), pt(ox, oy, u, v + 1)], col);
-  }
+  // ---- floor (the same for the same plan: drawn once, then copied) ----
+  c.drawImage(floorLayer(m, sz, o), 0, 0);
 
   // the door: a mat with a glowing arrow, the front edge of the room open to the street
   {

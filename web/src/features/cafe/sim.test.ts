@@ -111,6 +111,14 @@ describe('a guest', () => {
     expect(JSON.stringify(a.seen)).toBe(JSON.stringify(b.seen));
     expect(a.w.actors.map((x) => [x.u, x.v, x.doing])).toEqual(b.w.actors.map((x) => [x.u, x.v, x.doing]));
   });
+  it('opened while a workflow runs: one of its agents already done is in the cafe (waiting), a finished sub-agent is not', () => {
+    const snap = sess([
+      task([agent({ key: 'w1', startedAt: T0 - 60_000, state: 'done', endedAt: T0 - 5000 }), agent({ key: 'w2', label: 'b', startedAt: T0 - 60_000, beats: [T0] })], { kind: 'workflow', startedAt: T0 - 60_000 }),
+      task([agent({ key: 's1', label: 'gone', startedAt: T0 - 60_000, state: 'done', endedAt: T0 - 5000 })], { id: 't2', status: 'completed', endedAt: T0 - 5000, startedAt: T0 - 60_000 }),
+    ]);
+    const w = step(createWorld(2, T0), snap, T0, opts);
+    expect(w.actors.map((x) => x.key).sort()).toEqual(['t1/w1', 't1/w2']);
+  });
   it('with reduced motion a newcomer is at the counter at once', () => {
     const w = step(createWorld(1, T0 - 10_000), sess([task([agent({ startedAt: T0, beats: [T0] })])]), T0, { ...opts, reduced: true });
     expect([w.actors[0].u, w.actors[0].v]).toEqual([w.map.counter.u, w.map.counter.v]);

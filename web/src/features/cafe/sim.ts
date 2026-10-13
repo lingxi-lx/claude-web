@@ -214,10 +214,11 @@ export function step(prev: World, snap: BgSession | undefined, now: number, o: S
 
   // newcomers: through the door — or, for what was already going on when the cafe was opened, straight at the seat
   for (const [k, { t, a }] of g) {
-    if (byKey.has(k) || terminal(a) && (a.endedAt ?? 0) < w.born) continue;
+    // already on its way out when first seen (it came and went before the cafe was looking): never drawn. One that is
+    // done while its workflow runs is still in the cafe, waiting for the others
+    if (byKey.has(k) || leaveKind(t, a)) continue;
     const seat = w.map.seats.find((s) => s.key === k)!;
     const early = (a.startedAt ?? t.startedAt) < w.born - 2000;
-    if (terminal(a) && !early) continue; // came and went before we saw it walk in
     const x: Actor = {
       key: k, taskId: t.id, agentKey: a.key, name: a.label, color: a.color, ...(a.agentType ? { type: a.agentType } : {}),
       u: early ? seat.chair.u : w.map.door.u, v: early ? seat.chair.v : w.map.door.v, facing: 'ne', pose: 'stand',
