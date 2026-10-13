@@ -107,8 +107,8 @@ brainstorm 时定下的（按顺序）：画风 = 等距像素 + 有光影（「
   匹配 名字 > 类型 > 默认 > 小章鱼。
 - `preview.ts`：把角色渲染成 PNG（正面、背面、走路 4 帧，8 倍放大，纯 JS PNG 编码，zlib），给模型看。
 
-MCP 服务器 `cafe`（`server/src/characters/mcp.ts`，接入同 `web`：Claude 的 `mcpServers`、ACP、Codex `-c`；回连
-`POST /api/cafe/tool`，回环 + 文件密钥）：
+给模型的工具挂在现有的 `web` MCP 服务器上（`mcp__web__character_*`，计划阶段改的：共用它的启动、密钥文件、回连
+`/api/web/tool` 和三种 agent 的接法；代价是「联网」关掉时这些工具也没有）：
 
 - `character_guide()`：返回 skill 的说明全文。
 - `character_draft(character)`：校验；不合法回错误列表；合法则存草稿、返回预览 PNG + 一句话。
