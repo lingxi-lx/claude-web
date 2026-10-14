@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { applyMessage, applyTranscript, createConversation, decodeAttachments, sessionRefMarker, shownErrors, findChainUuidBefore, prependTranscript, setConversationClock, turnItems, walkTools, type AssistantItem, type Conversation, type UserItem } from './conversation';
+import { contextUsageOf, applyMessage, applyTranscript, createConversation, decodeAttachments, sessionRefMarker, shownErrors, findChainUuidBefore, prependTranscript, setConversationClock, turnItems, walkTools, type AssistantItem, type Conversation, type UserItem } from './conversation';
 import { credentialHint, noResponseHint } from './health';
 import { groupTurns, turnSummary } from './turn';
 
@@ -503,5 +503,13 @@ describe('a turn another program is still in (cw_elsewhere)', () => {
     expect(c.toolIndex.get('t1')?.status).not.toBe('done');
     applyMessage(c, { type: 'user', uuid: 'u2', message: { role: 'user', content: 'next' } });
     expect(c.elsewhere).toBeUndefined();
+  });
+});
+
+describe('contextUsageOf: both spellings', () => {
+  it('the SDK answer (camelCase) and the /context line (snake_case) read the same', () => {
+    expect(contextUsageOf({ totalTokens: 402_000, rawMaxTokens: 1_000_000, maxTokens: 967_000, percentage: 40, model: 'm' })).toMatchObject({ totalTokens: 402_000, maxTokens: 1_000_000, percentage: 40 });
+    expect(contextUsageOf({ total_tokens: 50_000, raw_max_tokens: 200_000 })).toMatchObject({ totalTokens: 50_000, maxTokens: 200_000, percentage: 25 });
+    expect(contextUsageOf({ totalTokens: 1, rawMaxTokens: 2, overLimit: { tokensOver: 5, kind: 'k' } }).overLimit).toEqual({ tokensOver: 5, kind: 'k' });
   });
 });

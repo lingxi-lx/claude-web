@@ -2309,6 +2309,26 @@ function driver() {
             const arch = { row: await exists('.sidebar .sb-filtered'), dot: await exists('.sidebar [data-id="filter"] .fdot'), groups: await count('.sidebar [data-id="projects"] .sb-group'), projects: await js('window.__store.getState().workspaces.length') };
             check('显示已归档 is not a filter: no 已筛选 row, empty projects stay listed, the funnel is marked', !arch.row && arch.dot && arch.groups === arch.projects, JSON.stringify(arch));
             await js('window.__store.setState({ showArchived: false })');
+            // two projects now: the lower one's menu moves it up / to the top, the upper one's down (2026-10-14)
+            {
+              const heads = '.sidebar [data-id="projects"] .sb-group > .sb-group-head';
+              const order = () => js(`[...document.querySelectorAll('${heads} .name')].map((e) => e.textContent).join('|')`);
+              const before = await order();
+              await js(`[...document.querySelectorAll('${heads}')].at(-1).querySelector('[aria-label="项目菜单"]').click()`);
+              await waitFor('!!document.querySelector(".menu [data-id=\\"move-up\\"]")', 2000);
+              await harvest();
+              await click('.menu [data-id="move-top"]');
+              await sleep(500);
+              const moved = await order();
+              await js(`document.querySelector('${heads} [aria-label="项目菜单"]').click()`);
+              await waitFor('!!document.querySelector(".menu [data-id=\\"move-down\\"]")', 2000);
+              await harvest();
+              await click('.menu [data-id="move-down"]');
+              await sleep(500);
+              const back = await order();
+              const draggable = await js(`document.querySelector('${heads}')?.getAttribute('draggable')`);
+              check('projects reorder: 移到最上面 puts the last first, 下移 puts it back; the headers can be dragged', moved.split('|')[0] === before.split('|').at(-1) && back === before && draggable === 'true', JSON.stringify({ before, moved, back, draggable }));
+            }
             // the account popover with the account's limits: the quota windows
             await click(':is(.rail, .sidebar) [data-id="account"]');
             await harvest();

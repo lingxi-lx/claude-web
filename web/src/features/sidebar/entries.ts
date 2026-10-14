@@ -22,7 +22,7 @@ export const PROJECTS_HEAD = ['filter', 'add-project'] as const;
 /** The funnel menu: everything that used to be chips, the filter box and 选择 above the list. */
 export const FILTER = ['query', 'source', 'machine', 'archived', 'select', 'library'] as const;
 /** A project's ··· / right-click menu; `add-project` on a folder outside every project. */
-export const PROJECT_MENU = ['new-here', 'worktree', 'terminal', 'rename', 'explorer', 'vscode', 'remove', 'make-project'] as const;
+export const PROJECT_MENU = ['new-here', 'worktree', 'terminal', 'move-top', 'move-up', 'move-down', 'rename', 'explorer', 'vscode', 'remove', 'make-project'] as const;
 /** A conversation row's ··· / right-click menu (shown by capability). */
 export const ROW_MENU = ['open-tab', 'open-split', 'resume', 'pin', 'explorer', 'vscode', 'stop', 'reference', 'rename', 'fork', 'archive', 'handoff', 'native-cli', 'copy-id', 'delete'] as const;
 /** On the rows themselves. */
@@ -108,7 +108,7 @@ export const LEGACY: { old: string; now: `${Place}:${string}`[] }[] = [
 ];
 
 /** Where the spec's new L0 / L1 entries live (§4.2 / §5.1), beyond the old ones. */
-export const ADDED: `${Place}:${string}`[] = ['top:chat', 'top:background', 'top:extensions', 'top:more', 'top:automation', 'automation:schedules', 'automation:goals', 'automation:orchestra', 'section:attention', 'section:projects', 'head:filter', 'account:account', 'account:today', 'account:shortcuts', 'filter:library', 'row:less'];
+export const ADDED: `${Place}:${string}`[] = ['top:chat', 'top:background', 'top:extensions', 'top:more', 'top:automation', 'automation:schedules', 'automation:goals', 'automation:orchestra', 'section:attention', 'section:projects', 'head:filter', 'account:account', 'account:today', 'account:shortcuts', 'filter:library', 'row:less', 'project:move-top', 'project:move-up', 'project:move-down'];
 
 export function resolves(ref: `${Place}:${string}`): boolean {
   const [place, id] = ref.split(':') as [Place, string];

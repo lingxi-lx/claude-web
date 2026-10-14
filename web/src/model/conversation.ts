@@ -106,6 +106,16 @@ export interface TaskInfo {
   backgrounded?: boolean;
 }
 
+/**
+ * Context usage in either spelling: the `/context` result line has `total_tokens` / `raw_max_tokens`, the SDK's
+ * getContextUsage answer `totalTokens` / `rawMaxTokens` (the meter read only the first and showed 0 / 0 for it).
+ */
+export function contextUsageOf(u: any): ContextUsage {
+  const total = u.totalTokens ?? u.total_tokens ?? 0;
+  const max = u.rawMaxTokens ?? u.raw_max_tokens ?? u.maxTokens ?? 0;
+  const over = u.overLimit ?? u.over_limit;
+  return { percentage: u.percentage ?? Math.round((total / Math.max(1, max)) * 100), totalTokens: total, maxTokens: max, model: u.model, overLimit: over ? { tokensOver: over.tokensOver ?? over.tokens_over, kind: over.kind } : undefined };
+}
 export interface ContextUsage { percentage: number; totalTokens: number; maxTokens: number; model?: string; overLimit?: { tokensOver: number; kind: string } }
 export interface RateLimitState { status: 'allowed' | 'allowed_warning' | 'rejected'; resetsAt?: number; type?: string; utilization?: number; errorCode?: string; at: number }
 
@@ -435,7 +445,7 @@ function restates(item: AssistantItem, kind: 'text' | 'thinking', whole: string)
 }
 
 function toContextUsage(u: any): ContextUsage {
-  return { percentage: u.percentage ?? Math.round(((u.total_tokens ?? 0) / Math.max(1, u.raw_max_tokens ?? 1)) * 100), totalTokens: u.total_tokens ?? 0, maxTokens: u.raw_max_tokens ?? 0, model: u.model, overLimit: u.over_limit ? { tokensOver: u.over_limit.tokens_over, kind: u.over_limit.kind } : undefined };
+  return contextUsageOf(u);
 }
 
 /** `<attached kind="file" name="a.txt" path="C:\x\a.txt" size="123">` markers appended by the composer; decoded for display. */
@@ -593,6 +603,11 @@ function applySystem(c: Conversation, m: any) {
       if (m.status === 'compacting') c.compacting = true;
       else if (c.compacting && m.status !== 'compacting') c.compacting = false;
       if (m.compact_result === 'failed') c.items.push({ kind: 'system', id: m.uuid ?? `cf-${clock()}`, subtype: 'compact_failed', level: 'error', text: `上下文压缩失败${m.compact_error ? `：${m.compact_error}` : ''}` });
+      return;
+    }
+    case 'cw_notice': {
+      // a line from Claude Web itself (server session-runner `notice`): what it is doing for this conversation
+      if (typeof m.text === 'string' && m.text) c.items.push({ kind: 'system', id: m.uuid ?? `cwn-${clock()}`, subtype: 'notice', level: 'info', text: m.text });
       return;
     }
     case 'compact_boundary': {

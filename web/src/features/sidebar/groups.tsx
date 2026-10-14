@@ -9,6 +9,7 @@ import { Menu, closeDrawer } from './menus';
 import { SessionRow, type RowCtx } from './rows';
 import { pageRows } from './status';
 import type { ProjectMenuId, RowId } from './entries';
+import { moveTo } from './reorder';
 
 /** A project's ··· / right-click menu (a project = a workspace folder; the data keeps calling it a workspace). */
 export function ProjectMenu({ w, onClose }: { w: Workspace; onClose: () => void }) {
@@ -21,6 +22,16 @@ export function ProjectMenu({ w, onClose }: { w: Workspace; onClose: () => void 
       <button data-id={id('worktree')} onClick={act(async () => { const n = await dlg.prompt(`${TERMS.worktree}的名称`, 'feature', { message: '在这个项目的一份独立副本里开一个新对话，改动不影响当前的工作目录。' }); if (n) await st.openSession({ cwd: w.path, worktree: n }).catch((e) => st.toast(e.message)); })}><Icon name="branch" size={14} /> 在{TERMS.worktree}里新建对话</button>
       <button data-id={id('terminal')} onClick={act(() => st.openTile({ id: `t${Date.now()}`, kind: 'term', cwd: w.path }, 'tab'))}><Icon name="terminal" size={14} /> 在这里开终端</button>
       <div className="menu-sep" />
+      {(() => {
+        const ids = st.workspaces.map((x) => x.id);
+        const at = ids.indexOf(w.id);
+        const move = (to: number) => act(() => st.reorderWorkspaces(moveTo(ids, w.id, to)));
+        return <>
+          {at > 0 && <button data-id={id('move-top')} onClick={move(0)}><Icon name="chevronUp" size={14} /> 移到最上面</button>}
+          {at > 0 && <button data-id={id('move-up')} onClick={move(at - 1)}><Icon name="arrowUp" size={14} /> 上移</button>}
+          {at >= 0 && at < ids.length - 1 && <button data-id={id('move-down')} onClick={move(at + 2)}><Icon name="arrowDown" size={14} /> 下移</button>}
+        </>;
+      })()}
       <button data-id={id('rename')} onClick={act(async () => { const n = await dlg.prompt('项目名称', w.name); if (n) await ws.request({ kind: 'workspaces.rename', id: w.id, name: n }); })}><Icon name="edit" size={14} /> 重命名</button>
       <button data-id={id('explorer')} onClick={act(() => ws.request({ kind: 'shell.open', path: w.path }).catch((e) => useStore.getState().toast(e.message)))}><Icon name="folder" size={14} /> 在资源管理器打开</button>
       <button data-id={id('vscode')} onClick={act(() => ws.request({ kind: 'shell.open', path: w.path, app: 'code' }).catch((e) => useStore.getState().toast(e.message)))}><Icon name="keyboard" size={14} /> 在 VS Code 打开</button>
@@ -59,6 +70,8 @@ export interface GroupProps {
   section?: boolean;
   /** entry id (entries.ts) for a group that is itself a sidebar entry (置顶) */
   dataId?: string;
+  /** a project's header can be dragged to reorder the projects; where a drop would land is drawn on the target */
+  drag?: { onDragStart(e: React.DragEvent): void; onDragEnd(): void; onDragOver(e: React.DragEvent): void; onDragLeave(): void; onDrop(e: React.DragEvent): void; over?: 'before' | 'after' | null; dragging?: boolean };
 }
 
 /**
@@ -71,8 +84,8 @@ export function Group(p: GroupProps) {
   const { rows, hidden } = pageRows(p.items, limit, p.keep);
   const more: RowId = 'more', less: RowId = 'less';
   return (
-    <div className={clsx('sb-group', p.section && 'sb-sec', p.className, p.collapsed && 'collapsed')} data-group={p.k} data-id={p.dataId}>
-      <div className={clsx(p.section ? 'sb-sec-h fold' : 'ws-head sb-group-head')} onClick={p.onToggle} onContextMenu={p.onContextMenu} title={p.title} role="button" tabIndex={0} aria-expanded={!p.collapsed} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); p.onToggle(); } }}>
+    <div className={clsx('sb-group', p.section && 'sb-sec', p.className, p.collapsed && 'collapsed', p.drag?.dragging && 'dragging', p.drag?.over && `drop-${p.drag.over}`)} data-group={p.k} data-id={p.dataId}>
+      <div className={clsx(p.section ? 'sb-sec-h fold' : 'ws-head sb-group-head')} draggable={!!p.drag || undefined} onDragStart={p.drag?.onDragStart} onDragEnd={p.drag?.onDragEnd} onDragOver={p.drag?.onDragOver} onDragLeave={p.drag?.onDragLeave} onDrop={p.drag?.onDrop} onClick={p.onToggle} onContextMenu={p.onContextMenu} title={p.title} role="button" tabIndex={0} aria-expanded={!p.collapsed} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); p.onToggle(); } }}>
         {!p.section && <span className="ic"><Icon name={p.icon} size={15} className="gi" /><Icon name={p.collapsed ? 'chevronRight' : 'chevronDown'} size={13} className="gc" /></span>}
         <span className="name">{p.name}</span>
         {p.section && <Icon name={p.collapsed ? 'chevronRight' : 'chevronDown'} size={12} className="sec-chev" />}

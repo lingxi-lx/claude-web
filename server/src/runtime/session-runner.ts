@@ -9,7 +9,7 @@ import { settingsOverride, userAnthropicEnv } from './user-env.js';
 import { writeFlagSettings, type FlagSettings } from './flag-settings.js';
 import { resolveEngine, spawnClaude } from '../claude-exe.js';
 import { loopbackNoProxy, providerEnv, type SessionProvider } from '../providers/service.js';
-import { contextWindowFor, contextWindowsEnv, officialWindow } from '../models/context-window.js';
+import { ENGINE_DEFAULT_WINDOW, ONE_M, contextWindowFor, contextWindowsEnv, officialWindow } from '../models/context-window.js';
 import { ccbAccountEnv, ccbMisthinks, ccbModel, isChatModel, modelCaps, modelLabel, modelsFor, preferredRuntime, providerModelId, supportsUltracode, webCapsEnv } from '../models/catalog.js';
 import { turnShare, type RunningTotals } from '../usage/turn-cost.js';
 import { claudeMcpServer } from '../memory/launcher.js';
@@ -19,6 +19,9 @@ import { computerAllowedTools, computerClaudeMcpServer } from '../computer/launc
 import { ENGINE_SEARCH_TOOL, engineSearchOff, userPickedSearchAdapter } from '../web/engine-search.js';
 import { markUnknownCost } from '../usage/pricing.js';
 import type { AttachmentRef, EffortLevel, ModelInfo, OpenSessionParams, PermissionMode, PermissionRequestEvent, PermissionResponse, Provider, RunnerState, SessionFeatures, SessionInfoSnapshot } from '../protocol.js';
+
+/** A conversation above this share of the next model's window is compacted before the switch. */
+const FIT_SHARE = 0.8;
 
 const esc = (s: string) => s.replace(/"/g, '&quot;');
 
@@ -270,7 +273,10 @@ export class SessionRunner extends EventEmitter {
     const engine = resolveEngine(relay ? preferredRuntime(relay, ccbOnly ? undefined : model ?? '') : undefined);
     const anthropicWire = relay?.type === 'anthropic' || relay?.type === 'gateway';
     const noThinking = engine.kind === 'ccb' && anthropicWire && ccbMisthinks(providerModelId(relay!, model ?? ''));
-    return { engine, noThinking, key: `${engine.kind}${noThinking ? ':no-thinking' : ''}` };
+    // the official binary's earlier compaction is an environment variable, read once at start: a model that needs
+    // another one (a window set smaller than the binary assumes) is another process (2026-10-14)
+    const compact = engine.kind === 'claude' ? this.officialCompactWindow(model) : undefined;
+    return { engine, noThinking, key: `${engine.kind}${noThinking ? ':no-thinking' : ''}${compact ? `:compact-${compact}` : ''}` };
   }
 
   private start(extra: Partial<Options>) {
@@ -305,11 +311,8 @@ export class SessionRunner extends EventEmitter {
     if (this.provider) {
       const windows = engine.kind === 'ccb' ? contextWindowsEnv(this.provider, [...(this.provider.models ?? []), ...Object.values(this.provider.modelMap ?? {}), this.provider.defaultModel, providerModelId(this.provider, this.model)]) : undefined;
       if (windows && !('CLAUDE_WEB_CONTEXT_WINDOWS' in fenv)) fenv.CLAUDE_WEB_CONTEXT_WINDOWS = windows;
-      if (engine.kind === 'claude') {
-        const id = providerModelId(this.provider, this.model);
-        const w = id ? officialWindow(contextWindowFor(this.provider, id), id) : { suffix: false };
-        if (w.compactWindow && !('CLAUDE_CODE_AUTO_COMPACT_WINDOW' in fenv)) fenv.CLAUDE_CODE_AUTO_COMPACT_WINDOW = String(w.compactWindow);
-      }
+      const compact = engine.kind === 'claude' ? this.officialCompactWindow(this.model) : undefined;
+      if (compact && !('CLAUDE_CODE_AUTO_COMPACT_WINDOW' in fenv)) fenv.CLAUDE_CODE_AUTO_COMPACT_WINDOW = String(compact);
     }
     // a claude.ai-login session on the bundled ccb: its alias table predates the Claude 5 family (see
     // OFFICIAL_ALIAS_TARGETS) — the CLI's own variables align it with the official one; the user's env / settings win.
@@ -585,7 +588,11 @@ export class SessionRunner extends EventEmitter {
     const p = this.pending.get(requestId);
     if (!p) return false;
     this.pending.delete(requestId);
-    p.resolve(r as PermissionResult);
+    // an allow says what to run with: claude-web-engine (ccb) checks the answer against a schema where `updatedInput`
+    // is required and turned every 允许 without it into "Tool permission request failed" — every tool that asks
+    // failed (user report 2026-10-14, a relay's Claude on ccb). The input as it was asked is what was allowed.
+    const answer = r.behavior === 'allow' && !r.updatedInput ? { ...r, updatedInput: p.event.input as Record<string, unknown> } : r;
+    p.resolve(answer as PermissionResult);
     this.emit('permissionResolved', requestId);
     if (this.pending.size === 0) this.setState('running');
     return true;
@@ -762,7 +769,60 @@ export class SessionRunner extends EventEmitter {
     return `${model && model !== 'default' ? model.replace(/\[1m\]$/i, '') : id}[1m]`;
   }
 
+  /** The official binary's `CLAUDE_CODE_AUTO_COMPACT_WINDOW` for `model` on this provider (none: it assumes right). */
+  private officialCompactWindow(model: string | undefined): number | undefined {
+    if (!this.provider) return undefined;
+    const id = providerModelId(this.provider, model);
+    return id ? officialWindow(contextWindowFor(this.provider, id), id).compactWindow : undefined;
+  }
+
+  /**
+   * The context window `model` will have here, when it is known: the provider's settings (engine default otherwise);
+   * on the account, `[1m]` is 1M and a plain id the 200K both engines give it ("default" is whatever the plan says).
+   */
+  private windowOf(model: string | undefined): number | undefined {
+    if (this.provider) {
+      const id = providerModelId(this.provider, model);
+      return id ? contextWindowFor(this.provider, id) ?? ENGINE_DEFAULT_WINDOW : undefined;
+    }
+    if (!model || model === 'default') return undefined;
+    return /\[1m\]$/i.test(model) ? ONE_M : ENGINE_DEFAULT_WINDOW;
+  }
+
+  /**
+   * Switching to a model with a smaller window than the conversation already uses (Claude 1M → GPT 272K at 600K):
+   * the new model could not even read the conversation to compact it, so the current one compacts it first
+   * (`/compact`), then the switch goes ahead. Nothing happens while a turn runs, or when it fits (FIT_SHARE).
+   */
+  private async fitBeforeSwitch(model: string): Promise<boolean> {
+    if (!this.q || this.busy() || !this.hasTranscript || this.closed) return false;
+    const window = this.windowOf(model);
+    if (!window) return false;
+    let used = 0;
+    try { const u = await this.contextUsage('summary'); used = Number(u?.totalTokens ?? u?.total_tokens ?? 0); } catch { return false; }
+    if (!(used > window * FIT_SHARE)) return false;
+    const k = (n: number) => `${Math.round(n / 1000)}K`;
+    this.notice(used >= window ? `对话已经用了 ${k(used)}，${model} 最多只能装 ${k(window)}：先用现在的模型把对话压缩一下，再换过去` : `对话已经用了 ${k(used)}，快到 ${model} 的上限 ${k(window)} 了：先用现在的模型把对话压缩一下，再换过去`);
+    const done = new Promise<void>((resolve) => {
+      const t = setTimeout(() => { this.off('message', on); resolve(); }, 15 * 60_000);
+      t.unref?.();
+      const on = (m: SDKMessage) => { if (m.type === 'result') { clearTimeout(t); this.off('message', on); resolve(); } };
+      this.on('message', on);
+    });
+    this.send('/compact');
+    await done;
+    return true;
+  }
+
+  /** A line in the conversation from this app (not the model): every window shows it; it is not in the transcript. */
+  private notice(text: string) {
+    const m = { type: 'system', subtype: 'cw_notice', text, uuid: randomUUID(), session_id: this.sessionId } as unknown as SDKMessage;
+    this.history.push(m);
+    this.emit('message', m);
+  }
+
   async setModel(model: string) {
+    await this.fitBeforeSwitch(model);
     // the model can decide the engine (see plan()): crossing over means another process, resuming this conversation
     if (this.plan(model).key !== this.planKey) {
       this.model = model;

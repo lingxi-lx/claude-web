@@ -5,6 +5,10 @@ import { ws } from '@/ws/client';
 import { desktop } from '@/desktop';
 import { clsx } from '@/util';
 import { folderLabels, splitFolders } from './folders';
+import { dropOrder } from './reorder';
+
+/** What a dragged project header carries (session rows carry their own type, so they never land here). */
+const PROJECT_DRAG = 'application/x-cw-project';
 import type { AgentKind, SessionSummary } from '@shared';
 import { Icon } from '@/ui/icons';
 import { projectFor } from '@/features/paths';
@@ -89,6 +93,9 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
   const [anchor, setAnchor] = useState<string | null>(null);
   const [machine, setMachine] = useState<string>('all');
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  // projects reordered by dragging their header (2026-10-14 user report): which one is dragged, where it would land
+  const [dragWs, setDragWs] = useState<string | null>(null);
+  const [overWs, setOverWs] = useState<{ id: string; after: boolean } | null>(null);
   const toggleMenu = (k: string) => (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); setMenu((m) => (m === k ? null : k)); };
   // a menu closes only itself: a late close from the one being replaced must not shut the one that just opened
   const closeMenu = useCallback((k: string) => setMenu((m) => (m === k ? null : m)), []);
@@ -303,14 +310,40 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
             if (narrowed && !arr.length) return null;
             const mk = `proj:${w.id}`;
             const projMenu = toggleMenu(mk);
+            const half = (e: React.DragEvent) => { const r = e.currentTarget.getBoundingClientRect(); return e.clientY > r.top + r.height / 2; };
+            const drag = mobile || selecting || narrowed || workspaces.length < 2 ? undefined : {
+              onDragStart: (e: React.DragEvent) => { e.dataTransfer.setData(PROJECT_DRAG, w.id); e.dataTransfer.effectAllowed = 'move'; setDragWs(w.id); setMenu(null); },
+              onDragEnd: () => { setDragWs(null); setOverWs(null); },
+              onDragOver: (e: React.DragEvent) => {
+                if (!e.dataTransfer.types.includes(PROJECT_DRAG)) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                const after = half(e);
+                if (overWs?.id !== w.id || overWs.after !== after) setOverWs({ id: w.id, after });
+              },
+              onDragLeave: () => setOverWs((o) => (o?.id === w.id ? null : o)),
+              onDrop: (e: React.DragEvent) => {
+                const id = e.dataTransfer.getData(PROJECT_DRAG);
+                setDragWs(null);
+                setOverWs(null);
+                if (!id) return;
+                e.preventDefault();
+                const ids = workspaces.map((x) => x.id);
+                const next = dropOrder(ids, id, w.id, half(e));
+                if (next.join() !== ids.join()) void useStore.getState().reorderWorkspaces(next);
+              },
+              over: overWs?.id === w.id && dragWs !== w.id ? (overWs.after ? 'after' as const : 'before' as const) : null,
+              dragging: dragWs === w.id,
+            };
             return (
               <Group
                 key={w.id}
                 {...groupProps(w.id, arr)}
                 name={w.name}
                 icon="folder"
-                title={w.path}
+                title={drag ? `${w.path}\n拖动可以调整项目的顺序` : w.path}
                 onContextMenu={projMenu}
+                drag={drag}
                 actions={<>
                   <button className="icon-btn xs" data-id={pm('new-here')} title="在这里新建对话" aria-label="在这里新建对话" onClick={() => { void useStore.getState().openSession({ cwd: w.path }).catch((e) => toast(e.message)); closeDrawer(); }}><Icon name="edit" size={13} /></button>
                   <button className="icon-btn xs" title="更多" aria-label="项目菜单" aria-haspopup="menu" aria-expanded={menu === mk} onClick={projMenu}><Icon name="more" size={14} /></button>

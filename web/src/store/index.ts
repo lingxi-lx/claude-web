@@ -13,7 +13,7 @@ export const THEMES = ['dark', 'light', 'dracula', 'nord', 'tokyo-night', 'paper
 export type Theme = (typeof THEMES)[number];
 import { ws } from '@/ws/client';
 import { desktop } from '@/desktop';
-import { applyMessage, applyTranscript, createConversation, prependTranscript, walkTools, type Conversation } from '@/model/conversation';
+import { contextUsageOf, applyMessage, applyTranscript, createConversation, prependTranscript, walkTools, type Conversation } from '@/model/conversation';
 import { staleStopResult, stopFoundNothing } from './stop';
 import { EXTERNAL_LIVE_MS, externalLive, nextReadAt, readsFromOutside, shownSessions } from './external';
 import { isImportedSessionId } from '@/util';
@@ -137,6 +137,8 @@ interface State {
   setDocDirty(tileId: string, dirty: boolean): void;
   loadMeta(): Promise<void>;
   addWorkspace(path: string): Promise<void>;
+  /** Put the projects in this order (the sidebar's drag, 上移 / 下移): shown at once, saved on the server. */
+  reorderWorkspaces(ids: string[]): Promise<void>;
   setSessionMeta(sessionId: string, patch: SessionMeta): Promise<void>;
   // actions
   init(): void;
@@ -422,6 +424,12 @@ export const useStore = create<State>((set, get) => ({
     applyUiSettings(settings);
     get().setTheme(resolveTheme((settings['ui.theme'] as any) ?? DEFAULT_THEME), true);
   },
+  async reorderWorkspaces(ids) {
+    const by = new Map(get().workspaces.map((w) => [w.id, w]));
+    const next = ids.map((id, i) => by.get(id) && { ...by.get(id)!, order: i }).filter((w): w is Workspace => !!w);
+    if (next.length === by.size) set({ workspaces: next });
+    await ws.request({ kind: 'workspaces.reorder', ids }).catch((e) => { get().toast(e.message); void get().loadMeta(); });
+  },
   async addWorkspace(path) {
     await ws.request({ kind: 'workspaces.add', path });
     await get().loadMeta();
@@ -620,7 +628,7 @@ export const useStore = create<State>((set, get) => ({
     try {
       const u: any = await ws.request({ kind: 'session.contextUsage', sessionId, detail: 'summary' });
       if (!u) return;
-      const cu: ContextUsage = { percentage: u.percentage ?? Math.round(((u.total_tokens ?? 0) / Math.max(1, u.raw_max_tokens ?? 1)) * 100), totalTokens: u.total_tokens ?? 0, maxTokens: u.raw_max_tokens ?? 0, model: u.model, overLimit: u.over_limit ? { tokensOver: u.over_limit.tokens_over, kind: u.over_limit.kind } : undefined };
+      const cu = contextUsageOf(u);
       set((s) => bump(s, sessionId, (x) => { x.contextUsage = cu; x.conv.contextUsage = cu; }));
     } catch {
       /* runtime without the control request */

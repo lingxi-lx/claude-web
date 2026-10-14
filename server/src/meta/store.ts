@@ -92,7 +92,9 @@ export class MetaStore extends EventEmitter {
     const norm = path.resolve(p);
     const existing = this.data.workspaces.find((w) => w.path.toLowerCase() === norm.toLowerCase());
     if (existing) return existing;
-    const w: Workspace = { id: Math.random().toString(36).slice(2, 10), path: norm, name: path.basename(norm) || norm, addedAt: Date.now(), order: this.data.workspaces.length };
+    // a new project goes on top (user report 2026-10-14: it landed at the bottom, under everything older)
+    for (const x of this.data.workspaces) x.order += 1;
+    const w: Workspace = { id: Math.random().toString(36).slice(2, 10), path: norm, name: path.basename(norm) || norm, addedAt: Date.now(), order: 0 };
     this.data.workspaces.push(w);
     await this.queueSave();
     return w;
