@@ -97,6 +97,9 @@ export interface OpenSessionParams {
   permissionMode?: PermissionMode;
   effort?: EffortLevel;
   ultracode?: boolean;
+  /** the model subagents run on ('' = the same as the main model); absent = the conversation's own pick for its
+   *  provider, else the provider's default (models/subagent.ts) */
+  subagentModel?: string;
   fork?: boolean;
   resumeAt?: string; // fork from this message uuid (implies fork)
   worktree?: string; // create a git worktree with this name for the session
@@ -295,7 +298,7 @@ export interface AttachmentRef { kind: 'image' | 'text' | 'file' | 'folder'; nam
 export interface MessageFeedback { rating: 'up' | 'down' | null; note?: string; at: number }
 
 export interface Workspace { id: string; path: string; name: string; addedAt: number; order: number }
-export interface SessionMeta { pinned?: boolean; archived?: boolean; workspaceId?: string; tags?: string[]; providerId?: string; /** sidebar grouping directory when it differs from the cwd (orchestration worktrees) */ groupCwd?: string; /** prompt-cache route key when it is not the session's own id (forks keep their root's) */ cacheKey?: string }
+export interface SessionMeta { pinned?: boolean; archived?: boolean; workspaceId?: string; tags?: string[]; providerId?: string; /** sidebar grouping directory when it differs from the cwd (orchestration worktrees) */ groupCwd?: string; /** prompt-cache route key when it is not the session's own id (forks keep their root's) */ cacheKey?: string; /** the model its subagents run on, picked for this provider ('' = the main model) */ subagent?: { providerId: string; model: string } }
 export interface Schedule { id: string; name: string; cwd: string; prompt: string; everyMinutes: number; cron?: string; enabled: boolean; lastRunAt?: number; nextRunAt?: number; sessionId?: string; model?: string; permissionMode?: string; freshSession?: boolean; lastError?: string; runs?: number }
 export interface LimitWindow { label: string; percent: number; resetsAt: string | null; active: boolean; severity?: string }
 // ---- remote access / phones / IM (phase 6) ----
@@ -369,6 +372,8 @@ export interface SessionInfoSnapshot {
   /** Claude only: xhigh + dynamic workflow orchestration, session-scoped. */
   ultracode?: boolean;
   supportsUltracode?: boolean;
+  /** Claude: the model subagents run on (absent = the same as the main model) */
+  subagentModel?: string;
   claudeCodeVersion?: string;
   runtime?: RuntimeKind;
   providerId?: string;
@@ -396,6 +401,8 @@ export type ClientRequest =
   | { kind: 'session.setModel'; sessionId: string; model: string; providerId?: string }
   | { kind: 'session.setEffort'; sessionId: string; effort: EffortLevel }
   | { kind: 'session.setUltracode'; sessionId: string; on: boolean }
+  /** '' = the same as the main model. `providerId`: the provider the pick was made for (a switch in between drops it) */
+  | { kind: 'session.setSubagentModel'; sessionId: string; model: string; providerId?: string }
   | { kind: 'session.setProvider'; sessionId: string; providerId?: string; model?: string } // model: the respawned process starts on it
   | { kind: 'session.switchAgent'; sessionId: string; agent: AgentKind; model?: string }
   | { kind: 'session.canonical'; sessionId: string }

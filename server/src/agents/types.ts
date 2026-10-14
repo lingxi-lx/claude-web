@@ -34,6 +34,8 @@ export interface AgentDriver extends EventEmitter {
   setEffort?(effort: EffortLevel): Promise<void>;
   /** Claude only: xhigh + dynamic workflows. Separate from effort on purpose — see catalog.ts. */
   setUltracode?(on: boolean): Promise<void>;
+  /** Claude: the model subagents run on ('' = the main model) — another process when it changes */
+  setSubagentModel?(model: string): Promise<void>;
   stopTask?(taskId: string): Promise<void>;
   contextUsage?(detail: 'summary' | 'full'): Promise<unknown>;
   respawn?(): Promise<void>;

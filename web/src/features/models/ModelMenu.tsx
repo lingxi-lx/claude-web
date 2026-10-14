@@ -8,7 +8,7 @@ import { TERMS } from '@/ui/terms';
 import { buildModelMenu, filterMenu, pushRecent, recentKey, type AgentSource, type ModelMenuItem, type ModelMenuSection } from './menu';
 import { refreshAllModels, useGatewayStatus, useRefreshRun } from './data';
 import { placeMenu, samePlacement, withOrigin, type Placement } from './place';
-import { MODEL_MENU_ID } from '@/features/composer/ids';
+import { MODEL_MENU_ID, SUBAGENT_MENU_ID } from '@/features/composer/ids';
 import './models.css';
 import { ErrorBoundary } from '@/ui/ErrorBoundary';
 import { useMenuClaim } from '@/ui/menus';
@@ -42,6 +42,20 @@ export interface ModelMenuProps {
   anchor?: RefObject<HTMLElement | null>;
   /** the other agents as more sections of the flat list (picking one switches agent / hands over) */
   otherAgents?: AgentSource[];
+  /**
+   * The 子代理 chip's menu (SubagentChip): `lockProvider`'s own models only, a 「跟主模型一样」 row on top, no
+   * favourites / recents / default entries, and at the bottom whether new conversations on this provider take it.
+   */
+  subagent?: SubagentMenuOptions;
+}
+
+export interface SubagentMenuOptions {
+  /** nothing picked: the subagents run on the main model */
+  same: boolean;
+  onSame: () => void;
+  /** the current pick is this provider's default for new conversations */
+  isDefault: boolean;
+  onToggleDefault: () => void;
 }
 
 /**
@@ -108,12 +122,15 @@ export function ModelMenu(p: ModelMenuProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pos]);
 
+  const sub = !!p.subagent;
   const menu = useMemo(() => {
     const m = buildModelMenu({ agent: p.agent, providers, gatewayGroups: gateway.groups, gatewayEnabled: gateway.enabled, engine, settings, current: p.current, builtin: p.builtin, builtinTitle: p.builtinTitle, agentDefault: p.agentDefault, otherAgents: p.lockProvider ? undefined : p.otherAgents });
     if (!p.lockProvider) return m;
-    const keep = (s: ModelMenuSection) => ({ ...s, items: s.items.filter((i) => i.providerId === p.lockProvider && !i.agent) });
-    return { ...m, sections: m.sections.map(keep).filter((s) => s.items.length) };
-  }, [p.agent, providers, gateway, engine, settings, p.current.providerId, p.current.model, p.builtin, p.builtinTitle, p.agentDefault, p.lockProvider, p.otherAgents]);
+    const keep = (s: ModelMenuSection) => ({ ...s, items: s.items.filter((i) => i.providerId === p.lockProvider && !i.agent && !(sub && i.isDefault)) });
+    // the 子代理 menu: one model of this provider each, no favourites / recents repeating them
+    const own = sub ? m.sections.filter((s) => s.kind === 'builtin' || s.kind === 'provider') : m.sections;
+    return { ...m, sections: own.map(keep).filter((s) => s.items.length) };
+  }, [p.agent, providers, gateway, engine, settings, p.current.providerId, p.current.model, p.builtin, p.builtinTitle, p.agentDefault, p.lockProvider, p.otherAgents, sub]);
   const shown = useMemo(() => filterMenu(menu, q), [menu, q]);
   // keyboard / Enter only walk entries that can be picked (unavailable profiles are shown, not selectable)
   const flat = useMemo(() => shown.sections.flatMap((s) => s.items.filter((it) => !it.unavailable).map((it) => ({ s, it }))), [shown]);
@@ -159,7 +176,7 @@ export function ModelMenu(p: ModelMenuProps) {
     p.onClose();
     // recorded only once the pick went through (a confirm dialog may still say no, a switch may fail)
     const done = await p.onPick(it);
-    if (done === false) return;
+    if (done === false || sub) return; // the subagents' model is not a recent pick of the main one
     const st = useStore.getState();
     void st.setSetting('ui.recentModels', pushRecent(st.settings['ui.recentModels'] as string[] | undefined, recentKey(it.agent ?? p.agent, it.providerId, it.model)));
   };
@@ -181,7 +198,7 @@ export function ModelMenu(p: ModelMenuProps) {
   const portal = !!p.anchor;
   if (portal && !pos && !sheet) return null; // measured in the layout effect before the first paint
   const body = (
-    <div ref={box} className={clsx('menu mm', portal ? 'fixed' : [p.placement === 'down' ? 'down' : 'up', p.align === 'left' ? 'left' : 'right'].join(' '))} style={pos ?? undefined} role="dialog" aria-label="选择模型" onKeyDown={onKey} {...motion}>
+    <div ref={box} className={clsx('menu mm', portal ? 'fixed' : [p.placement === 'down' ? 'down' : 'up', p.align === 'left' ? 'left' : 'right'].join(' '))} style={pos ?? undefined} role="dialog" aria-label={sub ? '子代理用的模型' : '选择模型'} onKeyDown={onKey} {...motion}>
       <div className="mm-search">
         <Icon name="search" size={13} />
         <input ref={input} value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索模型或供应商…" aria-label="搜索模型" role="combobox" aria-expanded aria-controls="mm-list" aria-activedescendant={flat[active] ? `mm-opt-${active}` : undefined} />
@@ -189,6 +206,12 @@ export function ModelMenu(p: ModelMenuProps) {
       </div>
       {p.lockProvider && p.lockNote && <div className="mm-note">{p.lockNote}</div>}
       <div ref={list} className="mm-list" id="mm-list" role="listbox">
+        {p.subagent && !q && (
+          <div role="option" aria-selected={false} data-id={SUBAGENT_MENU_ID.same} className={clsx('mm-row', 'mm-same', p.subagent.same && 'cur')} onClick={() => { p.onClose(); p.subagent!.onSame(); }} title="子代理和主对话用同一个模型（Claude Code 的默认做法）">
+            <span className="mm-check">{p.subagent.same && <Icon name="check" size={12} />}</span>
+            <span className="mm-label"><span className="m">跟主模型一样</span></span>
+          </div>
+        )}
         {shown.sections.map((s, si) => (
           <div key={s.id} className={clsx('mm-sec', s.kind === 'agent' && 'agent')} data-sec={s.id}>
             {s.kind === 'agent' && shown.sections[si - 1]?.kind !== 'agent' && <div className="mm-group">{TERMS.agents}</div>}
@@ -201,7 +224,7 @@ export function ModelMenu(p: ModelMenuProps) {
               {s.error && !s.unavailable && <span className="err" title={s.error}>拉取失败：{s.error}</span>}
             </div>
             {s.items.map((it) => {
-              const own = it.providerId === 'claude';
+              const own = it.providerId === 'claude' || sub;
               if (it.unavailable) {
                 return (
                   <div key={`${s.id}:${it.key}:${it.isDefault ? 'd' : ''}`} role="option" aria-disabled className={clsx('mm-row', 'off', it.current && 'cur')} title={`${it.label} — ${it.unavailable}`}>
@@ -219,9 +242,9 @@ export function ModelMenu(p: ModelMenuProps) {
                     {!own && <span className="p">{it.providerName} / </span>}
                     <span className="m">{it.display}</span>
                   </span>
-                  {it.profileDefault && <span className="badge">默认</span>}
+                  {it.profileDefault && !sub && <span className="badge">默认</span>}
                   {it.hint && <span className="mm-hint">{it.hint}</span>}
-                  {!it.isDefault && !it.agent && (
+                  {!it.isDefault && !it.agent && !sub && (
                     <button className={clsx('mm-star', it.favorite && 'on')} aria-label={it.favorite ? '取消收藏' : '收藏'} title={it.favorite ? '取消收藏' : '收藏（置顶）'} onClick={(e) => { e.stopPropagation(); toggleFav(it); }}>
                       <Icon name="star" size={12} />
                     </button>
@@ -238,6 +261,12 @@ export function ModelMenu(p: ModelMenuProps) {
           </button>
         )}
       </div>
+      {p.subagent && (
+        <label className="mm-subdef" data-id={SUBAGENT_MENU_ID.default} title="在这个供应商上新开的对话（也包括 IM、定时任务）的子代理都用这里选的">
+          <input type="checkbox" checked={p.subagent.isDefault} disabled={p.subagent.same && p.subagent.isDefault} onChange={() => p.subagent!.onToggleDefault()} />
+          <span>这个供应商的新对话都这样</span>
+        </label>
+      )}
       <div className="mm-foot">
         <button data-id={MODEL_MENU_ID.refresh} onClick={() => void refreshAllModels()} disabled={refresh.running} title="拉取每个供应商的模型列表（/v1/models，只列模型，不花 token）">
           {refresh.running ? <span className="spinner" /> : <Icon name="refresh" size={13} />}

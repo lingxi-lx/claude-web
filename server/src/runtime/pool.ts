@@ -10,6 +10,7 @@ import { beforeAppServer } from '../gateway/agents.js';
 import { CodexDriver } from '../agents/codex-driver.js';
 import { proxy } from '../net/proxy.js';
 import { withExplanation } from '../errors/explain.js';
+import { SUBAGENT_DEFAULTS, providerKey, subagentModelFor } from '../models/subagent.js';
 
 const IDLE_TTL_MS = 30 * 60 * 1000;
 /** an idle Codex conversation lets go of its thread after this (the Codex CLI cannot resume it while we hold it) */
@@ -79,8 +80,17 @@ export class RunnerPool extends EventEmitter {
         const recorded = this.providers.meta?.sessionMeta(params.sessionId).cacheKey;
         if (recorded) params = { ...params, cacheParentId: recorded };
       }
+      // the subagents' model: said by the caller (the composer's chip), else this conversation's own pick for its
+      // provider, else the provider's default — IM, schedules, goals and every reopen land here too
+      const m = this.providers.meta;
+      const explicit = params.subagentModel;
+      if (explicit === undefined && m) params = { ...params, subagentModel: subagentModelFor({ recorded: params.sessionId ? m.sessionMeta(params.sessionId).subagent : undefined, defaults: m.settings()[SUBAGENT_DEFAULTS], providerId: params.providerId }) };
       const sp = this.providers.forSession(params.providerId);
       r = new SessionRunner(params, sp);
+      // a pick is the conversation's from then on (a new one: under the id it was given; a fork gets its id at init)
+      if (explicit !== undefined && m && !params.fork && !params.resumeAt) {
+        void m.setSessionMeta(r.sessionId, { subagent: { providerId: providerKey(params.providerId), model: explicit } }).catch(() => { /* in memory; the next save persists it */ });
+      }
       (r as SessionRunner).onPromptOnly = (providerId, model) => void this.recordPromptOnly(providerId, model);
       this.ttl.set(r, idleTtlFor(sp));
     }

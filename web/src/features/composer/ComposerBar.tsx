@@ -6,7 +6,7 @@ import type { ReactNode } from 'react';
  * chips drop their text (`.opt`) and keep their icons; the model chip truncates last. The welcome page and a
  * conversation use the same row; which slots are filled is the caller's business.
  */
-export function ComposerBar({ plus, project, branch, status, meter, model, effort, permission, mic, steer, send }: {
+export function ComposerBar({ plus, project, branch, status, meter, model, subagent, effort, permission, mic, steer, send }: {
   plus?: ReactNode;
   project?: ReactNode;
   branch?: ReactNode;
@@ -14,6 +14,8 @@ export function ComposerBar({ plus, project, branch, status, meter, model, effor
   status?: ReactNode;
   meter?: ReactNode;
   model?: ReactNode;
+  /** 子代理 — the model the conversation's subagents run on (Claude only) */
+  subagent?: ReactNode;
   /** 想多深 — its own chip next to the model's (none for an agent without levels) */
   effort?: ReactNode;
   permission?: ReactNode;
@@ -25,7 +27,7 @@ export function ComposerBar({ plus, project, branch, status, meter, model, effor
     <div className="composer-bar cb">
       <div className="cb-left">{plus}{project}{branch}</div>
       <span className="grow" />
-      <div className="cb-right">{status}{meter}{model}{effort}{permission}{mic}{steer}{send}</div>
+      <div className="cb-right">{status}{meter}{model}{subagent}{effort}{permission}{mic}{steer}{send}</div>
     </div>
   );
 }

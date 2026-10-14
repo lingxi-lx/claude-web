@@ -38,6 +38,7 @@ import type { MemoryService } from '../memory/service.js';
 import { harvest } from '../memory/extract.js';
 import { setMemoryMcpEnabled } from '../memory/launcher.js';
 import { afterSwitch, normProvider, openOnProvider, swapAgent, swapProvider } from '../session/swap.js';
+import { providerKey } from '../models/subagent.js';
 import { expandSessionRefs } from '../library/briefing.js';
 import type { LibraryService } from '../library/service.js';
 import type { GatewayService } from '../gateway/service.js';
@@ -512,6 +513,19 @@ export class Hub {
         await afterSwitch(req.sessionId);
         await this.runner(req.sessionId).setUltracode?.(req.on);
         return null;
+      // the subagents' model: the conversation's own from now on (also one that is not running: its next start takes it)
+      case 'session.setSubagentModel': {
+        await afterSwitch(req.sessionId);
+        const live = s.pool.get(req.sessionId);
+        const on = live && live.state !== 'closed' && live.state !== 'error' ? live : undefined;
+        // running: for the provider it runs on (a switch from another window in between drops the pick); not running:
+        // for the provider the window will resume it on (its chips may have picked another one already)
+        if (on && req.providerId !== undefined && providerKey(req.providerId) !== providerKey(on.info.providerId)) throw new Error('这个对话刚刚换了供应商，这次选的子代理模型没有用上，请重新选');
+        const providerId = on ? on.info.providerId : req.providerId ?? s.meta.sessionMeta(req.sessionId).providerId;
+        await s.meta.setSessionMeta(req.sessionId, { subagent: { providerId: providerKey(providerId), model: req.model } });
+        await on?.setSubagentModel?.(req.model);
+        return null;
+      }
       // Swapping the provider or the agent behind a live session. Both are an invisible restart:
       // the CLI's env is fixed at spawn, so "no restart" can only mean the user never sees one.
       case 'session.setProvider': {

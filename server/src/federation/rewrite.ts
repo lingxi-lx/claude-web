@@ -11,7 +11,7 @@ import { isPeerId, parsePeerId, peerSessionId } from './types.js';
 /** Requests about a remote session that are answered by the machine the session lives on. */
 const FORWARD = new Set<ClientRequest['kind']>([
   'session.open', 'session.info', 'session.send', 'session.interrupt', 'session.close',
-  'session.setModel', 'session.setPermissionMode', 'session.setEffort', 'session.setUltracode',
+  'session.setModel', 'session.setPermissionMode', 'session.setEffort', 'session.setUltracode', 'session.setSubagentModel',
   'session.contextUsage', 'session.stopTask', 'session.canonical',
   'permission.respond',
   'transcript.load', 'transcript.subagents', 'transcript.subagent',

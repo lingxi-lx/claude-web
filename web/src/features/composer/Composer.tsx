@@ -24,6 +24,8 @@ import { SessionRefChip } from '@/features/chat/ChatView';
 import { REFERENCE_EVENT, handOver, type ReferenceDetail } from '@/features/sidebar/session-actions';
 import { ModelChip } from '@/features/models/ModelMenu';
 import { EffortChip } from '@/features/models/EffortChip';
+import { SubagentChip, subagentLabel } from '@/features/models/SubagentChip';
+import { SUBAGENT_DEFAULTS, subagentDefault, subagentModelFor } from '../../../../server/src/models/subagent';
 import { OWN_PROVIDER, effectiveRuntime, usableProfile, type AgentSource, type ModelMenuItem } from '@/features/models/menu';
 import { mergeResume, resumeView } from '@/store/reopen';
 import { routePick, switchedNote } from '@/features/models/route';
@@ -92,6 +94,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   const interrupt = useStore((s) => s.interrupt);
   const setDraft = useStore((s) => s.setDraft);
   const setResume = useStore((s) => s.setResume);
+  const setSubagentModel = useStore((s) => s.setSubagentModel);
   const saveDraft = useStore((s) => s.saveDraft);
   const openSession = useStore((s) => s.openSession);
   const sessions = useStore((s) => s.sessions);
@@ -123,6 +126,8 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   const [wEffort, setWEffort] = useState<EffortLevel | ''>('');
   const [wUltra, setWUltra] = useState(false);
   const [wWorktree, setWWorktree] = useState('');
+  // the 子代理 chip on the welcome page: picked for one provider (another one takes its own default); null = the default
+  const [wSub, setWSub] = useState<{ providerId: string; model: string } | null>(null);
   const [starting, setStarting] = useState(false);
   const providers = useStore((s) => s.providers);
   const lastProvider = useRef(localStorage.getItem('cw.lastProvider'));
@@ -141,6 +146,8 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   // unusable right now (official engine, gateway off / group gone) counts as gone too
   const provider = usableProfile(providers, wProvider, { agent: wKind, engine, gatewayGroups: gatewayView.groups, gatewayEnabled: gatewayView.enabled });
   // the agent's own model list: the catalog, or what the agent registry probed when the catalog has none
+  const wProviderId = provider ? provider.id : 'claude';
+  const wSubModel = wSub && wSub.providerId === wProviderId ? wSub.model : subagentDefault(settings[SUBAGENT_DEFAULTS], wProviderId);
   const wBuiltin = agent && !modelsFor(agent.kind).length ? agent.models.map((m) => ({ value: m, displayName: m })) : undefined;
   // providers a Claude conversation could use right now (the model menu's own check)
   const usableIds = useMemo(() => providers.filter((p) => usableProfile(providers, p.id, { agent: 'claude', engine, gatewayGroups: gatewayView.groups, gatewayEnabled: gatewayView.enabled })).map((p) => p.id), [providers, engine, gatewayView.groups, gatewayView.enabled]);
@@ -454,12 +461,13 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
         localStorage.setItem('cw.lastProvider', providerId);
         localStorage.setItem('cw.lastAgent', wAgent);
         if (wAgent !== 'claude' && !agent) throw new Error('选中的 agent 已不可用');
-        const id = await openSession({ cwd: cwd.trim(), model, permissionMode: wMode, effort, ultracode: wUltracode && wUltra ? true : undefined, worktree: wWorktree || undefined, providerId, features: foreign ? {} : featDefaults, agent: foreign ? wAgent : undefined }, target);
+        const id = await openSession({ cwd: cwd.trim(), model, permissionMode: wMode, effort, ultracode: wUltracode && wUltra ? true : undefined, subagentModel: foreign ? undefined : wSubModel, worktree: wWorktree || undefined, providerId, features: foreign ? {} : featDefaults, agent: foreign ? wAgent : undefined }, target);
         // what is asked for anew for every conversation (操控电脑) is off again for the next one
         if (!foreign && isFeatures(storedFeatures) && afterStart(storedFeatures) !== storedFeatures) setFeatures(afterStart(storedFeatures));
         const uploaded = files.length ? await uploadAll(id) : [];
         await send(id, withRefs(t), im, false, [...atts, ...uploaded]);
         setRefs([]);
+        setWSub(null); // a pick here is for that conversation; the next one starts on the default again
         saveDraft('welcome', '');
       } catch (e: any) {
         toast(e.message);
@@ -666,6 +674,15 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     setWModel(it.model);
     return true;
   };
+  // 子代理: the conversation's own from now on; a running one restarts its process invisibly (after the turn, mid-turn)
+  const pickSubagent = async (model: string, providerId: string, builtin: { value: string; displayName: string }[] | undefined, live: boolean) => {
+    if (!active) return;
+    try {
+      await setSubagentModel(active.sessionId, model, providerId);
+      const name = model ? subagentLabel({ providers, providerId, model, builtin }) : '';
+      toast(model ? `子代理改用 ${name}${live && busy ? '（这一轮结束后生效）' : ''}` : `子代理改回跟主模型一样${live && busy ? '（这一轮结束后生效）' : ''}`, true);
+    } catch (e: any) { toast(e.message); }
+  };
   const setEffort = (effort: EffortLevel) => active && ws.request({ kind: 'session.setEffort', sessionId: active.sessionId, effort }).catch((e) => toast(e.message));
   const setUltracode = (on: boolean) => active && ws.request({ kind: 'session.setUltracode', sessionId: active.sessionId, on }).catch((e) => toast(e.message));
 
@@ -719,7 +736,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     <button data-id={BAR_ID.mic} className={clsx('icon-btn', listening && 'active')} title={listening ? '停止语音输入' : '语音输入（浏览器识别）'} onClick={toggleVoice} aria-label="语音输入"><Icon name="mic" size={15} /></button>
   ) : null;
 
-  let model: React.ReactNode = null, effort: React.ReactNode = null, permission: React.ReactNode = null, meter: React.ReactNode = null, status: React.ReactNode = null;
+  let model: React.ReactNode = null, subagent: React.ReactNode = null, effort: React.ReactNode = null, permission: React.ReactNode = null, meter: React.ReactNode = null, status: React.ReactNode = null;
   // 深度编排 on: the placeholder says what to ask for (user report: the switch looked clear, but not how to use it)
   let ultraOn = false;
   if (welcome) {
@@ -737,6 +754,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
         onPick={pickWelcome}
       />
     );
+    if (!foreign) subagent = <SubagentChip providerId={wProviderId} value={wSubModel} onPick={(m) => setWSub({ providerId: wProviderId, model: m })} />;
     ultraOn = wUltracode && wUltra;
     effort = (
       <EffortChip
@@ -769,6 +787,10 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
         onPick={pickLive}
       />
     );
+    if (liveAgent === 'claude' && !remote) {
+      const builtin = liveProvider === 'claude' && info.models?.length ? info.models : undefined;
+      subagent = <SubagentChip providerId={liveProvider} value={info.subagentModel ?? ''} builtin={builtin} disabled={swapping} onPick={(m) => void pickSubagent(m, liveProvider, builtin, true)} />;
+    }
     ultraOn = ultraOk && !!info.ultracode;
     effort = (
       <EffortChip
@@ -809,6 +831,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
         onPick={(it) => pickResume(it, v)}
       />
     );
+    if (rAgent === 'claude' && !remote) subagent = <SubagentChip providerId={rProvider} value={subagentModelFor({ recorded: sessionMeta[sid]?.subagent, defaults: settings[SUBAGENT_DEFAULTS], providerId: rProvider })} disabled={swapping} onPick={(m) => void pickSubagent(m, rProvider, undefined, false)} />;
     ultraOn = rUltraOk && !!v.ultracode;
     effort = (
       <EffortChip
@@ -907,6 +930,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
             status={status}
             meter={meter}
             model={model}
+            subagent={subagent}
             effort={effort}
             permission={permission}
             mic={mic}

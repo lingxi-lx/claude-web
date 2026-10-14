@@ -155,10 +155,34 @@ describe('RunnerPool', () => {
 describe('RunnerPool: prompt-cache key of a reopened session', () => {
   it('a session reopened from anywhere (goals, IM, schedules, hot switch) keeps the key recorded for it', () => {
     const recorded: Record<string, any> = { 'fork-1': { cacheKey: 'root' } };
-    const p = new RunnerPool({ forSession: () => undefined, meta: { sessionMeta: (id: string) => recorded[id] ?? {} } } as any);
+    const p = new RunnerPool({ forSession: () => undefined, meta: { sessionMeta: (id: string) => recorded[id] ?? {}, settings: () => ({}) } } as any);
     expect((p.open({ sessionId: 'fork-1', cwd: 'C:/x' }) as any).params.cacheParentId).toBe('root');
     expect((p.open({ sessionId: 'plain', cwd: 'C:/x' }) as any).params.cacheParentId).toBeUndefined();
     expect((p.open({ sessionId: 'other', cwd: 'C:/x', cacheParentId: 'explicit' }) as any).params.cacheParentId).toBe('explicit');
+  });
+});
+
+describe('RunnerPool: the subagents model', () => {
+  const setup = (recorded: Record<string, any>, settings: Record<string, unknown>) => {
+    const writes: [string, any][] = [];
+    const meta = { sessionMeta: (id: string) => recorded[id] ?? {}, settings: () => settings, setSessionMeta: async (id: string, patch: any) => { writes.push([id, patch]); } };
+    return { p: new RunnerPool({ forSession: () => undefined, meta } as any), writes };
+  };
+  it('not said: the conversation pick for its provider, else that provider default', () => {
+    const { p, writes } = setup({ a: { providerId: 'relay', subagent: { providerId: 'relay', model: 'mini' } }, b: { subagent: { providerId: 'relay', model: 'mini' } } }, { subagentModels: { relay: 'cheap', claude: 'haiku' } });
+    expect((p.open({ sessionId: 'a', cwd: 'C:/x', providerId: 'relay' }) as any).params.subagentModel).toBe('mini');
+    // its pick was for another provider than the one it opens on
+    expect((p.open({ sessionId: 'b', cwd: 'C:/x', providerId: 'claude' }) as any).params.subagentModel).toBe('haiku');
+    expect((p.open({ cwd: 'C:/x', providerId: 'relay' }) as any).params.subagentModel).toBe('cheap');
+    expect(writes).toEqual([]);
+  });
+  it('said by the caller: used and remembered for the conversation (a new one under the id it got), not for a fork', () => {
+    const { p, writes } = setup({}, {});
+    const r = p.open({ cwd: 'C:/x', providerId: 'relay', subagentModel: 'mini' }) as any;
+    expect(r.params.subagentModel).toBe('mini');
+    expect(writes).toEqual([[r.sessionId, { subagent: { providerId: 'relay', model: 'mini' } }]]);
+    p.open({ sessionId: 'src', cwd: 'C:/x', fork: true, subagentModel: '' });
+    expect(writes).toHaveLength(1);
   });
 });
 

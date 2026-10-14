@@ -8,6 +8,9 @@ export const PLUS_ID = { files: 'files', folder: 'folder', reference: 'reference
 /** Model menu controls (the model rows are `.mm-row`, the other agents' sections `data-sec="agent:<kind>"`). */
 export const MODEL_MENU_ID = { addProvider: 'add-provider', agents: 'agents', refresh: 'refresh', manage: 'manage' } as const;
 
+/** The 子代理 chip's menu (models/SubagentChip.tsx): 「跟主模型一样」 and 「这个供应商的新对话都这样」. */
+export const SUBAGENT_MENU_ID = { same: 'subagent-same', default: 'subagent-default' } as const;
+
 /** The menu of the chip next to the model's (models/EffortChip.tsx): the levels' group, and 深度编排's row. */
 export const EFFORT_MENU_ID = { effort: 'effort', ultracode: 'ultracode' } as const;
 

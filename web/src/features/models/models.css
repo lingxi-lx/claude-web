@@ -100,3 +100,27 @@
 /* the Claude login in the by-model table: a label, not a button */
 .prov-chip.static { cursor: default; border-style: dashed; }
 .prov-chip.static:hover { background: var(--surface-1); color: var(--ink-2); }
+
+/* the 子代理 chip and its menu (SubagentChip): 「跟主模型一样」 on top, the default switch above the footer */
+.mm-row.mm-same { margin-bottom: 4px; }
+.mm-row.mm-same:hover { background-color: var(--layer-hover); }
+.mm-subdef { flex: none; display: flex; align-items: center; gap: 8px; margin-top: 6px; padding: 6px 8px 0; border-top: 1px solid var(--edge-subtle); font-size: var(--fs-sm); color: var(--ink-2); cursor: pointer; }
+.mm-subdef input { margin: 0; }
+.mm-subdef:has(input:disabled) { cursor: default; color: var(--ink-4); }
+.cb .sub-anchor > .chip > svg { flex: none; color: var(--ink-3); }
+.cb .sub-anchor > .chip.on > svg { color: var(--accent-text); }
+/* nothing picked: 「子代理」 stays whole (the longer chips around it give way) */
+.cb .mm-anchor.sub-anchor.same { flex: none; }
+.cb .sub-anchor .mm-chip-label { max-width: 200px; }
+/* a full row (the 子代理 chip made it longer): the main model chip, the longest, gives way before the short ones —
+   「proj」 and 「深入」 stayed whole before the 子代理 chip came, and keep doing so. Narrow rows (a split pane, a phone)
+   keep the old even give-and-take, and the 子代理 chip is its icon there (lit when a model is picked) */
+@container (min-width: 561px) {
+  .cb > .cb-right { flex-shrink: 100; }
+  .cb .mm-anchor:not(.sub-anchor) { flex-shrink: 100; }
+  .cb .mm-anchor.sub-anchor:not(.same) { flex-shrink: 30; }
+  .cb .depth-chip { flex-shrink: 0; }
+}
+@container (max-width: 560px) {
+  .cb .sub-anchor .mm-chip-label { display: none; }
+}

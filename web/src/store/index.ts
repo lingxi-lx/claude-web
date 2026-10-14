@@ -143,7 +143,7 @@ interface State {
   // actions
   init(): void;
   refreshSessions(): Promise<void>;
-  openSession(p: { sessionId?: string; cwd: string; model?: string; permissionMode?: PermissionMode; effort?: EffortLevel; ultracode?: boolean; fork?: boolean; resumeAt?: string; worktree?: string; providerId?: string; features?: SessionFeatures; agent?: AgentKind }, target?: { paneId: string; tileId: string } | 'none'): Promise<string>;
+  openSession(p: { sessionId?: string; cwd: string; model?: string; permissionMode?: PermissionMode; effort?: EffortLevel; ultracode?: boolean; subagentModel?: string; fork?: boolean; resumeAt?: string; worktree?: string; providerId?: string; features?: SessionFeatures; agent?: AgentKind }, target?: { paneId: string; tileId: string } | 'none'): Promise<string>;
   engine: EngineInfo | null;
   providers: Provider[];
   agents: AgentInfo[];
@@ -193,6 +193,8 @@ interface State {
   setDraft(sessionId: string, d: string): void;
   /** a conversation that is not running: remember a pick on its chips for the send that resumes it */
   setResume(sessionId: string, patch: ResumeChoice): void;
+  /** 子代理: the model the conversation's subagents run on ('' = the main model), picked for `providerId` */
+  setSubagentModel(sessionId: string, model: string, providerId: string): Promise<void>;
   closeSession(sessionId: string): Promise<void>;
   setTheme(t: Theme, fromSettings?: boolean): void;
   forkAt(sessionId: string, messageUuid: string): Promise<void>;
@@ -985,6 +987,16 @@ export const useStore = create<State>((set, get) => ({
   },
   setResume(sessionId, patch) {
     set((s) => bump(s, sessionId, (o) => { o.resume = mergeResume(o.resume, patch); }));
+  },
+  async setSubagentModel(sessionId, model, providerId) {
+    const prev = get().sessionMeta[sessionId];
+    set((s) => ({ sessionMeta: { ...s.sessionMeta, [sessionId]: { ...s.sessionMeta[sessionId], subagent: { providerId, model } } } }));
+    try {
+      await ws.request({ kind: 'session.setSubagentModel', sessionId, model, providerId });
+    } catch (e) {
+      set((s) => ({ sessionMeta: { ...s.sessionMeta, [sessionId]: { ...prev } } }));
+      throw e;
+    }
   },
 
   setDraft(sessionId, draft) {

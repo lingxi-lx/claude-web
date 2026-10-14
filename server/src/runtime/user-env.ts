@@ -72,3 +72,11 @@ export function settingsOverride(ours: Record<string, string>, cwd?: string): Re
   }
   return Object.keys(out).length ? out : null;
 }
+
+/**
+ * The account (no provider): the subagents' model picked in the composer goes over a `CLAUDE_CODE_SUBAGENT_MODEL` the
+ * user's settings files set — only that key (the rest of those files is the account's own setup). Null: none sets it.
+ */
+export function ownSubagentOverride(model: string, cwd?: string): Record<string, string> | null {
+  return settingsEnvs(cwd).some((env) => 'CLAUDE_CODE_SUBAGENT_MODEL' in env) ? { CLAUDE_CODE_SUBAGENT_MODEL: model } : null;
+}

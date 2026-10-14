@@ -628,6 +628,17 @@ function driver() {
       const backHigh = await waitFor(`(() => { const c = document.querySelector('.welcome .cb .depth-chip'); return !!c && !c.classList.contains('ultra') && c.getAttribute('aria-label') === '智能程度：深入'; })()`, 2000);
       check('picking a level leaves 深度编排', backHigh, await js(`document.querySelector('.welcome .cb .depth-chip')?.getAttribute('aria-label')`));
       await sleep(200);
+      // 子代理: its own chip next to the model's — the model menu locked to one provider, 「跟主模型一样」 on top
+      phase = 'subagent-chip';
+      const subChip = await js(`document.querySelector('.welcome .cb .sub-anchor > button.chip')?.getAttribute('aria-label') ?? null`);
+      check('子代理 chip next to the model chip, nothing picked', subChip === '子代理：同主模型', subChip);
+      await click('.welcome .cb .sub-anchor > button.chip');
+      const sm = await waitFor(`!!document.querySelector('.menu.mm [data-id="subagent-same"]')`, 3000) && await js(`(() => { const m = document.querySelector('.menu.mm'); return { label: m.getAttribute('aria-label'), same: m.querySelector('[data-id="subagent-same"]')?.classList.contains('cur'), def: !!m.querySelector('[data-id="subagent-default"] input'), agents: m.querySelectorAll('[data-sec^="agent:"]').length, heads: m.querySelectorAll('[data-sec="favorites"], [data-sec="recent"]').length, words: /effort|ultracode|档案|引擎/i.test(m.innerText) }; })()`);
+      check('子代理 menu: 「跟主模型一样」 checked, the default switch, no other agents / favourites / recents, no implementation words', sm && sm.label === '子代理用的模型' && sm.same && sm.def && !sm.agents && !sm.heads && !sm.words, JSON.stringify(sm));
+      await shot('subagent-menu');
+      check('子代理 menu without error boundary', !(await noBoundary('body')), await noBoundary('body'));
+      await key('Escape');
+      await sleep(250);
 
       // ---- redesign phase 3: the composer row, the + menu, the permission menu
       phase = 'composer';
@@ -1018,7 +1029,7 @@ function driver() {
         phase = 'settings:menus';
         const ctrl = async (k) => { wc.sendInputEvent({ type: 'keyDown', keyCode: k, modifiers: ['control'] }); wc.sendInputEvent({ type: 'keyUp', keyCode: k, modifiers: ['control'] }); await sleep(300); };
         const menusLeft = [];
-        for (const [chip, menu] of [['.welcome .dirpick', '.menu.dirmenu'], ['.welcome .mm-anchor > button.chip', '.menu.mm']]) {
+        for (const [chip, menu] of [['.welcome .dirpick', '.menu.dirmenu'], ['.welcome .mm-anchor > button.chip', '.menu.mm'], ['.welcome .sub-anchor > button.chip', '.menu.mm']]) {
           await click(chip);
           const opened = await waitFor(`!!document.querySelector(${JSON.stringify(menu)})`, 3000);
           await ctrl(',');

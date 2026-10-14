@@ -5,7 +5,7 @@ import { EventEmitter } from 'node:events';
 import { statSync } from 'node:fs';
 import { withExplanation } from '../errors/explain.js';
 import { findClaudeTranscript, hasClaudeTranscript, hasEntry, lastCostState, lastHumanPrompt, repairLeaf } from './transcript-file.js';
-import { settingsOverride, userAnthropicEnv } from './user-env.js';
+import { ownSubagentOverride, settingsOverride, userAnthropicEnv } from './user-env.js';
 import { writeFlagSettings, type FlagSettings } from './flag-settings.js';
 import { resolveEngine, spawnClaude } from '../claude-exe.js';
 import { loopbackNoProxy, providerEnv, type SessionProvider } from '../providers/service.js';
@@ -152,6 +152,8 @@ export class SessionRunner extends EventEmitter {
   private nextFlag: FlagSettings | null = null;
   /** official binary, 深度编排 picked before the start: `/effort ultracode` goes before the first message */
   private ultracodeFirst = false;
+  /** the model subagents run on ('' = the main model): `CLAUDE_CODE_SUBAGENT_MODEL`, read once at start */
+  private subagent = '';
 
   constructor(params: OpenSessionParams, provider?: SessionProvider) {
     super();
@@ -168,7 +170,9 @@ export class SessionRunner extends EventEmitter {
     this.model = params.model || provider?.defaultModel || undefined;
     this.effort = params.effort;
     this.permissionMode = params.permissionMode ?? 'default';
+    this.subagent = params.subagentModel ?? '';
     this.info = { sessionId: this.sessionId, state: 'starting', cwd: this.cwd, model: this.model, effort: this.effort, permissionMode: this.permissionMode, providerId: provider?.id, providerName: provider?.name, features: this.features, agent: 'claude' };
+    if (this.subagent) this.info.subagentModel = this.subagent;
     // 深度编排 picked before the conversation started (welcome page, a reopen): our engine starts with --ultracode; the
     // official binary only has `/effort ultracode` inside the conversation — sent just before the first message (at
     // open it would make a conversation of its own, titled after the command, even if nothing is ever sent)
@@ -276,7 +280,7 @@ export class SessionRunner extends EventEmitter {
     // the official binary's earlier compaction is an environment variable, read once at start: a model that needs
     // another one (a window set smaller than the binary assumes) is another process (2026-10-14)
     const compact = engine.kind === 'claude' ? this.officialCompactWindow(model) : undefined;
-    return { engine, noThinking, key: `${engine.kind}${noThinking ? ':no-thinking' : ''}${compact ? `:compact-${compact}` : ''}` };
+    return { engine, noThinking, key: `${engine.kind}${noThinking ? ':no-thinking' : ''}${compact ? `:compact-${compact}` : ''}${this.subagent ? `:sub-${this.subagent}` : ''}` };
   }
 
   private start(extra: Partial<Options>) {
@@ -303,17 +307,21 @@ export class SessionRunner extends EventEmitter {
     // what each of the provider's models can do with thinking strength (claude-web-engine reads it: levels, whether it
     // reasons, models recorded as refusing the native parameter); the official binary ignores it
     if (engine.kind === 'ccb' && this.provider) {
-      fenv.CLAUDE_WEB_MODEL_CAPS = webCapsEnv(this.provider, [...(this.provider.models ?? []), providerModelId(this.provider, this.model)]);
+      fenv.CLAUDE_WEB_MODEL_CAPS = webCapsEnv(this.provider, [...(this.provider.models ?? []), providerModelId(this.provider, this.model), ...(this.subagent ? [providerModelId(this.provider, this.subagent)] : [])]);
     }
     // each model's context window (2026-10-14: a relay's Claude compacted at 175K): claude-web-engine takes the whole
     // table (a model switched to mid-conversation keeps its own); the official binary only knows `[1m]` (engineModel)
     // and an earlier compaction for this model
     if (this.provider) {
-      const windows = engine.kind === 'ccb' ? contextWindowsEnv(this.provider, [...(this.provider.models ?? []), ...Object.values(this.provider.modelMap ?? {}), this.provider.defaultModel, providerModelId(this.provider, this.model)]) : undefined;
+      const windows = engine.kind === 'ccb' ? contextWindowsEnv(this.provider, [...(this.provider.models ?? []), ...Object.values(this.provider.modelMap ?? {}), this.provider.defaultModel, providerModelId(this.provider, this.model), ...(this.subagent ? [providerModelId(this.provider, this.subagent)] : [])]) : undefined;
       if (windows && !('CLAUDE_WEB_CONTEXT_WINDOWS' in fenv)) fenv.CLAUDE_WEB_CONTEXT_WINDOWS = windows;
       const compact = engine.kind === 'claude' ? this.officialCompactWindow(this.model) : undefined;
       if (compact && !('CLAUDE_CODE_AUTO_COMPACT_WINDOW' in fenv)) fenv.CLAUDE_CODE_AUTO_COMPACT_WINDOW = String(compact);
     }
+    // the subagents' model (the composer's 子代理 chip): both engines take it before an agent's own `model:` and the
+    // tool's haiku / sonnet / opus; on the official binary a 1M Claude gets its `[1m]` like the main model
+    const sub = this.subagent ? this.engineModel(engine.kind, this.subagent) : undefined;
+    if (sub) fenv.CLAUDE_CODE_SUBAGENT_MODEL = sub;
     // a claude.ai-login session on the bundled ccb: its alias table predates the Claude 5 family (see
     // OFFICIAL_ALIAS_TARGETS) — the CLI's own variables align it with the official one; the user's env / settings win.
     // Not for a relay the user set up in settings.json / the environment: its model list is its own (the injected
@@ -338,7 +346,7 @@ export class SessionRunner extends EventEmitter {
     // through the flag tier (`settingsOverride`)
     this.nextFlag?.dispose();
     this.nextFlag = null;
-    const override = this.provider ? settingsOverride(fenv, this.cwd) : null;
+    const override = this.provider ? settingsOverride(fenv, this.cwd) : sub ? ownSubagentOverride(sub, this.cwd) : null;
     if (override) {
       try {
         this.nextFlag = writeFlagSettings(override);
@@ -883,6 +891,18 @@ export class SessionRunner extends EventEmitter {
       return;
     }
     this.send(`/effort ${on ? 'ultracode' : this.effort ?? 'high'}`);
+  }
+
+  /**
+   * The model subagents run on ('' = the main model). An environment variable read once at start: another process,
+   * resuming this conversation (mid-turn: once the turn is done — subagents already out keep theirs).
+   */
+  async setSubagentModel(model: string) {
+    this.subagent = model;
+    if (model) this.info.subagentModel = model;
+    else delete this.info.subagentModel;
+    this.emit('info', this.info);
+    if (this.plan().key !== this.planKey) await this.respawnWhenIdle();
   }
 
   /** Set by the pool: a model of this conversation's provider refused its native thinking-strength parameter. */

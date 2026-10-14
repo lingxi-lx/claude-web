@@ -921,3 +921,41 @@ describe('SessionRunner: 联网', () => {
     });
   });
 });
+
+describe('the subagents model (the composer 子代理 chip)', () => {
+  it('goes to the process as CLAUDE_CODE_SUBAGENT_MODEL; a change restarts it, the same pick does not', async () => {
+    eng.kind = 'ccb';
+    try {
+      queries.length = 0;
+      const p = { id: 'p1', name: 'relay', type: 'openai', baseUrl: 'https://relay.invalid', apiKey: 'k', models: ['gpt-big', 'gpt-mini'] } as any;
+      const r = new SessionRunner({ sessionId: 'sub1', cwd: '/x', model: 'gpt-big', subagentModel: 'gpt-mini' } as any, p);
+      await tick();
+      expect(queries[0].options.env.CLAUDE_CODE_SUBAGENT_MODEL).toBe('gpt-mini');
+      expect(r.info.subagentModel).toBe('gpt-mini');
+      await r.setSubagentModel('');
+      await tick();
+      expect(queries).toHaveLength(2);
+      expect(queries[1].options.env.CLAUDE_CODE_SUBAGENT_MODEL).toBeUndefined();
+      expect(r.info.subagentModel).toBeUndefined();
+      await r.setSubagentModel('');
+      await tick();
+      expect(queries).toHaveLength(2);
+      await r.close();
+    } finally {
+      eng.kind = 'claude';
+    }
+  });
+
+  it('the official binary: a Claude with a 1M window gets its [1m], like the main model', async () => {
+    queries.length = 0;
+    const p = { id: 'p2', name: 'relay', type: 'anthropic', runtime: 'claude', baseUrl: 'https://relay.invalid', apiKey: 'k', models: ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-4-5-20251001'] } as any;
+    const a = new SessionRunner({ sessionId: 'sub2', cwd: '/x', model: 'claude-opus-5-5', subagentModel: 'claude-sonnet-5-5' } as any, p);
+    await tick();
+    expect(queries[0].options.env.CLAUDE_CODE_SUBAGENT_MODEL).toBe('claude-sonnet-5-5[1m]');
+    await a.close();
+    const b = new SessionRunner({ sessionId: 'sub3', cwd: '/x', model: 'claude-opus-5-5', subagentModel: 'claude-haiku-4-5-20251001' } as any, p);
+    await tick();
+    expect(queries[1].options.env.CLAUDE_CODE_SUBAGENT_MODEL).toBe('claude-haiku-4-5-20251001');
+    await b.close();
+  });
+});
