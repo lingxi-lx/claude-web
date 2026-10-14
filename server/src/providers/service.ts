@@ -3,6 +3,7 @@ import { CLAUDE_PROVIDER_ID, type AgentKind, type ModelRefreshResult, type Provi
 import type { MetaStore } from '../meta/store.js';
 import { resolveEngine, runClaudeCli } from '../claude-exe.js';
 import type { SecretService } from '../secrets/service.js';
+import { contextWindowFor, listedContext } from '../models/context-window.js';
 import { CODEX_KEY_ENV, codexGatewayArgs, codexProviderArgs, geminiApiKeyEnv } from '../gateway/agents.js';
 import { claudeFamilyMap, isChatModel, pickChatModel, preferredRuntime, profileFitError } from '../models/catalog.js';
 import { wantsResponses } from '../gateway/shim.js';
@@ -169,7 +170,7 @@ function modelsUrl(type: ProviderType, baseUrl: string): string {
 
 export interface ChatProbe { ok: boolean; runtime: RuntimeKind | 'api'; model: string; error?: string; ms: number; switched?: boolean; status?: number }
 /** `responses`: openai profiles whose default model is gpt-* — the /v1/responses check the cache shim relies on. */
-export interface ProbeResult { ok: boolean; status?: number; models: string[]; modelNames?: Record<string, string>; modelEfforts?: Provider['modelEfforts']; error?: string; ms: number; chat?: ChatProbe; responses?: ChatProbe }
+export interface ProbeResult { ok: boolean; status?: number; models: string[]; modelNames?: Record<string, string>; modelEfforts?: Provider['modelEfforts']; modelContext?: Provider['modelContext']; error?: string; ms: number; chat?: ChatProbe; responses?: ChatProbe }
 
 /**
  * A model list's ids and the display names it gives where they differ from the id (DeepSeek / OpenRouter `name`,
@@ -189,8 +190,9 @@ function effortOf(m: any): { levels: Effort[]; default?: Effort } | undefined {
   return { levels, ...(isEffort(e.default_level) && have.has(e.default_level) ? { default: e.default_level } : {}) };
 }
 
-export function parseModelList(raw: unknown[]): { models: string[]; modelNames?: Record<string, string>; modelEfforts?: Provider['modelEfforts'] } {
+export function parseModelList(raw: unknown[]): { models: string[]; modelNames?: Record<string, string>; modelEfforts?: Provider['modelEfforts']; modelContext?: Provider['modelContext'] } {
   const names: Record<string, string> = {};
+  const context: Record<string, number> = {};
   const efforts: NonNullable<Provider['modelEfforts']> = {};
   const ids = raw.map((m: any) => {
     const id = String(m?.id ?? m?.name ?? m).replace(/^models\//, '');
@@ -199,6 +201,8 @@ export function parseModelList(raw: unknown[]): { models: string[]; modelNames?:
       if (id && label && label.trim() !== id) names[id] = label.trim().slice(0, 80);
       const effort = effortOf(m);
       if (id && effort) efforts[id] = effort;
+      const ctx = listedContext(m);
+      if (id && ctx) context[id] = ctx;
     }
     return id;
   }).filter(Boolean);
@@ -206,6 +210,7 @@ export function parseModelList(raw: unknown[]): { models: string[]; modelNames?:
     models: [...new Set(ids)].sort(),
     ...(Object.keys(names).length ? { modelNames: names } : {}),
     ...(Object.keys(efforts).length ? { modelEfforts: efforts } : {}),
+    ...(Object.keys(context).length ? { modelContext: context } : {}),
   };
 }
 
@@ -339,9 +344,9 @@ async function listModels(p: Pick<Provider, 'type' | 'baseUrl' | 'apiKey'>): Pro
     // `||`: an empty body is an empty string, which would otherwise become the whole error message
     if (!r.ok) return { ok: false, status: r.status, models: [], error: j?.error?.message || j?.message || text.slice(0, 300) || `HTTP ${r.status}`, ms: Date.now() - t0 };
     const raw: any[] = Array.isArray(j?.data) ? j.data : Array.isArray(j?.models) ? j.models : Array.isArray(j) ? j : [];
-    const { models, modelNames, modelEfforts } = parseModelList(raw);
+    const { models, modelNames, modelEfforts, modelContext } = parseModelList(raw);
     if (!models.length && !j) return { ok: false, status: r.status, models: [], error: '返回不是 JSON 模型列表', ms: Date.now() - t0 };
-    return { ok: true, status: r.status, models, ...(modelNames ? { modelNames } : {}), ...(modelEfforts ? { modelEfforts } : {}), ms: Date.now() - t0 };
+    return { ok: true, status: r.status, models, ...(modelNames ? { modelNames } : {}), ...(modelEfforts ? { modelEfforts } : {}), ...(modelContext ? { modelContext } : {}), ms: Date.now() - t0 };
   } catch (e: any) {
     return { ok: false, models: [], error: e?.name === 'AbortError' ? LIST_TIMEOUT : e?.cause?.message ?? e?.message ?? String(e), ms: Date.now() - t0 };
   }
@@ -434,7 +439,9 @@ export class ProviderService {
         // it into chat/completions for relays without the Responses API (most of them) — direct, those 404
         const base = p.shim ? shimBaseUrl(p.shim, sessionId) : openaiBase(p.baseUrl);
         const key = p.shim ? p.shim.key : p.apiKey;
-        return { env: { OPENAI_BASE_URL: base, OPENAI_API_KEY: key, [CODEX_KEY_ENV]: key }, args: codexProviderArgs(base, p.name, p.defaultModel) };
+        // the default model's context window (Codex assumes its own for a model it does not know)
+        const window = p.defaultModel ? contextWindowFor(p, p.defaultModel) : undefined;
+        return { env: { OPENAI_BASE_URL: base, OPENAI_API_KEY: key, [CODEX_KEY_ENV]: key }, args: [...codexProviderArgs(base, p.name, p.defaultModel), ...(window ? ['-c', `model_context_window=${window}`] : [])] };
       }
       const env: Record<string, string> = { OPENAI_BASE_URL: openaiBase(p.baseUrl), OPENAI_API_KEY: p.apiKey };
       if (p.defaultModel) env.OPENAI_MODEL = p.defaultModel;
@@ -489,7 +496,7 @@ export class ProviderService {
         return { ...base, ok: false, count: 0, error, ms: r.ms };
       }
       // null clears the field (upsertProvider drops null-valued optional keys)
-      if (!(await this.meta.upsertProvider({ id: t.id, models: r.models, modelNames: (r.modelNames ?? null) as unknown as undefined, modelEfforts: (r.modelEfforts ?? null) as unknown as undefined, modelsAt: Date.now(), modelsError: null as unknown as undefined }, { mustExist: true }))) return gone;
+      if (!(await this.meta.upsertProvider({ id: t.id, models: r.models, modelNames: (r.modelNames ?? null) as unknown as undefined, modelEfforts: (r.modelEfforts ?? null) as unknown as undefined, modelContext: (r.modelContext ?? null) as unknown as undefined, modelsAt: Date.now(), modelsError: null as unknown as undefined }, { mustExist: true }))) return gone;
       return { ...base, ok: true, count: r.models.length, ms: r.ms };
     };
     let next = 0;
@@ -542,7 +549,7 @@ export class ProviderService {
     const p = { type: draft?.type ?? saved?.type ?? 'anthropic', baseUrl: (draft?.baseUrl ?? saved?.baseUrl ?? '').trim(), apiKey: key.trim() } as Pick<Provider, 'type' | 'baseUrl' | 'apiKey'>;
     if (!p.apiKey) return { ok: false, models: [], error: '没有 API Key', ms: 0 };
     const r = await probeProvider(p);
-    if (r.ok && saved && r.models.length) await this.meta.upsertProvider({ id: saved.id, models: r.models, modelNames: (r.modelNames ?? null) as unknown as undefined, modelEfforts: (r.modelEfforts ?? null) as unknown as undefined, modelsAt: Date.now(), modelsError: null as unknown as undefined }, { mustExist: true });
+    if (r.ok && saved && r.models.length) await this.meta.upsertProvider({ id: saved.id, models: r.models, modelNames: (r.modelNames ?? null) as unknown as undefined, modelEfforts: (r.modelEfforts ?? null) as unknown as undefined, modelContext: (r.modelContext ?? null) as unknown as undefined, modelsAt: Date.now(), modelsError: null as unknown as undefined }, { mustExist: true });
     if (opts.listOnly || !r.ok || (p.type !== 'anthropic' && p.type !== 'openai')) return r;
     // Real chat check, with automatic fallback to the official binary when the endpoint rejects ccb.
     const full: Provider = { id: saved?.id ?? 'draft', name: draft?.name ?? saved?.name ?? 'draft', createdAt: 0, ...saved, ...p, defaultModel: draft?.defaultModel ?? saved?.defaultModel, modelMap: draft?.modelMap ?? saved?.modelMap };

@@ -9,8 +9,8 @@ import { PRESETS, anthropicBase, cleanBase, explainProbe, quickPlan, relayName, 
 import { Segmented } from '@/ui/Segmented';
 
 /** A model list as the probe returned it: the ids and the display names it gave. */
-type Listed = { models: string[]; modelNames?: Record<string, string>; modelEfforts?: Provider['modelEfforts'] };
-interface Probe extends ProbeLike { models: string[]; modelNames?: Record<string, string>; modelEfforts?: Provider['modelEfforts']; chat?: { ok: boolean; model: string; error?: string; switched?: boolean } }
+type Listed = { models: string[]; modelNames?: Record<string, string>; modelEfforts?: Provider['modelEfforts']; modelContext?: Provider['modelContext'] };
+interface Probe extends ProbeLike { models: string[]; modelNames?: Record<string, string>; modelEfforts?: Provider['modelEfforts']; modelContext?: Provider['modelContext']; chat?: { ok: boolean; model: string; error?: string; switched?: boolean } }
 type Phase = 'idle' | 'list' | 'chat' | 'save';
 
 const FORMATS: { v: QuickFormat; l: string; t: string }[] = [
@@ -54,11 +54,11 @@ export function QuickConnect({ onDone, makeDefault, autoFocus = true }: { onDone
 
   const pick = (id: string) => { if (busy) return; setPresetId(id); setErr(null); setFallback(null); };
 
-  const save = async (p: QuickPlan, { models, modelNames, modelEfforts }: Listed, runtime?: 'claude') => {
+  const save = async (p: QuickPlan, { models, modelNames, modelEfforts, modelContext }: Listed, runtime?: 'claude') => {
     setPhase('save');
     const st = useStore.getState();
     const name = uniqueName(relay ? relayName(base) : preset.name, st.providers.map((x) => x.name));
-    const draft: Partial<Provider> = { name, type: p.type as ProviderType, baseUrl: p.baseUrl, apiKey: key.trim(), models, ...(modelNames ? { modelNames } : {}), ...(modelEfforts ? { modelEfforts } : {}), ...(models.length ? { modelsAt: Date.now() } : {}) };
+    const draft: Partial<Provider> = { name, type: p.type as ProviderType, baseUrl: p.baseUrl, apiKey: key.trim(), models, ...(modelNames ? { modelNames } : {}), ...(modelEfforts ? { modelEfforts } : {}), ...(modelContext ? { modelContext } : {}), ...(models.length ? { modelsAt: Date.now() } : {}) };
     if (p.defaultModel) draft.defaultModel = p.defaultModel;
     if (p.modelMap) draft.modelMap = p.modelMap;
     if (runtime) draft.runtime = runtime;

@@ -9,6 +9,7 @@ import { settingsOverride, userAnthropicEnv } from './user-env.js';
 import { writeFlagSettings, type FlagSettings } from './flag-settings.js';
 import { resolveEngine, spawnClaude } from '../claude-exe.js';
 import { loopbackNoProxy, providerEnv, type SessionProvider } from '../providers/service.js';
+import { contextWindowFor, contextWindowsEnv, officialWindow } from '../models/context-window.js';
 import { ccbAccountEnv, ccbMisthinks, ccbModel, isChatModel, modelCaps, modelLabel, modelsFor, preferredRuntime, providerModelId, supportsUltracode, webCapsEnv } from '../models/catalog.js';
 import { turnShare, type RunningTotals } from '../usage/turn-cost.js';
 import { claudeMcpServer } from '../memory/launcher.js';
@@ -298,6 +299,18 @@ export class SessionRunner extends EventEmitter {
     if (engine.kind === 'ccb' && this.provider) {
       fenv.CLAUDE_WEB_MODEL_CAPS = webCapsEnv(this.provider, [...(this.provider.models ?? []), providerModelId(this.provider, this.model)]);
     }
+    // each model's context window (2026-10-14: a relay's Claude compacted at 175K): claude-web-engine takes the whole
+    // table (a model switched to mid-conversation keeps its own); the official binary only knows `[1m]` (engineModel)
+    // and an earlier compaction for this model
+    if (this.provider) {
+      const windows = engine.kind === 'ccb' ? contextWindowsEnv(this.provider, [...(this.provider.models ?? []), ...Object.values(this.provider.modelMap ?? {}), this.provider.defaultModel, providerModelId(this.provider, this.model)]) : undefined;
+      if (windows && !('CLAUDE_WEB_CONTEXT_WINDOWS' in fenv)) fenv.CLAUDE_WEB_CONTEXT_WINDOWS = windows;
+      if (engine.kind === 'claude') {
+        const id = providerModelId(this.provider, this.model);
+        const w = id ? officialWindow(contextWindowFor(this.provider, id), id) : { suffix: false };
+        if (w.compactWindow && !('CLAUDE_CODE_AUTO_COMPACT_WINDOW' in fenv)) fenv.CLAUDE_CODE_AUTO_COMPACT_WINDOW = String(w.compactWindow);
+      }
+    }
     // a claude.ai-login session on the bundled ccb: its alias table predates the Claude 5 family (see
     // OFFICIAL_ALIAS_TARGETS) — the CLI's own variables align it with the official one; the user's env / settings win.
     // Not for a relay the user set up in settings.json / the environment: its model list is its own (the injected
@@ -333,7 +346,7 @@ export class SessionRunner extends EventEmitter {
     const options: Options = {
       cwd: this.cwd,
       env,
-      model: engine.kind === 'ccb' ? ccbModel(this.model) : this.model,
+      model: this.engineModel(engine.kind, this.model),
       // `ultra` is Codex-only; the Claude SDK's ladder tops out at max
       effort: this.effort === 'ultra' ? 'max' : this.effort,
       permissionMode: this.permissionMode,
@@ -737,6 +750,18 @@ export class SessionRunner extends EventEmitter {
     this.emit('info', this.info);
   }
 
+  /**
+   * The model as the engine takes it: ccb's own spelling, or — on the official binary with a provider — `[1m]` after a
+   * Claude model whose window is over 200K (with no model picked, the provider's default one, so it gets the suffix too).
+   */
+  private engineModel(kind: string | undefined, model: string | undefined): string | undefined {
+    if (kind === 'ccb') return ccbModel(model);
+    if (kind !== 'claude' || !this.provider) return model;
+    const id = providerModelId(this.provider, model);
+    if (!id || !officialWindow(contextWindowFor(this.provider, id), id).suffix) return model;
+    return `${model && model !== 'default' ? model.replace(/\[1m\]$/i, '') : id}[1m]`;
+  }
+
   async setModel(model: string) {
     // the model can decide the engine (see plan()): crossing over means another process, resuming this conversation
     if (this.plan(model).key !== this.planKey) {
@@ -747,7 +772,7 @@ export class SessionRunner extends EventEmitter {
       return;
     }
     try {
-      await this.q?.setModel(this.info.runtime === 'ccb' ? ccbModel(model) : model);
+      await this.q?.setModel(this.engineModel(this.info.runtime, model));
       this.model = model;
       this.info.model = model;
       this.emit('info', this.info);

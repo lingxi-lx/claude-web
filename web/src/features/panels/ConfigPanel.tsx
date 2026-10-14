@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { useScopedSession, useStore } from '@/store';
 import { ws } from '@/ws/client';
 import { clsx } from '@/util';
@@ -8,6 +8,7 @@ import { Icon } from '@/ui/icons';
 import { EnvEditor } from '@/features/settings/EnvEditor';
 import { connectModel } from '@/features/providers/ConnectModel';
 import { REGION_BLOCKED, REGION_RE } from '@/features/providers/quick';
+import { contextWindowFor, contextWindowSource } from '../../../../server/src/models/context-window';
 
 type Tab = 'overview' | 'providers' | 'plugins' | 'mcp' | 'skills' | 'agents' | 'hooks' | 'settings';
 const TABS: { id: Tab; l: string }[] = [
@@ -277,7 +278,7 @@ export function ProviderProfiles() {
   const toast = useStore((s) => s.toast);
   const [editing, setEditing] = useState<Draft | null>(null);
   type ChatCheck = { ok: boolean; runtime: string; model: string; error?: string; ms: number; switched?: boolean; status?: number };
-  const [probe, setProbe] = useState<{ ok: boolean; models: string[]; modelNames?: Record<string, string>; modelEfforts?: Provider['modelEfforts']; error?: string; ms: number; status?: number; chat?: ChatCheck; responses?: ChatCheck } | null>(null);
+  const [probe, setProbe] = useState<{ ok: boolean; models: string[]; modelNames?: Record<string, string>; modelEfforts?: Provider['modelEfforts']; modelContext?: Provider['modelContext']; error?: string; ms: number; status?: number; chat?: ChatCheck; responses?: ChatCheck } | null>(null);
   const [busy, setBusy] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const def = settings.defaultProviderId as string | undefined;
@@ -291,7 +292,7 @@ export function ProviderProfiles() {
   }, []);
   const isGw = editing?.type === 'gateway';
 
-  const startEdit = (p?: Provider) => { setEditing(p ? { ...p, modelMap: { ...(p.modelMap ?? {}) } } : emptyDraft()); setProbe(p?.models?.length ? { ok: true, models: p.models, modelNames: p.modelNames, modelEfforts: p.modelEfforts, ms: 0 } : null); setShowKey(false); };
+  const startEdit = (p?: Provider) => { setEditing(p ? { ...p, modelMap: { ...(p.modelMap ?? {}) } } : emptyDraft()); setProbe(p?.models?.length ? { ok: true, models: p.models, modelNames: p.modelNames, modelEfforts: p.modelEfforts, modelContext: p.modelContext, ms: 0 } : null); setShowKey(false); };
   const test = async () => {
     if (!editing) return;
     setBusy(true);
@@ -322,10 +323,11 @@ export function ProviderProfiles() {
       // the display names come with the list they were read from (none in this list = none kept)
       const modelNames = fresh ? probe!.modelNames ?? (null as any) : editing.modelNames;
       const modelEfforts = fresh ? probe!.modelEfforts ?? (null as any) : editing.modelEfforts;
+      const modelContext = fresh ? probe!.modelContext ?? (null as any) : editing.modelContext;
       // only Anthropic-format endpoints can be pinned to the official binary (it has no other format): a pin left from
       // before a format change goes (user report: it greyed out every GPT model)
       const pinOk = editing.type === 'anthropic' || editing.type === 'gateway';
-      const saved = await ws.request<Provider>({ kind: 'providers.upsert', provider: { ...editing, models, modelNames, modelEfforts, ...(pinOk ? {} : { runtime: null as any }) } });
+      const saved = await ws.request<Provider>({ kind: 'providers.upsert', provider: { ...editing, models, modelNames, modelEfforts, modelContext, contextWindows: editing.contextWindows && Object.keys(editing.contextWindows).length ? editing.contextWindows : (null as any), ...(pinOk ? {} : { runtime: null as any }) } });
       // the first provider of someone without a Claude login is what they will send with: the default for new
       // conversations (a default already set, or a logged-in account, stays)
       const st = useStore.getState();
@@ -417,6 +419,7 @@ export function ProviderProfiles() {
           {modelPick('haiku →', 'haiku')}
           {modelPick('sonnet →', 'sonnet')}
           {modelPick('opus →', 'opus')}
+          <ContextWindows editing={editing} models={models} listed={probe?.ok ? probe.modelContext : editing.modelContext} set={setEditing} />
           {(editing.type === 'anthropic' || editing.type === 'gateway') && (
             <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13, color: 'var(--fg-2)', margin: '6px 0' }}>
               <input type="checkbox" checked={editing.runtime === 'claude'} onChange={(e) => setEditing({ ...editing, runtime: e.target.checked ? 'claude' : (null as any) })} />
@@ -430,6 +433,55 @@ export function ProviderProfiles() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * 上下文窗口 per model (2026-10-14 user report: a relay's Claude compacted at 175K; aimami sets it per model). Empty =
+ * the default it shows: what the model list said, else the family's full size (Claude 1M, GPT 272K…), else the
+ * engine's 200K. The models in use (default, family map) first; with many, a filter.
+ */
+function ContextWindows({ editing, models, listed, set }: { editing: Draft; models: string[]; listed?: Record<string, number>; set: (d: Draft) => void }) {
+  const [q, setQ] = useState('');
+  const [all, setAll] = useState(false);
+  const used = [editing.defaultModel, ...Object.values(editing.modelMap ?? {})].filter((m): m is string => !!m && !!m.trim());
+  const setOnes = Object.keys(editing.contextWindows ?? {});
+  const ids = [...new Set([...used, ...setOnes, ...models])];
+  const ql = q.trim().toLowerCase();
+  const shown = ql ? ids.filter((m) => m.toLowerCase().includes(ql)) : all ? ids : ids.slice(0, 8);
+  if (!ids.length) return null;
+  const put = (m: string, v: string) => {
+    const n = Math.round(Number(v.replace(/[,_\s]/g, '').replace(/k$/i, '000').replace(/m$/i, '000000')));
+    const next = { ...(editing.contextWindows ?? {}) };
+    if (!v.trim() || !Number.isFinite(n) || n <= 0) delete next[m];
+    else next[m] = n;
+    set({ ...editing, contextWindows: next });
+  };
+  return (
+    <div className="ctx-win" style={{ margin: '8px 0' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--fg-2)', marginBottom: 4 }}>
+        <span title="对话用到多少 token 时自动压缩，看的就是这个。空着 = 用默认：模型列表写的，否则按模型拉满（Claude 1M、GPT 272K…），都不知道就是 200K">上下文窗口</span>
+        <span className="grow" />
+        {ids.length > 8 && <input className="field" style={{ width: 160, height: 26 }} placeholder="筛选模型" value={q} onChange={(e) => setQ(e.target.value)} aria-label="筛选模型" />}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 150px', gap: '4px 8px', alignItems: 'center' }}>
+        {shown.map((m) => {
+          const def = contextWindowFor({ modelContext: listed }, m);
+          const src = contextWindowSource({ modelContext: listed }, m);
+          return (
+            <Fragment key={m}>
+              <span className="mono" style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={m}>{m}</span>
+              <input className="field mono" style={{ height: 26, fontSize: 12 }} inputMode="numeric" aria-label={`${m} 的上下文窗口`}
+                value={editing.contextWindows?.[m] ?? ''} onChange={(e) => put(m, e.target.value)}
+                placeholder={`默认 ${(def ?? 200_000).toLocaleString('en-US')}`}
+                title={src === 'list' ? '默认值来自模型列表' : src === 'known' ? '默认值按模型拉满' : '不认识的模型：引擎默认 200K'} />
+            </Fragment>
+          );
+        })}
+      </div>
+      {!ql && ids.length > 8 && <button className="link" style={{ fontSize: 12, marginTop: 4 }} onClick={() => setAll(!all)}>{all ? '收起' : `显示全部 ${ids.length} 个模型`}</button>}
+      <div className="sub" style={{ fontSize: 12, marginTop: 4 }}>可以写 272000、272k 或 1m。正在跑的对话要重新开始才用得上。</div>
     </div>
   );
 }

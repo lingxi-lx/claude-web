@@ -151,6 +151,10 @@ export interface Provider {
    * their next conversations get the strength through the prompt. 保存后重新检测 clears it.
    */
   promptEffortModels?: string[];
+  /** context window (tokens) each model's list entry declared (`context_length`, `max_input_tokens`…), pulled with the list */
+  modelContext?: Record<string, number>;
+  /** context window (tokens) the user set per model in the provider's settings; wins over everything else */
+  contextWindows?: Record<string, number>;
   /** when `models` was last pulled from the endpoint's model list (providers.refreshModels / probe) */
   modelsAt?: number;
   /** the last model-list pull failed (the previous `models` are kept) */
