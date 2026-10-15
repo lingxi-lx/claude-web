@@ -4,7 +4,7 @@
 
 Every version's changes are recorded here; installers are on the [Releases](https://github.com/ypyik0669/claude-web/releases) page. Versions follow [semantic versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.2.6] — 2026-10-16
 
 ### Added
 
