@@ -4,12 +4,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { AndroidDevice, AndroidStatus } from '../protocol.js';
+import { tr } from '../i18n/index.js';
 
 const execFileAsync = promisify(execFile);
 const isWin = process.platform === 'win32';
 
 /** `adb shell` joins its argv into a device-side sh command line, so anything interpolated there must be a plain token. */
-function assertPkg(pkg: string) { if (!/^[A-Za-z0-9_.]+$/.test(pkg)) throw new Error(`无效包名：${pkg}`); }
+function assertPkg(pkg: string) { if (!/^[A-Za-z0-9_.]+$/.test(pkg)) throw new Error(tr('无效包名：{pkg}', { pkg })); }
 
 /** Android emulator / device preview through adb: screenshots, input, apk install, logcat. Optional feature; degrades to "adb 未安装". */
 export class AndroidService {
@@ -38,7 +39,7 @@ export class AndroidService {
   emulator(): string | null { if (this.emulatorPath === undefined) this.emulatorPath = this.find('emulator'); return this.emulatorPath; }
   private async run(args: string[], opts: { serial?: string; timeout?: number; maxBuffer?: number } = {}) {
     const adb = this.adb();
-    if (!adb) throw new Error('未找到 adb：安装 Android SDK Platform-Tools，或设置 ANDROID_HOME');
+    if (!adb) throw new Error(tr('未找到 adb：安装 Android SDK Platform-Tools，或设置 ANDROID_HOME'));
     const full = opts.serial ? ['-s', opts.serial, ...args] : args;
     const { stdout } = await execFileAsync(adb, full, { windowsHide: true, timeout: opts.timeout ?? 15_000, maxBuffer: opts.maxBuffer ?? 8 * 1024 * 1024 });
     return String(stdout);
@@ -68,15 +69,15 @@ export class AndroidService {
   /** PNG screenshot as base64. */
   async screenshot(serial: string): Promise<{ png: string; width: number; height: number }> {
     const adb = this.adb();
-    if (!adb) throw new Error('未找到 adb');
+    if (!adb) throw new Error(tr('未找到 adb'));
     const buf = await new Promise<Buffer>((res, rej) => {
       const chunks: Buffer[] = [];
       const p = spawn(adb, ['-s', serial, 'exec-out', 'screencap', '-p'], { windowsHide: true });
       // cleared on exit: the panel polls every 0.9s, so a dangling 15s timer per shot piled up
-      const timer = setTimeout(() => { p.kill(); rej(new Error('screencap 超时')); }, 15_000);
+      const timer = setTimeout(() => { p.kill(); rej(new Error(tr('screencap 超时'))); }, 15_000);
       p.stdout.on('data', (d: Buffer) => chunks.push(d));
       p.on('error', (e) => { clearTimeout(timer); rej(e); });
-      p.on('close', (code) => { clearTimeout(timer); if (code === 0) res(Buffer.concat(chunks)); else rej(new Error(`screencap 退出 ${code}`)); });
+      p.on('close', (code) => { clearTimeout(timer); if (code === 0) res(Buffer.concat(chunks)); else rej(new Error(tr('screencap 退出 {code}', { code }))); });
     });
     // PNG IHDR: width/height at bytes 16..24
     const width = buf.length > 24 ? buf.readUInt32BE(16) : 0;
@@ -88,7 +89,7 @@ export class AndroidService {
     switch (i.kind) {
       case 'tap': await this.run(['shell', 'input', 'tap', String(Math.round(i.x)), String(Math.round(i.y))], { serial }); break;
       case 'swipe': await this.run(['shell', 'input', 'swipe', String(Math.round(i.x1)), String(Math.round(i.y1)), String(Math.round(i.x2)), String(Math.round(i.y2)), String(i.ms ?? 300)], { serial }); break;
-      case 'key': if (!/^\w+$/.test(String(i.code))) throw new Error('无效按键'); await this.run(['shell', 'input', 'keyevent', String(i.code)], { serial }); break;
+      case 'key': if (!/^\w+$/.test(String(i.code))) throw new Error(tr('无效按键')); await this.run(['shell', 'input', 'keyevent', String(i.code)], { serial }); break;
       case 'text': await this.run(['shell', 'input', 'text', i.text.replace(/ /g, '%s').replace(/([()<>|;&*~"'\\$])/g, '\\$1')], { serial }); break;
     }
   }
@@ -103,7 +104,7 @@ export class AndroidService {
   async packages(serial: string) { const out = await this.run(['shell', 'pm', 'list', 'packages', '-3'], { serial }); return out.split(/\r?\n/).map((l) => l.replace(/^package:/, '').trim()).filter(Boolean).sort(); }
   startEmulator(avd: string) {
     const emu = this.emulator();
-    if (!emu) throw new Error('未找到 emulator（Android SDK 的 emulator 目录）');
+    if (!emu) throw new Error(tr('未找到 emulator（Android SDK 的 emulator 目录）'));
     const p = spawn(emu, ['-avd', avd, '-netdelay', 'none', '-netspeed', 'full'], { detached: true, stdio: 'ignore', windowsHide: true });
     p.on('error', (e) => console.error('[android] emulator:', e.message)); // EACCES etc. arrive async; unhandled 'error' crashes the server
     p.unref();

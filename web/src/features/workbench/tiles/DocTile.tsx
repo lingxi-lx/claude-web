@@ -8,6 +8,7 @@ import type { FsOpenResult } from '@shared';
 import { MonacoEditor, type EditorHandle } from '@/features/editor/MonacoEditor';
 import { fileUrl, previewKind } from '@/features/editor/preview';
 import { samePath } from '@/features/paths';
+import { tr, dateLocale } from '@/i18n';
 
 type DocTileModel = Extract<Tile, { kind: 'doc' }>;
 
@@ -78,8 +79,8 @@ export function DocTile({ tile }: { tile: DocTileModel }) {
       setDirty(tile.id, latest.current !== text); // keystrokes that landed while the write was in flight stay dirty
       setDiskChanged(false);
     } catch (e: any) {
-      if (/磁盘上已被修改/.test(e.message)) setDiskChanged(true);
-      else toast(`保存失败：${e.message}`);
+      if (/磁盘上已被修改|modified on disk/.test(e.message)) setDiskChanged(true);
+      else toast(tr('保存失败：{message}', { message: e.message }));
     }
     setSaving(false);
   };
@@ -98,13 +99,13 @@ export function DocTile({ tile }: { tile: DocTileModel }) {
   if (kind !== 'text') {
     return (
       <div className="doc-tile">
-        <div className="doc-head"><b>{title}</b><span className="mono path" title={tile.path}>{tile.path}</span><span className="grow" /><button className="btn sm ghost" onClick={() => ws.request({ kind: 'shell.open', path: tile.path }).catch(() => {})}>系统打开</button></div>
+        <div className="doc-head"><b>{title}</b><span className="mono path" title={tile.path}>{tile.path}</span><span className="grow" /><button className="btn sm ghost" onClick={() => ws.request({ kind: 'shell.open', path: tile.path }).catch(() => {})}>{tr('系统打开')}</button></div>
         <div className="doc-body preview">
           {kind === 'image' && <img src={fileUrl(tile.path)} alt={title} onClick={() => useStore.getState().openViewer([fileUrl(tile.path)], 0)} />}
           {kind === 'pdf' && <iframe src={fileUrl(tile.path)} title={title} />}
           {kind === 'video' && <video src={fileUrl(tile.path)} controls />}
           {kind === 'audio' && <audio src={fileUrl(tile.path)} controls />}
-          {kind === 'binary' && <div className="empty">二进制文件，无法在这里预览。</div>}
+          {kind === 'binary' && <div className="empty">{tr('二进制文件，无法在这里预览。')}</div>}
         </div>
       </div>
     );
@@ -117,25 +118,25 @@ export function DocTile({ tile }: { tile: DocTileModel }) {
         <span className="grow" />
         {isMd(tile.path) && (
           <span className="seg mini">
-            <button className={mode === 'preview' ? 'active' : ''} onClick={() => setMode('preview')}>预览</button>
-            <button className={mode === 'edit' ? 'active' : ''} onClick={() => setMode('edit')}>编辑</button>
+            <button className={mode === 'preview' ? 'active' : ''} onClick={() => setMode('preview')}>{tr('预览')}</button>
+            <button className={mode === 'edit' ? 'active' : ''} onClick={() => setMode('edit')}>{tr('编辑')}</button>
           </span>
         )}
-        {!autoSave || dirty ? <button className="btn sm" disabled={!dirty || saving} onClick={save} title="Ctrl+S">{saving ? '保存中…' : '保存'}</button> : null}
-        <button className="btn sm ghost" onClick={() => load()} title="从磁盘重新加载">刷新</button>
+        {!autoSave || dirty ? <button className="btn sm" disabled={!dirty || saving} onClick={save} title="Ctrl+S">{saving ? tr('保存中…') : tr('保存')}</button> : null}
+        <button className="btn sm ghost" onClick={() => load()} title={tr('从磁盘重新加载')}>{tr('刷新')}</button>
         <button className="btn sm ghost" onClick={() => ws.request({ kind: 'shell.open', path: tile.path, app: 'code' }).catch(() => {})}>VS Code</button>
       </div>
       {diskChanged && (
         <div className="doc-banner">
-          <span>文件在磁盘上被修改了（或被删除）。</span>
-          <button className="btn sm" onClick={() => load()}>重新加载（丢弃本地改动）</button>
-          <button className="btn sm ghost" onClick={() => { setDiskChanged(false); void save(); }}>用我的版本覆盖</button>
+          <span>{tr('文件在磁盘上被修改了（或被删除）。')}</span>
+          <button className="btn sm" onClick={() => load()}>{tr('重新加载（丢弃本地改动）')}</button>
+          <button className="btn sm ghost" onClick={() => { setDiskChanged(false); void save(); }}>{tr('用我的版本覆盖')}</button>
         </div>
       )}
       <div className="doc-body editor">
         {err && <div className="empty" style={{ color: 'var(--red)' }}>{err}</div>}
-        {!doc && !err && <div className="empty">读取中…</div>}
-        {doc?.binary && <div className="empty">二进制文件，无法编辑。</div>}
+        {!doc && !err && <div className="empty">{tr('读取中…')}</div>}
+        {doc?.binary && <div className="empty">{tr('二进制文件，无法编辑。')}</div>}
         {doc && !doc.binary && (mode === 'preview' && isMd(tile.path) ? (
           <div className="md-doc"><Markdown text={latest.current || doc.text} /></div>
         ) : (
@@ -143,10 +144,10 @@ export function DocTile({ tile }: { tile: DocTileModel }) {
         ))}
       </div>
       <div className="doc-foot">
-        <span>{doc?.truncated ? '文件过大，只读显示前 4MB' : `行 ${pos.line}，列 ${pos.col}`}</span>
+        <span>{doc?.truncated ? tr('文件过大，只读显示前 4MB') : tr('行 {line}，列 {col}', { line: pos.line, col: pos.col })}</span>
         <span className="grow" />
-        <span>{autoSave ? (dirty ? '未保存 · 自动保存中' : '已保存') : dirty ? '未保存 (Ctrl+S)' : '已保存'}</span>
-        {doc && <span>{doc.size.toLocaleString()} B</span>}
+        <span>{autoSave ? (dirty ? tr('未保存 · 自动保存中') : tr('已保存')) : dirty ? tr('未保存 (Ctrl+S)') : tr('已保存')}</span>
+        {doc && <span>{doc.size.toLocaleString(dateLocale())} B</span>}
       </div>
     </div>
   );

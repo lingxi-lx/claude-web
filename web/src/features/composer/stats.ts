@@ -1,6 +1,7 @@
 import { fmtMs, fmtTok } from '@/util';
 import { fmtCost, sumCosts } from '@/model/cost';
 import { hitRate, pct } from '@/model/tokens';
+import { tr } from '@/i18n';
 
 /**
  * The composer's old stats bar (「1 轮 ↑253K ↓1.8K 缓存 100%」) — spec §4.2: the context ring in the composer's
@@ -49,14 +50,14 @@ export function meterMode(pct: number | undefined): 'ring' | null {
 
 export function usageLines(t: Totals, o: { lastMs?: number; context?: { percentage: number; totalTokens: number; maxTokens: number; model?: string }; tasks?: number }): [string, string][] {
   const lines: [string, string][] = [
-    ['轮数', String(t.turns)],
-    ['输入 / 输出', `↑${fmtTok(t.inp + t.cache + t.write)} ↓${fmtTok(t.out)}`],
+    [tr('轮数'), String(t.turns)],
+    [tr('输入 / 输出'), `↑${fmtTok(t.inp + t.cache + t.write)} ↓${fmtTok(t.out)}`],
   ];
   // same formula as the line under each answer and the ledger (cache writes count as input)
-  if (t.cache > 0) lines.push(['缓存命中', pct(hitRate({ input: t.inp, cacheRead: t.cache, cacheWrite: t.write }))]);
-  if (t.cost > 0 || t.costUnknown > 0) lines.push(['费用', fmtCost(t.cost, t.costUnknown)]);
-  if (o.lastMs) lines.push(['上一轮用时', fmtMs(o.lastMs)]);
-  if (o.context) lines.push(['上下文', `${o.context.percentage}% · ${fmtTok(o.context.totalTokens)} / ${fmtTok(o.context.maxTokens)}`]);
-  if (o.tasks) lines.push(['后台任务', `${o.tasks} 个运行中`]);
+  if (t.cache > 0) lines.push([tr('缓存命中'), pct(hitRate({ input: t.inp, cacheRead: t.cache, cacheWrite: t.write }))]);
+  if (t.cost > 0 || t.costUnknown > 0) lines.push([tr('费用'), fmtCost(t.cost, t.costUnknown)]);
+  if (o.lastMs) lines.push([tr('上一轮用时'), fmtMs(o.lastMs)]);
+  if (o.context) lines.push([tr('上下文'), `${o.context.percentage}% · ${fmtTok(o.context.totalTokens)} / ${fmtTok(o.context.maxTokens)}`]);
+  if (o.tasks) lines.push([tr('后台任务'), tr('{tasks} 个运行中', { tasks: o.tasks })]);
   return lines;
 }

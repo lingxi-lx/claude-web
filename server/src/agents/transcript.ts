@@ -5,6 +5,7 @@ import path from 'node:path';
 import { dataDir } from '../files/service.js';
 import { hasClaudeTranscript } from '../runtime/transcript-file.js';
 import type { AgentKind, SessionSummary } from '../protocol.js';
+import { tr } from '../i18n/index.js';
 
 // `imported`: a pointer head created by LibraryService.prepareResume for a session that lives in the
 // agent's own store (Codex / OpenCode / ACP) — its history is always read back from the agent.
@@ -111,11 +112,11 @@ export class AgentTranscripts {
       const sessionId = name.slice(0, -6);
       const [head, st] = await Promise.all([this.head(sessionId), fs.stat(path.join(this.dir, name))]);
       if (!head) continue;
-      out.push({ head, summary: { sessionId, title: head.title || `${head.agent} 对话`, cwd: head.cwd, lastModified: st.mtimeMs, createdAt: head.createdAt, agent: head.agent, firstPrompt: head.title } });
+      out.push({ head, summary: { sessionId, title: head.title || tr('{agent} 对话', { agent: head.agent }), cwd: head.cwd, lastModified: st.mtimeMs, createdAt: head.createdAt, agent: head.agent, firstPrompt: head.title } });
     }
     for (const [sessionId, { head, mtime }] of parked) {
       const asClaude: Head = { ...head, agent: 'claude', nativeSessionId: undefined };
-      out.push({ head: asClaude, summary: { sessionId, title: head.title || '交接的对话', cwd: head.cwd, lastModified: mtime, createdAt: head.createdAt, agent: 'claude', firstPrompt: head.title } });
+      out.push({ head: asClaude, summary: { sessionId, title: head.title || tr('交接的对话'), cwd: head.cwd, lastModified: mtime, createdAt: head.createdAt, agent: 'claude', firstPrompt: head.title } });
     }
     return out;
   }

@@ -3,6 +3,7 @@ import { Icon } from '@/ui/icons';
 import { canZoom, changeZoom, refreshZoom, useZoomState } from '@/ui/zoom';
 import { zoomChoices, zoomPercent } from '@/ui/zoom-math';
 import { modKey } from '@/features/workbench/shortcuts';
+import { tr } from '@/i18n';
 
 /**
  * 设置 → 外观 → 界面缩放: − · the factor · +. The desktop app's whole-window zoom (every window, remembered; the same
@@ -17,11 +18,11 @@ export function ZoomControl({ label }: { label: string }) {
   const choices = zoomChoices(st.steps, st);
   return (
     <div className="zoomer" role="group" aria-label={label} data-zoom={st.zoom}>
-      <button className="icon-btn" aria-label="缩小界面" title={`缩小（${modKey} −）`} disabled={st.zoom <= st.min} onClick={() => changeZoom('out')}><Icon name="minus" size={15} /></button>
-      <select className="field" aria-label={`${label}比例`} title={`还原到 100%：${modKey} 0`} value={String(st.zoom)} onChange={(e) => changeZoom(Number(e.target.value))}>
+      <button className="icon-btn" aria-label={tr('缩小界面')} title={tr('缩小（{modKey} −）', { modKey })} disabled={st.zoom <= st.min} onClick={() => changeZoom('out')}><Icon name="minus" size={15} /></button>
+      <select className="field" aria-label={tr('{label}比例', { label })} title={tr('还原到 100%：{modKey} 0', { modKey })} value={String(st.zoom)} onChange={(e) => changeZoom(Number(e.target.value))}>
         {choices.map((z) => <option key={z} value={String(z)}>{zoomPercent(z)}</option>)}
       </select>
-      <button className="icon-btn" aria-label="放大界面" title={`放大（${modKey} +）`} disabled={st.zoom >= st.max} onClick={() => changeZoom('in')}><Icon name="plus" size={15} /></button>
+      <button className="icon-btn" aria-label={tr('放大界面')} title={tr('放大（{modKey} +）', { modKey })} disabled={st.zoom >= st.max} onClick={() => changeZoom('in')}><Icon name="plus" size={15} /></button>
     </div>
   );
 }

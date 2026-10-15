@@ -4,13 +4,14 @@ import { useStore } from '@/store';
 import { clsx } from '@/util';
 import type { LimitWindow, Limits } from '@shared';
 import { planLabel } from './status';
+import { tr } from '@/i18n';
 
 export function resetIn(iso: string | null) {
   if (!iso) return '';
   const s = Math.max(0, (Date.parse(iso) - Date.now()) / 1000);
-  if (s < 3600) return `${Math.ceil(s / 60)} 分钟后重置`;
-  if (s < 86400) return `${Math.floor(s / 3600)} 小时 ${Math.floor((s % 3600) / 60)} 分后重置`;
-  return `${Math.floor(s / 86400)} 天 ${Math.floor((s % 86400) / 3600)} 小时后重置`;
+  if (s < 3600) return tr('{s} 分钟后重置', { s: Math.ceil(s / 60) });
+  if (s < 86400) return tr('{s} 小时 {s2} 分后重置', { s: Math.floor(s / 3600), s2: Math.floor((s % 3600) / 60) });
+  return tr('{s} 天 {s2} 小时后重置', { s: Math.floor(s / 86400), s2: Math.floor((s % 86400) / 3600) });
 }
 
 export function Ring({ percent, size = 14 }: { percent: number; size?: number }) {
@@ -56,19 +57,19 @@ export function UsageRing({ tip = true, fallbackPlan }: { tip?: boolean; fallbac
   };
   const plan = planLabel(limits?.subscriptionType ?? fallbackPlan);
   if (!limits) return plan ? <span className="quota unknown" data-id="quota">{plan}</span> : null;
-  if (!limits.ok) return <span className="quota unknown" data-id="quota" title={limits.error ?? '暂时读不到账号额度'}>{plan ? `${plan} · ` : ''}额度 –</span>;
+  if (!limits.ok) return <span className="quota unknown" data-id="quota" title={limits.error ?? tr('暂时读不到账号额度')}>{tr('{v}额度 –', { v: plan ? `${plan} · ` : '' })}</span>;
   const worst = worstWindow(limits);
   if (!worst) return plan ? <span className="quota unknown" data-id="quota">{plan}</span> : null;
   const tone = worst.percent >= 90 ? 'crit' : worst.percent >= 70 ? 'hot' : '';
   return (
-    <span ref={ref} className={clsx('quota', tone)} data-id="quota" onMouseEnter={show} onMouseLeave={() => setAt(null)} title={tip ? `${worst.label}: 已用 ${worst.percent}%` : undefined}>
+    <span ref={ref} className={clsx('quota', tone)} data-id="quota" onMouseEnter={show} onMouseLeave={() => setAt(null)} title={tip ? tr('{label}: 已用 {percent}%', { label: worst.label, percent: worst.percent }) : undefined}>
       <Ring percent={worst.percent} size={12} />
-      <span className="pct">{plan ? `${plan} · ` : ''}已用 {worst.percent}%</span>
+      <span className="pct">{tr('{v}已用 {percent}%', { v: plan ? `${plan} · ` : '', percent: worst.percent })}</span>
       {at && createPortal(
         <div className="tip up quota-tip" style={{ position: 'fixed', left: at.left, bottom: at.bottom, top: 'auto', right: 'auto', margin: 0 }}>
-          <div className="label" style={{ marginBottom: 6 }}>账号额度{plan ? ` · ${plan}` : ''}</div>
+          <div className="label" style={{ marginBottom: 6 }}>{tr('账号额度{v}', { v: plan ? ` · ${plan}` : '' })}</div>
           <QuotaWindows limits={limits} />
-          <div style={{ color: 'var(--ink-4)', fontSize: 'var(--fs-meta)', marginTop: 6 }}>每 90 秒刷新 · 来源 api.anthropic.com/api/oauth/usage</div>
+          <div style={{ color: 'var(--ink-4)', fontSize: 'var(--fs-meta)', marginTop: 6 }}>{tr('每 90 秒刷新 · 来源 api.anthropic.com/api/oauth/usage')}</div>
         </div>,
         document.body,
       )}

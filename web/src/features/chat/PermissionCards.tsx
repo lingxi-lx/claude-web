@@ -11,6 +11,7 @@ import { DOCK_DENY_QUEUED, DOCK_HINT, DOCK_STATUS } from '@/ui/terms';
 import { useLeaveGhost, type GhostOpts } from '@/ui/ghost';
 import { alwaysDetails, alwaysLabel, denyResponse, dockKind, permissionTitle, primaryKey } from './permission-dock';
 import { ACCESS_NOTE, accessAsk } from '@/features/computer/computer-tools';
+import { tr } from '@/i18n';
 
 // The card a permission request, an AskUserQuestion or an ExitPlanMode docks above the composer (redesign phase 5,
 // spec §5.3 / §5.11): one at a time, 「还有 N 条」 when more wait. The old 「拒绝理由 / 修改意见」 field is the composer
@@ -76,7 +77,7 @@ function DockLive({ text }: { text: string }) {
  * (拒绝 / 要求修改 / 跳过 with those words). A button, not an Enter — what Enter means never depends on hidden state.
  */
 const DenyQueued = ({ p, busy, onDenyQueued }: { p: PermissionRequestEvent; busy: boolean; onDenyQueued?: () => void }) =>
-  onDenyQueued ? <button className="btn ghost" data-act="deny-queued" disabled={busy} onClick={onDenyQueued} title="把刚才排队的那条消息撤回来，用它的文字回答这张卡片">{DOCK_DENY_QUEUED[dockKind(p)]}</button> : null;
+  onDenyQueued ? <button className="btn ghost" data-act="deny-queued" disabled={busy} onClick={onDenyQueued} title={tr('把刚才排队的那条消息撤回来，用它的文字回答这张卡片')}>{DOCK_DENY_QUEUED[dockKind(p)]}</button> : null;
 
 function Head({ p, agent, more, where }: { p: PermissionRequestEvent; agent: string; more: number; where?: string }) {
   const kind = dockKind(p);
@@ -84,7 +85,7 @@ function Head({ p, agent, more, where }: { p: PermissionRequestEvent; agent: str
     <div className="pd-head">
       <span className="pd-ic" aria-hidden><Icon name={kind === 'ask' ? 'question' : kind === 'plan' ? 'plan' : kind === 'access' ? 'machine' : 'shield'} size={15} /></span>
       <span className="pd-title">{permissionTitle(p, agent)}</span>
-      {more > 0 && <span className="pd-more" title="其它请求排在这一条后面，一次处理一条">还有 {more} 条</span>}
+      {more > 0 && <span className="pd-more" title={tr('其它请求排在这一条后面，一次处理一条')}>{tr('还有 {more} 条', { more })}</span>}
       <span className="grow" />
       {where && <span className="pd-where" title={where}><Icon name="folder" size={12} />{basename(where)}</span>}
     </div>
@@ -124,9 +125,9 @@ function ToolPermission({ p, agent, cwd, more, reason, onReasonUsed, scope, note
       <div className="pd-actions">
         <Hint hint={DOCK_HINT.tool(agent)} note={note} />
         <DenyQueued p={p} busy={busy} onDenyQueued={onDenyQueued} />
-        <button className="btn" data-act="deny" disabled={busy} onClick={deny} title={reason.trim() ? `拒绝，并把输入框里的话告诉 ${agent}` : '拒绝这次操作'}>拒绝</button>
-        {always && <button className="btn" data-act="always" disabled={busy} title={`允许，并写进权限规则，之后同样的操作不再询问：\n${alwaysDetails(p.suggestions).join('\n')}`} onClick={() => send({ behavior: 'allow', updatedPermissions: p.suggestions })}>{always}</button>}
-        <button className="btn primary pd-main" data-act="allow" disabled={busy} onClick={allowOnce} title="允许这一次（输入框空着时按 Enter 也是）">允许一次 <Enter /></button>
+        <button className="btn" data-act="deny" disabled={busy} onClick={deny} title={reason.trim() ? tr('拒绝，并把输入框里的话告诉 {agent}', { agent }) : tr('拒绝这次操作')}>{tr('拒绝')}</button>
+        {always && <button className="btn" data-act="always" disabled={busy} title={tr("允许，并写进权限规则，之后同样的操作不再询问：\n{alwaysDetails}", { alwaysDetails: alwaysDetails(p.suggestions).join('\n') })} onClick={() => send({ behavior: 'allow', updatedPermissions: p.suggestions })}>{always}</button>}
+        <button className="btn primary pd-main" data-act="allow" disabled={busy} onClick={allowOnce} title={tr('允许这一次（输入框空着时按 Enter 也是）')}>{tr('允许一次')} <Enter /></button>
       </div>
     </>
   );
@@ -144,18 +145,18 @@ function AccessRequest({ p, agent, more, reason, onReasonUsed, note, onDenyQueue
     <>
       <Head p={p} agent={agent} more={more} />
       <div className="pd-body pd-access">
-        {ask.reason && <div className="pd-why"><span className="k">它说要做的事</span>{ask.reason}</div>}
-        <ul className="pd-apps" aria-label="要操控的应用">
+        {ask.reason && <div className="pd-why"><span className="k">{tr('它说要做的事')}</span>{ask.reason}</div>}
+        <ul className="pd-apps" aria-label={tr('要操控的应用')}>
           {ask.apps.map((a) => <li key={a} className="pd-app"><Icon name="machine" size={13} />{a}</li>)}
         </ul>
-        {ask.extras.length > 0 && <div className="pd-note">还会：{ask.extras.join('；')}</div>}
+        {ask.extras.length > 0 && <div className="pd-note">{tr('还会：{extras}', { extras: ask.extras.join('；') })}</div>}
         <div className="pd-note">{ACCESS_NOTE}</div>
       </div>
       <div className="pd-actions">
         <Hint hint={DOCK_HINT.access(agent)} note={note} />
         <DenyQueued p={p} busy={busy} onDenyQueued={onDenyQueued} />
-        <button className="btn" data-act="deny" disabled={busy} onClick={deny} title={reason.trim() ? `不允许，并把输入框里的话告诉 ${agent}` : '不允许'}>不允许</button>
-        <button className="btn primary pd-main" data-act="allow" disabled={busy} onClick={() => send({ behavior: 'allow' })} title="允许它在这个对话里操控这些应用（只能点这里，按键不会允许）">允许操控</button>
+        <button className="btn" data-act="deny" disabled={busy} onClick={deny} title={reason.trim() ? tr('不允许，并把输入框里的话告诉 {agent}', { agent }) : tr('不允许')}>{tr('不允许')}</button>
+        <button className="btn primary pd-main" data-act="allow" disabled={busy} onClick={() => send({ behavior: 'allow' })} title={tr('允许它在这个对话里操控这些应用（只能点这里，按键不会允许）')}>{tr('允许操控')}</button>
       </div>
     </>
   );
@@ -174,8 +175,8 @@ function PlanApproval({ p, agent, more, reason, onReasonUsed, scope, note, onDen
       <div className="pd-actions">
         <Hint hint={DOCK_HINT.plan()} note={note} />
         <DenyQueued p={p} busy={busy} onDenyQueued={onDenyQueued} />
-        <button className="btn" data-act="deny" disabled={busy} onClick={revise} title={reason.trim() ? '把输入框里的修改意见发给 Claude' : '要求修改计划'}>要求修改</button>
-        <button className="btn primary pd-main" data-act="allow" disabled={busy} onClick={approve} title="批准并开始（输入框空着时按 Ctrl+Enter 也是）">批准并开始 <kbd className="pd-kbd" aria-hidden>Ctrl ↵</kbd></button>
+        <button className="btn" data-act="deny" disabled={busy} onClick={revise} title={reason.trim() ? tr('把输入框里的修改意见发给 Claude') : tr('要求修改计划')}>{tr('要求修改')}</button>
+        <button className="btn primary pd-main" data-act="allow" disabled={busy} onClick={approve} title={tr('批准并开始（输入框空着时按 Ctrl+Enter 也是）')}>{tr('批准并开始')} <kbd className="pd-kbd" aria-hidden>Ctrl ↵</kbd></button>
       </div>
     </>
   );
@@ -226,15 +227,15 @@ function AskQuestion({ p, agent, more, reason, onReasonUsed, scope, note, onDeny
                 </button>
               );
             })}
-            <input className="pd-other" placeholder="其它（自定义回答）" value={other[q.question] ?? ''} onChange={(e) => setOther((s) => ({ ...s, [q.question]: e.target.value }))} />
+            <input className="pd-other" placeholder={tr('其它（自定义回答）')} value={other[q.question] ?? ''} onChange={(e) => setOther((s) => ({ ...s, [q.question]: e.target.value }))} />
           </div>
         ))}
       </div>
       <div className="pd-actions">
         <Hint hint={DOCK_HINT.ask(agent)} note={note} />
         <DenyQueued p={p} busy={busy} onDenyQueued={onDenyQueued} />
-        <button className="btn" data-act="deny" disabled={busy} onClick={skip}>跳过</button>
-        <button className="btn primary pd-main" data-act="allow" disabled={busy || !complete} onClick={submit} title="提交回答（选好之后在空输入框按 Enter 也是）">提交回答 <Enter /></button>
+        <button className="btn" data-act="deny" disabled={busy} onClick={skip}>{tr('跳过')}</button>
+        <button className="btn primary pd-main" data-act="allow" disabled={busy || !complete} onClick={submit} title={tr('提交回答（选好之后在空输入框按 Enter 也是）')}>{tr('提交回答')} <Enter /></button>
       </div>
     </>
   );

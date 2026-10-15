@@ -1,5 +1,6 @@
 // Pure helpers for the agent config center's MCP form: text fields → McpSpec (and back from a catalog entry).
 import type { McpSpec } from '@shared';
+import { tr } from '@/i18n';
 
 export interface McpForm { name: string; transport: McpSpec['transport']; command: string; url: string; env: string; headers: string }
 
@@ -29,7 +30,7 @@ export function parsePairs(text: string, sep: '=' | ':'): Record<string, string>
     const line = raw.trim();
     if (!line || line.startsWith('#')) continue;
     const i = line.indexOf(sep);
-    if (i <= 0) throw new Error(`「${line}」不是 ${sep === '=' ? 'KEY=value' : 'Key: value'} 形式`);
+    if (i <= 0) throw new Error(tr('「{line}」不是 {v} 形式', { line, v: sep === '=' ? 'KEY=value' : 'Key: value' }));
     out[line.slice(0, i).trim()] = line.slice(i + 1).trim();
   }
   return out;
@@ -37,15 +38,15 @@ export function parsePairs(text: string, sep: '=' | ':'): Record<string, string>
 
 export function formToSpec(f: McpForm): McpSpec {
   const name = f.name.trim();
-  if (!name) throw new Error('请填写名称');
+  if (!name) throw new Error(tr('请填写名称'));
   if (f.transport === 'stdio') {
     const [command, ...args] = splitArgs(f.command);
-    if (!command) throw new Error('请填写启动命令');
+    if (!command) throw new Error(tr('请填写启动命令'));
     const env = parsePairs(f.env, '=');
     return { name, transport: 'stdio', command, args, ...(Object.keys(env).length ? { env } : {}) };
   }
   const url = f.url.trim();
-  if (!url) throw new Error('请填写 URL');
+  if (!url) throw new Error(tr('请填写 URL'));
   const headers = parsePairs(f.headers, ':');
   return { name, transport: f.transport, url, ...(Object.keys(headers).length ? { headers } : {}) };
 }
@@ -69,7 +70,7 @@ export function formFromCatalog(id: string, json: Record<string, any>, envKeys: 
 export function catalogSpec(item: { id: string; json: Record<string, any>; env?: string[] }, envText: string): McpSpec {
   const spec = formToSpec({ ...formFromCatalog(item.id, item.json, item.env), env: envText });
   const missing = (item.env ?? []).filter((k) => !spec.env?.[k]);
-  if (missing.length) throw new Error(`请填写 ${missing.join('、')}`);
+  if (missing.length) throw new Error(tr('请填写 {missing}', { missing: missing.join('、') }));
   return spec;
 }
 

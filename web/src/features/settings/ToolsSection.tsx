@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ws } from '@/ws/client';
 import { clsx } from '@/util';
 import type { ToolInfo } from '@shared';
+import { tr } from '@/i18n';
 
 /** Detects the CLI tools agents lean on (git / gh / node / python / uv / docker / VS Code …) with install hints. */
 export function ToolsSection() {
@@ -14,9 +15,9 @@ export function ToolsSection() {
   return (
     <div className="section">
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-        <h5 style={{ margin: 0 }}>命令行工具</h5>
+        <h5 style={{ margin: 0 }}>{tr('命令行工具')}</h5>
         <span className="grow" />
-        <button className="btn sm ghost" disabled={busy} onClick={load}>{busy ? '检测中…' : '重新检测'}</button>
+        <button className="btn sm ghost" disabled={busy} onClick={load}>{busy ? tr('检测中…') : tr('重新检测')}</button>
       </div>
       <div className="list">
         {(tools ?? []).map((t) => (
@@ -24,14 +25,14 @@ export function ToolsSection() {
             <span className={clsx('dot', t.ok ? 'idle' : 'error')} />
             <div className="grow">
               <div>{t.label} {t.ok && <span className="mono muted" style={{ fontSize: 12 }}>{t.version}</span>}</div>
-              <div className="sub">{t.ok ? t.path || '在 PATH 中' : `未安装 · ${t.hint}`}</div>
+              <div className="sub">{t.ok ? t.path || tr('在 PATH 中') : tr('未安装 · {hint}', { hint: t.hint })}</div>
             </div>
-            {!t.ok && <a className="btn sm ghost" href={t.url} target="_blank" rel="noreferrer">下载</a>}
-            {!t.ok && /^winget /.test(t.hint) && <button className="btn sm ghost" onClick={() => navigator.clipboard.writeText(t.hint.split('，')[0])}>复制命令</button>}
+            {!t.ok && <a className="btn sm ghost" href={t.url} target="_blank" rel="noreferrer">{tr('下载')}</a>}
+            {!t.ok && /^winget /.test(t.hint) && <button className="btn sm ghost" onClick={() => navigator.clipboard.writeText(t.hint.split('，')[0])}>{tr('复制命令')}</button>}
           </div>
         ))}
-        {!tools && <div className="empty">检测中…</div>}
-        {err && <div className="empty" style={{ color: 'var(--red)' }}>检测失败：{err}</div>}
+        {!tools && <div className="empty">{tr('检测中…')}</div>}
+        {err && <div className="empty" style={{ color: 'var(--red)' }}>{tr('检测失败：{err}', { err })}</div>}
       </div>
     </div>
   );

@@ -31,6 +31,7 @@ import { modKey } from './shortcuts';
 import { ErrorBoundary } from '@/ui/ErrorBoundary';
 import { reducedMotion } from '@/ui/input-intent';
 import { RP_OUT_MS, panelFadesOut, type DockSeen } from './dock-closing';
+import { tr } from '@/i18n';
 
 export { PANELS, PANEL_ICONS, PANEL_TITLES };
 export const DOCK_DEFAULT_WIDTH = 440;
@@ -45,7 +46,7 @@ export type PanelHost = 'dock' | 'tile';
 /** A panel with its own error boundary: one broken panel does not blank the dock (or the tile it sits in). */
 export function PanelBody({ id, visible, host = 'dock' }: { id: PanelId; visible: boolean; host?: PanelHost }) {
   return (
-    <ErrorBoundary area={`右侧面板 · ${PANEL_TITLES[id] ?? id}`}>
+    <ErrorBoundary area={tr('右侧面板 · {id}', { id: PANEL_TITLES[id] ?? id })}>
       <PanelContent id={id} visible={visible} host={host} />
     </ErrorBoundary>
   );
@@ -64,8 +65,8 @@ function BoardPanel({ visible }: { visible: boolean }) {
     if (visible && active && (active.cwd !== shown?.cwd || active.sessionId !== shown?.sid)) setShown({ cwd: active.cwd, sid: active.sessionId });
   }, [visible, active?.cwd, active?.sessionId]);
   const peer = sessionPeer(shown?.sid ?? null, sessions);
-  if (!shown) return <div className="empty">还没有打开对话。打开一个对话后，这里是它所在仓库的 Issue 与 PR。</div>;
-  if (peer) return <div className="empty">这个对话在机器「{peer.name}」上，它的仓库在那台机器上。</div>;
+  if (!shown) return <div className="empty">{tr('还没有打开对话。打开一个对话后，这里是它所在仓库的 Issue 与 PR。')}</div>;
+  if (peer) return <div className="empty">{tr('这个对话在机器「{name}」上，它的仓库在那台机器上。', { name: peer.name })}</div>;
   return <BoardView key={shown.cwd} cwd={shown.cwd} sid={shown.sid} />;
 }
 
@@ -86,7 +87,7 @@ function PanelContent({ id, visible, host }: { id: PanelId; visible: boolean; ho
     case 'board': return <BoardPanel visible={visible} />;
     case 'cafe': return <CafePanel />;
     // one browser per window: its pages live in the right panel's copy (a second set of webviews would be other pages)
-    case 'browser': return host === 'dock' ? <BrowserPanel visible={visible} /> : <div className="empty">浏览器在右侧面板里。</div>;
+    case 'browser': return host === 'dock' ? <BrowserPanel visible={visible} /> : <div className="empty">{tr('浏览器在右侧面板里。')}</div>;
   }
 }
 
@@ -128,37 +129,37 @@ function MoreMenu({ mounted, open: temps, active, onPick, onClose }: { mounted: 
     if (!next) { close(true); return; }
     requestAnimationFrame(() => document.querySelector<HTMLElement>(`.dock-more-menu .dock-more-open[data-open="${next}"] > button[data-panel]`)?.focus());
   };
-  const title = temps.length ? `更多面板 · 已打开：${names}` : '更多面板：目标、编排、用量、Issue 与 PR…';
+  const title = temps.length ? tr('更多面板 · 已打开：{names}', { names }) : tr('更多面板：目标、编排、用量、Issue 与 PR…');
   return (
     <>
-      <button ref={btn} className={clsx('icon-btn dock-more', (open || front) && 'active')} title={title} aria-label={temps.length ? `更多面板（已打开 ${temps.length} 个）` : '更多面板'} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+      <button ref={btn} className={clsx('icon-btn dock-more', (open || front) && 'active')} title={title} aria-label={temps.length ? tr('更多面板（已打开 {tempsCount} 个）', { tempsCount: temps.length }) : tr('更多面板')} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
         <Icon name="plus" size={15} />
         {temps.length > 0 && <span className="dock-more-n" aria-hidden>{temps.length}</span>}
       </button>
       {open && (
-        <Popover anchor={btn} onClose={close} prefer="down" align="right" className="dock-more-menu" label="更多面板">
+        <Popover anchor={btn} onClose={close} prefer="down" align="right" className="dock-more-menu" label={tr('更多面板')}>
           {temps.length > 0 && (
             <>
-              <div className="menu-label">已打开</div>
+              <div className="menu-label">{tr('已打开')}</div>
               {temps.map((id) => (
                 <div key={id} className="dock-more-open" data-open={id}>
                   <button role="menuitemradio" aria-checked={active === id} data-mi data-panel={id} onClick={() => { onPick(id); setOpen(false); }}>
                     <Icon name={PANEL_ICONS[id]} size={14} /><span className="grow">{PANEL_TITLES[id]}</span>{active === id && <Icon name="check" size={13} />}
                   </button>
-                  <button className="x" role="menuitem" data-mi title={`关闭${PANEL_TITLES[id]}`} aria-label={`关闭${PANEL_TITLES[id]}`} onClick={() => closeOpen(id)}><Icon name="close" size={12} /></button>
+                  <button className="x" role="menuitem" data-mi title={tr('关闭{v}', { v: PANEL_TITLES[id] })} aria-label={tr('关闭{v}', { v: PANEL_TITLES[id] })} onClick={() => closeOpen(id)}><Icon name="close" size={12} /></button>
                 </div>
               ))}
               <div className="menu-sep" />
             </>
           )}
-          <div className="menu-label">在右侧面板打开</div>
+          <div className="menu-label">{tr('在右侧面板打开')}</div>
           {MORE_PANELS.map((p) => (
             <button key={p.id} role="menuitem" data-mi data-panel={p.id} onClick={() => { dispatch({ t: 'dock.show', panel: p.id }); setOpen(false); }}>
               <Icon name={p.icon} size={14} /><span className="grow">{p.title}</span>{mounted.includes(p.id) && <Icon name="check" size={13} />}
             </button>
           ))}
           <div className="menu-sep" />
-          <div className="menu-note">总览、记忆、配置中心等在命令面板（{modKey}+K）里，或在设置里打开「{TERMS.workbench}」</div>
+          <div className="menu-note">{tr('总览、记忆、配置中心等在命令面板（{modKey}+K）里，或在设置里打开「{workbench}」', { modKey, workbench: TERMS.workbench })}</div>
         </Popover>
       )}
     </>
@@ -366,19 +367,19 @@ export function Dock() {
       onClick={() => pick(id)}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(id); } }}
       onAuxClick={(e) => { if (e.button === 1 && !isFixed) { e.preventDefault(); close(id); } }}
-      title={min || !workbench ? PANEL_TITLES[id] : `${PANEL_TITLES[id]} · 可拖到分屏里`}
+      title={min || !workbench ? PANEL_TITLES[id] : tr('{v} · 可拖到分屏里', { v: PANEL_TITLES[id] })}
     >
       <span className="ic"><Icon name={PANEL_ICONS[id]} size={15} /></span>
       <span className="t">{PANEL_TITLES[id]}</span>
       {/* always there in the default look, with a fixed two-digit room: 0 → 3 → 12 files must not move the row */}
-      {!workbench && id === 'files' && <span className="n" aria-label={reviewCount > 0 ? `${reviewCount} 个文件` : undefined} title={reviewCount > 99 ? `${reviewCount} 个文件` : undefined}>{countText(reviewCount)}</span>}
-      {!isFixed && <button className="x" title="关闭" aria-label={`关闭${PANEL_TITLES[id]}`} onClick={(e) => { e.stopPropagation(); close(id); }}><Icon name="close" size={11} /></button>}
+      {!workbench && id === 'files' && <span className="n" aria-label={reviewCount > 0 ? tr('{reviewCount} 个文件', { reviewCount }) : undefined} title={reviewCount > 99 ? tr('{reviewCount} 个文件', { reviewCount }) : undefined}>{countText(reviewCount)}</span>}
+      {!isFixed && <button className="x" title={tr('关闭')} aria-label={tr('关闭{v}', { v: PANEL_TITLES[id] })} onClick={(e) => { e.stopPropagation(); close(id); }}><Icon name="close" size={11} /></button>}
     </div>
   );
 
   return (
     <div className={clsx('dock', min && 'min', !workbench && 'simple')} hidden={!shown}>
-      {!min && <div className="resizer" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onDoubleClick={() => dispatch({ t: 'dock.set', patch: { width: DOCK_DEFAULT_WIDTH } })} title="拖动调整 · 双击复位" />}
+      {!min && <div className="resizer" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onDoubleClick={() => dispatch({ t: 'dock.set', patch: { width: DOCK_DEFAULT_WIDTH } })} title={tr('拖动调整 · 双击复位')} />}
       <div className={clsx('dock-tabs', stacked && 'stacked')} ref={row}>
         <div className="dock-tabgroups" role="tablist" aria-label={TERMS.dock}>
           {fixed.length > 0 && <div className={clsx('dock-fixed', short && 'short')} ref={fixedRef}>{fixed.map(tab)}</div>}
@@ -386,9 +387,9 @@ export function Dock() {
           {/* only the temporary tabs scroll; the menus hang in <body>, so nothing here clips them */}
           {!folded && (
             <div className={clsx('dock-temps', fade.l && 'fade-l', fade.r && 'fade-r')}>
-              {fade.l && <button className="dock-scroll l" tabIndex={-1} aria-hidden title="向左滚动" onClick={() => scrollTemps(-1)}><Icon name="chevronLeft" size={12} /></button>}
+              {fade.l && <button className="dock-scroll l" tabIndex={-1} aria-hidden title={tr('向左滚动')} onClick={() => scrollTemps(-1)}><Icon name="chevronLeft" size={12} /></button>}
               <div className="dock-tablist" ref={list} onScroll={updateFade} onWheel={onWheel}>{temps.map(tab)}</div>
-              {fade.r && <button className="dock-scroll r" tabIndex={-1} aria-hidden title="向右滚动" onClick={() => scrollTemps(1)}><Icon name="chevronRight" size={12} /></button>}
+              {fade.r && <button className="dock-scroll r" tabIndex={-1} aria-hidden title={tr('向右滚动')} onClick={() => scrollTemps(1)}><Icon name="chevronRight" size={12} /></button>}
             </div>
           )}
         </div>
@@ -396,12 +397,12 @@ export function Dock() {
         <span className="dock-ctl" ref={ctlRef}>
           {simple && <MoreMenu mounted={mounted} open={folded ? temps.map((t) => t.id) : NONE} active={active} onPick={pick} onClose={close} />}
           {(workbench || min) && !mobile && (
-            <button className="icon-btn" title={min ? `还原${TERMS.dock} (${modKey}+Shift+J)` : `最小化 (${modKey}+Shift+J)`} onClick={() => dispatch({ t: 'dock.set', patch: { minimized: !min } })}>
+            <button className="icon-btn" title={min ? tr('还原{dock} ({modKey}+Shift+J)', { dock: TERMS.dock, modKey }) : tr('最小化 ({modKey}+Shift+J)', { modKey })} onClick={() => dispatch({ t: 'dock.set', patch: { minimized: !min } })}>
               <Icon name={min ? 'restore' : 'minimize'} size={16} />
             </button>
           )}
           {/* phone: × puts the drawer away (like a tap above it) without touching the desktop's open / closed */}
-          {!min && <button className="icon-btn" title={mobile ? '收起' : `隐藏${TERMS.dock} (${modKey}+J)`} aria-label={mobile ? '收起' : `隐藏${TERMS.dock}`} onClick={() => (mobile ? hideSheet() : dispatch({ t: 'dock.set', patch: { open: false } }))}><Icon name="close" size={15} /></button>}
+          {!min && <button className="icon-btn" title={mobile ? tr('收起') : tr('隐藏{dock} ({modKey}+J)', { dock: TERMS.dock, modKey })} aria-label={mobile ? tr('收起') : tr('隐藏{dock}', { dock: TERMS.dock })} onClick={() => (mobile ? hideSheet() : dispatch({ t: 'dock.set', patch: { open: false } }))}><Icon name="close" size={15} /></button>}
         </span>
       </div>
       <div className={clsx('dock-body', foldedFront && 'headed')}>
@@ -412,7 +413,7 @@ export function Dock() {
             <Icon name={PANEL_ICONS[active]} size={14} />
             <span className="t">{PANEL_TITLES[active]}</span>
             <span className="grow" />
-            <button className="icon-btn xs" title={`关闭${PANEL_TITLES[active]}`} aria-label={`关闭${PANEL_TITLES[active]}`} onClick={() => close(active)}><Icon name="close" size={12} /></button>
+            <button className="icon-btn xs" title={tr('关闭{v}', { v: PANEL_TITLES[active] })} aria-label={tr('关闭{v}', { v: PANEL_TITLES[active] })} onClick={() => close(active)}><Icon name="close" size={12} /></button>
           </div>
         )}
         {mounted.map((id) => (

@@ -14,6 +14,7 @@ import { rowStatus, type RowStatus } from './status';
 import type { RowId, RowMenuId } from './entries';
 import { useLongPress } from '@/ui/long-press';
 import { haptic } from '@/ui/haptics';
+import { tr } from '@/i18n';
 
 /** Sidebar-only entries of the session menu (where to open it, pin, folder); the rest is the shared SessionMenu. */
 function SidebarMenuExtra({ s, onClose }: { s: SessionSummary; onClose: () => void }) {
@@ -27,18 +28,18 @@ function SidebarMenuExtra({ s, onClose }: { s: SessionSummary; onClose: () => vo
     const g = st.layout;
     const before = g;
     st.dispatchLayout({ t: 'pane.split', paneId: (g.groups.find((x) => x.id === g.activeGroupId) ?? g.groups[0]).focusedPaneId, dir: 'row' });
-    if (useStore.getState().layout === before) return st.toast('最多 6 个分屏');
+    if (useStore.getState().layout === before) return st.toast(tr('最多 6 个分屏'));
     open ? st.openInPane(s.sessionId, 'replace') : void st.loadHistory(s.sessionId);
   };
   return (
     <>
-      <button data-id={id('open-tab')} onClick={openIn('tab')}><Icon name="board" size={14} /> 在新{TERMS.tile}打开</button>
-      <button data-id={id('open-split')} onClick={act(split)}><Icon name="splitRight" size={14} /> 在右侧{TERMS.pane}打开</button>
-      {effectiveCaps(s).resume && <button data-id={id('resume')} onClick={act(() => st.openSession({ sessionId: s.sessionId, cwd: s.cwd }).catch((e) => st.toast(e.message)))}><Icon name="play" size={14} /> 恢复运行</button>}
-      <button data-id={id('pin')} onClick={act(() => st.setSessionMeta(s.sessionId, { pinned: !meta.pinned }))}><Icon name="pin" size={14} /> {meta.pinned ? '取消置顶' : '置顶'}</button>
-      {!s.peer && <button data-id={id('explorer')} onClick={act(() => ws.request({ kind: 'shell.open', path: s.cwd }).catch((e) => useStore.getState().toast(e.message)))}><Icon name="folder" size={14} /> 在资源管理器打开</button>}
-      {!s.peer && <button data-id={id('vscode')} onClick={act(() => ws.request({ kind: 'shell.open', path: s.cwd, app: 'code' }).catch((e) => useStore.getState().toast(e.message)))}><Icon name="keyboard" size={14} /> 在 VS Code 打开</button>}
-      {open && open.state !== 'history' && <button data-id={id('stop')} onClick={act(() => st.closeSession(s.sessionId))}><Icon name="stop" size={14} /> 结束进程</button>}
+      <button data-id={id('open-tab')} onClick={openIn('tab')}><Icon name="board" size={14} /> {tr('在新{tile}打开', { tile: TERMS.tile })}</button>
+      <button data-id={id('open-split')} onClick={act(split)}><Icon name="splitRight" size={14} /> {tr('在右侧{pane}打开', { pane: TERMS.pane })}</button>
+      {effectiveCaps(s).resume && <button data-id={id('resume')} onClick={act(() => st.openSession({ sessionId: s.sessionId, cwd: s.cwd }).catch((e) => st.toast(e.message)))}><Icon name="play" size={14} /> {tr('恢复运行')}</button>}
+      <button data-id={id('pin')} onClick={act(() => st.setSessionMeta(s.sessionId, { pinned: !meta.pinned }))}><Icon name="pin" size={14} /> {meta.pinned ? tr('取消置顶') : tr('置顶')}</button>
+      {!s.peer && <button data-id={id('explorer')} onClick={act(() => ws.request({ kind: 'shell.open', path: s.cwd }).catch((e) => useStore.getState().toast(e.message)))}><Icon name="folder" size={14} /> {tr('在资源管理器打开')}</button>}
+      {!s.peer && <button data-id={id('vscode')} onClick={act(() => ws.request({ kind: 'shell.open', path: s.cwd, app: 'code' }).catch((e) => useStore.getState().toast(e.message)))}><Icon name="keyboard" size={14} /> {tr('在 VS Code 打开')}</button>}
+      {open && open.state !== 'history' && <button data-id={id('stop')} onClick={act(() => st.closeSession(s.sessionId))}><Icon name="stop" size={14} /> {tr('结束进程')}</button>}
       <div className="menu-sep" />
     </>
   );
@@ -111,9 +112,9 @@ function rowTitle(s: SessionSummary, tag: string | null, st: RowStatus, sel: boo
   const where = [s.cwd, s.gitBranch].filter(Boolean).join(' · ');
   if (where) lines.push(where);
   if (tag) lines.push(tag);
-  if (s.peer) lines.push(`在机器「${s.peer.name}」上${s.peer.offline ? '（离线，只读）' : ''}`);
+  if (s.peer) lines.push(tr('在机器「{name}」上{v}', { name: s.peer.name, v: s.peer.offline ? tr('（离线，只读）') : '' }));
   if (st.kind !== 'time') lines.push(st.title);
-  lines.push(`点击打开 · Ctrl / 中键：新${TERMS.tile} · Shift：多选 · 右键：菜单 · 可拖到${TERMS.pane}`);
+  lines.push(tr('点击打开 · Ctrl / 中键：新{tile} · Shift：多选 · 右键：菜单 · 可拖到{pane}', { tile: TERMS.tile, pane: TERMS.pane }));
   return lines.join('\n');
 }
 
@@ -171,16 +172,16 @@ export function SessionRow({ s, ctx, depth = 0, flat = false, pip = false }: { s
       title={rowTitle(s, tag, st, sel.on)}
     >
       {kids && (
-        <button className="kids-toggle" data-id={kidsId} aria-expanded={open} title={`${s.childCount} 个子对话（分叉 / 子代理）`} aria-label={open ? '收起子对话' : '展开子对话'} onClick={(e) => { e.stopPropagation(); ctx.toggleKids(id); }}>
+        <button className="kids-toggle" data-id={kidsId} aria-expanded={open} title={tr('{childCount} 个子对话（分叉 / 子代理）', { childCount: s.childCount })} aria-label={open ? tr('收起子对话') : tr('展开子对话')} onClick={(e) => { e.stopPropagation(); ctx.toggleKids(id); }}>
           <Icon name={open ? 'chevronDown' : 'chevronRight'} size={12} />
         </button>
       )}
       {sel.on && <input type="checkbox" className="sel-box" checked={checked} readOnly tabIndex={-1} aria-hidden />}
       {pip && <span className={clsx('pip', st.kind === 'error' && 'err')} />}
       <span className="t">{s.title}</span>
-      {s.peer && <span className="peer-tag" title={`在机器「${s.peer.name}」上${s.peer.offline ? '（离线）' : ''}`}>{s.peer.name}</span>}
+      {s.peer && <span className="peer-tag" title={tr('在机器「{name}」上{v}', { name: s.peer.name, v: s.peer.offline ? tr('（离线）') : '' })}>{s.peer.name}</span>}
       <StatusMark st={st} />
-      {!sel.on && <button className="more" title="更多" aria-label="更多" onClick={(e) => { e.stopPropagation(); setMenu(menu === key ? null : key); }}><Icon name="more" size={14} /></button>}
+      {!sel.on && <button className="more" title={tr('更多')} aria-label={tr('更多')} onClick={(e) => { e.stopPropagation(); setMenu(menu === key ? null : key); }}><Icon name="more" size={14} /></button>}
       {menu === key && <SessionMenu s={s} onClose={() => closeMenu(key)} extra={<SidebarMenuExtra s={s} onClose={() => closeMenu(key)} />} />}
     </div>
   );

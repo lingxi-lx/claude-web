@@ -10,6 +10,7 @@ import { HomeLists } from '@/features/home/HomeLists';
 import { DiscoveryHint } from '@/features/sidebar/hint';
 import { hintReady } from '@/features/sidebar/newcomer';
 import { SidebarReveal, usePaneEdge } from './pane-edge';
+import { tr } from '@/i18n';
 
 /**
  * The start page — an empty chat tile (spec §5.8, mock-home.png): 「今天想做点什么？」 · the composer (it creates the
@@ -34,9 +35,9 @@ export function Welcome({ paneId, tileId }: { paneId: string; tileId: string }) 
         <div className="home-col">
           <h1 className="greet"><span className="spark"><Icon name="claude" size={26} /></span>{GREETING}</h1>
           <Composer welcome target={{ paneId, tileId }} />
-          <div className="starters" role="group" aria-label="起手建议">
+          <div className="starters" role="group" aria-label={tr('起手建议')}>
             {STARTERS.map((s) => (
-              <button key={s.id} className="chip starter" data-starter={s.id} title="填进输入框（不会直接发送）" onClick={() => fillComposer({ tileId, text: s.text })}>
+              <button key={s.id} className="chip starter" data-starter={s.id} title={tr('填进输入框（不会直接发送）')} onClick={() => fillComposer({ tileId, text: s.text })}>
                 <Icon name={s.icon} size={14} />{s.label}
               </button>
             ))}

@@ -3,8 +3,9 @@
 import type { AnywhereRecent, AnywhereStatus, DeviceInfo, LinkKind } from '@shared';
 import { MAX_LIST_ENTRIES, MAX_PAIR_LINK_BYTES, isStunUrl, pairLinkBytes, type BrokerDef } from '@anywhere';
 import { agoText } from '@/features/home/model';
+import { tr } from '@/i18n';
 
-const KIND_TEXT: Record<LinkKind, string> = { 'p2p-v6': '直连 · IPv6', 'p2p-v4': '直连', relay: '慢速转发' };
+const KIND_TEXT: Record<LinkKind, string> = { 'p2p-v6': tr('直连 · IPv6'), 'p2p-v4': tr('直连'), relay: tr('慢速转发') };
 
 export function linkKindText(kind: LinkKind): string {
   return KIND_TEXT[kind] ?? kind;
@@ -12,7 +13,7 @@ export function linkKindText(kind: LinkKind): string {
 
 /** A device row's 最近一次: 「直连 · IPv6 · 3 分钟前」 / 「慢速转发 · 3 分钟前」 / 「没连上：<原因>」. */
 export function lastLinkText(e: AnywhereRecent, now = Date.now()): string {
-  if (!e.ok) return e.error ? `没连上：${e.error}` : '没连上';
+  if (!e.ok) return e.error ? tr('没连上：{error}', { error: e.error }) : tr('没连上');
   const time = agoText(e.at, now);
   return e.kind ? `${linkKindText(e.kind)} · ${time}` : time;
 }
@@ -38,14 +39,14 @@ export type LineTone = 'ok' | 'err' | 'wait' | 'off';
 /** The one line under the 在外面也能用 switch; none while remote access is off (the switch says to turn it on). */
 export function anywhereLine(o: { enabled: boolean; running: boolean; settingOn: boolean; anywhere: AnywhereStatus | undefined }): { text: string; tone: LineTone } | null {
   if (!o.enabled) return null;
-  if (!o.settingOn) return { text: '关着：手机只能在同一个 Wi-Fi 里连这台电脑', tone: 'off' };
-  if (!o.running) return { text: '远程访问没在运行，在外面也连不上', tone: 'err' };
+  if (!o.settingOn) return { text: tr('关着：手机只能在同一个 Wi-Fi 里连这台电脑'), tone: 'off' };
+  if (!o.running) return { text: tr('远程访问没在运行，在外面也连不上'), tone: 'err' };
   const a = o.anywhere;
-  if (!a?.on) return { text: '正在连接牵线服务器…', tone: 'wait' };
-  if (!a.brokers.length) return { text: '没有牵线服务器：在下面「更多选项」里添加，或恢复默认', tone: 'err' };
-  if (a.brokers.some((b) => b.ok)) return { text: '可以从外面连', tone: 'ok' };
-  if (a.brokers.every((b) => b.error)) return { text: '连不上牵线服务器，检查网络', tone: 'err' };
-  return { text: '正在连接牵线服务器…', tone: 'wait' };
+  if (!a?.on) return { text: tr('正在连接牵线服务器…'), tone: 'wait' };
+  if (!a.brokers.length) return { text: tr('没有牵线服务器：在下面「更多选项」里添加，或恢复默认'), tone: 'err' };
+  if (a.brokers.some((b) => b.ok)) return { text: tr('可以从外面连'), tone: 'ok' };
+  if (a.brokers.every((b) => b.error)) return { text: tr('连不上牵线服务器，检查网络'), tone: 'err' };
+  return { text: tr('正在连接牵线服务器…'), tone: 'wait' };
 }
 
 export interface RecentRow { key: string; who: string; link: string; time: string; why?: string }
@@ -60,10 +61,10 @@ export function recentRows(recent: readonly AnywhereRecent[] | undefined, device
     .slice(0, RECENT_MAX)
     .map((e, i) => ({
       key: `${e.at}:${i}`,
-      who: e.deviceId ? names.get(e.deviceId) ?? '已删除的设备' : '配对中',
-      link: e.kind ? linkKindText(e.kind) : e.ok ? '已连上' : '没连上',
+      who: e.deviceId ? names.get(e.deviceId) ?? tr('已删除的设备') : tr('配对中'),
+      link: e.kind ? linkKindText(e.kind) : e.ok ? tr('已连上') : tr('没连上'),
       time: agoText(e.at, now),
-      ...(e.ok ? {} : { why: e.error ?? '没连上' }),
+      ...(e.ok ? {} : { why: e.error ?? tr('没连上') }),
     }));
 }
 
@@ -84,17 +85,17 @@ export function brokerProblem(rows: readonly BrokerDraft[]): string | null {
     if (isBlank(r)) continue;
     n++;
     const name = r.name.trim();
-    if (!name) return `第 ${i + 1} 行没有名称`;
+    if (!name) return tr('第 {i} 行没有名称', { i: i + 1 });
     const url = r.url.trim();
-    if (!/^wss:\/\//i.test(url)) return `第 ${i + 1} 行的地址要以 wss:// 开头（比如 wss://broker.emqx.io:8084/mqtt）`;
-    if (!/^wss:\/\/[^\s/]+\S*$/i.test(url)) return `第 ${i + 1} 行的地址不对：wss:// 后面要紧跟服务器名，不能有空格`;
-    if (seen.has(name)) return `名称「${name}」重复了`;
+    if (!/^wss:\/\//i.test(url)) return tr('第 {i} 行的地址要以 wss:// 开头（比如 wss://broker.emqx.io:8084/mqtt）', { i: i + 1 });
+    if (!/^wss:\/\/[^\s/]+\S*$/i.test(url)) return tr('第 {i} 行的地址不对：wss:// 后面要紧跟服务器名，不能有空格', { i: i + 1 });
+    if (seen.has(name)) return tr('名称「{name}」重复了', { name });
     seen.add(name);
   }
   // the PC reads at most this many (core's lists.ts): the rest would be kept here and never used
-  if (n > MAX_LIST_ENTRIES) return `最多填 ${MAX_LIST_ENTRIES} 行`;
-  if (!n) return '至少要留一个牵线服务器';
-  if (!rows.some((r) => !isBlank(r) && r.relay)) return '至少要勾一行「用于转发」：直连打不通时，慢速转发只走勾了的服务器';
+  if (n > MAX_LIST_ENTRIES) return tr('最多填 {MAX_LIST_ENTRIES} 行', { MAX_LIST_ENTRIES });
+  if (!n) return tr('至少要留一个牵线服务器');
+  if (!rows.some((r) => !isBlank(r) && r.relay)) return tr('至少要勾一行「用于转发」：直连打不通时，慢速转发只走勾了的服务器');
   return null;
 }
 
@@ -104,11 +105,11 @@ export function brokerProblem(rows: readonly BrokerDraft[]): string | null {
  */
 export function pairLinkProblem(shellUrl: string, brokers: readonly BrokerDef[], stun: readonly string[]): string | null {
   if (pairLinkBytes(shellUrl, brokers, stun) <= MAX_PAIR_LINK_BYTES) return null;
-  return '列表太长，配对二维码装不下了：删掉几行，或换短一点的地址';
+  return tr('列表太长，配对二维码装不下了：删掉几行，或换短一点的地址');
 }
 
 /** Said when a broker or STUN list is saved or restored: phones that paired before keep the old lists until they scan again. */
-export const RESCAN_NOTE = '已经配对的手机要重新扫码，才会用新的列表';
+export const RESCAN_NOTE = tr('已经配对的手机要重新扫码，才会用新的列表');
 
 /** What is saved: trimmed, empty rows out, `relay` only when ticked. */
 export function cleanBrokers(rows: readonly BrokerDraft[]): BrokerDef[] {
@@ -128,9 +129,9 @@ export function stunProblem(rows: readonly string[]): string | null {
     const s = r.trim();
     if (!s) continue;
     n++;
-    if (!isStunUrl(s)) return `第 ${i + 1} 行要以 stun: 开头（比如 stun:stun.cloudflare.com:3478）`;
+    if (!isStunUrl(s)) return tr('第 {i} 行要以 stun: 开头（比如 stun:stun.cloudflare.com:3478）', { i: i + 1 });
   }
-  return n > MAX_LIST_ENTRIES ? `最多填 ${MAX_LIST_ENTRIES} 行` : null;
+  return n > MAX_LIST_ENTRIES ? tr('最多填 {MAX_LIST_ENTRIES} 行', { MAX_LIST_ENTRIES }) : null;
 }
 
 export function cleanStun(rows: readonly string[]): string[] {
@@ -140,14 +141,14 @@ export function cleanStun(rows: readonly string[]): string[] {
 /** The phone page's address: https:// and a folder (ends in /); the QR adds `#p=…` after it. */
 export function shellUrlProblem(s: string): string | null {
   const v = s.trim();
-  if (!/^https:\/\//i.test(v)) return '手机页面地址要以 https:// 开头';
+  if (!/^https:\/\//i.test(v)) return tr('手机页面地址要以 https:// 开头');
   let u: URL;
   try {
     u = new URL(v);
   } catch {
-    return '这不是一个能打开的网址';
+    return tr('这不是一个能打开的网址');
   }
-  if (/\s/.test(v) || u.hash || u.search || v.includes('#')) return '这不是一个能打开的网址：不要带空格、# 或 ?';
-  if (!v.endsWith('/')) return '手机页面地址要以 / 结尾';
+  if (/\s/.test(v) || u.hash || u.search || v.includes('#')) return tr('这不是一个能打开的网址：不要带空格、# 或 ?');
+  if (!v.endsWith('/')) return tr('手机页面地址要以 / 结尾');
   return null;
 }

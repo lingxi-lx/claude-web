@@ -28,6 +28,7 @@ import { withExplanation } from '@errors';
 import { Fold, onScreen, reducedMotion, useEntrance, useFold } from './Fold';
 import { stepBusy, stepState } from './step-view';
 import { COUNT_UP_MS, countAt, splitNumbers } from './count-up';
+import { tr } from '@/i18n';
 
 const EDIT_STEPS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit']);
 const NO_PENDING: PermissionRequestEvent[] = [];
@@ -52,14 +53,14 @@ function stepLabel(tools: ToolUseBlock[]): string {
     c[k] = (c[k] ?? 0) + 1;
   }
   const parts: string[] = [];
-  if (c.read) parts.push(`读取 ${c.read} 个文件`);
-  if (c.edit) parts.push(`编辑 ${c.edit} 个文件`);
-  if (c.cmd) parts.push(`运行 ${c.cmd} 条命令`);
-  if (c.web) parts.push(`搜索网页 ${c.web} 次`);
-  if (c.skill) parts.push(`调用 ${c.skill} 个 skill`);
-  if (c.mcp) parts.push(`MCP ${c.mcp} 次`);
+  if (c.read) parts.push(tr('读取 {read} 个文件', { read: c.read }));
+  if (c.edit) parts.push(tr('编辑 {edit} 个文件', { edit: c.edit }));
+  if (c.cmd) parts.push(tr('运行 {cmd} 条命令', { cmd: c.cmd }));
+  if (c.web) parts.push(tr('搜索网页 {web} 次', { web: c.web }));
+  if (c.skill) parts.push(tr('调用 {skill} 个 skill', { skill: c.skill }));
+  if (c.mcp) parts.push(tr('MCP {mcp} 次', { mcp: c.mcp }));
   const other = (c.other ?? 0) + (c.plan ?? 0) + (c.agent ?? 0);
-  if (other) parts.push(`${other} 步`);
+  if (other) parts.push(tr('{other} 步', { other }));
   return parts.join(' · ');
 }
 
@@ -104,7 +105,7 @@ function StepRow({ t, version, open, moves, onToggle }: { t: ToolUseBlock; versi
     <div className={clsx('tl', st, open && 'open', enter && 'enter')} data-step={t.id}>
       <ToolHead t={t} open={open} onToggle={onToggle} />
       <Fold open={open} animate={moves}><ToolCard t={t} version={version} bare /></Fold>
-      {!open && t.children.length > 0 && <button className="tl-sub" onClick={() => onToggle('pointer')}>子代理 {t.children.length} 条消息</button>}
+      {!open && t.children.length > 0 && <button className="tl-sub" onClick={() => onToggle('pointer')}>{tr('子代理 {childrenCount} 条消息', { childrenCount: t.children.length })}</button>}
     </div>
   );
 }
@@ -157,8 +158,8 @@ function Steps({ tools, version }: { tools: ToolUseBlock[]; version: number }) {
       {tools.length > 1 && (
         <div className="tl-foot">
           <span className="lbl">{stepLabel(tools)}</span>
-          {failed && <span className="badge err">失败</span>}
-          <button className="tl-all" onClick={(e) => { moves.current = e.detail > 0; setAll(!all); setOpened({}); if (!all) touch?.(); }}>{all ? '全部收起' : '全部展开'}</button>
+          {failed && <span className="badge err">{tr('失败')}</span>}
+          <button className="tl-all" onClick={(e) => { moves.current = e.detail > 0; setAll(!all); setOpened({}); if (!all) touch?.(); }}>{all ? tr('全部收起') : tr('全部展开')}</button>
         </div>
       )}
     </div>
@@ -180,12 +181,12 @@ function Thinking({ b, streaming }: { b: ThinkingBlock; streaming: boolean }) {
   if (!text && !streaming && !b.redacted) return null;
   const show = open ?? (mode === 'expanded');
   const toggle = (by: ToggleBy) => { moves.current = by === 'pointer'; setOpen(!show); if (!show) touch?.(); };
-  const label = b.redacted ? '思考内容已隐藏（redacted）' : streaming ? '思考中' : b.ms !== undefined ? `思考了 ${fmtDuration(b.ms)}` : text.length > 1200 ? '深入思考了一会儿' : '思考了一下';
-  const size = text ? (text.length > 1000 ? `${(text.length / 1000).toFixed(1)}K 字` : `${text.length} 字`) : '';
+  const label = b.redacted ? tr('思考内容已隐藏（redacted）') : streaming ? tr('思考中') : b.ms !== undefined ? tr('思考了 {fmtDuration}', { fmtDuration: fmtDuration(b.ms) }) : text.length > 1200 ? tr('深入思考了一会儿') : tr('思考了一下');
+  const size = text ? (text.length > 1000 ? tr('{textCount}K 字', { textCount: (text.length / 1000).toFixed(1) }) : tr('{textCount} 字', { textCount: text.length })) : '';
   return (
     <div className={clsx('trail thinking', streaming && 'running')}>
       <div className={clsx('tl', streaming ? 'active' : 'done', show && 'open')}>
-        <div className="tl-head" onClick={(e) => toggle(e.detail === 0 ? 'key' : 'pointer')} role="button" tabIndex={0} aria-expanded={show} title={size ? `思考内容 ${size}` : undefined} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle('key'); } }}>
+        <div className="tl-head" onClick={(e) => toggle(e.detail === 0 ? 'key' : 'pointer')} role="button" tabIndex={0} aria-expanded={show} title={size ? tr('思考内容 {size}', { size }) : undefined} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle('key'); } }}>
           <span className={clsx('sgw', streaming ? 'active' : 'done')} aria-hidden>{streaming ? <span className="spin" /> : <Icon name="memory" size={16} />}</span>
           <span className={clsx('lbl', streaming && 'shimmer')}>{label}</span>
           {!b.redacted && <Icon name="chevronRight" size={13} className="chev" />}
@@ -250,7 +251,7 @@ const AGENT_NAMES: Record<string, string> = { codex: 'Codex', claude: 'Claude Co
 export function SessionRefChip({ a, onRemove }: { a: Attachment; onRemove?: () => void }) {
   const exists = useStore((s) => !!a.sessionId && s.sessions.some((x) => x.sessionId === a.sessionId));
   const bad = !exists || !!a.error;
-  const title = !exists ? '这个对话已不存在' : a.error ? a.error : `引用的对话：${a.name}（点击打开）`;
+  const title = !exists ? tr('这个对话已不存在') : a.error ? a.error : tr('引用的对话：{name}（点击打开）', { name: a.name });
   const open = () => {
     if (!exists || !a.sessionId) return;
     const st = useStore.getState();
@@ -260,7 +261,7 @@ export function SessionRefChip({ a, onRemove }: { a: Attachment; onRemove?: () =
     <span className={clsx('att-chip ref', bad && 'bad')} title={title} onClick={open} role={exists ? 'button' : undefined}>
       <span className="ic"><Icon name="quote" size={12} /></span>
       {a.name}
-      {onRemove && <button aria-label="移除引用" onClick={(e) => { e.stopPropagation(); onRemove(); }}><Icon name="close" size={10} /></button>}
+      {onRemove && <button aria-label={tr('移除引用')} onClick={(e) => { e.stopPropagation(); onRemove(); }}><Icon name="close" size={10} /></button>}
     </span>
   );
 }
@@ -299,8 +300,8 @@ function UserRow({ it, version }: { it: UserItem; version: number }) {
 function resultStats(r: ResultItem): { text: string; title?: string }[] {
   return [
     { text: fmtMs(r.durationMs) },
-    { text: `${r.numTurns} 步` },
-    { text: fmtCost(r.costUsd, r.costUnknown), title: r.costUnknown ? '这个模型 / agent 没有可靠的价格（ccb 按 Claude 价表估的数不作数）' : undefined },
+    { text: tr('{numTurns} 步', { numTurns: r.numTurns }) },
+    { text: fmtCost(r.costUsd, r.costUnknown), title: r.costUnknown ? tr('这个模型 / agent 没有可靠的价格（ccb 按 Claude 价表估的数不作数）') : undefined },
     ...usageParts(r.usage, fmtTok),
   ];
 }
@@ -344,7 +345,7 @@ export function ItemList({ items, version, actions = 'all' }: { items: Item[]; v
           case 'result':
             return (
               <div key={it.id} className={clsx('result-line', it.isError && 'err')} data-item-id={it.id}>
-                {it.isError && <span title={it.text}>{it.errorKind ? ERROR_LABEL[it.errorKind] : '错误'}: {(it.text ?? '').slice(0, 200)}</span>}
+                {it.isError && <span title={it.text}>{it.errorKind ? ERROR_LABEL[it.errorKind] : tr('错误')}: {(it.text ?? '').slice(0, 200)}</span>}
                 {resultStats(it).map((x, i) => <span key={i} title={x.title}>{x.text}</span>)}
               </div>
             );
@@ -379,20 +380,20 @@ function ChangesCard({ rows, sessionId, cwd }: { rows: FileChange[]; sessionId: 
     <div className="fcard" data-files={rows.length}>
       <div className="fcard-h">
         <Icon name="diff" size={14} />
-        <span className="t">改动了 {rows.length} 个文件</span>
+        <span className="t">{tr('改动了 {rowsCount} 个文件', { rowsCount: rows.length })}</span>
         <span className="n"><span className="add">+{added}</span> <span className="del">−{removed}</span></span>
-        <button className="btn sm primary" onClick={() => open()} title="在右侧审阅这个对话改过的文件">审阅</button>
+        <button className="btn sm primary" onClick={() => open()} title={tr('在右侧审阅这个对话改过的文件')}>{tr('审阅')}</button>
       </div>
       {rows.slice(0, CARD_ROWS).map((r) => {
         const p = displayPath(r.path, cwd);
         return (
-          <button key={r.path} className="fcard-f" onClick={() => open(r.path)} title={`${r.path}\n点击审阅这个文件的改动`} data-path={r.path}>
+          <button key={r.path} className="fcard-f" onClick={() => open(r.path)} title={tr("{path}\n点击审阅这个文件的改动", { path: r.path })} data-path={r.path}>
             <span className="p"><span className="d">{p.dir}</span><span className="f">{p.name}</span></span>
             <span className="n"><span className="add">+{r.added}</span> <span className="del">−{r.removed}</span></span>
           </button>
         );
       })}
-      {rows.length > CARD_ROWS && <button className="fcard-f more" onClick={() => open()}>还有 {rows.length - CARD_ROWS} 个文件…</button>}
+      {rows.length > CARD_ROWS && <button className="fcard-f more" onClick={() => open()}>{tr('还有 {rowsCount} 个文件…', { rowsCount: rows.length - CARD_ROWS })}</button>}
     </div>
   );
 }
@@ -498,7 +499,7 @@ function TurnView({ turn, last, live, version, sessionId, cwd }: { turn: Turn; l
       {fold && summary && (
         <div className={clsx('turn-sum-row', ended && 'just')} data-item-id={parts.process[0]?.id}>
           {/* a click made by the keyboard (detail 0) folds at once */}
-          <button className="turn-sum" aria-expanded={open} onClick={(e) => setOpen(!open, e.detail > 0)} title={`${open ? '收起' : '展开'}这一轮的步骤${turn.result ? `\n${resultStats(turn.result).map((x) => x.text).join(' · ')}` : ''}`}>
+          <button className="turn-sum" aria-expanded={open} onClick={(e) => setOpen(!open, e.detail > 0)} title={tr('{v}这一轮的步骤{v2}', { v: open ? tr('收起') : tr('展开'), v2: turn.result ? `\n${resultStats(turn.result).map((x) => x.text).join(' · ')}` : '' })}>
             <Icon name="chevronRight" size={13} className="chev" />
             <SumLine parts={turnSummaryParts(summary)} play={ended} />
           </button>
@@ -620,22 +621,22 @@ export function ChatView() {
   return (
     <div className="chat" ref={ref} onScroll={onScroll}>
       <FindBar open={find} onClose={() => setFind(false)} root={() => ref.current} />
-      {!atBottom && <button className="jump-bottom" title="回到底部" onClick={() => { const el = ref.current!; el.scrollTop = el.scrollHeight; stick.current = true; }} aria-label="回到底部"><Icon name="chevronDown" size={16} /></button>}
+      {!atBottom && <button className="jump-bottom" title={tr('回到底部')} onClick={() => { const el = ref.current!; el.scrollTop = el.scrollHeight; stick.current = true; }} aria-label={tr('回到底部')}><Icon name="chevronDown" size={16} /></button>}
       <div className="chat-inner" data-session-id={active.sessionId}>
-        {active.loading && <div className="sysline"><span className="spinner" /> 加载历史…</div>}
+        {active.loading && <div className="sysline"><span className="spinner" /> {tr('加载历史…')}</div>}
         {active.loadError && !active.loading && (
           <div className="load-err" role="alert">
             <Icon name="alert" size={14} />
-            <span className="why">加载历史失败：{active.loadError}</span>
-            <button className="btn sm" onClick={() => void useStore.getState().loadHistory(sid, { focus: false })}><Icon name="refresh" size={12} /> 重试</button>
+            <span className="why">{tr('加载历史失败：{loadError}', { loadError: active.loadError })}</span>
+            <button className="btn sm" onClick={() => void useStore.getState().loadHistory(sid, { focus: false })}><Icon name="refresh" size={12} /> {tr('重试')}</button>
           </div>
         )}
         {active.historyCursor && !active.loading && (
           <div className="older-row">
             {older.error ? (
-              <span className="load-err inline" role="alert"><span className="why">加载更早的记录失败：{older.error}</span><button className="btn sm" onClick={loadOlder}><Icon name="refresh" size={12} /> 重试</button></span>
+              <span className="load-err inline" role="alert"><span className="why">{tr('加载更早的记录失败：{error}', { error: older.error })}</span><button className="btn sm" onClick={loadOlder}><Icon name="refresh" size={12} /> {tr('重试')}</button></span>
             ) : (
-              <button className="btn sm ghost" disabled={older.busy} onClick={loadOlder}>{older.busy ? <span className="spinner" /> : <Icon name="chevronDown" size={12} className="flip" />} 加载更早的记录</button>
+              <button className="btn sm ghost" disabled={older.busy} onClick={loadOlder}>{older.busy ? <span className="spinner" /> : <Icon name="chevronDown" size={12} className="flip" />} {tr('加载更早的记录')}</button>
             )}
           </div>
         )}
@@ -649,17 +650,17 @@ export function ChatView() {
         {active.error && <div className="sysline" role="alert" style={{ color: 'var(--red)', whiteSpace: 'pre-line', userSelect: 'text' }}>{withExplanation(active.error)}</div>}
         {active.state === 'running' && !active.conv.streaming.size && (
           <div className="working">
-            <span className="spinner" /> 处理中
+            <span className="spinner" /> {tr('处理中')}
           </div>
         )}
         {(elsewhere || (readsFromOutside(active) && externalLive(active))) && (
           <div className="working elsewhere" data-elsewhere={elsewhere?.agent ?? ''}>
-            <span className="spinner" /> {elsewhere ? `这一轮还在 ${AGENT_NAMES[elsewhere.agent] ?? '别的应用'} 里进行，做完会自动显示在这里` : '这个对话正在别处更新（终端或其它应用），这里会跟着显示'}
+            <span className="spinner" /> {elsewhere ? tr('这一轮还在 {v} 里进行，做完会自动显示在这里', { v: AGENT_NAMES[elsewhere.agent] ?? tr('别的应用') }) : tr('这个对话正在别处更新（终端或其它应用），这里会跟着显示')}
           </div>
         )}
         {active.state === 'starting' && (
           <div className="working">
-            <span className="spinner" /> 正在启动 Claude Code…
+            <span className="spinner" /> {tr('正在启动 Claude Code…')}
           </div>
         )}
       </div>

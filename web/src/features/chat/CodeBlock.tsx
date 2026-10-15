@@ -5,6 +5,7 @@ import { Icon } from '@/ui/icons';
 import { ws } from '@/ws/client';
 import { desktop } from '@/desktop';
 import { BLANK_CHECK_MS, BLANK_REPORTS_MAX, blankMessage, blankProblem, browserOf, nextStep, type BlankFix, type BlankInfo, type BlankProblem, type CodeProbe } from './code-blank';
+import { tr } from '@/i18n';
 
 const MermaidBlock = lazy(() => import('./MermaidBlock'));
 
@@ -46,8 +47,8 @@ function intruders(pre: HTMLPreElement): Pick<BlankInfo, 'translated' | 'foreign
     for (const a of Array.from(el.attributes)) if (a.name !== 'class') attrs.add(a.name);
   }
   const html = document.documentElement;
-  const translated = /\btranslated-(?:ltr|rtl)\b/.test(html.className) ? 'Google 翻译'
-    : html.hasAttribute('_msthash') || attrs.has('_msthash') || attrs.has('_msttexthash') ? '微软翻译'
+  const translated = /\btranslated-(?:ltr|rtl)\b/.test(html.className) ? tr('Google 翻译')
+    : html.hasAttribute('_msthash') || attrs.has('_msthash') || attrs.has('_msttexthash') ? tr('微软翻译')
     : null;
   return { translated, foreignTags: [...tags], foreignAttrs: [...attrs] };
 }
@@ -58,7 +59,7 @@ function reportBlank(info: BlankInfo) {
   const message = blankMessage(info);
   // eslint-disable-next-line no-console
   console.warn(`[code block] ${message}`);
-  ws.request({ kind: 'client.log', level: 'warn', area: '代码块', message, url: location.pathname }).catch(() => {});
+  ws.request({ kind: 'client.log', level: 'warn', area: tr('代码块'), message, url: location.pathname }).catch(() => {});
 }
 
 export interface CodeBlockProps {
@@ -145,11 +146,11 @@ export const CodeBlock = memo(function CodeBlock({ code, lang, title, startLine 
     <div className={clsx('code', wrap && 'wrap', className)}>
       <div className="code-head">
         <span className="code-lang" title={title}>{label}</span>
-        <span className="code-meta">{lines.length} 行{text.length > 2000 ? ` · ${(text.length / 1024).toFixed(1)} KB` : ''}</span>
+        <span className="code-meta">{tr('{linesCount} 行{v}', { linesCount: lines.length, v: text.length > 2000 ? ` · ${(text.length / 1024).toFixed(1)} KB` : '' })}</span>
         <span className="grow" />
-        {!isMermaid && <button className={clsx('code-btn', wrap && 'on')} title="自动换行" onClick={() => setWrap(!wrap)} aria-label="自动换行" aria-pressed={wrap}><Icon name="refresh" size={14} /></button>}
+        {!isMermaid && <button className={clsx('code-btn', wrap && 'on')} title={tr('自动换行')} onClick={() => setWrap(!wrap)} aria-label={tr('自动换行')} aria-pressed={wrap}><Icon name="refresh" size={14} /></button>}
         {/* the icon turns into a check for a moment (keyed: the check is a new node, so it pops in) */}
-        <button className={clsx('code-btn', ok && 'ok')} title={ok ? '已复制' : '复制'} aria-label={ok ? '已复制' : '复制'} onClick={() => copy(text)}><Icon key={ok ? 'ok' : 'copy'} name={ok ? 'check' : 'copy'} size={14} className={ok ? 'pop' : undefined} /></button>
+        <button className={clsx('code-btn', ok && 'ok')} title={ok ? tr('已复制') : tr('复制')} aria-label={ok ? tr('已复制') : tr('复制')} onClick={() => copy(text)}><Icon key={ok ? 'ok' : 'copy'} name={ok ? 'check' : 'copy'} size={14} className={ok ? 'pop' : undefined} /></button>
       </div>
       {isMermaid && !streaming ? (
         <Suspense fallback={<pre className="code-body">{text}</pre>}>
@@ -177,7 +178,7 @@ export const CodeBlock = memo(function CodeBlock({ code, lang, title, startLine 
       )}
       {(truncated || footer) && (
         <div className="code-foot">
-          {truncated && <button className="link" onClick={() => setAll(true)}>全部显示（{text.length} 字符，{lines.length} 行）</button>}
+          {truncated && <button className="link" onClick={() => setAll(true)}>{tr('全部显示（{textCount} 字符，{linesCount} 行）', { textCount: text.length, linesCount: lines.length })}</button>}
           {footer}
         </div>
       )}

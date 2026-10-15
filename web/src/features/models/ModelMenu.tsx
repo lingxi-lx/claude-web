@@ -15,11 +15,12 @@ import { useMenuClaim } from '@/ui/menus';
 import { imeComposing } from '@/ui/ime';
 import { useMenuMotion } from '@/ui/menu-motion';
 import { ActionSheet, useSheetMenu } from '@/ui/ActionSheet';
+import { tr } from '@/i18n';
 
 /** `5 分钟前` / `刚刚` / a date */
 export function agoText(t: number): string {
   const a = ago(t);
-  return /^\d+ (分钟|小时|天)$/.test(a) ? `${a}前` : a;
+  return /^\d+ (分钟|小时|天)$/.test(a) ? tr('{a}前', { a }) : a;
 }
 
 export interface ModelMenuProps {
@@ -198,18 +199,18 @@ export function ModelMenu(p: ModelMenuProps) {
   const portal = !!p.anchor;
   if (portal && !pos && !sheet) return null; // measured in the layout effect before the first paint
   const body = (
-    <div ref={box} className={clsx('menu mm', portal ? 'fixed' : [p.placement === 'down' ? 'down' : 'up', p.align === 'left' ? 'left' : 'right'].join(' '))} style={pos ?? undefined} role="dialog" aria-label={sub ? '子代理用的模型' : '选择模型'} onKeyDown={onKey} {...motion}>
+    <div ref={box} className={clsx('menu mm', portal ? 'fixed' : [p.placement === 'down' ? 'down' : 'up', p.align === 'left' ? 'left' : 'right'].join(' '))} style={pos ?? undefined} role="dialog" aria-label={sub ? tr('子代理用的模型') : tr('选择模型')} onKeyDown={onKey} {...motion}>
       <div className="mm-search">
         <Icon name="search" size={13} />
-        <input ref={input} value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索模型或供应商…" aria-label="搜索模型" role="combobox" aria-expanded aria-controls="mm-list" aria-activedescendant={flat[active] ? `mm-opt-${active}` : undefined} />
-        {q && <button className="icon-btn xs" aria-label="清除" onClick={() => { setQ(''); input.current?.focus(); }}><Icon name="close" size={11} /></button>}
+        <input ref={input} value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr('搜索模型或供应商…')} aria-label={tr('搜索模型')} role="combobox" aria-expanded aria-controls="mm-list" aria-activedescendant={flat[active] ? `mm-opt-${active}` : undefined} />
+        {q && <button className="icon-btn xs" aria-label={tr('清除')} onClick={() => { setQ(''); input.current?.focus(); }}><Icon name="close" size={11} /></button>}
       </div>
       {p.lockProvider && p.lockNote && <div className="mm-note">{p.lockNote}</div>}
       <div ref={list} className="mm-list" id="mm-list" role="listbox">
         {p.subagent && !q && (
-          <div role="option" aria-selected={false} data-id={SUBAGENT_MENU_ID.same} className={clsx('mm-row', 'mm-same', p.subagent.same && 'cur')} onClick={() => { p.onClose(); p.subagent!.onSame(); }} title="子代理和主对话用同一个模型（Claude Code 的默认做法）">
+          <div role="option" aria-selected={false} data-id={SUBAGENT_MENU_ID.same} className={clsx('mm-row', 'mm-same', p.subagent.same && 'cur')} onClick={() => { p.onClose(); p.subagent!.onSame(); }} title={tr('子代理和主对话用同一个模型（Claude Code 的默认做法）')}>
             <span className="mm-check">{p.subagent.same && <Icon name="check" size={12} />}</span>
-            <span className="mm-label"><span className="m">跟主模型一样</span></span>
+            <span className="mm-label"><span className="m">{tr('跟主模型一样')}</span></span>
           </div>
         )}
         {shown.sections.map((s, si) => (
@@ -220,8 +221,8 @@ export function ModelMenu(p: ModelMenuProps) {
               <span className="t">{s.title}</span>
               {s.providerType && <span className="ty">{s.providerType}</span>}
               {s.unavailable && <span className="err off" title={s.unavailable}>{s.unavailable}</span>}
-              {s.kind === 'provider' && !s.error && !s.unavailable && <span className="meta">{s.count ? `${s.count} 个模型` : '未拉取'}{s.modelsAt ? ` · ${agoText(s.modelsAt)}` : ''}</span>}
-              {s.error && !s.unavailable && <span className="err" title={s.error}>拉取失败：{s.error}</span>}
+              {s.kind === 'provider' && !s.error && !s.unavailable && <span className="meta">{s.count ? tr('{count} 个模型', { count: s.count }) : tr('未拉取')}{s.modelsAt ? ` · ${agoText(s.modelsAt)}` : ''}</span>}
+              {s.error && !s.unavailable && <span className="err" title={s.error}>{tr('拉取失败：{error}', { error: s.error })}</span>}
             </div>
             {s.items.map((it) => {
               const own = it.providerId === 'claude' || sub;
@@ -242,10 +243,10 @@ export function ModelMenu(p: ModelMenuProps) {
                     {!own && <span className="p">{it.providerName} / </span>}
                     <span className="m">{it.display}</span>
                   </span>
-                  {it.profileDefault && !sub && <span className="badge">默认</span>}
+                  {it.profileDefault && !sub && <span className="badge">{tr('默认')}</span>}
                   {it.hint && <span className="mm-hint">{it.hint}</span>}
                   {!it.isDefault && !it.agent && !sub && (
-                    <button className={clsx('mm-star', it.favorite && 'on')} aria-label={it.favorite ? '取消收藏' : '收藏'} title={it.favorite ? '取消收藏' : '收藏（置顶）'} onClick={(e) => { e.stopPropagation(); toggleFav(it); }}>
+                    <button className={clsx('mm-star', it.favorite && 'on')} aria-label={it.favorite ? tr('取消收藏') : tr('收藏')} title={it.favorite ? tr('取消收藏') : tr('收藏（置顶）')} onClick={(e) => { e.stopPropagation(); toggleFav(it); }}>
                       <Icon name="star" size={12} />
                     </button>
                   )}
@@ -254,32 +255,32 @@ export function ModelMenu(p: ModelMenuProps) {
             })}
           </div>
         ))}
-        {!flat.length && <div className="mm-empty">{q ? `没有匹配「${q}」的模型` : '没有可选的模型'}</div>}
+        {!flat.length && <div className="mm-empty">{q ? tr('没有匹配「{q}」的模型', { q }) : tr('没有可选的模型')}</div>}
         {!q && !p.lockProvider && (
-          <button type="button" className="mm-add" data-id={MODEL_MENU_ID.addProvider} onClick={() => { p.onClose(); useStore.getState().openSettings({ section: 'providers' }); }} title="加一个中转 / 自己的 API key（Anthropic、OpenAI、Gemini、Grok 兼容）">
-            <Icon name="plus" size={12} /> 添加供应商…
+          <button type="button" className="mm-add" data-id={MODEL_MENU_ID.addProvider} onClick={() => { p.onClose(); useStore.getState().openSettings({ section: 'providers' }); }} title={tr('加一个中转 / 自己的 API key（Anthropic、OpenAI、Gemini、Grok 兼容）')}>
+            <Icon name="plus" size={12} /> {tr('添加供应商…')}
           </button>
         )}
       </div>
       {p.subagent && (
-        <label className="mm-subdef" data-id={SUBAGENT_MENU_ID.default} title="在这个供应商上新开的对话（也包括 IM、定时任务）的子代理都用这里选的">
+        <label className="mm-subdef" data-id={SUBAGENT_MENU_ID.default} title={tr('在这个供应商上新开的对话（也包括 IM、定时任务）的子代理都用这里选的')}>
           <input type="checkbox" checked={p.subagent.isDefault} disabled={p.subagent.same && p.subagent.isDefault} onChange={() => p.subagent!.onToggleDefault()} />
-          <span>这个供应商的新对话都这样</span>
+          <span>{tr('这个供应商的新对话都这样')}</span>
         </label>
       )}
       <div className="mm-foot">
-        <button data-id={MODEL_MENU_ID.refresh} onClick={() => void refreshAllModels()} disabled={refresh.running} title="拉取每个供应商的模型列表（/v1/models，只列模型，不花 token）">
+        <button data-id={MODEL_MENU_ID.refresh} onClick={() => void refreshAllModels()} disabled={refresh.running} title={tr('拉取每个供应商的模型列表（/v1/models，只列模型，不花 token）')}>
           {refresh.running ? <span className="spinner" /> : <Icon name="refresh" size={13} />}
-          {refresh.running ? `刷新中 ${refresh.done}/${refresh.total}` : '刷新全部模型'}
+          {refresh.running ? tr('刷新中 {done}/{total}', { done: refresh.done, total: refresh.total }) : tr('刷新全部模型')}
         </button>
         <span className="grow" />
         {p.otherAgents && !p.lockProvider && (
-          <button data-id={MODEL_MENU_ID.agents} onClick={() => { p.onClose(); useStore.getState().openSettings({ section: 'agents' }); }} title="安装、登录、配置 Codex / Gemini CLI 等其它 Agent">
+          <button data-id={MODEL_MENU_ID.agents} onClick={() => { p.onClose(); useStore.getState().openSettings({ section: 'agents' }); }} title={tr('安装、登录、配置 Codex / Gemini CLI 等其它 Agent')}>
             <Icon name="agent" size={13} /> {TERMS.agents}…
           </button>
         )}
         <button data-id={MODEL_MENU_ID.manage} onClick={() => { p.onClose(); useStore.getState().openSettings({ section: 'models' }); }}>
-          <Icon name="settings" size={13} /> 管理模型与供应商…
+          <Icon name="settings" size={13} /> {tr('管理模型与供应商…')}
         </button>
       </div>
     </div>
@@ -298,13 +299,13 @@ export function ModelChip(p: Omit<ModelMenuProps, 'onClose'> & { label: string; 
   const { label, title, busy, disabled, ...menu } = p;
   return (
     <span ref={anchor} className="mm-anchor">
-      <button type="button" className={clsx('chip', open && 'active')} title={title ?? label} disabled={disabled} aria-label={`模型：${label}`} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+      <button type="button" className={clsx('chip', open && 'active')} title={title ?? label} disabled={disabled} aria-label={tr('模型：{label}', { label })} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         {busy && <span className="spinner" />}
         <span className="mm-chip-label">{label}</span>
         <span className="caret"><Icon name="chevronDown" size={10} /></span>
       </button>
       {open && (
-        <ErrorBoundary area="模型菜单" compact onReset={() => setOpen(false)}>
+        <ErrorBoundary area={tr('模型菜单')} compact onReset={() => setOpen(false)}>
           <ModelMenu {...menu} anchor={anchor} onClose={() => setOpen(false)} />
         </ErrorBoundary>
       )}

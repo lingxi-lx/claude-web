@@ -12,15 +12,16 @@ import { Orphans } from './Orphans';
 import { EMPTY } from '@/ui/terms';
 import { EmptyState } from '@/ui/EmptyState';
 import './orchestra.css';
+import { tr } from '@/i18n';
 
 type View = { kind: 'none' } | { kind: 'edit'; draft: WorkflowDraft; key: number } | { kind: 'run'; runId: string };
 
 /** Ask for the run input, start it, return the run (or null when cancelled / failed). */
 export async function startWorkflow(w: Workflow): Promise<OrchRun | null> {
   const usesInput = w.nodes.some((n) => n.kind !== 'approval' && n.prompt.includes('{{input}}'));
-  const input = usesInput ? await dlg.prompt(`运行「${w.name}」`, '', { message: '这段文字会填进提示词里的 {{input}}。', multiline: true, placeholder: '要做的事 / bug 描述 / 需求…', okLabel: '开始' }) : ((await dlg.confirm(`运行「${w.name}」？`, { okLabel: '开始' })) ? '' : null);
+  const input = usesInput ? await dlg.prompt(tr('运行「{name}」', { name: w.name }), '', { message: tr('这段文字会填进提示词里的 {{input}}。'), multiline: true, placeholder: tr('要做的事 / bug 描述 / 需求…'), okLabel: tr('开始') }) : ((await dlg.confirm(tr('运行「{name}」？', { name: w.name }), { okLabel: tr('开始') })) ? '' : null);
   if (input === null) return null;
-  try { return await ws.request<OrchRun>({ kind: 'orchestra.run.start', workflowId: w.id, input }); } catch (e: any) { await dlg.alert('没能启动', { message: e.message }); return null; }
+  try { return await ws.request<OrchRun>({ kind: 'orchestra.run.start', workflowId: w.id, input }); } catch (e: any) { await dlg.alert(tr('没能启动'), { message: e.message }); return null; }
 }
 
 /**
@@ -40,7 +41,7 @@ export function OrchestraPanel({ newSignal = 0, page = false }: { newSignal?: nu
   const [hint, setHint] = useState(false);
   const defaultCwd = activeCwd ?? workspaces[0]?.path ?? '';
 
-  const newDraft = (t?: WorkflowTemplate): WorkflowDraft => ({ name: t?.name ?? '新编排', description: t?.description, cwd: defaultCwd, nodes: t ? structuredClone(t.nodes) : [] });
+  const newDraft = (t?: WorkflowTemplate): WorkflowDraft => ({ name: t?.name ?? tr('新编排'), description: t?.description, cwd: defaultCwd, nodes: t ? structuredClone(t.nodes) : [] });
   const edit = (draft: WorkflowDraft) => setView({ kind: 'edit', draft, key: Date.now() });
   const run = async (w: Workflow) => { const r = await startWorkflow(w); if (r) { useOrch.setState((s) => ({ full: { ...s.full, [r.id]: r } })); setView({ kind: 'run', runId: r.id }); } };
 
@@ -58,29 +59,29 @@ export function OrchestraPanel({ newSignal = 0, page = false }: { newSignal?: nu
     <div className="orch">
       <div className="orch-side">
         <div className="orch-side-h">
-          <b>工作流</b>
+          <b>{tr('工作流')}</b>
           <span className="grow" />
-          <select className="field tpl" value="" onChange={(e) => { const t = templates.find((x) => x.id === e.target.value); if (t) edit(newDraft(t)); }} title="从内置模板新建">
-            <option value="">模板…</option>
+          <select className="field tpl" value="" onChange={(e) => { const t = templates.find((x) => x.id === e.target.value); if (t) edit(newDraft(t)); }} title={tr('从内置模板新建')}>
+            <option value="">{tr('模板…')}</option>
             {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
-          {!page && <button className="icon-btn xs" title="新建工作流" aria-label="新建工作流" onClick={() => edit(newDraft())}><Icon name="plus" size={13} /></button>}
+          {!page && <button className="icon-btn xs" title={tr('新建工作流')} aria-label={tr('新建工作流')} onClick={() => edit(newDraft())}><Icon name="plus" size={13} /></button>}
         </div>
-        {hint && <div className="orch-hint">选一个工作流，点 <Icon name="play" size={11} /> 运行</div>}
+        {hint && <div className="orch-hint">{tr('选一个工作流，点')} <Icon name="play" size={11} /> {tr('运行')}</div>}
         <div className="orch-list">
           {workflows.map((w) => (
             <div key={w.id} className={clsx('orch-row', view.kind === 'edit' && view.draft.id === w.id && 'sel')} onClick={() => edit(structuredClone(w))}>
               <div className="grow">
                 <div className="t">{w.name}</div>
-                <div className="s">{w.nodes.length} 个节点 · {basename(w.cwd)}</div>
+                <div className="s">{tr('{nodesCount} 个节点 · {basename}', { nodesCount: w.nodes.length, basename: basename(w.cwd) })}</div>
               </div>
-              <button className="icon-btn xs" title="运行" aria-label={`运行 ${w.name}`} onClick={(e) => { e.stopPropagation(); setHint(false); void run(w); }}><Icon name="play" size={12} /></button>
-              <button className="icon-btn xs" title="删除" aria-label={`删除 ${w.name}`} onClick={async (e) => { e.stopPropagation(); if (await dlg.confirm(`删除工作流「${w.name}」？`, { message: '运行记录保留。', danger: true, okLabel: '删除' })) { await ws.request({ kind: 'orchestra.workflows.remove', id: w.id }).catch(() => {}); if (view.kind === 'edit' && view.draft.id === w.id) setView({ kind: 'none' }); } }}><Icon name="trash" size={12} /></button>
+              <button className="icon-btn xs" title={tr('运行')} aria-label={tr('运行 {name}', { name: w.name })} onClick={(e) => { e.stopPropagation(); setHint(false); void run(w); }}><Icon name="play" size={12} /></button>
+              <button className="icon-btn xs" title={tr('删除')} aria-label={tr('删除 {name}', { name: w.name })} onClick={async (e) => { e.stopPropagation(); if (await dlg.confirm(tr('删除工作流「{name}」？', { name: w.name }), { message: tr('运行记录保留。'), danger: true, okLabel: tr('删除') })) { await ws.request({ kind: 'orchestra.workflows.remove', id: w.id }).catch(() => {}); if (view.kind === 'edit' && view.draft.id === w.id) setView({ kind: 'none' }); } }}><Icon name="trash" size={12} /></button>
             </div>
           ))}
           {!workflows.length && <EmptyState e={EMPTY.workflows} className="orch-empty sm" />}
         </div>
-        <div className="orch-side-h"><b>运行记录</b><span className="grow" /><span className="muted">{runs.length}</span></div>
+        <div className="orch-side-h"><b>{tr('运行记录')}</b><span className="grow" /><span className="muted">{runs.length}</span></div>
         <div className="orch-list runs">
           {runs.map((r) => (
             <div key={r.id} className={clsx('orch-row', view.kind === 'run' && view.runId === r.id && 'sel')} onClick={() => setView({ kind: 'run', runId: r.id })}>
@@ -89,7 +90,7 @@ export function OrchestraPanel({ newSignal = 0, page = false }: { newSignal?: nu
                 <div className="t">{r.name}</div>
                 <div className="s">{RUN_L[r.state]} · {r.done}/{r.total} · {ago(r.startedAt)}</div>
               </div>
-              {r.waiting > 0 && <span className="badge run">{r.waiting} 等你</span>}
+              {r.waiting > 0 && <span className="badge run">{tr('{waiting} 等你', { waiting: r.waiting })}</span>}
             </div>
           ))}
           {!runs.length && <EmptyState e={EMPTY.orchestraRuns} className="orch-empty sm" />}

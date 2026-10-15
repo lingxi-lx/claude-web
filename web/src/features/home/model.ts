@@ -8,21 +8,22 @@ import { rowStatus } from '@/features/sidebar/status';
 import { basename } from '@/util';
 import { projectFor } from '@/features/paths';
 import { nextRunText, scheduleText } from '@/features/automation/schedule-text';
+import { tr, dateLocale } from '@/i18n';
 
 // ---------------------------------------------------------------------------------------------------- greeting
 
 /** The one line over the composer. It is set in the heading face, so ui/heading-text.ts lists it. */
-export const GREETING = '今天想做点什么？';
+export const GREETING = tr('今天想做点什么？');
 
 // ---------------------------------------------------------------------------------------------------- starters
 
 export interface Starter { id: string; icon: IconName; label: string; text: string }
 /** Four ways to begin (spec §5.8). A click only puts the text in the box: nothing is sent. */
 export const STARTERS: Starter[] = [
-  { id: 'explain', icon: 'read', label: '讲讲这个项目的结构', text: '讲讲这个项目的结构：有哪些主要目录、入口在哪、各部分怎么配合。' },
-  { id: 'bug', icon: 'search', label: '找一个 bug 并修好', text: '找一个 bug 并修好：先说清楚问题在哪、怎么复现，再动手改。' },
-  { id: 'tests', icon: 'todo', label: '给最近的改动补测试', text: '给最近的改动补测试：看看最近的提交和未提交的改动，找出没被测到的地方。' },
-  { id: 'plan', icon: 'plan', label: '先出方案再动手', text: '先出一个方案给我看，我同意之后再动手：' },
+  { id: 'explain', icon: 'read', label: tr('讲讲这个项目的结构'), text: tr('讲讲这个项目的结构：有哪些主要目录、入口在哪、各部分怎么配合。') },
+  { id: 'bug', icon: 'search', label: tr('找一个 bug 并修好'), text: tr('找一个 bug 并修好：先说清楚问题在哪、怎么复现，再动手改。') },
+  { id: 'tests', icon: 'todo', label: tr('给最近的改动补测试'), text: tr('给最近的改动补测试：看看最近的提交和未提交的改动，找出没被测到的地方。') },
+  { id: 'plan', icon: 'plan', label: tr('先出方案再动手'), text: tr('先出一个方案给我看，我同意之后再动手：') },
 ];
 
 /** The box after a starter is clicked: it fills an empty box (or replaces another starter); typed text is kept. */
@@ -90,9 +91,9 @@ export function checklistView(stored: ChecklistStore): { items: { id: ChecklistI
 export type HomeTab = 'recent' | 'schedules' | 'archived';
 export function homeTabs(o: { schedules: number }): { id: HomeTab; label: string; n?: number }[] {
   return [
-    { id: 'recent', label: '最近任务' },
-    { id: 'schedules', label: '定时任务', n: o.schedules || undefined },
-    { id: 'archived', label: '已归档' },
+    { id: 'recent', label: tr('最近任务') },
+    { id: 'schedules', label: tr('定时任务'), n: o.schedules || undefined },
+    { id: 'archived', label: tr('已归档') },
   ];
 }
 
@@ -123,25 +124,25 @@ export const HOME_PAGE = 5;
 export function agoText(ts: number, now = Date.now()): string {
   if (!ts) return '';
   const d = now - ts;
-  if (d < 60_000) return '刚刚';
-  if (d < 3600_000) return `${Math.floor(d / 60_000)} 分钟前`;
-  if (d < 86400_000) return `${Math.floor(d / 3600_000)} 小时前`;
-  if (d < 2 * 86400_000) return '昨天';
-  if (d < 7 * 86400_000) return `${Math.floor(d / 86400_000)} 天前`;
+  if (d < 60_000) return tr('刚刚');
+  if (d < 3600_000) return tr('{d} 分钟前', { d: Math.floor(d / 60_000) });
+  if (d < 86400_000) return tr('{d} 小时前', { d: Math.floor(d / 3600_000) });
+  if (d < 2 * 86400_000) return tr('昨天');
+  if (d < 7 * 86400_000) return tr('{d} 天前', { d: Math.floor(d / 86400_000) });
   const t = new Date(ts);
   return `${t.getMonth() + 1}/${t.getDate()}`;
 }
 
 /** A waiting request in words: which kind of thing Claude waits on. */
 export function waitingText(pending: readonly { toolName: string }[]): string {
-  if (!pending.length) return '等你确认';
-  if (pending.every((p) => p.toolName === 'AskUserQuestion')) return '有问题问你';
-  if (pending.length > 1) return `等你确认 ${pending.length} 个操作`;
+  if (!pending.length) return tr('等你确认');
+  if (pending.every((p) => p.toolName === 'AskUserQuestion')) return tr('有问题问你');
+  if (pending.length > 1) return tr('等你确认 {pendingCount} 个操作', { pendingCount: pending.length });
   const t = pending[0].toolName;
-  if (t === 'Bash' || t === 'PowerShell') return '等你确认一条命令';
-  if (t === 'Edit' || t === 'MultiEdit' || t === 'Write' || t === 'NotebookEdit') return '等你确认一处修改';
-  if (t === 'ExitPlanMode') return '等你确认方案';
-  return '等你确认';
+  if (t === 'Bash' || t === 'PowerShell') return tr('等你确认一条命令');
+  if (t === 'Edit' || t === 'MultiEdit' || t === 'Write' || t === 'NotebookEdit') return tr('等你确认一处修改');
+  if (t === 'ExitPlanMode') return tr('等你确认方案');
+  return tr('等你确认');
 }
 
 function projectOf(cwd: string, workspaces: HomeInput['workspaces']): string {
@@ -153,9 +154,9 @@ export function homeStatus(s: SessionSummary, k: KnownStatus | undefined): HomeS
   const st = rowStatus({ state: (k?.state ?? s.live) as never, pending: k?.pending, error: k?.error, diff: k?.diff, lastModified: s.lastModified });
   switch (st.kind) {
     case 'confirm': return { kind: 'confirm', label: waitingText(k?.pending ?? []), title: st.title };
-    case 'ask': return { kind: 'ask', label: '有问题问你', title: st.title };
-    case 'error': return { kind: 'error', label: '出错', title: st.title };
-    case 'running': return { kind: 'running', label: '运行中', title: st.title };
+    case 'ask': return { kind: 'ask', label: tr('有问题问你'), title: st.title };
+    case 'error': return { kind: 'error', label: tr('出错'), title: st.title };
+    case 'running': return { kind: 'running', label: tr('运行中'), title: st.title };
     case 'diff': return { kind: 'diff', label: st.label, title: st.title, added: st.added ?? 0, removed: st.removed ?? 0 };
     default: return null; // the time and the agent are on the second line already
   }
@@ -175,9 +176,9 @@ export function homeRows(tab: HomeTab, o: HomeInput): { rows: HomeRow[]; more: n
         where: sc.cwd ? projectOf(sc.cwd, o.workspaces) : '',
         when: period.text,
         ...(period.title ? { whenTitle: period.title } : {}),
-        status: sc.lastError ? { kind: 'error', label: '出错', title: sc.lastError }
-          : !sc.enabled ? { kind: 'paused', label: '已暂停', title: '没有启用' }
-          : sc.nextRunAt ? { kind: 'time', label: nextRunText(sc.nextRunAt, now), title: `下次运行：${new Date(sc.nextRunAt).toLocaleString()}` }
+        status: sc.lastError ? { kind: 'error', label: tr('出错'), title: sc.lastError }
+          : !sc.enabled ? { kind: 'paused', label: tr('已暂停'), title: tr('没有启用') }
+          : sc.nextRunAt ? { kind: 'time', label: nextRunText(sc.nextRunAt, now), title: tr('下次运行：{v}', { v: new Date(sc.nextRunAt).toLocaleString(dateLocale()) }) }
           : null,
       };
     });
@@ -237,7 +238,7 @@ export interface EngineNotice { kind: 'login' | 'engine'; text: string; actions:
  * Claude login second.
  */
 export function engineNotice(o: { auth: { loggedIn?: boolean } | null; providers: number; engine: 'ok' | 'missing' | 'unknown' }): EngineNotice | null {
-  if (o.engine === 'missing') return { kind: 'engine', text: '没找到 Claude Code 的运行内核，对话开不起来。', actions: ['runtime'] };
-  if (o.auth && o.auth.loggedIn === false && o.providers === 0) return { kind: 'login', text: '还没接模型：填一个 API Key，或者用 Claude 账号登录。', actions: ['provider', 'login'] };
+  if (o.engine === 'missing') return { kind: 'engine', text: tr('没找到 Claude Code 的运行内核，对话开不起来。'), actions: ['runtime'] };
+  if (o.auth && o.auth.loggedIn === false && o.providers === 0) return { kind: 'login', text: tr('还没接模型：填一个 API Key，或者用 Claude 账号登录。'), actions: ['provider', 'login'] };
   return null;
 }

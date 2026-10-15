@@ -2,9 +2,10 @@
 // what the bulk buttons act on, which buttons one file has, what 提交 does (and a phone's folded commit button), and
 // a commit's patch split per file. No DOM, no store — unit tested.
 import type { GitFileStatus, GitStatus } from '@shared';
+import { tr } from '@/i18n';
 
 export type ReviewScope = 'uncommitted' | 'staged' | 'session' | 'commit';
-export const SCOPE_LABEL: Record<ReviewScope, string> = { uncommitted: '未提交的改动', staged: '已暂存', session: '本次对话改动', commit: '某次提交' };
+export const SCOPE_LABEL: Record<ReviewScope, string> = { uncommitted: tr('未提交的改动'), staged: tr('已暂存'), session: tr('本次对话改动'), commit: tr('某次提交') };
 
 /** What the server returns for one file (`git.diff` / `files.diff`), plus our own `error`. */
 export type DiffResult =
@@ -163,9 +164,9 @@ export function bulkTargets(rows: ReviewRow[]): { stage: string[]; discard: stri
 
 /** A button one file has: icons in its header on a desktop, a row of words under it on a phone. */
 export type FileAction = 'stage' | 'unstage' | 'discard' | 'open';
-export const FILE_ACTION_LABEL: Record<FileAction, string> = { stage: '暂存', unstage: '取消暂存', discard: '还原', open: '打开' };
+export const FILE_ACTION_LABEL: Record<FileAction, string> = { stage: tr('暂存'), unstage: tr('取消暂存'), discard: tr('还原'), open: tr('打开') };
 /** …and what each one does, as its tooltip. */
-export const FILE_ACTION_TITLE: Record<FileAction, string> = { stage: '暂存（加入下一次提交）', unstage: '取消暂存', discard: '还原（丢弃这个文件的改动）', open: '在编辑器打开' };
+export const FILE_ACTION_TITLE: Record<FileAction, string> = { stage: tr('暂存（加入下一次提交）'), unstage: tr('取消暂存'), discard: tr('还原（丢弃这个文件的改动）'), open: tr('在编辑器打开') };
 
 /**
  * The buttons one file gets, in the order they are drawn — one rule for the desktop's icons and the phone's
@@ -187,7 +188,7 @@ export function fileActions(row: ReviewRow, scope: ReviewScope, inRepo: boolean)
 
 /** A phone's review (UI refresh §8): long diff lines wrap, or the card scrolls sideways as on a desktop. */
 export type LineMode = 'wrap' | 'scroll';
-export const LINE_MODES: readonly { value: LineMode; label: string }[] = [{ value: 'wrap', label: '换行' }, { value: 'scroll', label: '横滚' }];
+export const LINE_MODES: readonly { value: LineMode; label: string }[] = [{ value: 'wrap', label: tr('换行') }, { value: 'scroll', label: tr('横滚') }];
 export const DEFAULT_LINE_MODE: LineMode = 'wrap';
 
 /** What 提交 does. */
@@ -230,7 +231,7 @@ export function commitPlan(status: GitStatus | null): CommitPlan {
 export function commitFold(plan: CommitPlan, o: { phone: boolean; open: boolean }): string | null {
   if (!o.phone || o.open) return null;
   const n = plan.kind === 'commit' ? plan.staged : plan.kind === 'stageAll' ? plan.stage.length : 0;
-  return n ? `提交 ${n} 个文件` : null;
+  return n ? tr('提交 {n} 个文件', { n }) : null;
 }
 
 /** Text of a confirmation dialog (`dlg.confirm`). */
@@ -250,36 +251,36 @@ export function discardConfirm(rows: ReviewRow[], scope: ReviewScope): ConfirmTe
     const r = rows[0];
     const g = r.git;
     const lines: string[] = [];
-    if (g?.status === 'untracked') lines.push('这是一个没有提交过的新文件：还原会把它永久删除（不进回收站）。');
-    else if (g?.status === 'added') lines.push('这是刚加入暂存区的新文件：会回到暂存区里的版本，之后在工作区里的改动都会丢掉。');
+    if (g?.status === 'untracked') lines.push(tr('这是一个没有提交过的新文件：还原会把它永久删除（不进回收站）。'));
+    else if (g?.status === 'added') lines.push(tr('这是刚加入暂存区的新文件：会回到暂存区里的版本，之后在工作区里的改动都会丢掉。'));
     else {
-      lines.push(`文件会回到上一次提交时的样子，里面所有未提交的改动都会丢掉${scope === 'session' ? '——不只是这个对话做的' : ''}。`);
-      if (g?.staged) lines.push('已暂存的改动也会一起丢掉。');
+      lines.push(tr('文件会回到上一次提交时的样子，里面所有未提交的改动都会丢掉{v}。', { v: scope === 'session' ? tr('——不只是这个对话做的') : '' }));
+      if (g?.staged) lines.push(tr('已暂存的改动也会一起丢掉。'));
     }
-    lines.push('这一步不能撤销。');
-    return { title: `还原 ${r.rel}？`, message: lines.join('\n'), okLabel: '还原' };
+    lines.push(tr('这一步不能撤销。'));
+    return { title: tr('还原 {rel}？', { rel: r.rel }), message: lines.join('\n'), okLabel: tr('还原') };
   }
   const staged = rows.filter((r) => r.git?.staged).length;
   const fresh = rows.filter((r) => r.git?.status === 'untracked').length;
   const items = rows.slice(0, CONFIRM_LIST_MAX).map((r) => r.rel);
-  if (n > CONFIRM_LIST_MAX) items.push(`…等 ${n} 个文件`);
+  if (n > CONFIRM_LIST_MAX) items.push(tr('…等 {n} 个文件', { n }));
   // (each consequence only when it applies: a line about staged changes over files with none reads as a warning
   // that they have some)
   const message = [
-    '这些文件会回到上一次提交时的样子：',
-    ...(staged ? [`· 包括已暂存的改动（${staged} 个文件有）；`] : []),
-    '· 不只是这个对话做的改动：文件里所有未提交的改动都会丢掉；',
-    ...(fresh ? [`· 新建的文件会被永久删除（不进回收站）：${fresh} 个；`] : []),
-    '这一步不能撤销。',
+    tr('这些文件会回到上一次提交时的样子：'),
+    ...(staged ? [tr('· 包括已暂存的改动（{staged} 个文件有）；', { staged })] : []),
+    tr('· 不只是这个对话做的改动：文件里所有未提交的改动都会丢掉；'),
+    ...(fresh ? [tr('· 新建的文件会被永久删除（不进回收站）：{fresh} 个；', { fresh })] : []),
+    tr('这一步不能撤销。'),
   ].join('\n');
-  return { title: `还原 ${n} 个文件？`, message, items, okLabel: `还原 ${n} 个文件` };
+  return { title: tr('还原 {n} 个文件？', { n }), message, items, okLabel: tr('还原 {n} 个文件', { n }) };
 }
 
 /** The 全部暂存并提交 question (commitPlan 'stageAll'): how many files, and that new files go in too. */
 export function stageAllConfirm(plan: CommitPlan): ConfirmText {
   const n = plan.stage.length;
   const items = plan.stage.slice(0, CONFIRM_LIST_MAX);
-  if (n > CONFIRM_LIST_MAX) items.push(`…等 ${n} 个文件`);
-  const message = `把 ${n} 个文件的改动暂存并提交？${plan.untracked ? `\n其中 ${plan.untracked} 个是没有提交过的新文件，也会进这次提交。` : ''}`;
-  return { title: '还没有暂存的改动', message, items, okLabel: '全部暂存并提交' };
+  if (n > CONFIRM_LIST_MAX) items.push(tr('…等 {n} 个文件', { n }));
+  const message = tr('把 {n} 个文件的改动暂存并提交？{v}', { n, v: plan.untracked ? tr("\n其中 {untracked} 个是没有提交过的新文件，也会进这次提交。", { untracked: plan.untracked }) : '' });
+  return { title: tr('还没有暂存的改动'), message, items, okLabel: tr('全部暂存并提交') };
 }

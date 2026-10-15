@@ -1,5 +1,6 @@
 // The sidebar's first screen for someone new (final review §9 #5). Pure: the component passes what it knows.
 import { checklistView, readChecklist } from '@/features/home/model';
+import { tr } from '@/i18n';
 
 /**
  * The 项目 section while there is no project. Conversations the CLI already had sit in 文件夹, one group per folder: then the
@@ -8,8 +9,8 @@ import { checklistView, readChecklist } from '@/features/home/model';
  */
 export function projectsEmpty(o: { projects: number; otherFolders: number }): { text: string; openButton: boolean } | null {
   if (o.projects > 0) return null;
-  if (o.otherFolders > 0) return { text: '把常用的文件夹设为项目：点下面「文件夹」里的「设为项目」，它就钉在最上面。', openButton: false };
-  return { text: '还没有项目。打开一个文件夹，Claude 就在里面工作。', openButton: true };
+  if (o.otherFolders > 0) return { text: tr('把常用的文件夹设为项目：点下面「文件夹」里的「设为项目」，它就钉在最上面。'), openButton: false };
+  return { text: tr('还没有项目。打开一个文件夹，Claude 就在里面工作。'), openButton: true };
 }
 
 /** 设为项目 on a folder of 文件夹 is written out (not a hover icon) while there is no project yet. */
@@ -36,6 +37,6 @@ export function hintReady(checklist: unknown, now: number): boolean {
 /** 「把 Codex 等工具里的对话也列在这里？」: one tool by name, several by the first one's; every name is in the tooltip. */
 export function hintText(names: readonly string[]): { text: string; title: string } {
   const list = names.join('、');
-  const text = names.length <= 1 ? `把 ${names[0] ?? '其它工具'} 里的对话也列在这里？` : `把 ${names[0]} 等工具里的对话也列在这里？`;
-  return { text, title: `本机有 ${list} 的对话。列出来以后，它们会出现在侧栏和搜索里（不会改动它们的数据）` };
+  const text = names.length <= 1 ? tr('把 {v} 里的对话也列在这里？', { v: names[0] ?? tr('其它工具') }) : tr('把 {v} 等工具里的对话也列在这里？', { v: names[0] });
+  return { text, title: tr('本机有 {list} 的对话。列出来以后，它们会出现在侧栏和搜索里（不会改动它们的数据）', { list }) };
 }

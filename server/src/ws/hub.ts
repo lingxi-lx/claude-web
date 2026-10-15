@@ -39,6 +39,8 @@ import { harvest } from '../memory/extract.js';
 import { setMemoryMcpEnabled } from '../memory/launcher.js';
 import { afterSwitch, normProvider, openOnProvider, swapAgent, swapProvider } from '../session/swap.js';
 import { providerKey } from '../models/subagent.js';
+import { applyLanguage } from '../i18n/boot.js';
+import { LANGUAGE_KEY } from '../i18n/core.js';
 import { expandSessionRefs } from '../library/briefing.js';
 import type { LibraryService } from '../library/service.js';
 import type { GatewayService } from '../gateway/service.js';
@@ -58,6 +60,7 @@ import { isWebKeySetting, maskWebSettings, type WebService } from '../web/servic
 import { setWebMcpEnabled } from '../web/launcher.js';
 import type { ComputerAccess } from '../computer/access.js';
 import { computerSupported, defaultFeaturesOf } from '../computer/launcher.js';
+import { tr } from '../i18n/index.js';
 
 export interface Services {
   /** Unified session library: every joined source's sessions (sessions.list / search / library.*). */
@@ -229,7 +232,7 @@ export class Hub {
 
   /** For what only a window on this machine may do: refuses another machine's connection and a remote-access / paired-device one. */
   private localWindowOnly(ws: WebSocket, what: string) {
-    if (this.peerConns.has(ws) || this.remoteConns.has(ws)) throw new Error(`只有本机的桌面窗口才能提供${what}`);
+    if (this.peerConns.has(ws) || this.remoteConns.has(ws)) throw new Error(tr('只有本机的桌面窗口才能提供{what}', { what }));
   }
 
   /** What a conversation is waiting on the user for: its tools' requests, and what 操控电脑 asked. */
@@ -342,7 +345,7 @@ export class Hub {
         // not running on the recorded one → open, then the same bookkeeping as session.setProvider (SessionMeta, the
         // account clears it; the canonical switch line); running on another one → session.setProvider's swap. Under
         // the conversation's lock (openOnProvider)
-        const nameOf = (id: string) => (normProvider(id) ? s.providers.forSession(id)?.name ?? id : 'Claude 账号');
+        const nameOf = (id: string) => (normProvider(id) ? s.providers.forSession(id)?.name ?? id : tr('Claude 账号'));
         return openOnProvider({ pool: s.pool, meta: s.meta, canonical: s.canonical }, params, nameOf, {
           open: (p) => this.openSession(p),
           // running on another provider: the same as session.setProvider (re-review m-3)
@@ -444,6 +447,8 @@ export class Hub {
         // a search engine's API key: protected at rest, the mask sent back keeps what is stored, '' removes it
         if (isWebKeySetting(req.key)) { await s.web.setKey(req.key, req.value); return null; }
         await s.meta.setSetting(req.key, req.value);
+        // the language of what the server words from now on (the page reloads itself)
+        if (req.key === LANGUAGE_KEY) applyLanguage(req.value);
         // takes effect on the next session start — running children keep the servers they were given
         if (req.key === 'memory.mcp') setMemoryMcpEnabled(req.value !== false);
         if (req.key === 'web.mcp') setWebMcpEnabled(req.value !== false);
@@ -501,7 +506,7 @@ export class Hub {
         const r = this.runner(req.sessionId);
         // picked for the provider this window saw: another window switched in the meantime → the model may not even
         // exist there (it was applied anyway and every turn failed "issue with the selected model")
-        if (req.providerId !== undefined && normProvider(req.providerId) !== normProvider(r.info.providerId)) throw new Error('这个对话刚刚换了供应商，这次选的模型没有用上，请在模型菜单里重新选');
+        if (req.providerId !== undefined && normProvider(req.providerId) !== normProvider(r.info.providerId)) throw new Error(tr('这个对话刚刚换了供应商，这次选的模型没有用上，请在模型菜单里重新选'));
         await r.setModel(req.model);
         return null;
       }
@@ -520,7 +525,7 @@ export class Hub {
         const on = live && live.state !== 'closed' && live.state !== 'error' ? live : undefined;
         // running: for the provider it runs on (a switch from another window in between drops the pick); not running:
         // for the provider the window will resume it on (its chips may have picked another one already)
-        if (on && req.providerId !== undefined && providerKey(req.providerId) !== providerKey(on.info.providerId)) throw new Error('这个对话刚刚换了供应商，这次选的子代理模型没有用上，请重新选');
+        if (on && req.providerId !== undefined && providerKey(req.providerId) !== providerKey(on.info.providerId)) throw new Error(tr('这个对话刚刚换了供应商，这次选的子代理模型没有用上，请重新选'));
         const providerId = on ? on.info.providerId : req.providerId ?? s.meta.sessionMeta(req.sessionId).providerId;
         await s.meta.setSessionMeta(req.sessionId, { subagent: { providerId: providerKey(providerId), model: req.model } });
         await on?.setSubagentModel?.(req.model);
@@ -532,12 +537,12 @@ export class Hub {
         // 'claude' = back to the account, like no provider at all (the window sends either)
         const own = !req.providerId || req.providerId === CLAUDE_PROVIDER_ID;
         const p = own ? undefined : s.providers.forSession(req.providerId);
-        if (!own && !p) throw new Error('没有这个供应商');
+        if (!own && !p) throw new Error(tr('没有这个供应商'));
         // the agent behind the session must be able to use this profile type (Codex cannot talk to an Anthropic relay…)
         const agent = s.pool.get(req.sessionId)?.info.agent ?? (await s.transcripts.head(req.sessionId).catch(() => null))?.agent ?? 'claude';
         const unfit = s.providers.fitError(req.providerId, agent);
         if (unfit) throw new Error(unfit);
-        const r = await swapProvider({ pool: s.pool, canonical: s.canonical, transcripts: s.transcripts, meta: s.meta }, req.sessionId, req.providerId, p?.name ?? 'Claude 账号', req.model); // serialised per session inside
+        const r = await swapProvider({ pool: s.pool, canonical: s.canonical, transcripts: s.transcripts, meta: s.meta }, req.sessionId, req.providerId, p?.name ?? tr('Claude 账号'), req.model); // serialised per session inside
         s.sessions.emit('changed');
         return r;
       }
@@ -567,7 +572,7 @@ export class Hub {
         // pull the durable facts out of a finished session: dead ends, decisions, constraints
         const events = await s.canonical.load(req.sessionId);
         const cwd = s.pool.get(req.sessionId)?.cwd ?? (await s.canonical.head(req.sessionId))?.cwd ?? '';
-        if (!cwd) throw new Error('这个对话没有可用的目录');
+        if (!cwd) throw new Error(tr('这个对话没有可用的目录'));
         return harvest(s.memory, events, { cwd, sessionId: req.sessionId, agent: s.pool.get(req.sessionId)?.info.agent });
       }
       // ---- 联网: search + the built-in browser (every agent reaches them over MCP; see web/mcp.ts) ----
@@ -577,11 +582,11 @@ export class Hub {
         return s.web.search(req.query, { count: req.count });
       case 'browser.host':
         // the built-in browser is a desktop window's on this machine: a phone or another machine cannot be it
-        this.localWindowOnly(ws, '内置浏览器');
+        this.localWindowOnly(ws, tr('内置浏览器'));
         s.web.setHost(ws, !!req.on, (command) => this.send(ws, { type: 'event', event: { kind: 'browser.command', command } }));
         return s.web.status();
       case 'browser.result':
-        this.localWindowOnly(ws, '内置浏览器');
+        this.localWindowOnly(ws, tr('内置浏览器'));
         // false: nothing was waiting for it any more (it came after the 30 s, or the command was another window's)
         return { taken: s.web.result(ws, String(req.id), !!req.ok, req.answer, req.error) };
 
@@ -839,7 +844,7 @@ export class Hub {
         return null;
       case 'tunnel.open': {
         const host = s.meta.remoteHosts().find((h) => h.id === req.hostId);
-        if (!host) throw new Error('主机不存在');
+        if (!host) throw new Error(tr('主机不存在'));
         return s.tunnels.open(host);
       }
       case 'tunnel.close':
@@ -849,7 +854,7 @@ export class Hub {
         return s.tunnels.list();
       case 'tunnel.run': {
         const host = s.meta.remoteHosts().find((h) => h.id === req.hostId);
-        if (!host) throw new Error('主机不存在');
+        if (!host) throw new Error(tr('主机不存在'));
         return s.tunnels.runRemote(host, req.command);
       }
       case 'im.kinds':

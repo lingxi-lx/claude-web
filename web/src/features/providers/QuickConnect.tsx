@@ -7,6 +7,7 @@ import { Icon } from '@/ui/icons';
 import { imeComposing } from '@/ui/ime';
 import { PRESETS, anthropicBase, cleanBase, explainProbe, quickPlan, relayName, uniqueName, type ProbeLike, type QuickFormat, type QuickPlan } from './quick';
 import { Segmented } from '@/ui/Segmented';
+import { tr } from '@/i18n';
 
 /** A model list as the probe returned it: the ids and the display names it gave. */
 type Listed = { models: string[]; modelNames?: Record<string, string>; modelEfforts?: Provider['modelEfforts']; modelContext?: Provider['modelContext'] };
@@ -14,9 +15,9 @@ interface Probe extends ProbeLike { models: string[]; modelNames?: Record<string
 type Phase = 'idle' | 'list' | 'chat' | 'save';
 
 const FORMATS: { v: QuickFormat; l: string; t: string }[] = [
-  { v: 'auto', l: '自动', t: '读到 Claude 模型就用 Claude 格式，否则 OpenAI 格式' },
-  { v: 'anthropic', l: 'Claude 格式', t: 'Anthropic Messages 接口（/v1/messages）' },
-  { v: 'openai', l: 'OpenAI 格式', t: 'OpenAI Chat Completions 接口（/v1/chat/completions）' },
+  { v: 'auto', l: tr('自动'), t: tr('读到 Claude 模型就用 Claude 格式，否则 OpenAI 格式') },
+  { v: 'anthropic', l: tr('Claude 格式'), t: tr('Anthropic Messages 接口（/v1/messages）') },
+  { v: 'openai', l: tr('OpenAI 格式'), t: tr('OpenAI Chat Completions 接口（/v1/chat/completions）') },
 ];
 
 function probe(provider: Partial<Provider>, listOnly: boolean): Promise<Probe> {
@@ -65,7 +66,7 @@ export function QuickConnect({ onDone, makeDefault, autoFocus = true }: { onDone
     const saved = await ws.request<Provider>({ kind: 'providers.upsert', provider: draft });
     if (makeDefault) await st.setSetting('defaultProviderId', saved.id);
     await st.loadProviders();
-    st.toast(`已接好「${saved.name}」${p.defaultModel ? ` · ${p.defaultModel}` : ''}${makeDefault ? '，新对话默认用它' : ''}`, true);
+    st.toast(tr('已接好「{name}」{v}{v2}', { name: saved.name, v: p.defaultModel ? ` · ${p.defaultModel}` : '', v2: makeDefault ? tr('，新对话默认用它') : '' }), true);
     onDone(saved);
   };
 
@@ -75,8 +76,8 @@ export function QuickConnect({ onDone, makeDefault, autoFocus = true }: { onDone
     setFallback(null);
     const k = key.trim();
     const b = relay ? cleanBase(base) : preset.baseUrl ?? '';
-    if (relay && !b) { setErr({ text: '先填中转站的地址。' }); return; }
-    if (!k) { setErr({ text: '先粘贴 API Key。' }); return; }
+    if (relay && !b) { setErr({ text: tr('先填中转站的地址。') }); return; }
+    if (!k) { setErr({ text: tr('先粘贴 API Key。') }); return; }
     try {
       setPhase('list');
       let used: QuickFormat = fmt;
@@ -111,33 +112,33 @@ export function QuickConnect({ onDone, makeDefault, autoFocus = true }: { onDone
   };
 
   const secs = started ? Math.max(0, Math.round((Date.now() - started) / 1000)) : 0;
-  const status = phase === 'list' ? '正在读取模型列表…'
-    : phase === 'chat' ? `正在发一条很短的消息测试 ${plan?.defaultModel ?? ''}${plan?.type === 'anthropic' ? '（Claude 格式要启动一次 Claude Code，约 10–40 秒）' : ''}… ${secs} 秒`
-    : phase === 'save' ? '正在保存…' : '';
+  const status = phase === 'list' ? tr('正在读取模型列表…')
+    : phase === 'chat' ? tr('正在发一条很短的消息测试 {defaultModel}{v}… {secs} 秒', { defaultModel: plan?.defaultModel ?? '', v: plan?.type === 'anthropic' ? tr('（Claude 格式要启动一次 Claude Code，约 10–40 秒）') : '', secs })
+    : phase === 'save' ? tr('正在保存…') : '';
   const enter = (e: React.KeyboardEvent) => { if (e.key === 'Enter' && !imeComposing(e.nativeEvent)) { e.preventDefault(); void connect(); } };
 
   return (
     <div className="qc" data-preset={preset.id}>
-      <div className="qc-presets" role="radiogroup" aria-label="API Key 从哪来">
+      <div className="qc-presets" role="radiogroup" aria-label={tr('API Key 从哪来')}>
         {PRESETS.map((p) => (
           <button key={p.id} type="button" role="radio" aria-checked={p.id === preset.id} className={clsx('qc-preset', p.id === preset.id && 'on')} disabled={busy && p.id !== preset.id} onClick={() => pick(p.id)}>{p.name}</button>
         ))}
       </div>
       {relay && (
         <label className="qc-f">
-          <span className="qc-l">地址</span>
-          <input ref={first} className="field" data-qc="base" value={base} disabled={busy} onChange={(e) => setBase(e.target.value)} onKeyDown={enter} placeholder="中转站给的地址，如 https://api.example.com" spellCheck={false} autoComplete="off" />
+          <span className="qc-l">{tr('地址')}</span>
+          <input ref={first} className="field" data-qc="base" value={base} disabled={busy} onChange={(e) => setBase(e.target.value)} onKeyDown={enter} placeholder={tr('中转站给的地址，如 https://api.example.com')} spellCheck={false} autoComplete="off" />
         </label>
       )}
       <label className="qc-f">
         <span className="qc-l">API Key</span>
-        <input ref={relay ? undefined : first} className="field" data-qc="key" type="password" value={key} disabled={busy} onChange={(e) => setKey(e.target.value)} onKeyDown={enter} placeholder={relay ? '中转站给的 Key（通常以 sk- 开头）' : `在 ${preset.name} 官网创建的 API Key`} spellCheck={false} autoComplete="off" />
+        <input ref={relay ? undefined : first} className="field" data-qc="key" type="password" value={key} disabled={busy} onChange={(e) => setKey(e.target.value)} onKeyDown={enter} placeholder={relay ? tr('中转站给的 Key（通常以 sk- 开头）') : tr('在 {name} 官网创建的 API Key', { name: preset.name })} spellCheck={false} autoComplete="off" />
       </label>
-      {preset.keyUrl && <div className="qc-hint"><a href={preset.keyUrl} target="_blank" rel="noreferrer">去 {preset.name} 官网创建 API Key <Icon name="external" size={11} /></a></div>}
+      {preset.keyUrl && <div className="qc-hint"><a href={preset.keyUrl} target="_blank" rel="noreferrer">{tr('去 {name} 官网创建 API Key', { name: preset.name })} <Icon name="external" size={11} /></a></div>}
       {relay && (
         <div className="qc-f qc-fmt">
-          <span className="qc-l">接口格式</span>
-          <Segmented className="sp-seg" label="接口格式" arrows disabled={busy} value={fmt} options={FORMATS.map((f) => ({ value: f.v, label: f.l, title: f.t }))} onChange={setFmt} />
+          <span className="qc-l">{tr('接口格式')}</span>
+          <Segmented className="sp-seg" label={tr('接口格式')} arrows disabled={busy} value={fmt} options={FORMATS.map((f) => ({ value: f.v, label: f.l, title: f.t }))} onChange={setFmt} />
         </div>
       )}
       {preset.note && <div className="qc-hint sub">{preset.note}</div>}
@@ -146,8 +147,8 @@ export function QuickConnect({ onDone, makeDefault, autoFocus = true }: { onDone
         {!busy && err && <span className="qc-err" title={err.raw && err.raw !== err.text ? err.raw : undefined}>{err.text}</span>}
       </div>
       <div className="qc-actions">
-        <button className="btn primary" data-qc="connect" disabled={busy} onClick={() => void connect()}>{busy ? '连接中…' : '连接'}</button>
-        {fallback && !busy && <button className="btn ghost" data-qc="force" onClick={() => void forceSave()} title="模型列表读到了，只是测试消息没通过：先保存，之后在设置 → 供应商 里改模型">仍然保存</button>}
+        <button className="btn primary" data-qc="connect" disabled={busy} onClick={() => void connect()}>{busy ? tr('连接中…') : tr('连接')}</button>
+        {fallback && !busy && <button className="btn ghost" data-qc="force" onClick={() => void forceSave()} title={tr('模型列表读到了，只是测试消息没通过：先保存，之后在设置 → 供应商 里改模型')}>{tr('仍然保存')}</button>}
       </div>
     </div>
   );

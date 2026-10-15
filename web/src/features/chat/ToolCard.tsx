@@ -11,6 +11,7 @@ import { ArrivalCtx, LiveCtx, StepStartCtx, WaitingCtx } from './turn-context';
 import { WAITING_FOR_YOU } from '@/ui/terms';
 import { useJust } from './Fold';
 import { fmtStepDuration, mergedLabel, mergedTarget, shortVerb, stepDurationMs, stepState, watchStep, watchedStep, type StepState } from './step-view';
+import { tr } from '@/i18n';
 
 /** How a step's row is toggled: a pointer's click moves (the detail slides open), the keyboard's does not (spec §4.5). */
 export type ToggleBy = 'pointer' | 'key';
@@ -34,7 +35,7 @@ function SubagentLoader({ toolUseId }: { toolUseId: string }) {
   return (
     <div style={{ fontSize: 13, color: 'var(--ink-3)' }}>
       <button className="btn sm" disabled={busy} onClick={load}>
-        {busy ? '加载中…' : '加载子代理对话'}
+        {busy ? tr('加载中…') : tr('加载子代理对话')}
       </button>
       {err && <span style={{ color: 'var(--err)', marginLeft: 8 }}>{err}</span>}
     </div>
@@ -94,13 +95,13 @@ export function ToolHead({ t, onToggle, open }: { t: ToolUseBlock; onToggle?: (b
   // finished while this row was on screen: its icon pops in (history, and a row drawn already finished, do not)
   const pop = useJust(st === 'done', POP_MS);
   const took = st === 'done' ? stepDurationMs(t, { start: starts.get(t.id), watched }) : undefined;
-  const end = st === 'failed' ? '失败'
-    : st === 'stopped' ? '已停止'
+  const end = st === 'failed' ? tr('失败')
+    : st === 'stopped' ? tr('已停止')
     : st === 'waiting' ? WAITING_FOR_YOU
-      : t.status === 'running' ? (secs !== null ? (secs < 60 ? `${secs} 秒` : fmtDuration(secs * 1000)) : '运行中')
+      : t.status === 'running' ? (secs !== null ? (secs < 60 ? tr('{secs} 秒', { secs }) : fmtDuration(secs * 1000)) : tr('运行中'))
         // in a conversation that runs, the spinner says it; in one that does not, the step never got its turn
         : live ? ''
-          : t.status === 'pending' ? '等待'
+          : t.status === 'pending' ? tr('等待')
             : t.status === 'streaming' ? '…'
               : '';
   return (
@@ -121,7 +122,7 @@ export function ToolHead({ t, onToggle, open }: { t: ToolUseBlock; onToggle?: (b
       {target && <code className="summary">{target}</code>}
       <span className="grow" />
       {/* before the time, shown on hover: the times stay in a column at the row's end */}
-      {!phone && <button className="icon-btn xs" title="在右侧查看详情" aria-label="详情" onClick={(e) => { e.stopPropagation(); setInspect(t.id); }}><Icon name="external" size={12} /></button>}
+      {!phone && <button className="icon-btn xs" title={tr('在右侧查看详情')} aria-label={tr('详情')} onClick={(e) => { e.stopPropagation(); setInspect(t.id); }}><Icon name="external" size={12} /></button>}
       {t.progress?.lastTool && t.status === 'running' && <span className="st">{t.progress.lastTool}</span>}
       {(end || took !== undefined) && <span className={clsx('st', st === 'failed' && 'err', st === 'waiting' && 'wait', took !== undefined && 'dur')}>{end || fmtStepDuration(took!)}</span>}
     </div>
@@ -218,7 +219,7 @@ export const ToolCard = memo(function ToolCard({ t, version, bare }: { t: ToolUs
   const Body = def.Body;
   const children = t.children.length > 0 ? (
     <div className="tool-children">
-      {show ? <ItemList items={t.children} version={version} /> : <div style={{ fontSize: 13, color: 'var(--ink-3)', cursor: 'pointer' }} onClick={() => setOpen(true)}>子代理 {t.children.length} 条消息 · 展开</div>}
+      {show ? <ItemList items={t.children} version={version} /> : <div style={{ fontSize: 13, color: 'var(--ink-3)', cursor: 'pointer' }} onClick={() => setOpen(true)}>{tr('子代理 {childrenCount} 条消息 · 展开', { childrenCount: t.children.length })}</div>}
     </div>
   ) : isAgent && t.status === 'done' && t.name !== 'Workflow' ? (
     <div className="tool-children"><SubagentLoader toolUseId={t.id} /></div>

@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import WebSocket from 'ws';
 import { proxyAgentFor } from '../net/proxy.js';
 import { chunk, jsonFetch, type AdapterState, type ImAdapter, type OutboundOptions } from './types.js';
+import { tr } from '../i18n/index.js';
 
 /** Slack app in Socket Mode (app-level token xapp- for the socket, bot token xoxb- for posting). */
 export class SlackAdapter extends EventEmitter implements ImAdapter {
@@ -70,14 +71,14 @@ export class SlackAdapter extends EventEmitter implements ImAdapter {
         if (p.channel?.id && p.message?.ts) void this.api('chat.update', { channel: p.channel.id, ts: p.message.ts, text: p.message.text ?? '…', blocks: [] }).catch(() => {});
       }
     });
-    ws.on('close', () => { if (ws === this.ws && this.running) { this.running = false; this.setState('error', '连接断开，重连中…'); this.scheduleReconnect(4000); } });
+    ws.on('close', () => { if (ws === this.ws && this.running) { this.running = false; this.setState('error', tr('连接断开，重连中…')); this.scheduleReconnect(4000); } });
     ws.on('error', (e) => this.setState('error', e.message));
   }
 
   async stop() { this.running = false; this.wanted = false; if (this.retry) clearTimeout(this.retry); this.retry = null; try { this.ws?.close(); } catch { /* ignore */ } this.ws = null; this.setState('stopped'); }
 
   async send(chatId: string, text: string, o: OutboundOptions = {}) {
-    const parts = chunk(text || '(空)', this.maxLen);
+    const parts = chunk(text || tr('(空)'), this.maxLen);
     for (let i = 0; i < parts.length; i++) {
       const body: any = { channel: chatId, text: parts[i] };
       if (i === parts.length - 1 && o.buttons?.length) {

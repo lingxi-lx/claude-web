@@ -7,6 +7,7 @@ import { Icon } from '@/ui/icons';
 import { CharacterIcon } from './Character';
 import { agentColor, agentStateText, clock, KIND_LABEL, tokensText, unwrapHarnessMessage } from './model';
 import { closeAgent, stopTask } from './state';
+import { tr } from '@/i18n';
 
 /** How often a running agent's conversation is read again while it is open. */
 const REFRESH_MS = 3000;
@@ -38,14 +39,14 @@ export function AgentDrawer({ sessionId, task, agent }: { sessionId: string; tas
     return c;
   }, [msgs, running]);
   const facts = [
-    agent.phaseTitle && `阶段 ${agent.phase ?? ''} · ${agent.phaseTitle}`.replace('  ', ' '),
+    agent.phaseTitle && tr('阶段 {phase} · {phaseTitle}', { phase: agent.phase ?? '', phaseTitle: agent.phaseTitle }).replace('  ', ' '),
     agent.model,
     agent.tokens ? `${tokensText(agent.tokens)} tok` : '',
-    agent.toolCalls ? `${agent.toolCalls} 次工具调用` : '',
+    agent.toolCalls ? tr('{toolCalls} 次工具调用', { toolCalls: agent.toolCalls }) : '',
     agent.startedAt ? clock((agent.endedAt ?? Date.now()) - agent.startedAt) : '',
   ].filter(Boolean);
   return (
-    <aside className="bg-drawer" aria-label={`${agent.label} 的对话`} style={{ '--c': agentColor(agent.color) } as React.CSSProperties}>
+    <aside className="bg-drawer" aria-label={tr('{label} 的对话', { label: agent.label })} style={{ '--c': agentColor(agent.color) } as React.CSSProperties}>
       <div className="bg-drawer-head">
         <CharacterIcon color={agent.color} type={agent.agentType} state={agent.state} size={28} />
         <div className="bg-drawer-title">
@@ -53,18 +54,18 @@ export function AgentDrawer({ sessionId, task, agent }: { sessionId: string; tas
           <div className="sub">{KIND_LABEL[task.kind]} · {agentStateText(agent)}{facts.length ? ` · ${facts.join(' · ')}` : ''}</div>
         </div>
         {task.status === 'running' && (task.kind === 'agent' || task.kind === 'workflow') && (
-          <button className="btn sm" onClick={() => stopTask(sessionId, task.id)} title={task.kind === 'workflow' ? '工作流里的子代理只能和整个工作流一起停' : '停止这个子代理'}>
-            <Icon name="stop" size={12} />{task.kind === 'workflow' ? '停止整个工作流' : '停止'}
+          <button className="btn sm" onClick={() => stopTask(sessionId, task.id)} title={task.kind === 'workflow' ? tr('工作流里的子代理只能和整个工作流一起停') : tr('停止这个子代理')}>
+            <Icon name="stop" size={12} />{task.kind === 'workflow' ? tr('停止整个工作流') : tr('停止')}
           </button>
         )}
-        <button className="icon-btn" aria-label="关闭" title="关闭 (Esc)" onClick={closeAgent}><Icon name="close" size={14} /></button>
+        <button className="icon-btn" aria-label={tr('关闭')} title={tr('关闭 (Esc)')} onClick={closeAgent}><Icon name="close" size={14} /></button>
       </div>
       {agent.error && <div className="bg-drawer-err">{agent.error}</div>}
       <div className="bg-drawer-body">
-        {!id ? <div className="bg-idle">它还在排队，开始之后这里会是它的对话。</div>
-          : err ? <div className="bg-drawer-err">读不到它的对话：{err}</div>
-            : !conv ? <div className="bg-idle">读取中…</div>
-              : conv.items.length === 0 ? <div className="bg-idle">它还没说话。</div>
+        {!id ? <div className="bg-idle">{tr('它还在排队，开始之后这里会是它的对话。')}</div>
+          : err ? <div className="bg-drawer-err">{tr('读不到它的对话：{err}', { err })}</div>
+            : !conv ? <div className="bg-idle">{tr('读取中…')}</div>
+              : conv.items.length === 0 ? <div className="bg-idle">{tr('它还没说话。')}</div>
                 : <ItemList items={conv.items} version={msgs?.length ?? 0} actions="none" />}
       </div>
     </aside>

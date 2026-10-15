@@ -6,6 +6,7 @@ import { EventEmitter } from 'node:events';
 import type { IncomingMessage } from 'node:http';
 import type { Socket } from 'node:net';
 import type { MetaStore } from '../meta/store.js';
+import { getLocale, tr } from '../i18n/index.js';
 import type { DeviceInfo, RemotePairCode, RemoteStatus } from '../protocol.js';
 
 const PAIR_TTL_MS = 10 * 60_000;
@@ -81,7 +82,7 @@ export class RemoteService extends EventEmitter {
       sock.once('close', () => sockets.delete(sock));
     });
     await new Promise<void>((res) => {
-      srv.once('error', (e: any) => { this.error = e.code === 'EADDRINUSE' ? `端口 ${port} 被占用` : e.message; this.server = null; res(); });
+      srv.once('error', (e: any) => { this.error = e.code === 'EADDRINUSE' ? tr('端口 {port} 被占用', { port }) : e.message; this.server = null; res(); });
       srv.listen(port, this.host, () => { this.server = srv; this.port = (srv.address() as { port: number }).port; this.error = ''; res(); });
     });
     this.emit('changed');
@@ -145,13 +146,13 @@ export class RemoteService extends EventEmitter {
   /** Exchange a pairing code for a device token. */
   async redeem(code: string, name: string, req: IncomingMessage): Promise<{ token: string; device: DeviceInfo } | { error: string }> {
     const p = this.pair;
-    if (!p || p.expiresAt < Date.now()) return { error: '配对码已过期，请在电脑上重新生成' };
-    if (p.tries >= MAX_TRIES) { this.pair = null; return { error: '尝试次数过多，请重新生成配对码' }; }
+    if (!p || p.expiresAt < Date.now()) return { error: tr('配对码已过期，请在电脑上重新生成') };
+    if (p.tries >= MAX_TRIES) { this.pair = null; return { error: tr('尝试次数过多，请重新生成配对码') }; }
     if (code.trim() !== p.code) {
       p.tries++;
       // no try left: the code can no longer pair (the next attempt says 尝试次数过多)
       if (p.tries >= MAX_TRIES) this.emit('pairEnded', p.code);
-      return { error: '配对码不对' };
+      return { error: tr('配对码不对') };
     }
     this.pair = null;
     this.emit('pairEnded', p.code);
@@ -197,15 +198,15 @@ export function clientIp(req: IncomingMessage) { return (req.socket.remoteAddres
 function guessName(ua: string) {
   if (/iPhone/.test(ua)) return 'iPhone';
   if (/iPad/.test(ua)) return 'iPad';
-  if (/Android/.test(ua)) return 'Android 手机';
+  if (/Android/.test(ua)) return tr('Android 手机');
   if (/Macintosh/.test(ua)) return 'Mac';
-  if (/Windows/.test(ua)) return 'Windows 电脑';
-  return '设备';
+  if (/Windows/.test(ua)) return tr('Windows 电脑');
+  return tr('设备');
 }
 
 /** The /pair page: reads the code from the URL fragment, asks for a device name, stores the token and opens the app. */
 export function pairPage() {
-  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#f7f6f2" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#12110f" media="(prefers-color-scheme: dark)"><title>配对 · Claude Web</title>
+  return `<!doctype html><html lang="${getLocale() === 'zh' ? 'zh-CN' : 'en'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#f7f6f2" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#12110f" media="(prefers-color-scheme: dark)"><title>${tr('配对 · Claude Web')}</title>
 <style>:root{--g:#f7f6f2;--c:#fefdfc;--f:#1c1917;--f2:#67625f;--e:#be2a27;--r:#a94900;--pf:#fefdfc}
 @media (prefers-color-scheme:dark){:root{--g:#12110f;--c:#1b1a18;--f:#eeedea;--f2:#a5a39e;--e:#ff8179;--r:#f9a56e;--pf:#1b1a18}}
 body{margin:0;font:16px Inter,system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei UI","Microsoft YaHei",sans-serif;background:var(--g);color:var(--f);display:flex;min-height:100vh;min-height:100dvh;align-items:center;justify-content:center;padding:env(safe-area-inset-top) 16px env(safe-area-inset-bottom);box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -216,10 +217,10 @@ input{width:100%;box-sizing:border-box;font:inherit;height:48px;padding:0 14px;b
 input.code{height:60px;font-size:26px;letter-spacing:8px;text-align:center;font-family:ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace}
 button{margin-top:22px;width:100%;font:inherit;font-weight:600;height:48px;border:0;border-radius:999px;background:var(--f);color:var(--pf);touch-action:manipulation;transition:transform .12s cubic-bezier(.23,1,.32,1)}button:active{transform:scale(.98)}
 .err{color:var(--e);font-size:13px;margin-top:12px;min-height:18px}
-@media (prefers-reduced-motion:reduce){button{transition:none}button:active{transform:none}}</style></head><body><div class="card"><h1><i>✱</i>配对这台设备</h1><p>输入电脑上 Claude Web「远程访问」里显示的 6 位配对码。</p>
-<form id="f"><label>配对码</label><input class="code" id="code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" required><label>设备名称</label><input id="name" placeholder="例如 我的手机"><button>配对并打开</button><div class="err" id="err"></div></form></div>
+@media (prefers-reduced-motion:reduce){button{transition:none}button:active{transform:none}}</style></head><body><div class="card"><h1><i>✱</i>${tr('配对这台设备')}</h1><p>${tr('输入电脑上 Claude Web「远程访问」里显示的 6 位配对码。')}</p>
+<form id="f"><label>${tr('配对码')}</label><input class="code" id="code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" required><label>${tr('设备名称')}</label><input id="name" placeholder="${tr('例如 我的手机')}"><button>${tr('配对并打开')}</button><div class="err" id="err"></div></form></div>
 <script>const c=location.hash.slice(1);if(/^\\d{6}$/.test(c))document.getElementById('code').value=c;
 document.getElementById('f').onsubmit=async(e)=>{e.preventDefault();const err=document.getElementById('err');err.textContent='';
 try{const r=await fetch('/api/pair',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code:document.getElementById('code').value,name:document.getElementById('name').value})});const j=await r.json();
-if(!r.ok||j.error){err.textContent=j.error||('失败 '+r.status);return;}localStorage.setItem('cw.token',j.token);location.replace('/');}catch(x){err.textContent=String(x);}};</script></body></html>`;
+if(!r.ok||j.error){err.textContent=j.error||(${JSON.stringify(tr('失败'))}+' '+r.status);return;}localStorage.setItem('cw.token',j.token);location.replace('/');}catch(x){err.textContent=String(x);}};</script></body></html>`;
 }

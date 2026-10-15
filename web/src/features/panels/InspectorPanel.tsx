@@ -10,6 +10,7 @@ import { JsonTree } from '@/features/chat/tools/McpTool';
 import { basename } from '@/util';
 import { Icon } from '@/ui/icons';
 import { remoteFileNote, sessionPeer } from '@/features/peers';
+import { tr } from '@/i18n';
 
 function FileView({ path, line }: { path: string; line?: number }) {
   const [text, setText] = useState<string | null>(null);
@@ -32,10 +33,10 @@ function FileView({ path, line }: { path: string; line?: number }) {
         <b>{basename(path)}</b>
         <span className="mono" style={{ color: 'var(--fg-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontSize: 12 }} title={path}>{path}</span>
         <button className="btn sm ghost" onClick={() => ws.request({ kind: 'shell.open', path, app: 'code' }).catch(() => {})}>VS Code</button>
-        <button className="icon-btn" aria-label="关闭" onClick={() => useStore.setState({ inspect: null })}><Icon name="close" size={14} /></button>
+        <button className="icon-btn" aria-label={tr('关闭')} onClick={() => useStore.setState({ inspect: null })}><Icon name="close" size={14} /></button>
       </div>
       {err && <div style={{ color: 'var(--red)', fontSize: 13 }}>{err}</div>}
-      {text === null && !err && <div className="empty">读取中…</div>}
+      {text === null && !err && <div className="empty">{tr('读取中…')}</div>}
       {text !== null && <CodeBlock code={text} lang={langFromPath(path)} title={path} lineNumbers className="tall" />}
     </div>
   );
@@ -45,7 +46,7 @@ export function InspectorPanel() {
   const inspect = useStore((s) => s.inspect);
   const o = useStore((s) => (inspect ? s.open[inspect.sessionId] : undefined));
   const sessions = useStore((s) => s.sessions);
-  if (!inspect) return <div className="empty">点击工具行右侧的详情按钮、轨迹表格中的一行，或搜索结果里的文件路径查看详情</div>;
+  if (!inspect) return <div className="empty">{tr('点击工具行右侧的详情按钮、轨迹表格中的一行，或搜索结果里的文件路径查看详情')}</div>;
   if (inspect.file) {
     // a session on another machine: the path is on THAT disk — never read the same path here
     const peer = sessionPeer(inspect.sessionId, sessions);
@@ -53,28 +54,28 @@ export function InspectorPanel() {
     return <FileView path={inspect.file.path} line={inspect.file.line} />;
   }
   const t = o && inspect.toolUseId ? o.conv.toolIndex.get(inspect.toolUseId) : undefined;
-  if (!o || !t) return <div className="empty">找不到该工具调用</div>;
+  if (!o || !t) return <div className="empty">{tr('找不到该工具调用')}</div>;
   const Body = getToolDef(t.name).Body;
   return (
     <div className="inspector" style={{ padding: '8px 12px', fontSize: 13 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
         <div style={{ flex: 1, minWidth: 0 }}><ToolHead t={t} /></div>
-        <button className="icon-btn" aria-label="关闭" onClick={() => useStore.setState({ inspect: null })}><Icon name="close" size={14} /></button>
+        <button className="icon-btn" aria-label={tr('关闭')} onClick={() => useStore.setState({ inspect: null })}><Icon name="close" size={14} /></button>
       </div>
       <Body t={t} />
       <details className="structured" style={{ marginTop: 8 }}>
-        <summary>原始输入</summary>
+        <summary>{tr('原始输入')}</summary>
         <div className="jt"><JsonTree value={t.input} /></div>
       </details>
       {t.result && (
         <details className="structured">
-          <summary>原始输出（{t.result.content.length} 字符）</summary>
+          <summary>{tr('原始输出（{contentCount} 字符）', { contentCount: t.result.content.length })}</summary>
           <CodeBlock code={t.result.content} lang="plaintext" wrap maxLines={200} />
         </details>
       )}
       {t.children.length > 0 && (
         <>
-          <div style={{ color: 'var(--fg-2)', fontSize: 12, margin: '10px 0 3px' }}>子代理对话 ({t.children.length})</div>
+          <div style={{ color: 'var(--fg-2)', fontSize: 12, margin: '10px 0 3px' }}>{tr('子代理对话 ({childrenCount})', { childrenCount: t.children.length })}</div>
           <div style={{ borderLeft: '3px solid var(--accent-soft)', paddingLeft: 8 }}>
             <ItemList items={t.children} version={o.version} />
           </div>

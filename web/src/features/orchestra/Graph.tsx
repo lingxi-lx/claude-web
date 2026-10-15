@@ -4,13 +4,14 @@ import { Icon, type IconName } from '@/ui/icons';
 import type { NodeRun, OrchNode } from '@shared';
 import { CARD_H, CARD_W, fitScale, layoutGraph } from './graph-layout';
 import { agentLabel } from './labels';
+import { tr } from '@/i18n';
 
 export const KIND_ICON: Record<OrchNode['kind'], IconName> = { task: 'agent', compare: 'compare', approval: 'approval' };
 
 function sub(n: OrchNode) {
-  if (n.kind === 'task') return `${agentLabel(n.agent)}${n.workspace === 'worktree' ? ' · 独立副本' : ''}${n.untilDone ? ' · 直到完成' : ''}`;
-  if (n.kind === 'compare') return `${n.agents.map(agentLabel).join(' / ')}${n.judge ? ' · 裁判' : ''}`;
-  return '人工审批';
+  if (n.kind === 'task') return `${agentLabel(n.agent)}${n.workspace === 'worktree' ? tr(' · 独立副本') : ''}${n.untilDone ? tr(' · 直到完成') : ''}`;
+  if (n.kind === 'compare') return `${n.agents.map(agentLabel).join(' / ')}${n.judge ? tr(' · 裁判') : ''}`;
+  return tr('人工审批');
 }
 
 /**
@@ -34,7 +35,7 @@ export function Graph({ nodes, runs, selected, onSelect }: { nodes: OrchNode[]; 
     return () => ro.disconnect();
   }, [hasNodes]);
   const scale = fitScale(g.width, avail);
-  if (!hasNodes) return <div className="orch-graph empty">还没有节点</div>;
+  if (!hasNodes) return <div className="orch-graph empty">{tr('还没有节点')}</div>;
   return (
     <div className="orch-graph" ref={box}>
       <div style={{ width: g.width * scale, height: g.height * scale }}>
@@ -63,4 +64,4 @@ export function Graph({ nodes, runs, selected, onSelect }: { nodes: OrchNode[]; 
   );
 }
 
-export const STATE_L: Record<NodeRun['state'], string> = { pending: '待执行', running: '运行中', waiting: '等你', done: '完成', failed: '失败', skipped: '跳过', cancelled: '已取消' };
+export const STATE_L: Record<NodeRun['state'], string> = { pending: tr('待执行'), running: tr('运行中'), waiting: tr('等你'), done: tr('完成'), failed: tr('失败'), skipped: tr('跳过'), cancelled: tr('已取消') };

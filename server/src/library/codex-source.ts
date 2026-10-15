@@ -7,6 +7,7 @@ import type { AgentKind, SessionSummary, SourceCaps, SourceStatus } from '../pro
 import { libraryId } from './ids.js';
 import { LazyRpc } from './lazy-rpc.js';
 import { isNotInstalled, type SessionSource } from './types.js';
+import { tr } from '../i18n/index.js';
 
 const SOURCE_KINDS = ['cli', 'vscode', 'exec', 'appServer', 'subAgent', 'subAgentReview', 'subAgentCompact', 'subAgentThreadSpawn', 'subAgentOther'];
 // Shared by status() and list(). Real machine (codex 0.155): thread/list without `modelProviders`
@@ -60,7 +61,7 @@ async function rolloutOpen(file: string | undefined, now = Date.now()): Promise<
   }
 }
 
-const goneError = () => Object.assign(new Error('Codex 里读不到这个对话：它可能已经在 Codex 里删除了，或者刚创建、还没保存第一条消息。'), { code: THREAD_GONE });
+const goneError = () => Object.assign(new Error(tr('Codex 里读不到这个对话：它可能已经在 Codex 里删除了，或者刚创建、还没保存第一条消息。')), { code: THREAD_GONE });
 
 // Thread.source (per `codex app-server generate-ts`) is `"cli"|"vscode"|"exec"|"appServer"|
 // {custom:string}|{subAgent:SubAgentSource}|"unknown"` — a bare string for the built-in surfaces,
@@ -129,7 +130,7 @@ export class CodexSource implements SessionSource {
       return { ...base, installed: true, detected: true, enabled: true, version: this.version };
     } catch (e: any) {
       if (e?.code === -32601) {
-        return { ...base, installed: true, detected: true, enabled: false, version: this.version, disabledReason: 'Codex 版本不支持 thread/list，请升级' };
+        return { ...base, installed: true, detected: true, enabled: false, version: this.version, disabledReason: tr('Codex 版本不支持 thread/list，请升级') };
       }
       const installed = !!this.version; // initialize succeeded at least once — the executable itself resolved and ran
       const message = e?.message ?? String(e);

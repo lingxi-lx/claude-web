@@ -6,12 +6,13 @@ import type { BgAgent, BgSession, BgTask } from '@shared';
 import { clsx } from '@/util';
 import { agentColor, agentStateText, clock, KIND_LABEL, taskStateText, tokensText } from './model';
 import { CharacterIcon, MachineIcon, agentTip, phaseLine } from './Character';
+import { tr } from '@/i18n';
 
 type Pick = (agentKey: string, taskId: string) => void;
 type Item = { kind: 'agent'; task: BgTask; agent: BgAgent } | { kind: 'shell'; task: BgTask };
 
 const live = (i: Item) => (i.kind === 'agent' ? i.agent.state === 'running' : i.task.status === 'running');
-const SHELL_WORD: Record<BgTask['status'], string> = { running: '在跑', completed: '完成', failed: '失败', stopped: '已停止' };
+const SHELL_WORD: Record<BgTask['status'], string> = { running: tr('在跑'), completed: tr('完成'), failed: tr('失败'), stopped: tr('已停止') };
 
 /** How far along the bar is, 0…1: a running agent's time so far against the longest-running agent of its task (never
  *  quite full: full means done), done / failed full, queued empty, stopped where it was when it stopped. */
@@ -43,8 +44,8 @@ export function AgentCards({ session, taskId, onPick, max = 15 }: { session: BgS
       {shown.map((i) => (i.kind === 'agent'
         ? <AgentCard key={`${i.task.id}|${i.agent.key}`} task={i.task} agent={i.agent} p={progress(i.agent, now, longest.get(i.task.id) ?? 0)} onPick={onPick} />
         : <ShellCard key={`shell|${i.task.id}`} task={i.task} now={now} />))}
-      {folded && <button type="button" className="bg-card bg-card-more" onClick={() => setAll(true)}>还有 {items.length - max} 个</button>}
-      {all && items.length > max && <button type="button" className="bg-card bg-card-more" onClick={() => setAll(false)}>收起</button>}
+      {folded && <button type="button" className="bg-card bg-card-more" onClick={() => setAll(true)}>{tr('还有 {itemsCount} 个', { itemsCount: items.length - max })}</button>}
+      {all && items.length > max && <button type="button" className="bg-card bg-card-more" onClick={() => setAll(false)}>{tr('收起')}</button>}
     </div>
   );
 }

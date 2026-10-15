@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { tr } from '../i18n/index.js';
 
 export type OpenApp = 'explorer' | 'code' | 'cursor';
 
@@ -39,7 +40,7 @@ export function openCommands(p: string, app: OpenApp = 'explorer', platform: Nod
  */
 export function openPath(p: string, app: OpenApp = 'explorer') {
   if (p === '~' || p.startsWith('~/') || p.startsWith('~\\')) p = path.join(os.homedir(), p.slice(1));
-  if (!p || !existsSync(p)) throw new Error(`找不到这个文件夹：${p || '（空）'}`);
+  if (!p || !existsSync(p)) throw new Error(tr('找不到这个文件夹：{p}', { p: p || tr('（空）') }));
   const cmds = openCommands(p, app);
   const run = (i: number) => {
     const c = cmds[i];

@@ -12,6 +12,7 @@ import { replyFromError, replyFromPc, spaFallback, withToken, type ShellReply, t
 import { readPairAnswer, type PairLink, type PcLists } from './pair-link';
 import { appEntry, appKey, pcPath } from './route';
 import { ShellTunnel } from './tunnel';
+import { tr } from './i18n';
 
 /** How one dial goes. */
 export interface DialPlan {
@@ -493,7 +494,7 @@ export async function pairWith(
     const a = readPairAnswer(res);
     if ('error' in a) throw new ShellError({ text: a.error, raw: '' }, true);
     // the lists go on the record: every later dial of this PC uses them
-    return { id: a.id, pcName: r.pcName || link.pc || '电脑', token: a.token, pairedAt: (o.now ?? Date.now)(), ...lists };
+    return { id: a.id, pcName: r.pcName || link.pc || tr('电脑'), token: a.token, pairedAt: (o.now ?? Date.now)(), ...lists };
   } finally {
     o.signal?.removeEventListener('abort', stop);
     mux.close();

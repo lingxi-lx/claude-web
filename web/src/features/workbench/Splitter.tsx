@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { useStore } from '@/store';
 import type { Rect } from '@/model/layout';
+import { tr } from '@/i18n';
 
 /** Absolutely positioned split bar: drag to change the ratio, double-click to even out the subtree. */
 export function Splitter({ id, dir, rect, container }: { id: string; dir: 'row' | 'col'; rect: Rect; container: () => DOMRect | null }) {
@@ -47,7 +48,7 @@ export function Splitter({ id, dir, rect, container }: { id: string; dir: 'row' 
       onPointerUp={onUp}
       onPointerCancel={onUp}
       onDoubleClick={() => dispatch({ t: 'pane.even', splitId: id })}
-      title="拖动调整 · 双击均分"
+      title={tr('拖动调整 · 双击均分')}
     />
   );
 }

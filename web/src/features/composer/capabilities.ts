@@ -1,6 +1,7 @@
 import type { SessionFeatures } from '@shared';
 import type { IconName } from '@/ui/icons';
 import { PLUS_ID } from './ids';
+import { tr } from '@/i18n';
 
 /**
  * The per-conversation capabilities (spec §5.4 「+ 菜单」): what used to be the composer's 「功能」 dropdown —
@@ -34,13 +35,13 @@ const NO_ENV: CapabilityEnv = {};
 
 export const CAPABILITIES: Capability[] = [
   // (the built-in browser needs no switch — every conversation has it; this one is the user's own Chrome)
-  { key: 'chrome', label: '控制 Chrome', desc: '用你自己的 Chrome（要装 Claude 扩展）', title: 'Claude in Chrome（--chrome）：在你自己的 Chrome 里打开网页、点击、填表，用的是那里登录着的账号。内置浏览器不用开这个', icon: 'browser', group: 'main' },
+  { key: 'chrome', label: tr('控制 Chrome'), desc: tr('用你自己的 Chrome（要装 Claude 扩展）'), title: tr('Claude in Chrome（--chrome）：在你自己的 Chrome 里打开网页、点击、填表，用的是那里登录着的账号。内置浏览器不用开这个'), icon: 'browser', group: 'main' },
   // the whole desktop, through our own `computer` MCP server (server/src/computer): which applications is asked of
   // the user every time, in a card of this app. Windows only for now — elsewhere the row says so
-  { key: 'computerUse', label: '操控电脑', desc: '看屏幕、用键盘鼠标操作你允许的应用（每次先问你）', title: 'Computer Use：截图、键盘和鼠标操作整台电脑上你允许的应用。只对这一个对话开；要用哪些应用，每次都会先弹出来问你', icon: 'machine', group: 'main', needs: 'computer', unavailable: '目前只支持 Windows（看的是运行 Claude Web 的那台电脑）。上网不用它——搜索、打开网页、点击、截图都在右侧的「浏览器」里' },
-  { key: 'coordinator', label: '协调者模式', desc: '自己不动手，只派活给子代理', title: '协调者模式（CLAUDE_CODE_COORDINATOR_MODE）', icon: 'orchestra', group: 'advanced' },
-  { key: 'proactive', label: '主动模式', desc: '空闲时继续推进', title: '主动模式（--proactive）', icon: 'play', group: 'advanced' },
-  { key: 'brief', label: 'Brief', desc: '让 Claude 用简报工具随时告诉你进展', title: 'Brief（--brief，SendUserMessage 工具）', icon: 'chat', group: 'advanced' },
+  { key: 'computerUse', label: tr('操控电脑'), desc: tr('看屏幕、用键盘鼠标操作你允许的应用（每次先问你）'), title: tr('Computer Use：截图、键盘和鼠标操作整台电脑上你允许的应用。只对这一个对话开；要用哪些应用，每次都会先弹出来问你'), icon: 'machine', group: 'main', needs: 'computer', unavailable: tr('目前只支持 Windows（看的是运行 Claude Web 的那台电脑）。上网不用它——搜索、打开网页、点击、截图都在右侧的「浏览器」里') },
+  { key: 'coordinator', label: tr('协调者模式'), desc: tr('自己不动手，只派活给子代理'), title: tr('协调者模式（CLAUDE_CODE_COORDINATOR_MODE）'), icon: 'orchestra', group: 'advanced' },
+  { key: 'proactive', label: tr('主动模式'), desc: tr('空闲时继续推进'), title: tr('主动模式（--proactive）'), icon: 'play', group: 'advanced' },
+  { key: 'brief', label: 'Brief', desc: tr('让 Claude 用简报工具随时告诉你进展'), title: tr('Brief（--brief，SendUserMessage 工具）'), icon: 'chat', group: 'advanced' },
 ];
 export const FEATURE_KEYS = CAPABILITIES.map((c) => c.key);
 
@@ -75,7 +76,7 @@ export function afterStart(f: SessionFeatures): SessionFeatures {
   return next;
 }
 
-export const CHANNELS = { label: '频道', desc: '让插件 / MCP 服务器往对话里推消息', title: '频道（--channels），格式 plugin:name@marketplace 或 server:name，逗号分隔', placeholder: 'plugin:name@marketplace, server:name' } as const;
+export const CHANNELS = { label: tr('频道'), desc: tr('让插件 / MCP 服务器往对话里推消息'), title: tr('频道（--channels），格式 plugin:name@marketplace 或 server:name，逗号分隔'), placeholder: 'plugin:name@marketplace, server:name' } as const;
 
 export function withFeature(f: SessionFeatures, key: FeatureKey, on: boolean, env: CapabilityEnv = NO_ENV): SessionFeatures {
   const next = { ...f };
@@ -120,7 +121,7 @@ export interface AttachItem { id: typeof PLUS_ID.files | typeof PLUS_ID.folder |
  * Under 「这次对话可以…」 in a running conversation: the switches show what it was started with, read-only — the note
  * says where they CAN be changed (「改动在新对话生效」 read as if this menu changed them).
  */
-export const LIVE_CAPS_NOTE = '开对话时就定下了，要改请在新对话的 + 里设置';
+export const LIVE_CAPS_NOTE = tr('开对话时就定下了，要改请在新对话的 + 里设置');
 
 /**
  * What the + menu shows. `claude` = the conversation runs on Claude (the capabilities are Claude Code flags: the old
@@ -129,12 +130,12 @@ export const LIVE_CAPS_NOTE = '开对话时就定下了，要改请在新对话�
  * its reach — images still go inline; goals run on this machine and cannot drive it).
  */
 export function plusSections(o: { claude: boolean; live: boolean; remote?: boolean }): { attach: AttachItem[]; capabilities: boolean; readOnly: boolean; note?: string; goal: boolean } {
-  const remoteNote = '其它机器上的对话只收图片（文件在本机，那边读不到）';
+  const remoteNote = tr('其它机器上的对话只收图片（文件在本机，那边读不到）');
   return {
     attach: [
-      { id: PLUS_ID.files, label: '添加文件或图片', icon: 'attach', note: o.remote ? remoteNote : '或拖进来' },
-      { id: PLUS_ID.folder, label: '添加文件夹', icon: 'folder', disabled: o.remote ? remoteNote : undefined },
-      { id: PLUS_ID.reference, label: '引用另一个对话', icon: 'quote' },
+      { id: PLUS_ID.files, label: tr('添加文件或图片'), icon: 'attach', note: o.remote ? remoteNote : tr('或拖进来') },
+      { id: PLUS_ID.folder, label: tr('添加文件夹'), icon: 'folder', disabled: o.remote ? remoteNote : undefined },
+      { id: PLUS_ID.reference, label: tr('引用另一个对话'), icon: 'quote' },
     ],
     capabilities: o.claude,
     readOnly: o.live,

@@ -6,6 +6,7 @@ import path from 'node:path';
 import type { AgentKind, SessionSummary, SourceCaps, SourceStatus } from '../protocol.js';
 import type { SessionService } from '../sessions/service.js';
 import type { SessionSource } from './types.js';
+import { tr } from '../i18n/index.js';
 
 // Archiving Claude sessions is handled via meta (LibraryService, task 8), not an official
 // SessionsService API, so caps.archive stays false and there is no archive() method here.
@@ -59,7 +60,7 @@ export class ClaudeSource implements SessionSource {
    */
   async backupTo(nativeId: string, destDir: string): Promise<void> {
     const files = await this.sessions.locateAll(nativeId);
-    if (!files.length) throw new Error(`找不到对话文件 ${nativeId}.jsonl，未删除`);
+    if (!files.length) throw new Error(tr('找不到对话文件 {nativeId}.jsonl，未删除', { nativeId }));
     for (const file of files) {
       const to = path.join(destDir, path.basename(path.dirname(file)));
       await fs.mkdir(to, { recursive: true });

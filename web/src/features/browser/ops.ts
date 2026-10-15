@@ -2,6 +2,7 @@
 // Pure over `PageHandle` — what a page of the browser can be asked — so the order of things (act, let the page
 // settle, read it back) is tested without a browser; guest.ts makes a PageHandle out of a <webview>.
 import type { BrowserAnswer, BrowserOp, BrowserPage } from '@shared';
+import { tr } from '@/i18n';
 
 export interface PageHandle {
   /** Load an address and wait for it. Throws with the reason when it cannot be loaded; false = still loading after the wait. */
@@ -39,7 +40,7 @@ export const OPEN_CHARS = 60_000;
 export const GLANCE_CHARS = 6_000;
 /** How long an action's effect is given to finish loading. */
 export const ACTION_SETTLE_MS = 8_000;
-const STILL_LOADING = '页面还在加载，下面的内容可能不全（过一会儿用 browser_read 再读）。';
+const STILL_LOADING = tr('页面还在加载，下面的内容可能不全（过一会儿用 browser_read 再读）。');
 
 interface Read { page: BrowserPage; length: number }
 interface Did { submitted?: boolean; enter?: boolean }
@@ -81,34 +82,34 @@ export async function runOp(page: PageHandle, op: BrowserOp, args: Record<string
     case 'click': {
       const before = page.url();
       await page.call<Did>('click', { ref: args.ref });
-      const a = await glance(`已点击 ${at(args.ref)}。`);
-      return page.url() !== before ? { ...a, note: `${a.note ?? ''}页面换了地址（见下面的「来源」）。` } : a;
+      const a = await glance(tr('已点击 {at}。', { at: at(args.ref) }));
+      return page.url() !== before ? { ...a, note: tr('{note}页面换了地址（见下面的「来源」）。', { note: a.note ?? '' }) } : a;
     }
     case 'type': {
       const d = await page.call<Did>('type', { ref: args.ref, text: str(args.text), submit: args.submit === true });
       if (d.enter) await page.key('Enter');
-      if (d.submitted || d.enter) return glance(`已在 ${at(args.ref)} 里输入并提交。`);
-      return { note: `已在 ${at(args.ref)} 里输入。` };
+      if (d.submitted || d.enter) return glance(tr('已在 {at} 里输入并提交。', { at: at(args.ref) }));
+      return { note: tr('已在 {at} 里输入。', { at: at(args.ref) }) };
     }
     case 'key': {
       const key = str(args.key).trim();
-      if (!key) throw new Error('browser_press_key 需要参数 key');
+      if (!key) throw new Error(tr('browser_press_key 需要参数 key'));
       await page.key(key);
-      return glance(`已按 ${parseKey(key).keyCode || '键'}。`);
+      return glance(tr('已按 {keyCode}。', { keyCode: parseKey(key).keyCode || tr('键') }));
     }
     case 'scroll': {
       const up = args.direction === 'up';
       const s = await page.call<Scrolled>('scroll', { direction: up ? 'up' : 'down', amount: Number(args.amount) || 1 });
       await sleep(pause);
-      if (!s.moved) return { note: up ? '已经在页面最上面了。' : '已经到页面最下面了。' };
+      if (!s.moved) return { note: up ? tr('已经在页面最上面了。') : tr('已经到页面最下面了。') };
       // a page that loads more as it scrolls grew: the new part starts where the old text ended
       const now = await page.call<Read>('read', { offset: 0, maxChars: 200 });
-      const grew = now.length > s.length ? `页面多出了内容：用 browser_read {"offset": ${s.length}} 读新出现的部分。` : '用 browser_read 读内容（offset 是文字的位置，和滚到哪里无关）。';
-      return { note: `已向${up ? '上' : '下'}滚动（位置 ${s.top} / ${s.max}）。${grew}` };
+      const grew = now.length > s.length ? tr('页面多出了内容：用 browser_read {"offset": {sCount}} 读新出现的部分。', { sCount: s.length }) : tr('用 browser_read 读内容（offset 是文字的位置，和滚到哪里无关）。');
+      return { note: tr('已向{v}滚动（位置 {top} / {max}）。{grew}', { v: up ? tr('上') : tr('下'), top: s.top, max: s.max, grew }) };
     }
     case 'back': {
-      if (!(await page.back())) return { note: '没有上一页了。' };
-      return glance('已返回上一页。');
+      if (!(await page.back())) return { note: tr('没有上一页了。') };
+      return glance(tr('已返回上一页。'));
     }
     case 'screenshot': {
       const image = await page.capture();
@@ -126,7 +127,7 @@ export async function runOp(page: PageHandle, op: BrowserOp, args: Record<string
 export const COMPUTER_SETTLE_MS = 3_000;
 /** One wheel notch, in the page's pixels. */
 export const WHEEL_NOTCH = 100;
-const NEEDS_PICTURE = '先截一张图（action: "screenshot"）：位置按截图里的像素来。';
+const NEEDS_PICTURE = tr('先截一张图（action: "screenshot"）：位置按截图里的像素来。');
 
 /** `shift`, `ctrl+shift`, `Control+Alt` → the names an input event takes. */
 export function parseModifiers(text: unknown): string[] {
@@ -144,8 +145,8 @@ export function parseModifiers(text: unknown): string[] {
 /** A position in the last picture → the same place in the page's own pixels. Throws when it is outside the picture. */
 export function toView(at: unknown, picture: { width: number; height: number }, view: { width: number; height: number }): { x: number; y: number } {
   const [px, py] = Array.isArray(at) ? (at as number[]) : [NaN, NaN];
-  if (!Number.isFinite(px) || !Number.isFinite(py)) throw new Error('位置要写成 [x, y]。');
-  if (px < 0 || py < 0 || px > picture.width || py > picture.height) throw new Error(`位置 [${px}, ${py}] 在截图（${picture.width}×${picture.height}）外面。`);
+  if (!Number.isFinite(px) || !Number.isFinite(py)) throw new Error(tr('位置要写成 [x, y]。'));
+  if (px < 0 || py < 0 || px > picture.width || py > picture.height) throw new Error(tr('位置 [{px}, {py}] 在截图（{width}×{height}）外面。', { px, py, width: picture.width, height: picture.height }));
   return { x: Math.min(view.width - 1, Math.round((px * view.width) / picture.width)), y: Math.min(view.height - 1, Math.round((py * view.height) / picture.height)) };
 }
 
@@ -164,17 +165,17 @@ async function computer(page: PageHandle, args: Record<string, unknown>, pause: 
   };
   if (action === 'wait') {
     await sleep(Math.min(10, Math.max(0.1, Number(args.seconds) || 1)) * 1000);
-    return shot('已等待。');
+    return shot(tr('已等待。'));
   }
   if (action === 'type') {
     await page.insertText(str(args.text));
-    return after('已输入。');
+    return after(tr('已输入。'));
   }
   if (action === 'key') {
     const key = str(args.text).trim();
-    if (!parseKey(key).keyCode) throw new Error(`不认识的按键：${key.slice(0, 40)}`);
+    if (!parseKey(key).keyCode) throw new Error(tr('不认识的按键：{key}', { key: key.slice(0, 40) }));
     await page.key(key);
-    return after('已按键。');
+    return after(tr('已按键。'));
   }
   const f = await page.frame();
   if (!f.picture) throw new Error(NEEDS_PICTURE);
@@ -190,12 +191,12 @@ async function computer(page: PageHandle, args: Record<string, unknown>, pause: 
     }
   };
   switch (action) {
-    case 'left_click': await click('left', 1); return after('已点击。');
-    case 'right_click': await click('right', 1); return after('已右键点击。');
-    case 'middle_click': await click('middle', 1); return after('已中键点击。');
-    case 'double_click': await click('left', 2); return after('已双击。');
-    case 'triple_click': await click('left', 3); return after('已三连击。');
-    case 'mouse_move': await page.mouse({ type: 'move', ...at, ...mods }); return after('已移动鼠标。');
+    case 'left_click': await click('left', 1); return after(tr('已点击。'));
+    case 'right_click': await click('right', 1); return after(tr('已右键点击。'));
+    case 'middle_click': await click('middle', 1); return after(tr('已中键点击。'));
+    case 'double_click': await click('left', 2); return after(tr('已双击。'));
+    case 'triple_click': await click('left', 3); return after(tr('已三连击。'));
+    case 'mouse_move': await page.mouse({ type: 'move', ...at, ...mods }); return after(tr('已移动鼠标。'));
     case 'left_click_drag': {
       const from = toView(args.start, f.picture, f.view);
       await page.mouse({ type: 'move', ...from, ...mods });
@@ -207,7 +208,7 @@ async function computer(page: PageHandle, args: Record<string, unknown>, pause: 
         await sleep(Math.min(pause, 20));
       }
       await page.mouse({ type: 'up', ...at, button: 'left', count: 1, ...mods });
-      return after('已拖动。');
+      return after(tr('已拖动。'));
     }
     case 'scroll': {
       const n = Math.min(20, Math.max(1, Math.round(Number(args.amount) || 3))) * WHEEL_NOTCH;
@@ -217,10 +218,10 @@ async function computer(page: PageHandle, args: Record<string, unknown>, pause: 
       const dy = d === 'up' ? n : d === 'down' ? -n : 0;
       await page.mouse({ type: 'move', ...at, ...mods });
       await page.mouse({ type: 'wheel', ...at, dx, dy, ...mods });
-      return after('已滚动。');
+      return after(tr('已滚动。'));
     }
     default:
-      throw new Error(`不认识的操作：${action.slice(0, 40)}`);
+      throw new Error(tr('不认识的操作：{action}', { action: action.slice(0, 40) }));
   }
 }
 

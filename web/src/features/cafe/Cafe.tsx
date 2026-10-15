@@ -12,6 +12,7 @@ import { fitView, hitTest, onPage, render, sceneSize, type View } from './render
 import { DEFAULT_RATE, estimateUsd, fee, usd, yuan } from './money';
 import { AGENT_NIGHT, openLibrary, setReceipts, useCafe } from './state';
 import { tokensText } from '@/features/background/model';
+import { tr } from '@/i18n';
 
 /** Frames a second at most. */
 const FPS = 30;
@@ -22,16 +23,16 @@ function reducedMotion(): boolean {
 
 const doingText = (x: Actor): string => {
   switch (x.doing) {
-    case 'work': return '在干活';
-    case 'game': return '在打游戏';
+    case 'work': return tr('在干活');
+    case 'game': return tr('在打游戏');
     case 'activity': case 'toActivity':
-      return x.activity === 'eat' ? '在吃泡面' : x.activity === 'drink' ? '在喝饮料' : x.activity === 'toilet' ? '上厕所' : x.activity === 'smoke' ? '在吸烟区' : x.activity === 'power' ? '在借充电宝' : x.activity === 'chat' ? '在聊天' : '在闲逛';
-    case 'toDesk': case 'checkin': return '在开机';
-    case 'toCheckout': case 'checkout': return '在结账';
-    case 'leave': return '下机了';
-    case 'bsod': return '蓝屏了';
-    case 'wait': return '断线了，等一下';
-    default: return '在路上';
+      return x.activity === 'eat' ? tr('在吃泡面') : x.activity === 'drink' ? tr('在喝饮料') : x.activity === 'toilet' ? tr('上厕所') : x.activity === 'smoke' ? tr('在吸烟区') : x.activity === 'power' ? tr('在借充电宝') : x.activity === 'chat' ? tr('在聊天') : tr('在闲逛');
+    case 'toDesk': case 'checkin': return tr('在开机');
+    case 'toCheckout': case 'checkout': return tr('在结账');
+    case 'leave': return tr('下机了');
+    case 'bsod': return tr('蓝屏了');
+    case 'wait': return tr('断线了，等一下');
+    default: return tr('在路上');
   }
 };
 
@@ -110,7 +111,7 @@ export function Cafe({ session, compact, onPick, onAdmin }: { session: BgSession
         const sz = sceneSize(w.map);
         const list = [...w.actors.filter((x) => !x.hidden).map((x) => ({ x, kind: 'actor' as const })), { x: w.admin, kind: 'admin' as const }].map(({ x, kind }) => {
           const p = onPage(view, sz, x.u + 0.5, x.v + 0.5, 12);
-          return { key: x.key, kind, x: p.x / dpr, y: p.y / dpr, label: kind === 'admin' ? `网管 · ${L.mainBusy ? '主对话在回答' : '主对话空闲'}` : `${x.name} · ${doingText(x)}${x.seat ? ` · ${String(x.seat).padStart(2, '0')} 号机` : ''}` };
+          return { key: x.key, kind, x: p.x / dpr, y: p.y / dpr, label: kind === 'admin' ? tr('网管 · {v}', { v: L.mainBusy ? tr('主对话在回答') : tr('主对话空闲') }) : `${x.name} · ${doingText(x)}${x.seat ? tr(' · {padStart} 号机', { padStart: String(x.seat).padStart(2, '0') }) : ''}` };
         });
         setPeople((prev) => (JSON.stringify(prev) === JSON.stringify(list) ? prev : list));
       }
@@ -134,20 +135,20 @@ export function Cafe({ session, compact, onPick, onAdmin }: { session: BgSession
   };
   const tipFor = (key: string, kind: string): string[] => {
     const w = world.current, s = snap.current;
-    if (kind === 'admin') return ['网管 · 主对话', look.current.mainBusy ? '正在回答' : '空闲', '点一下回到对话'];
-    if (kind === 'machine') { const t = s?.tasks.find((x) => x.id === key); return ['包间 · 后台命令', t?.description ?? '', t?.status === 'running' ? '在跑' : '结束了']; }
+    if (kind === 'admin') return [tr('网管 · 主对话'), look.current.mainBusy ? tr('正在回答') : tr('空闲'), tr('点一下回到对话')];
+    if (kind === 'machine') { const t = s?.tasks.find((x) => x.id === key); return [tr('包间 · 后台命令'), t?.description ?? '', t?.status === 'running' ? tr('在跑') : tr('结束了')]; }
     const x = w?.actors.find((a) => a.key === key);
     const t = s?.tasks.find((y) => y.id === x?.taskId);
     const a = t?.agents.find((y) => y.key === x?.agentKey);
     if (!x) return [];
     const ms = Math.max(0, (a?.endedAt ?? Date.now()) - (a?.startedAt ?? t?.startedAt ?? Date.now()));
     return [
-      `${x.name}${x.seat ? ` · ${String(x.seat).padStart(2, '0')} 号机` : ''}`,
-      `${doingText(x)} · 上机 ${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`,
-      `网费 ${yuan(fee(ms, look.current.rate))}`,
+      `${x.name}${x.seat ? tr(' · {padStart} 号机', { padStart: String(x.seat).padStart(2, '0') }) : ''}`,
+      tr('{doingText} · 上机 {ms}:{padStart}', { doingText: doingText(x), ms: Math.floor(ms / 60000), padStart: String(Math.floor(ms / 1000) % 60).padStart(2, '0') }),
+      tr('网费 {yuan}', { yuan: yuan(fee(ms, look.current.rate)) }),
       `${a?.tokens ? `${tokensText(a.tokens)} token · ` : ''}${usd(estimateUsd(a?.tokens, a?.model))}`,
-      ...(a?.lastSummary ? [`最近：${a.lastSummary.length > 40 ? `${a.lastSummary.slice(0, 39)}…` : a.lastSummary}`] : []),
-      '只按输入单价估，实际会更高',
+      ...(a?.lastSummary ? [tr('最近：{lastSummary}', { lastSummary: a.lastSummary.length > 40 ? `${a.lastSummary.slice(0, 39)}…` : a.lastSummary })] : []),
+      tr('只按输入单价估，实际会更高'),
     ];
   };
   const onMove = (e: React.PointerEvent) => {
@@ -211,9 +212,9 @@ export function Cafe({ session, compact, onPick, onAdmin }: { session: BgSession
         ))}
       </div>
       <div className="cafe-tools">
-        <button className="icon-btn sm" title={sound ? '关掉声音' : '打开结账的声音'} aria-label={sound ? '关掉声音' : '打开结账的声音'} onClick={() => useStore.getState().setSetting('cafe.sound', !sound)}><Icon name={sound ? 'volume' : 'volumeOff'} size={14} /></button>
-        <button className="btn sm" onClick={openLibrary}><Icon name="user" size={13} /><span className="l">角色库</span></button>
-        {!compact && <button className="icon-btn sm" title="看全景（双击画面也行）" aria-label="看全景" onClick={() => { user.current = null; }}><Icon name="zoomOut" size={14} /></button>}
+        <button className="icon-btn sm" title={sound ? tr('关掉声音') : tr('打开结账的声音')} aria-label={sound ? tr('关掉声音') : tr('打开结账的声音')} onClick={() => useStore.getState().setSetting('cafe.sound', !sound)}><Icon name={sound ? 'volume' : 'volumeOff'} size={14} /></button>
+        <button className="btn sm" onClick={openLibrary}><Icon name="user" size={13} /><span className="l">{tr('角色库')}</span></button>
+        {!compact && <button className="icon-btn sm" title={tr('看全景（双击画面也行）')} aria-label={tr('看全景')} onClick={() => { user.current = null; }}><Icon name="zoomOut" size={14} /></button>}
       </div>
       {tip && tip.lines.length > 0 && (
         <div className="cafe-tip" style={{ left: tip.x + 14, top: tip.y + 14 }} role="tooltip">

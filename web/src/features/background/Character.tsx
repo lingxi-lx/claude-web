@@ -8,6 +8,7 @@ import type { CSSProperties } from 'react';
 import type { BgAgent, BgAgentState, BgTask } from '@shared';
 import { clsx } from '@/util';
 import { agentColor, agentStateText, tokensText } from './model';
+import { tr } from '@/i18n';
 
 /** The blob: 22 wide, 18 tall, its base centre at (0, 0). */
 const BODY = 'M-11,0 q0,-18 11,-18 q11,0 11,18 z';
@@ -149,7 +150,7 @@ export function MachineIcon({ running, size = 22, className }: { running: boolea
 /** The line under a character's name: its phase, else what kind of agent it is, else its workflow. */
 export function phaseLine(t: BgTask, a: BgAgent): string {
   if (a.phaseTitle) return a.phaseTitle;
-  if (t.kind === 'agent') return a.agentType ? `子代理 · ${a.agentType}` : '子代理';
+  if (t.kind === 'agent') return a.agentType ? tr('子代理 · {agentType}', { agentType: a.agentType }) : tr('子代理');
   return t.name || t.description || '';
 }
 

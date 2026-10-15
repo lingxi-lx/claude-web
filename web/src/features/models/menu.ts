@@ -1,5 +1,6 @@
 import type { AgentKind, GatewayGroup, Provider, ProviderType, RuntimeKind } from '@shared';
 import { isChatModel, modelsFor, preferredRuntime, profileFitError, providerTypesFor } from '@catalog';
+import { tr } from '@/i18n';
 
 /**
  * The unified model picker (AiMaMi-style): every provider profile's models flattened into one list of
@@ -16,7 +17,7 @@ import { isChatModel, modelsFor, preferredRuntime, profileFitError, providerType
 export const OWN_PROVIDER = 'claude';
 export const RECENT_MAX = 5;
 /** Where the other agents are installed / configured (the settings regroup names it so, redesign phase 6). */
-export const AGENTS_SETTING_PATH = '设置 → Agents 与子代理';
+export const AGENTS_SETTING_PATH = tr('设置 → Agents 与子代理');
 
 export interface ModelMenuItem {
   key: string;
@@ -128,8 +129,8 @@ export function effectiveRuntime(p: Pick<Provider, 'runtime'> & { type?: Provide
 /** Why profile `p` cannot be picked right now although the agent takes its type (null = it can). */
 export function profileUnavailable(p: Provider, i: Pick<BuildMenuInput, 'agent' | 'engine' | 'gatewayGroups' | 'gatewayEnabled'>): string | null {
   if (p.type === 'gateway') {
-    if (i.gatewayEnabled === false) return '模型网关未启用（设置 → 模型网关）';
-    if (i.gatewayEnabled && i.gatewayGroups && !i.gatewayGroups.some((g) => g.id === p.gatewayGroupId)) return '网关组不存在（设置 → 模型网关）';
+    if (i.gatewayEnabled === false) return tr('模型网关未启用（设置 → 模型网关）');
+    if (i.gatewayEnabled && i.gatewayGroups && !i.gatewayGroups.some((g) => g.id === p.gatewayGroupId)) return tr('网关组不存在（设置 → 模型网关）');
     return null;
   }
   return i.agent === 'claude' ? profileFitError('claude', p.type, effectiveRuntime(p, i.engine)) : null;
@@ -218,8 +219,8 @@ export function buildModelMenu(i: BuildMenuInput): ModelMenu {
   const sections: ModelMenuSection[] = [];
 
   // the agent's own login
-  const ownTitle = i.builtinTitle ?? (i.agent === 'claude' ? 'Claude 账号' : i.agent);
-  const own: ModelMenuItem[] = [make(OWN_PROVIDER, ownTitle, '', i.agentDefault ? `默认（${i.agentDefault}）` : '默认模型', true, { isDefault: true })];
+  const ownTitle = i.builtinTitle ?? (i.agent === 'claude' ? tr('Claude 账号') : i.agent);
+  const own: ModelMenuItem[] = [make(OWN_PROVIDER, ownTitle, '', i.agentDefault ? tr('默认（{agentDefault}）', { agentDefault: i.agentDefault }) : tr('默认模型'), true, { isDefault: true })];
   for (const m of builtinList(i)) if (m.value && m.value !== 'default') own.push(make(OWN_PROVIDER, ownTitle, m.value, m.displayName || m.value, true, { hint: m.description || undefined }));
   items.push(...own);
   const ownShown = own.filter(visible);
@@ -231,7 +232,7 @@ export function buildModelMenu(i: BuildMenuInput): ModelMenu {
     const models = profileModels(p, i.gatewayGroups, i.providers);
     const list = models.length
       ? models.map((m) => make(p.id, p.name, m, providerModelName(p, m), compatible, { profileDefault: m === p.defaultModel, unavailable, ...(providerModelName(p, m) !== m ? { hint: m } : {}) }))
-      : [make(p.id, p.name, '', '默认模型', compatible, { isDefault: true, unavailable })];
+      : [make(p.id, p.name, '', tr('默认模型'), compatible, { isDefault: true, unavailable })];
     items.push(...list);
     if (!compatible) continue;
     const shown = list.filter(visible);
@@ -242,7 +243,7 @@ export function buildModelMenu(i: BuildMenuInput): ModelMenu {
       title: p.name,
       providerId: p.id,
       providerType: p.type,
-      items: shown.length ? shown : [make(p.id, p.name, '', '默认模型', compatible, { isDefault: true, unavailable })],
+      items: shown.length ? shown : [make(p.id, p.name, '', tr('默认模型'), compatible, { isDefault: true, unavailable })],
       count: shown.filter((x) => !x.isDefault).length,
       modelsAt: p.modelsAt,
       error: p.modelsError,
@@ -252,7 +253,7 @@ export function buildModelMenu(i: BuildMenuInput): ModelMenu {
 
   for (const a of i.otherAgents ?? []) {
     if (a.kind === i.agent) continue;
-    const unavailable = a.installed ? undefined : `未安装（${AGENTS_SETTING_PATH}）`;
+    const unavailable = a.installed ? undefined : tr('未安装（{AGENTS_SETTING_PATH}）', { AGENTS_SETTING_PATH });
     const via = a.provider;
     const entry = (model: string, display: string, extra: Partial<ModelMenuItem> = {}): ModelMenuItem => ({
       key: modelKey(a.kind, via?.id ?? OWN_PROVIDER, model),
@@ -270,7 +271,7 @@ export function buildModelMenu(i: BuildMenuInput): ModelMenu {
       ...extra,
     });
     const def = via ? via.defaultModel : a.defaultModel;
-    const list = [entry('', def ? `默认（${def}）` : '默认模型', { isDefault: true })];
+    const list = [entry('', def ? tr('默认（{def}）', { def }) : tr('默认模型'), { isDefault: true })];
     const own = via ? [...new Set([...(via.defaultModel ? [via.defaultModel] : []), ...(via.models ?? [])])].map((m) => ({ value: m, displayName: providerModelName(via, m), description: (providerModelName(via, m) !== m ? m : undefined) as string | undefined })) : agentModels(a);
     for (const m of own) if (m.value && m.value !== 'default') list.push(entry(m.value, m.displayName || m.value, { hint: m.description || undefined }));
     items.push(...list);
@@ -288,8 +289,8 @@ export function buildModelMenu(i: BuildMenuInput): ModelMenu {
     .filter((x): x is ModelMenuItem => !!x)
     .slice(0, RECENT_MAX);
   const head: ModelMenuSection[] = [];
-  if (favs.length) head.push({ id: 'favorites', kind: 'favorites', title: '收藏', items: favs });
-  if (rec.length) head.push({ id: 'recent', kind: 'recent', title: '最近', items: rec });
+  if (favs.length) head.push({ id: 'favorites', kind: 'favorites', title: tr('收藏'), items: favs });
+  if (rec.length) head.push({ id: 'recent', kind: 'recent', title: tr('最近'), items: rec });
   return { sections: [...head, ...sections], items };
 }
 
@@ -349,7 +350,7 @@ export function modelTable(providers: Provider[], groups: GatewayGroup[] | undef
     r.providers.push({ id, name, isDefault });
     r.keys.push(modelKey('claude', id, model));
   };
-  for (const m of modelsFor('claude')) add(m.value, OWN_PROVIDER, 'Claude 账号', false);
+  for (const m of modelsFor('claude')) add(m.value, OWN_PROVIDER, tr('Claude 账号'), false);
   for (const p of providers) for (const m of profileModels(p, groups, providers)) add(m, p.id, p.name, m === p.defaultModel);
   const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
   return [...rows.values()]

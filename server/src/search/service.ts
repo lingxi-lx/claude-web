@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import type { SearchMatch, SearchOptions, SearchResult } from '../protocol.js';
+import { tr } from '../i18n/index.js';
 
 const require = createRequire(import.meta.url);
 
@@ -83,7 +84,7 @@ export class SearchService {
       });
       let err = '';
       child.stderr.on('data', (d) => { err += d; });
-      child.on('error', (e) => reject(new Error(`ripgrep 不可用：${e.message}`)));
+      child.on('error', (e) => reject(new Error(tr('ripgrep 不可用：{message}', { message: e.message }))));
       child.on('close', (code) => {
         if (buf) onLine(buf);
         if (code !== 0 && code !== 1 && !truncated && err.trim()) return reject(new Error(err.trim().split('\n')[0]));

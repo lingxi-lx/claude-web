@@ -4,6 +4,7 @@
 import { WORKBENCH_TABS, type WorkbenchTab } from '@/model/layout';
 import type { IconName } from '@/ui/icons';
 import { WORKBENCH_VIEW_LABEL } from '@/ui/terms';
+import { tr } from '@/i18n';
 
 export type WbView = Exclude<WorkbenchTab, 'live'>;
 
@@ -25,5 +26,5 @@ export function viewsFor(remote: boolean): WbViewDef[] {
 
 /** Command palette entries, one per view (`view.<id>`). */
 export function viewCommands(remote: boolean): { id: string; label: string; icon: IconName; view: WbView }[] {
-  return viewsFor(remote).map((v) => ({ id: `view.${v.id}`, label: `查看这个对话的${v.label}`, icon: v.icon, view: v.id }));
+  return viewsFor(remote).map((v) => ({ id: `view.${v.id}`, label: tr('查看这个对话的{label}', { label: v.label }), icon: v.icon, view: v.id }));
 }

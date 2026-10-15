@@ -10,6 +10,7 @@ import { SessionRow, type RowCtx } from './rows';
 import { pageRows } from './status';
 import type { ProjectMenuId, RowId } from './entries';
 import { moveTo } from './reorder';
+import { tr } from '@/i18n';
 
 /** A project's ··· / right-click menu (a project = a workspace folder; the data keeps calling it a workspace). */
 export function ProjectMenu({ w, onClose }: { w: Workspace; onClose: () => void }) {
@@ -17,26 +18,26 @@ export function ProjectMenu({ w, onClose }: { w: Workspace; onClose: () => void 
   const act = (fn: () => unknown) => () => { onClose(); closeDrawer(); void fn(); };
   const id = (x: ProjectMenuId) => x;
   return (
-    <Menu onClose={onClose} label={`项目 ${w.name}`}>
-      <button data-id={id('new-here')} onClick={act(() => st.openSession({ cwd: w.path }).catch((e) => st.toast(e.message)))}><Icon name="plus" size={14} /> 在这里新建对话</button>
-      <button data-id={id('worktree')} onClick={act(async () => { const n = await dlg.prompt(`${TERMS.worktree}的名称`, 'feature', { message: '在这个项目的一份独立副本里开一个新对话，改动不影响当前的工作目录。' }); if (n) await st.openSession({ cwd: w.path, worktree: n }).catch((e) => st.toast(e.message)); })}><Icon name="branch" size={14} /> 在{TERMS.worktree}里新建对话</button>
-      <button data-id={id('terminal')} onClick={act(() => st.openTile({ id: `t${Date.now()}`, kind: 'term', cwd: w.path }, 'tab'))}><Icon name="terminal" size={14} /> 在这里开终端</button>
+    <Menu onClose={onClose} label={tr('项目 {name}', { name: w.name })}>
+      <button data-id={id('new-here')} onClick={act(() => st.openSession({ cwd: w.path }).catch((e) => st.toast(e.message)))}><Icon name="plus" size={14} /> {tr('在这里新建对话')}</button>
+      <button data-id={id('worktree')} onClick={act(async () => { const n = await dlg.prompt(tr('{worktree}的名称', { worktree: TERMS.worktree }), 'feature', { message: tr('在这个项目的一份独立副本里开一个新对话，改动不影响当前的工作目录。') }); if (n) await st.openSession({ cwd: w.path, worktree: n }).catch((e) => st.toast(e.message)); })}><Icon name="branch" size={14} /> {tr('在{worktree}里新建对话', { worktree: TERMS.worktree })}</button>
+      <button data-id={id('terminal')} onClick={act(() => st.openTile({ id: `t${Date.now()}`, kind: 'term', cwd: w.path }, 'tab'))}><Icon name="terminal" size={14} /> {tr('在这里开终端')}</button>
       <div className="menu-sep" />
       {(() => {
         const ids = st.workspaces.map((x) => x.id);
         const at = ids.indexOf(w.id);
         const move = (to: number) => act(() => st.reorderWorkspaces(moveTo(ids, w.id, to)));
         return <>
-          {at > 0 && <button data-id={id('move-top')} onClick={move(0)}><Icon name="chevronUp" size={14} /> 移到最上面</button>}
-          {at > 0 && <button data-id={id('move-up')} onClick={move(at - 1)}><Icon name="arrowUp" size={14} /> 上移</button>}
-          {at >= 0 && at < ids.length - 1 && <button data-id={id('move-down')} onClick={move(at + 2)}><Icon name="arrowDown" size={14} /> 下移</button>}
+          {at > 0 && <button data-id={id('move-top')} onClick={move(0)}><Icon name="chevronUp" size={14} /> {tr('移到最上面')}</button>}
+          {at > 0 && <button data-id={id('move-up')} onClick={move(at - 1)}><Icon name="arrowUp" size={14} /> {tr('上移')}</button>}
+          {at >= 0 && at < ids.length - 1 && <button data-id={id('move-down')} onClick={move(at + 2)}><Icon name="arrowDown" size={14} /> {tr('下移')}</button>}
         </>;
       })()}
-      <button data-id={id('rename')} onClick={act(async () => { const n = await dlg.prompt('项目名称', w.name); if (n) await ws.request({ kind: 'workspaces.rename', id: w.id, name: n }); })}><Icon name="edit" size={14} /> 重命名</button>
-      <button data-id={id('explorer')} onClick={act(() => ws.request({ kind: 'shell.open', path: w.path }).catch((e) => useStore.getState().toast(e.message)))}><Icon name="folder" size={14} /> 在资源管理器打开</button>
-      <button data-id={id('vscode')} onClick={act(() => ws.request({ kind: 'shell.open', path: w.path, app: 'code' }).catch((e) => useStore.getState().toast(e.message)))}><Icon name="keyboard" size={14} /> 在 VS Code 打开</button>
+      <button data-id={id('rename')} onClick={act(async () => { const n = await dlg.prompt(tr('项目名称'), w.name); if (n) await ws.request({ kind: 'workspaces.rename', id: w.id, name: n }); })}><Icon name="edit" size={14} /> {tr('重命名')}</button>
+      <button data-id={id('explorer')} onClick={act(() => ws.request({ kind: 'shell.open', path: w.path }).catch((e) => useStore.getState().toast(e.message)))}><Icon name="folder" size={14} /> {tr('在资源管理器打开')}</button>
+      <button data-id={id('vscode')} onClick={act(() => ws.request({ kind: 'shell.open', path: w.path, app: 'code' }).catch((e) => useStore.getState().toast(e.message)))}><Icon name="keyboard" size={14} /> {tr('在 VS Code 打开')}</button>
       <div className="menu-sep" />
-      <button data-id={id('remove')} className="danger" onClick={act(() => ws.request({ kind: 'workspaces.remove', id: w.id }))}><Icon name="close" size={14} /> 从侧栏移除项目（不删文件）</button>
+      <button data-id={id('remove')} className="danger" onClick={act(() => ws.request({ kind: 'workspaces.remove', id: w.id }))}><Icon name="close" size={14} /> {tr('从侧栏移除项目（不删文件）')}</button>
     </Menu>
   );
 }
@@ -90,7 +91,7 @@ export function Group(p: GroupProps) {
         <span className="name">{p.name}</span>
         {p.section && <Icon name={p.collapsed ? 'chevronRight' : 'chevronDown'} size={12} className="sec-chev" />}
         {p.badge}
-        {p.collapsed && (p.busy ? <span className="spin" title="有对话在运行" /> : <span className="cnt">{p.items.length}</span>)}
+        {p.collapsed && (p.busy ? <span className="spin" title={tr('有对话在运行')} /> : <span className="cnt">{p.items.length}</span>)}
         {p.actions && <span className="acts" onClick={(e) => e.stopPropagation()}>{p.actions}</span>}
         {p.menu}
       </div>
@@ -105,8 +106,8 @@ export function Group(p: GroupProps) {
           {!p.items.length && p.emptyText && <div className="sb-empty-row">{p.emptyText}</div>}
           {(hidden > 0 || limit > PAGE_FIRST) && (
             <div className="sb-more">
-              {hidden > 0 && <button className="link" data-id={more} title={`还有 ${hidden} 个对话`} onClick={() => p.setShown(limit + PAGE_MORE)}>再显示 {Math.min(hidden, PAGE_MORE)} 个</button>}
-              {limit > PAGE_FIRST && <button className="link" data-id={less} onClick={() => p.setShown(undefined)}>收起</button>}
+              {hidden > 0 && <button className="link" data-id={more} title={tr('还有 {hidden} 个对话', { hidden })} onClick={() => p.setShown(limit + PAGE_MORE)}>{tr('再显示 {hidden} 个', { hidden: Math.min(hidden, PAGE_MORE) })}</button>}
+              {limit > PAGE_FIRST && <button className="link" data-id={less} onClick={() => p.setShown(undefined)}>{tr('收起')}</button>}
             </div>
           )}
         </div>

@@ -7,6 +7,7 @@ import { Icon } from '@/ui/icons';
 import { showGoals } from '@/features/workbench/right-panel';
 import { coalesce } from '@/features/workbench/git-refresh';
 import { goalBarFor, goalListSig, type GoalBar as GoalBarInfo } from './goal-bar';
+import { tr } from '@/i18n';
 
 // The goal list is one small store per window (not per conversation): loaded when the first conversation that could
 // show the bar mounts, refreshed on `goals.changed` — coalesced, and only stored when something a bar shows changed:
@@ -56,9 +57,9 @@ export function GoalBar({ sessionId }: { sessionId: string }) {
   return (
     <div className="goal-bar" role="status" data-goal={g.id}>
       <Icon name="goals" size={13} className="gb-ic" />
-      <span className="gb-t" title={g.objective}>目标：{g.objective}</span>
-      <span className="gb-r" title={`最多 ${g.maxTurns} 轮`}>第 {g.round} 轮</span>
-      <button className="gb-go" onClick={() => showGoals()} title="查看目标的执行图、规格和证据">查看</button>
+      <span className="gb-t" title={g.objective}>{tr('目标：{objective}', { objective: g.objective })}</span>
+      <span className="gb-r" title={tr('最多 {maxTurns} 轮', { maxTurns: g.maxTurns })}>{tr('第 {round} 轮', { round: g.round })}</span>
+      <button className="gb-go" onClick={() => showGoals()} title={tr('查看目标的执行图、规格和证据')}>{tr('查看')}</button>
     </div>
   );
 }

@@ -6,6 +6,7 @@ import agentSrc from './page-agent.js?raw';
 import { parseKey, type MouseAct, type PageHandle, type Picture } from './ops';
 import { guestOf, patchTab, tabOf, waitGuest, type WebviewEl } from './state';
 import { loadable } from './url';
+import { tr } from '@/i18n';
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 /** How long a page is given to load before it is read as it is. */
@@ -49,13 +50,13 @@ async function capture(el: WebviewEl): Promise<Picture> {
   if (desktop?.captureGuest) {
     const img = await desktop.captureGuest(el.getWebContentsId());
     if (img?.data) return img;
-    throw new Error('这个页面现在截不了图（它没有被画出来：窗口最小化了，或者屏幕关着）。');
+    throw new Error(tr('这个页面现在截不了图（它没有被画出来：窗口最小化了，或者屏幕关着）。'));
   }
   const late = new Promise<undefined>((r) => setTimeout(() => r(undefined), 5000));
   const shot = await Promise.race([el.capturePage?.().catch(() => undefined), late]);
   const url = shot && !shot.isEmpty?.() ? shot.toDataURL() : '';
   const m = /^data:(image\/(?:png|jpeg));base64,(.+)$/.exec(url);
-  if (!m) throw new Error('这个页面现在截不了图。');
+  if (!m) throw new Error(tr('这个页面现在截不了图。'));
   const size = shot?.getSize?.();
   return { mime: m[1] as 'image/png' | 'image/jpeg', data: m[2], ...(size?.width && size.height ? { width: size.width, height: size.height } : {}) };
 }
@@ -67,7 +68,7 @@ async function capture(el: WebviewEl): Promise<Picture> {
 export function pageOf(tabId: string): PageHandle {
   const need = async (): Promise<WebviewEl> => {
     const el = guestOf(tabId) ?? (await waitGuest(tabId, 8000));
-    if (!el) throw new Error(tabOf(tabId) ? '内置浏览器的这个标签页还没准备好。' : '这个标签页已经关掉了：用 browser_open 重新打开网址。');
+    if (!el) throw new Error(tabOf(tabId) ? tr('内置浏览器的这个标签页还没准备好。') : tr('这个标签页已经关掉了：用 browser_open 重新打开网址。'));
     return el;
   };
   const call = async <T>(fn: string, arg: Record<string, unknown>): Promise<T> => {
@@ -78,14 +79,14 @@ export function pageOf(tabId: string): PageHandle {
     const r = await el.executeJavaScript<{ ok: boolean; value?: T; error?: string }>(
       `${agentSrc}\n;(() => { try { return { ok: true, value: window.__cwAgent[${JSON.stringify(fn)}](${JSON.stringify(arg)}) }; } catch (e) { return { ok: false, error: String((e && e.message) || e) }; } })()`,
     );
-    if (!r || !r.ok) throw new Error(r?.error || '页面没有回应这个操作。');
+    if (!r || !r.ok) throw new Error(r?.error || tr('页面没有回应这个操作。'));
     return r.value as T;
   };
   return {
     async navigate(url) {
-      if (!loadable(url)) throw new Error(`内置浏览器只打开 http / https 的地址：${url.slice(0, 200)}`);
+      if (!loadable(url)) throw new Error(tr('内置浏览器只打开 http / https 的地址：{url}', { url: url.slice(0, 200) }));
       const tab = tabOf(tabId);
-      if (!tab) throw new Error('这个标签页已经关掉了：用 browser_open 重新打开网址。');
+      if (!tab) throw new Error(tr('这个标签页已经关掉了：用 browser_open 重新打开网址。'));
       if (!tab.src) {
         // a new tab: giving it an address is what creates its page
         patchTab(tabId, { src: url, url, loading: true, error: undefined });
@@ -99,7 +100,7 @@ export function pageOf(tabId: string): PageHandle {
       await sleep(150);
       const done = await idle(el, LOAD_MS);
       const err = tabOf(tabId)?.error;
-      if (err) throw new Error(`打不开 ${url}：${err}`);
+      if (err) throw new Error(tr('打不开 {url}：{err}', { url, err }));
       // what the page builds after `load` (most sites) gets a moment
       await sleep(300);
       return done;
@@ -117,7 +118,7 @@ export function pageOf(tabId: string): PageHandle {
     async key(key) {
       const el = await need();
       const k = parseKey(key);
-      if (!k.keyCode) throw new Error(`不认识的按键：${key}`);
+      if (!k.keyCode) throw new Error(tr('不认识的按键：{key}', { key }));
       const mods = k.modifiers.length ? { modifiers: k.modifiers } : {};
       await el.sendInputEvent({ type: 'keyDown', keyCode: k.keyCode, ...mods });
       if (k.char !== undefined) await el.sendInputEvent({ type: 'char', keyCode: k.char, ...mods });
@@ -141,7 +142,7 @@ export function pageOf(tabId: string): PageHandle {
     },
     async insertText(text: string) {
       const el = await need();
-      if (!el.insertText) throw new Error('这个页面现在不能输入文字。');
+      if (!el.insertText) throw new Error(tr('这个页面现在不能输入文字。'));
       await el.insertText(text);
     },
     url() {

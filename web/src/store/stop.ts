@@ -1,9 +1,10 @@
+import { tr } from '@/i18n';
 /**
  * Stop on a conversation the server no longer runs (its process was closed or crashed, or the server restarted
  * while this window still showed the turn as running): `session.interrupt` answers `{ running: false }` and the
  * turn this window still shows is ended here, with a result the reducer finishes like any other.
  */
-export const STALE_STOP_TEXT = '这个对话的进程已经不在运行了（可能已被关闭，或服务重启过），这一轮已结束。直接发送新消息会重新接上。';
+export const STALE_STOP_TEXT = tr('这个对话的进程已经不在运行了（可能已被关闭，或服务重启过），这一轮已结束。直接发送新消息会重新接上。');
 
 export function staleStopResult(sessionId: string, now = Date.now()) {
   return {

@@ -25,6 +25,7 @@ import { SIMPLIFIED_NOTICE } from '@/ui/terms';
 import { MOBILE_QUERY } from '@/ui/viewport';
 import type { SheetDetent } from '@/ui/sheet-snap';
 import { haptic } from '@/ui/haptics';
+import { LANGUAGE_KEY, reconcileLanguage, tr } from '@/i18n';
 
 /** 后台 fills this in (features/background/state.ts — it imports the store, not the other way round): what kept running after the turn's Stop. */
 let bgStopNote: (sessionId: string) => string | null = () => null;
@@ -221,7 +222,7 @@ function armAutoContinue(sessionId: string, at: number) {
     const st = useStore.getState();
     const o = st.open[sessionId];
     if (!o || !o.lastSent || o.state === 'running' || o.state === 'waiting') return;
-    st.toast('额度已恢复，自动继续上一条消息', true);
+    st.toast(tr('额度已恢复，自动继续上一条消息'), true);
     void st.retryLast(sessionId);
   };
   autoTimers.set(sessionId, setTimeout(fire, Math.max(1000, at - Date.now())));
@@ -337,7 +338,7 @@ export const useStore = create<State>((set, get) => ({
     get().dispatchLayout({ t: 'tile.open', paneId: paneId ?? g.focusedPaneId, tile, mode });
   },
   async closeTile(paneId, tileId) {
-    if (get().dirtyDocs[tileId] && !(await dlg.confirm('这个文件有未保存的改动，确定关闭？', { okLabel: '关闭', danger: true }))) return;
+    if (get().dirtyDocs[tileId] && !(await dlg.confirm(tr('这个文件有未保存的改动，确定关闭？'), { okLabel: tr('关闭'), danger: true }))) return;
     get().dispatchLayout({ t: 'tile.close', paneId, tileId });
   },
   dirtyDocs: {},
@@ -398,8 +399,10 @@ export const useStore = create<State>((set, get) => ({
   async setSetting(key, value) {
     set((s) => ({ settings: { ...s.settings, [key]: value } }));
     if (key.startsWith('ui.')) { applyUiSettings(get().settings); if (key === 'ui.theme') get().setTheme(resolveTheme((value as any) ?? DEFAULT_THEME), true); }
-    if (key === 'ui.softwareRender' && desktop?.setFlags) { void desktop.setFlags({ softwareRender: !!value }); get().toast('重启应用后生效', true); }
+    if (key === 'ui.softwareRender' && desktop?.setFlags) { void desktop.setFlags({ softwareRender: !!value }); get().toast(tr('重启应用后生效'), true); }
     await ws.request({ kind: 'settings.set', key, value });
+    // the language is read when the page loads: the page loads again in the new one
+    if (key === LANGUAGE_KEY) reconcileLanguage(value);
   },
   async loadMeta() {
     const [workspaces, sessionMeta, schedules, settings] = await Promise.all([
@@ -423,6 +426,7 @@ export const useStore = create<State>((set, get) => ({
       }
     }
     set({ workspaces, sessionMeta, schedules, settings, metaLoaded: true });
+    reconcileLanguage(settings[LANGUAGE_KEY]);
     applyUiSettings(settings);
     get().setTheme(resolveTheme((settings['ui.theme'] as any) ?? DEFAULT_THEME), true);
   },
@@ -504,7 +508,7 @@ export const useStore = create<State>((set, get) => ({
           break;
         case 'session.state': {
           const prev = get().open[e.sessionId]?.state;
-          if (desktop && e.state === 'idle' && prev === 'running' && !document.hasFocus()) desktop.notify(get().sessions.find((x) => x.sessionId === e.sessionId)?.title ?? '对话', 'Claude 完成了这一轮', e.sessionId);
+          if (desktop && e.state === 'idle' && prev === 'running' && !document.hasFocus()) desktop.notify(get().sessions.find((x) => x.sessionId === e.sessionId)?.title ?? tr('对话'), tr('Claude 完成了这一轮'), e.sessionId);
           set((s) => bump(s, e.sessionId, (o) => { o.state = e.state; if (e.error) o.error = e.error; if (e.state === 'idle' && o.queue.length) { const next = o.queue.shift()!; void get().send(e.sessionId, next.text, next.images, false, next.attachments); } }));
           set((s) => ({ sessions: s.sessions.map((x) => (x.sessionId === e.sessionId ? { ...x, live: e.state === 'closed' ? undefined : e.state } : x)) }));
           break;
@@ -515,8 +519,8 @@ export const useStore = create<State>((set, get) => ({
         case 'permission.request':
           set((s) => bump(s, e.request.sessionId, (o) => { if (!o.pending.some((p) => p.requestId === e.request.requestId)) o.pending.push(e.request); }));
           if (desktop) {
-            const title = get().sessions.find((x) => x.sessionId === e.request.sessionId)?.title ?? '对话';
-            const body = e.request.toolName === 'AskUserQuestion' ? 'Claude 有问题要问你' : e.request.toolName === 'ExitPlanMode' ? 'Claude 请求批准计划' : `需要权限：${e.request.toolName}`;
+            const title = get().sessions.find((x) => x.sessionId === e.request.sessionId)?.title ?? tr('对话');
+            const body = e.request.toolName === 'AskUserQuestion' ? tr('Claude 有问题要问你') : e.request.toolName === 'ExitPlanMode' ? tr('Claude 请求批准计划') : tr('需要权限：{toolName}', { toolName: e.request.toolName });
             desktop.notify(title, body, e.request.sessionId);
           }
           break;
@@ -666,7 +670,7 @@ export const useStore = create<State>((set, get) => ({
     const o = get().open[sessionId];
     if (!o) return;
     const anchor = findChainUuidBefore(o.conv, userItemId);
-    if (anchor === undefined) throw new Error('找不到这条消息');
+    if (anchor === undefined) throw new Error(tr('找不到这条消息'));
     const orig = o.conv.items.find((i) => i.id === userItemId);
     const atts = orig?.kind === 'user' ? orig.attachments?.filter((a) => a.path).map((a) => ({ kind: a.kind, name: a.name, path: a.path, size: a.size })) : undefined;
     // the copy starts as the conversation would go on (re-review M-1): its live settings, or its chips' picks
@@ -926,7 +930,7 @@ export const useStore = create<State>((set, get) => ({
       const agentsInOrder = [...walkTools(o.conv.items)].filter((x) => x.tool.name === 'Agent' || x.tool.name === 'Task').map((x) => x.tool.id);
       agentId = ids[agentsInOrder.indexOf(toolUseId)];
     }
-    if (!agentId) throw new Error('找不到子代理 id');
+    if (!agentId) throw new Error(tr('找不到子代理 id'));
     const msgs = await ws.request<any[]>({ kind: 'transcript.subagent', sessionId, agentId });
     set((s) => bump(s, sessionId, (x) => {
       const sub = createConversation();
@@ -942,7 +946,7 @@ export const useStore = create<State>((set, get) => ({
     try {
       reply = await ws.request({ kind: 'session.interrupt', sessionId });
     } catch (e: any) {
-      get().toast(`停止失败：${e?.message ?? e}`);
+      get().toast(tr('停止失败：{message}', { message: e?.message ?? e }));
       return;
     }
     // nothing runs on the server for it any more: end the turn this window still shows (store/stop.ts)

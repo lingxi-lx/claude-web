@@ -13,6 +13,7 @@ import { openAgent, openBackground, stopTask, useBgSession } from '@/features/ba
 import { EmptyState } from '@/ui/EmptyState';
 import { EMPTY } from '@/ui/terms';
 import { Icon } from '@/ui/icons';
+import { tr } from '@/i18n';
 export { SchedulesView as Schedules };
 
 /**
@@ -23,8 +24,8 @@ function SchedulesLink() {
   const n = useStore((s) => s.schedules.length);
   return (
     <div className="tasks-sched">
-      <button className="tasks-link" onClick={() => openSchedules()} title="定时任务：按时间自动开一个对话做事（在「自动化」里）">
-        <Icon name="tasks" size={13} /> 定时任务{n ? ` · ${n}` : ''}<span className="grow" /><span className="to">在「自动化」里</span><Icon name="chevronRight" size={12} />
+      <button className="tasks-link" onClick={() => openSchedules()} title={tr('定时任务：按时间自动开一个对话做事（在「自动化」里）')}>
+        <Icon name="tasks" size={13} /> {tr('定时任务{v}', { v: n ? ` · ${n}` : '' })}<span className="grow" /><span className="to">{tr('在「自动化」里')}</span><Icon name="chevronRight" size={12} />
       </button>
     </div>
   );
@@ -40,7 +41,7 @@ function Background({ sessionId }: { sessionId: string }) {
   const pick = (agentKey: string, taskId: string) => { openBackground(sessionId, taskId); openAgent({ sessionId, taskId, agentKey }); };
   return (
     <div className="section bg-tasks" style={{ padding: '0 4px' }}>
-      <h5>后台<button className="tasks-open" onClick={() => openBackground(sessionId)} title="在「后台」里看"><Icon name="office" size={13} />打开</button></h5>
+      <h5>{tr('后台')}<button className="tasks-open" onClick={() => openBackground(sessionId)} title={tr('在「后台」里看')}><Icon name="office" size={13} />{tr('打开')}</button></h5>
       <div className="bg-tasks-graph"><CommandGraph session={s} compact onPick={pick} /></div>
       {orderedTasks(s).map((t) => (
         <div key={t.id} className={clsx('bg-ttask', t.status === 'running' && 'live')} data-task={t.id}>
@@ -50,7 +51,7 @@ function Background({ sessionId }: { sessionId: string }) {
               <div className="n">{taskTitle(t)}</div>
               <div className="sub">{KIND_LABEL[t.kind]} · {taskStateText(t)}</div>
             </div>
-            {t.status === 'running' && <button className="btn sm danger" onClick={() => stopTask(sessionId, t.id)}>停止</button>}
+            {t.status === 'running' && <button className="btn sm danger" onClick={() => stopTask(sessionId, t.id)}>{tr('停止')}</button>}
           </div>
           {t.kind === 'workflow' && t.agents.map((a) => (
             <button key={a.key} className="bg-tagent" style={{ '--c': agentColor(a.color) } as React.CSSProperties} onClick={() => pick(a.key, t.id)} title={a.lastSummary ?? a.label}>
@@ -103,20 +104,20 @@ export function TasksPanel(_: { inDock?: boolean }) {
       <Background sessionId={active.sessionId} />
       {plan && (
         <div className="section tasks-plan" style={{ padding: '0 4px' }}>
-          <h5>计划</h5>
+          <h5>{tr('计划')}</h5>
           <TodoBody t={plan} />
         </div>
       )}
       {!hasBg && agents.length > 0 && (
         <div className="section" style={{ padding: '0 4px' }}>
-          <h5>子代理 / 后台调用</h5>
+          <h5>{tr('子代理 / 后台调用')}</h5>
           {agents.map(({ tool, depth }) => (
             <div key={tool.id} className="row clickable" style={{ paddingLeft: 8 + depth * 14 }} onClick={() => inspect(tool.id)}>
               <span className={clsx('dot', tool.status === 'running' || tool.status === 'pending' ? 'running' : tool.status === 'error' ? 'error' : 'idle')} />
               <div className="grow">
                 <div style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{toolSummary(tool.name, tool.input)}</div>
                 <div className="sub">
-                  {tool.name} · {tool.children.length} 条消息 {tool.progress?.lastTool ? `· ${tool.progress.lastTool}` : ''}
+                  {tr('{name} · {childrenCount} 条消息 {v}', { name: tool.name, childrenCount: tool.children.length, v: tool.progress?.lastTool ? `· ${tool.progress.lastTool}` : '' })}
                 </div>
               </div>
             </div>

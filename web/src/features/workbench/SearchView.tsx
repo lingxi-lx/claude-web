@@ -6,6 +6,7 @@ import type { SearchOptions, SearchResult } from '@shared';
 import { dlg } from '@/ui/dialog';
 import { imeComposing } from '@/ui/ime';
 import { Icon } from '@/ui/icons';
+import { tr } from '@/i18n';
 
 /** Cross-file search & replace (ripgrep on the server). Results grouped per file; click → editor at that line. */
 export function SearchView({ root }: { root: string }) {
@@ -40,10 +41,10 @@ export function SearchView({ root }: { root: string }) {
     if (!res) return;
     const targets = only ?? res.files.map((f) => ({ path: f.path, lines: f.matches.map((m) => m.line).filter((l) => !excluded.has(`${f.path}:${l}`)) })).filter((t) => t.lines.length);
     const n = targets.reduce((a, t) => a + (t.lines?.length ?? 0), 0);
-    if (!(await dlg.confirm(`替换 ${n} 处（${targets.length} 个文件）？`, { message: `「${q}」→「${rep}」`, okLabel: '替换' }))) return;
+    if (!(await dlg.confirm(tr('替换 {n} 处（{targetsCount} 个文件）？', { n, targetsCount: targets.length }), { message: `「${q}」→「${rep}」`, okLabel: tr('替换') }))) return;
     try {
       const r = await ws.request<{ files: number; replacements: number }>({ kind: 'search.replace', root, query: q, replacement: rep, options: { ...opt, include: inc.split(',').map((s) => s.trim()).filter(Boolean), exclude: exc.split(',').map((s) => s.trim()).filter(Boolean) }, targets });
-      toast(`已替换 ${r.replacements} 处，${r.files} 个文件`, true);
+      toast(tr('已替换 {replacements} 处，{files} 个文件', { replacements: r.replacements, files: r.files }), true);
       void run();
     } catch (e: any) { toast(e.message); }
   };
@@ -68,25 +69,25 @@ export function SearchView({ root }: { root: string }) {
     <div className="search-view">
       <div className="search-form">
         <div className="row">
-          <button className={clsx('icon-btn', showRep && 'active')} title="替换" onClick={() => setShowRep(!showRep)} aria-label="替换"><Icon name={showRep ? 'chevronDown' : 'chevronRight'} size={13} /></button>
-          <input className="field grow" placeholder="搜索（Enter 立即搜索）" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !imeComposing(e.nativeEvent) && run()} autoFocus />
-          <button className={clsx('tog', opt.caseSensitive && 'on')} title="区分大小写" onClick={() => setOpt({ ...opt, caseSensitive: !opt.caseSensitive })}>Aa</button>
-          <button className={clsx('tog', opt.wholeWord && 'on')} title="全词匹配" onClick={() => setOpt({ ...opt, wholeWord: !opt.wholeWord })}>ab</button>
-          <button className={clsx('tog', opt.regex && 'on')} title="正则表达式" onClick={() => setOpt({ ...opt, regex: !opt.regex })}>.*</button>
+          <button className={clsx('icon-btn', showRep && 'active')} title={tr('替换')} onClick={() => setShowRep(!showRep)} aria-label={tr('替换')}><Icon name={showRep ? 'chevronDown' : 'chevronRight'} size={13} /></button>
+          <input className="field grow" placeholder={tr('搜索（Enter 立即搜索）')} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !imeComposing(e.nativeEvent) && run()} autoFocus />
+          <button className={clsx('tog', opt.caseSensitive && 'on')} title={tr('区分大小写')} onClick={() => setOpt({ ...opt, caseSensitive: !opt.caseSensitive })}>Aa</button>
+          <button className={clsx('tog', opt.wholeWord && 'on')} title={tr('全词匹配')} onClick={() => setOpt({ ...opt, wholeWord: !opt.wholeWord })}>ab</button>
+          <button className={clsx('tog', opt.regex && 'on')} title={tr('正则表达式')} onClick={() => setOpt({ ...opt, regex: !opt.regex })}>.*</button>
         </div>
         {showRep && (
           <div className="row">
             <span style={{ width: 26 }} />
-            <input className="field grow" placeholder="替换为（正则可用 $1）" value={rep} onChange={(e) => setRep(e.target.value)} />
-            <button className="btn sm" disabled={!res?.total} onClick={() => replaceAll()} title="替换所有未排除的匹配">全部替换</button>
+            <input className="field grow" placeholder={tr('替换为（正则可用 $1）')} value={rep} onChange={(e) => setRep(e.target.value)} />
+            <button className="btn sm" disabled={!res?.total} onClick={() => replaceAll()} title={tr('替换所有未排除的匹配')}>{tr('全部替换')}</button>
           </div>
         )}
         <div className="row sub">
-          <input className="field" placeholder="包含：src/**, *.ts" value={inc} onChange={(e) => setInc(e.target.value)} />
-          <input className="field" placeholder="排除：dist, *.min.js" value={exc} onChange={(e) => setExc(e.target.value)} />
+          <input className="field" placeholder={tr('包含：src/**, *.ts')} value={inc} onChange={(e) => setInc(e.target.value)} />
+          <input className="field" placeholder={tr('排除：dist, *.min.js')} value={exc} onChange={(e) => setExc(e.target.value)} />
         </div>
         <div className="row sub muted">
-          {busy ? '搜索中…' : res ? `${total}${res.truncated ? '+' : ''} 处 · ${res.files.length} 个文件` : q ? '' : '在工作目录里搜索文本'}
+          {busy ? tr('搜索中…') : res ? tr('{total}{v} 处 · {filesCount} 个文件', { total, v: res.truncated ? '+' : '', filesCount: res.files.length }) : q ? '' : tr('在工作目录里搜索文本')}
           {err && <span style={{ color: 'var(--red)' }}> {err}</span>}
         </div>
       </div>
@@ -99,7 +100,7 @@ export function SearchView({ root }: { root: string }) {
               <span className="muted">{rel(f.path).replace(/[\\/][^\\/]+$/, '')}</span>
               <span className="grow" />
               <span className="badge">{f.matches.length}</span>
-              {showRep && <button className="x" title="替换此文件" aria-label="替换此文件" onClick={(e) => { e.stopPropagation(); void replaceAll([{ path: f.path, lines: f.matches.map((m) => m.line).filter((l) => !excluded.has(`${f.path}:${l}`)) }]); }}><Icon name="replace" size={12} /></button>}
+              {showRep && <button className="x" title={tr('替换此文件')} aria-label={tr('替换此文件')} onClick={(e) => { e.stopPropagation(); void replaceAll([{ path: f.path, lines: f.matches.map((m) => m.line).filter((l) => !excluded.has(`${f.path}:${l}`)) }]); }}><Icon name="replace" size={12} /></button>}
             </div>
             {!collapsed[f.path] && f.matches.map((m) => {
               const key = `${f.path}:${m.line}`;
@@ -107,13 +108,13 @@ export function SearchView({ root }: { root: string }) {
                 <div key={key} className={clsx('sr-line', excluded.has(key) && 'excluded')} onClick={() => openTile({ id: `d${Date.now().toString(36)}`, kind: 'doc', path: f.path, line: m.line }, 'tab')} title={`${f.path}:${m.line}`}>
                   <span className="ln">{m.line}</span>
                   <span className="tx">{preview(m)}</span>
-                  {showRep && <button className="x" title={excluded.has(key) ? '重新包含' : '从替换中排除'} onClick={(e) => { e.stopPropagation(); const n = new Set(excluded); n.has(key) ? n.delete(key) : n.add(key); setExcluded(n); }}><Icon name={excluded.has(key) ? 'plus' : 'close'} size={11} /></button>}
+                  {showRep && <button className="x" title={excluded.has(key) ? tr('重新包含') : tr('从替换中排除')} onClick={(e) => { e.stopPropagation(); const n = new Set(excluded); n.has(key) ? n.delete(key) : n.add(key); setExcluded(n); }}><Icon name={excluded.has(key) ? 'plus' : 'close'} size={11} /></button>}
                 </div>
               );
             })}
           </div>
         ))}
-        {res && !res.files.length && q && !busy && <div className="empty">没有匹配</div>}
+        {res && !res.files.length && q && !busy && <div className="empty">{tr('没有匹配')}</div>}
       </div>
     </div>
   );

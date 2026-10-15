@@ -8,6 +8,7 @@ import { EFFORT_DESC, EFFORT_LABEL, TERMS, ULTRACODE, effortTitle } from '@/ui/t
 import { Popover } from '@/features/composer/Popover';
 import { EFFORT_MENU_ID } from '@/features/composer/ids';
 import { EFFORT_PROMPT_TITLE } from './intelligence';
+import { tr } from '@/i18n';
 
 export interface EffortChipProps {
   /** the levels the current model takes; none → no ladder (Gemini) */
@@ -45,18 +46,18 @@ export function EffortChip({ intelligence, ultracode, compact, disabled }: Effor
         <span className="caret opt"><Icon name="chevronDown" size={10} /></span>
       </button>
       {open && (
-        <ErrorBoundary area="智能程度菜单" compact onReset={() => setOpen(false)}>
+        <ErrorBoundary area={tr('智能程度菜单')} compact onReset={() => setOpen(false)}>
           <Popover anchor={chip} onClose={close} prefer="up" align="right" className="depth-menu" label={TERMS.effort}>
             {levels.length > 0 && (
               <div role="group" aria-label={TERMS.effort} data-id={EFFORT_MENU_ID.effort}>
-                <div className="menu-label" title={`${TERMS.effort}（effort）：想得越久越稳，也越慢、越费额度`}>{TERMS.effort}</div>
+                <div className="menu-label" title={tr('{effort}（effort）：想得越久越稳，也越慢、越费额度', { effort: TERMS.effort })}>{TERMS.effort}</div>
                 {levels.map((l) => {
                   const on = !ultra && l === cur;
                   return (
                     <button key={l} type="button" data-mi data-level={l} role="menuitemradio" aria-checked={on} className={clsx('cm-it', on && 'on')} title={effortTitle(l)} disabled={intelligence?.disabled} onClick={() => pick(l)}>
                       <span className="cm-ck">{on && <Icon name="check" size={13} />}</span>
                       <span className="cm-tx">
-                        <span className="cm-l">{EFFORT_LABEL[l]}{l === intelligence?.defaultLevel && <span className="cm-rec">默认</span>}</span>
+                        <span className="cm-l">{EFFORT_LABEL[l]}{l === intelligence?.defaultLevel && <span className="cm-rec">{tr('默认')}</span>}</span>
                         <span className="cm-d">{EFFORT_DESC[l]}</span>
                       </span>
                     </button>

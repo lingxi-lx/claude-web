@@ -4,6 +4,7 @@ import { useStore } from '@/store';
 import { imeComposing } from '@/ui/ime';
 import { CLAUDE_LOGIN_CMD, LOGIN_IN_TERMINAL } from '@/ui/terms';
 import { QuickConnect } from './QuickConnect';
+import { tr } from '@/i18n';
 
 /**
  * Why the 「接一个模型」 dialog is open: `start` (the start page's notice), `send` (a new conversation about to go
@@ -33,15 +34,15 @@ export function connectModel(o: { reason?: ConnectReason; makeDefault?: boolean 
 /** `claude auth login` in a terminal tab (the Claude subscription route), with what to do there. */
 export function loginInTerminal() {
   const st = useStore.getState();
-  st.openTile({ id: `t${Date.now()}`, kind: 'term', cwd: '', cmd: CLAUDE_LOGIN_CMD, title: '登录 Claude' }, 'tab');
+  st.openTile({ id: `t${Date.now()}`, kind: 'term', cwd: '', cmd: CLAUDE_LOGIN_CMD, title: tr('登录 Claude') }, 'tab');
   st.toast(LOGIN_IN_TERMINAL, true, 12_000);
 }
 
 const COPY: Record<ConnectReason, { title: string; text: string }> = {
-  start: { title: '接一个模型', text: '有 API Key 就能用：中转站、DeepSeek、Kimi、智谱、通义千问…… 选来源、粘贴 Key，测试通过就好了。' },
-  send: { title: '先接一个模型', text: 'Claude 账号还没登录。接一个模型（中转站、DeepSeek、Kimi 等的 API Key）就能开始，接好后这条消息会直接发出去。' },
-  session: { title: '换一个模型继续', text: '这个对话用的是 Claude 账号，但它还没登录。接一个模型，这个对话就换过去并重试刚才那条消息。' },
-  settings: { title: '快速添加供应商', text: '选来源、粘贴 Key：模型列表和接口格式自动读取，测试通过后保存。更多选项在「添加」里。' },
+  start: { title: tr('接一个模型'), text: tr('有 API Key 就能用：中转站、DeepSeek、Kimi、智谱、通义千问…… 选来源、粘贴 Key，测试通过就好了。') },
+  send: { title: tr('先接一个模型'), text: tr('Claude 账号还没登录。接一个模型（中转站、DeepSeek、Kimi 等的 API Key）就能开始，接好后这条消息会直接发出去。') },
+  session: { title: tr('换一个模型继续'), text: tr('这个对话用的是 Claude 账号，但它还没登录。接一个模型，这个对话就换过去并重试刚才那条消息。') },
+  settings: { title: tr('快速添加供应商'), text: tr('选来源、粘贴 Key：模型列表和接口格式自动读取，测试通过后保存。更多选项在「添加」里。') },
 };
 
 export function ConnectModelHost() {
@@ -63,15 +64,15 @@ export function ConnectModelHost() {
         <p className="sub">{c.text}</p>
         {existing.length > 0 && (
           <div className="qc-existing">
-            <span className="qc-l">用已添加的</span>
+            <span className="qc-l">{tr('用已添加的')}</span>
             {existing.map((p) => <button key={p.id} type="button" className="btn sm" data-qc="existing" onClick={() => close(p)}>{p.name}</button>)}
           </div>
         )}
         <QuickConnect makeDefault={req.makeDefault} onDone={close} />
         <div className="qc-foot">
-          {req.reason !== 'settings' && <button type="button" className="link" data-qc="login" onClick={() => { close(null); loginInTerminal(); }}>有 Claude Pro / Max 订阅？用 Claude 账号登录</button>}
+          {req.reason !== 'settings' && <button type="button" className="link" data-qc="login" onClick={() => { close(null); loginInTerminal(); }}>{tr('有 Claude Pro / Max 订阅？用 Claude 账号登录')}</button>}
           <span className="grow" />
-          <button type="button" className="btn ghost" onClick={() => close(null)}>取消</button>
+          <button type="button" className="btn ghost" onClick={() => close(null)}>{tr('取消')}</button>
         </div>
       </div>
     </div>

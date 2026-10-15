@@ -7,6 +7,7 @@ import type { ImService } from '../im/service.js';
 import { OrchestraService } from './service.js';
 import { orchestraDeps, type RuntimeServices } from './runtime.js';
 import type { OrchestraRequest, OrchRun } from './types.js';
+import { tr } from '../i18n/index.js';
 
 export function isOrchestraRequest(req: { kind: string }): req is OrchestraRequest {
   return req.kind.startsWith('orchestra.');
@@ -25,21 +26,21 @@ export class OrchImBridge {
   buttons(runId: string, nodeId: string) {
     const token = randomBytes(4).toString('hex');
     this.tokens.set(token, { runId, nodeId });
-    return [{ id: `orch:${token}:a`, label: '通过' }, { id: `orch:${token}:r`, label: '驳回', danger: true }];
+    return [{ id: `orch:${token}:a`, label: tr('通过') }, { id: `orch:${token}:r`, label: tr('驳回'), danger: true }];
   }
 
   async handle([token, choice]: string[], boundSessionId: string | undefined): Promise<string> {
     const t = this.tokens.get(token);
-    if (!t) return '这个审批按钮已失效（可能服务重启过），到 claude-web 的「编排」面板里处理。';
-    if (choice !== 'a' && choice !== 'r') return `不认识的操作：${choice}`;
+    if (!t) return tr('这个审批按钮已失效（可能服务重启过），到 claude-web 的「编排」面板里处理。');
+    if (choice !== 'a' && choice !== 'r') return tr('不认识的操作：{choice}', { choice });
     let run: OrchRun;
-    try { run = this.svc.get(t.runId); } catch { return '这个编排运行已经不存在了。'; }
-    if (!boundSessionId) return '这个聊天没有绑定会话，不能审批编排。';
-    if (!Object.values(run.nodes).some((n) => n.sessionIds.includes(boundSessionId))) return '这个聊天绑定的会话不属于这个编排运行，不能审批。';
+    try { run = this.svc.get(t.runId); } catch { return tr('这个编排运行已经不存在了。'); }
+    if (!boundSessionId) return tr('这个聊天没有绑定会话，不能审批编排。');
+    if (!Object.values(run.nodes).some((n) => n.sessionIds.includes(boundSessionId))) return tr('这个聊天绑定的会话不属于这个编排运行，不能审批。');
     const decision = choice === 'a' ? 'approve' : 'reject';
-    await this.svc.approve(t.runId, t.nodeId, decision, decision === 'reject' ? '在 IM 上驳回' : undefined);
+    await this.svc.approve(t.runId, t.nodeId, decision, decision === 'reject' ? tr('在 IM 上驳回') : undefined);
     this.tokens.delete(token);
-    return `${decision === 'reject' ? '已驳回' : '已通过'}：${run.name}`;
+    return `${decision === 'reject' ? tr('已驳回') : tr('已通过')}：${run.name}`;
   }
 }
 
@@ -51,9 +52,9 @@ export async function createOrchestra(s: RuntimeServices & { im: ImService }): P
     const title = node?.title || nodeId;
     if (what === 'approval') {
       const note = node?.kind === 'approval' && node.note ? `\n${node.note}` : '';
-      void s.im.router.announce(sessionsOf(run), `编排「${run.name}」等你审批：${title}${note}`, { buttons: bridge.buttons(run.id, nodeId) });
+      void s.im.router.announce(sessionsOf(run), tr('编排「{name}」等你审批：{title}{note}', { name: run.name, title, note }), { buttons: bridge.buttons(run.id, nodeId) });
     } else {
-      void s.im.router.announce(sessionsOf(run), `编排「${run.name}」的比选「${title}」候选都跑完了，到 claude-web 的「编排」面板里选一个合并。`);
+      void s.im.router.announce(sessionsOf(run), tr('编排「{name}」的比选「{title}」候选都跑完了，到 claude-web 的「编排」面板里选一个合并。', { name: run.name, title }));
     }
   };
   const svc = new OrchestraService(orchestraDeps(s, { runs: path.join(dataDir(), 'orchestra'), worktrees: path.join(dataDir(), 'worktrees') }, notify));

@@ -1,6 +1,7 @@
 // The sidebar's row model (spec 2026-09-28 §5.1): every row is a title plus ONE status at its end, and the
 // 「需要你」 section lists what waits for a human. Pure — no store — so the priorities are unit-tested.
 import type { RunnerState, SessionSummary } from '@shared';
+import { tr, dateLocale } from '@/i18n';
 
 export type RowStatusKind = 'confirm' | 'ask' | 'error' | 'running' | 'diff' | 'tag' | 'time';
 export interface RowStatus { kind: RowStatusKind; label: string; title: string; added?: number; removed?: number }
@@ -26,28 +27,28 @@ export function rowStatus(i: RowStatusInput): RowStatus {
   if (pending.length) {
     const onlyQuestions = pending.every((p) => ASK_TOOLS.has(p.toolName));
     return onlyQuestions
-      ? { kind: 'ask', label: '提问', title: 'Claude 在问你一个问题' }
-      : { kind: 'confirm', label: '待确认', title: pending.some((p) => p.toolName === 'ExitPlanMode') ? 'Claude 的方案等你确认' : 'Claude 等你确认一个操作' };
+      ? { kind: 'ask', label: tr('提问'), title: tr('Claude 在问你一个问题') }
+      : { kind: 'confirm', label: tr('待确认'), title: pending.some((p) => p.toolName === 'ExitPlanMode') ? tr('Claude 的方案等你确认') : tr('Claude 等你确认一个操作') };
   }
-  if (i.state === 'waiting') return { kind: 'confirm', label: '待确认', title: '等你确认一个操作' };
-  if (i.state === 'error') return { kind: 'error', label: '出错', title: i.error ? `出错：${i.error}` : '进程异常退出' };
-  if (i.state === 'running' || i.state === 'starting') return { kind: 'running', label: '运行中', title: i.state === 'starting' ? '启动中' : '运行中' };
+  if (i.state === 'waiting') return { kind: 'confirm', label: tr('待确认'), title: tr('等你确认一个操作') };
+  if (i.state === 'error') return { kind: 'error', label: tr('出错'), title: i.error ? tr('出错：{error}', { error: i.error }) : tr('进程异常退出') };
+  if (i.state === 'running' || i.state === 'starting') return { kind: 'running', label: tr('运行中'), title: i.state === 'starting' ? tr('启动中') : tr('运行中') };
   const d = i.diff;
-  if (d && d.added + d.removed > 0) return { kind: 'diff', label: `+${d.added} −${d.removed}`, title: `这个对话改动了 +${d.added} −${d.removed} 行`, added: d.added, removed: d.removed };
+  if (d && d.added + d.removed > 0) return { kind: 'diff', label: `+${d.added} −${d.removed}`, title: tr('这个对话改动了 +{added} −{removed} 行', { added: d.added, removed: d.removed }), added: d.added, removed: d.removed };
   const time = shortAgo(i.lastModified, i.now);
   if (i.tag) return { kind: 'tag', label: i.tag, title: `${i.tag} · ${time}` };
-  return { kind: 'time', label: time, title: i.lastModified ? new Date(i.lastModified).toLocaleString() : '' };
+  return { kind: 'time', label: time, title: i.lastModified ? new Date(i.lastModified).toLocaleString(dateLocale()) : '' };
 }
 
 /** 刚刚 / 5 分钟 / 3 小时 / 6 天 / 2 周 / 2/3 (this year) / 2025/11 — short enough for the row's end. */
 export function shortAgo(ts: number, now = Date.now()): string {
   if (!ts) return '';
   const d = now - ts;
-  if (d < 60_000) return '刚刚';
-  if (d < 3600_000) return `${Math.floor(d / 60_000)} 分钟`;
-  if (d < 86400_000) return `${Math.floor(d / 3600_000)} 小时`;
-  if (d < 7 * 86400_000) return `${Math.floor(d / 86400_000)} 天`;
-  if (d < 30 * 86400_000) return `${Math.floor(d / (7 * 86400_000))} 周`;
+  if (d < 60_000) return tr('刚刚');
+  if (d < 3600_000) return tr('{d} 分钟', { d: Math.floor(d / 60_000) });
+  if (d < 86400_000) return tr('{d} 小时', { d: Math.floor(d / 3600_000) });
+  if (d < 7 * 86400_000) return tr('{d} 天', { d: Math.floor(d / 86400_000) });
+  if (d < 30 * 86400_000) return tr('{d} 周', { d: Math.floor(d / (7 * 86400_000)) });
   const t = new Date(ts), n = new Date(now);
   return t.getFullYear() === n.getFullYear() ? `${t.getMonth() + 1}/${t.getDate()}` : `${t.getFullYear()}/${t.getMonth() + 1}`;
 }
@@ -123,19 +124,19 @@ export function todayCost(rows: readonly { ts: number; costUsd: number; costUnkn
 export function planLabel(t: string | undefined | null): string {
   if (!t) return '';
   const k = t.toLowerCase();
-  if (k === 'max') return 'Max 套餐';
-  if (k === 'pro') return 'Pro 套餐';
-  if (k === 'team') return 'Team 套餐';
+  if (k === 'max') return tr('Max 套餐');
+  if (k === 'pro') return tr('Pro 套餐');
+  if (k === 'team') return tr('Team 套餐');
   if (k === 'enterprise') return 'Enterprise';
   return t;
 }
 
 /** The account row's name and avatar letter from `config.auth` (claude auth status); no login → what can be used instead. */
 export function accountName(auth: { loggedIn?: boolean; email?: string; orgName?: string } | null, providers: number): { name: string; initial: string; signedIn: boolean } {
-  if (!auth) return { name: '账号', initial: '', signedIn: false };
+  if (!auth) return { name: tr('账号'), initial: '', signedIn: false };
   if (auth.loggedIn) {
-    const name = auth.email?.split('@')[0] || auth.orgName || 'Claude 账号';
+    const name = auth.email?.split('@')[0] || auth.orgName || tr('Claude 账号');
     return { name, initial: name.slice(0, 1).toUpperCase(), signedIn: true };
   }
-  return { name: providers ? `${providers} 个供应商` : '未登录', initial: '', signedIn: false };
+  return { name: providers ? tr('{providers} 个供应商', { providers }) : tr('未登录'), initial: '', signedIn: false };
 }

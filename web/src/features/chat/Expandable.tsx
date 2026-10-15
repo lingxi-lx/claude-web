@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
+import { tr, dateLocale } from '@/i18n';
 
 /** Clamp long text; renders `children(visibleText, truncated)` and a "show all" toggle. */
 export function Expandable({ text, lines = 30, chars = 4000, children, openByDefault }: { text: string; lines?: number; chars?: number; openByDefault?: boolean; children: (visible: string, truncated: boolean) => ReactNode }) {
@@ -16,7 +17,7 @@ export function Expandable({ text, lines = 30, chars = 4000, children, openByDef
       {children(visible, truncated)}
       {(truncated || (all && (lineCount > lines || text.length > chars))) && (
         <div className="expand-row">
-          <button className="link" onClick={() => setAll(!all)}>{all ? '收起' : `全部显示（${text.length.toLocaleString()} 字符，${lineCount} 行）`}</button>
+          <button className="link" onClick={() => setAll(!all)}>{all ? tr('收起') : tr('全部显示（{textCount} 字符，{lineCount} 行）', { textCount: text.length.toLocaleString(dateLocale()), lineCount })}</button>
         </div>
       )}
     </>

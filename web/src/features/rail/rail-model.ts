@@ -2,13 +2,14 @@
 import { PANELS, type PanelId } from '@/model/layout';
 import type { IconName } from '@/ui/icons';
 import type { Section } from '@/features/sections/pages';
+import { tr } from '@/i18n';
 
 /** The sections, top to bottom. `automation` keeps the id the sidebar's row had. */
 export const RAIL_SECTIONS: { id: Section; label: string; icon: IconName; tip: string }[] = [
-  { id: 'chat', label: '对话', icon: 'chat', tip: '对话' },
-  { id: 'background', label: '后台', icon: 'office', tip: '后台：在跑的子代理、工作流和后台命令' },
-  { id: 'automation', label: '自动化', icon: 'tasks', tip: '自动化：定时任务、目标、编排' },
-  { id: 'extensions', label: '扩展', icon: 'extensions', tip: '扩展：连接器、Skills、插件' },
+  { id: 'chat', label: tr('对话'), icon: 'chat', tip: tr('对话') },
+  { id: 'background', label: tr('后台'), icon: 'office', tip: tr('后台：在跑的子代理、工作流和后台命令') },
+  { id: 'automation', label: tr('自动化'), icon: 'tasks', tip: tr('自动化：定时任务、目标、编排') },
+  { id: 'extensions', label: tr('扩展'), icon: 'extensions', tip: tr('扩展：连接器、Skills、插件') },
 ];
 
 /**
@@ -19,15 +20,15 @@ export const RAIL_SECTIONS: { id: Section; label: string; icon: IconName; tip: s
 export const RAIL_MORE: PanelId[] = ['mission', 'cafe', 'usage', 'memory', 'board', 'android', 'config'];
 
 /** What ··· calls each one (the right panel's tab keeps its short title). */
-const MORE_LABEL: Partial<Record<PanelId, string>> = { usage: '用量与账本', memory: '共享记忆' };
+const MORE_LABEL: Partial<Record<PanelId, string>> = { usage: tr('用量与账本'), memory: tr('共享记忆') };
 const MORE_HINT: Partial<Record<PanelId, string>> = {
-  mission: '谁在等你、谁在跑、谁出错了',
-  cafe: '子代理在网吧里上机、吃泡面、结账',
-  usage: '用了多少、花了多少、缓存命中',
-  memory: '各 Agent 共用的决定和约束',
-  board: '这个仓库的 Issue 和 PR',
-  android: '手机或模拟器的屏幕',
-  config: '插件、Hooks、环境变量',
+  mission: tr('谁在等你、谁在跑、谁出错了'),
+  cafe: tr('子代理在网吧里上机、吃泡面、结账'),
+  usage: tr('用了多少、花了多少、缓存命中'),
+  memory: tr('各 Agent 共用的决定和约束'),
+  board: tr('这个仓库的 Issue 和 PR'),
+  android: tr('手机或模拟器的屏幕'),
+  config: tr('插件、Hooks、环境变量'),
 };
 
 export interface RailPanel { id: PanelId; label: string; hint: string; icon: IconName }

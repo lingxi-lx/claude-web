@@ -1,4 +1,5 @@
 import { parsePeerId, type SessionPeer, type SessionSummary } from '@shared';
+import { tr } from '@/i18n';
 
 /**
  * Which machine a session lives on, decided by its id alone (`peer_<peer>~<id>`) — never by whether
@@ -22,5 +23,5 @@ export function remoteOpenBlock(sessionId: string | null | undefined, sessions: 
 
 /** What to tell the user instead of opening a remote session's file here (same path on this disk ≠ that file). */
 export function remoteFileNote(peer: Pick<SessionPeer, 'name'>, path?: string): string {
-  return `文件在机器「${peer.name}」上${path ? `（${path}）` : ''}，请在那台机器上打开`;
+  return tr('文件在机器「{name}」上{v}，请在那台机器上打开', { name: peer.name, v: path ? `（${path}）` : '' });
 }

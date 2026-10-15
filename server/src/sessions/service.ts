@@ -7,6 +7,7 @@ import type { SessionSummary } from '../protocol.js';
 import { watchTree, type TreeWatcher } from '../runtime/watch-tree.js';
 import { hasClaudeTranscript } from '../runtime/transcript-file.js';
 import { BRIEFING_HEAD } from '../session/handoff.js';
+import { tr } from '../i18n/index.js';
 
 export const claudeDir = process.env.CLAUDE_CONFIG_DIR ?? path.join(os.homedir(), '.claude');
 export const projectsDir = path.join(claudeDir, 'projects');
@@ -26,7 +27,7 @@ export function listTitle(s: Pick<SDKSessionInfo, 'sessionId' | 'customTitle' | 
   if (s.customTitle) return s.customTitle;
   const said = [s.summary, s.firstPrompt].map(cleanTitle).filter(Boolean);
   const real = said.find((t) => !t.startsWith(BRIEFING_HEAD));
-  return real || (said.length ? '交接的对话' : s.sessionId.slice(0, 8));
+  return real || (said.length ? tr('交接的对话') : s.sessionId.slice(0, 8));
 }
 
 function toSummary(s: SDKSessionInfo): SessionSummary {
@@ -59,7 +60,7 @@ export function transcriptIdOf(rel: string): string | null {
 
 /** A fork's title: one (分叉) mark however deep the fork of a fork goes (it stacked: 「… (分叉) (分叉)」). */
 export function forkTitle(title: string): string {
-  return `${title.replace(/(?:\s*\(分叉\))+\s*$/, '').trim()} (分叉)`.trim();
+  return tr('{replace} (分叉)', { replace: title.replace(/(?:\s*\((?:分叉|fork)\))+\s*$/, '').trim() }).trim();
 }
 
 export class SessionService extends EventEmitter {
@@ -157,7 +158,7 @@ export class SessionService extends EventEmitter {
   async rename(sessionId: string, title: string) {
     const info = await getSessionInfo(sessionId);
     // the title lives in the CLI's transcript, which only exists once the first message went out
-    if (!info && !hasClaudeTranscript(sessionId)) throw new Error('这个对话还没发过消息，发出第一条消息之后才能改名');
+    if (!info && !hasClaudeTranscript(sessionId)) throw new Error(tr('这个对话还没发过消息，发出第一条消息之后才能改名'));
     await renameSession(sessionId, title, { dir: info?.cwd });
     this.bump();
   }

@@ -9,6 +9,7 @@ import { canOpenWindow } from '@/ws/tunnel';
 import { offerGroupToNewWindow } from './windows';
 import { underCovers } from './cover-commands';
 import { changeZoom } from '@/ui/zoom';
+import { tr } from '@/i18n';
 
 export function runCommand(id: string): boolean {
   const st = useStore.getState();
@@ -78,7 +79,7 @@ export function runCommand(id: string): boolean {
     case 'pane.splitRight': case 'pane.splitDown': {
       const before = st.layout;
       d({ t: 'pane.split', paneId: g.focusedPaneId, dir: id === 'pane.splitRight' ? 'row' : 'col' });
-      if (useStore.getState().layout === before) st.toast(`最多 6 个${TERMS.pane}`);
+      if (useStore.getState().layout === before) st.toast(tr('最多 6 个{pane}', { pane: TERMS.pane }));
       return true;
     }
     case 'tile.close': if (pane?.activeTileId) st.closeTile(pane.id, pane.activeTileId); return true;

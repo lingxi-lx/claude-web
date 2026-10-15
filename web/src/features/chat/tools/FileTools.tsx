@@ -7,6 +7,7 @@ import { Expandable } from '../Expandable';
 import { langFromPath } from '../highlight';
 import { ErrorPre, ImageGrid } from './McpTool';
 import { blockRemoteOpen } from '@/features/remote-guard';
+import { tr } from '@/i18n';
 
 export function ReadBody({ t }: { t: ToolUseBlock }) {
   const inp = t.input as any;
@@ -35,12 +36,12 @@ export function ReadBody({ t }: { t: ToolUseBlock }) {
       </>
     );
   }
-  if (!r) return <div className="tool-meta">读取中…</div>;
+  if (!r) return <div className="tool-meta">{tr('读取中…')}</div>;
   const file = st?.type === 'text' ? st.file : undefined;
   const content: string = file?.content ?? stripLineNumbers(r.content);
   const startLine = file?.startLine ?? (inp.offset ? Number(inp.offset) : 1);
   const footer = file ? (
-    <span>{file.numLines} / {file.totalLines} 行{file.truncatedByTokenCap ? ' · 已按 token 上限截断' : ''}{inp.limit ? ` · limit ${inp.limit}` : ''}</span>
+    <span>{tr('{numLines} / {totalLines} 行{v}{v2}', { numLines: file.numLines, totalLines: file.totalLines, v: file.truncatedByTokenCap ? tr(' · 已按 token 上限截断') : '', v2: inp.limit ? ` · limit ${inp.limit}` : '' })}</span>
   ) : null;
   return <CodeBlock code={content} lang={langFromPath(path)} title={path} startLine={startLine} lineNumbers maxLines={80} footer={footer} />;
 }
@@ -60,7 +61,7 @@ export function WriteBody({ t }: { t: ToolUseBlock }) {
   return (
     <>
       {patch ? (
-        <DiffView patch={patch} title={`${st.type === 'create' ? '新建' : '更新'} ${path}`} />
+        <DiffView patch={patch} title={`${st.type === 'create' ? tr('新建') : tr('更新')} ${path}`} />
       ) : (
         <CodeBlock code={String(inp.content ?? '')} lang={langFromPath(path)} title={path} maxLines={120} />
       )}
@@ -83,7 +84,7 @@ export function EditBody({ t }: { t: ToolUseBlock }) {
       ) : (
         edits.map((e, i) => <DiffView key={i} oldText={String(e.old_string ?? '')} newText={String(e.new_string ?? '')} title={edits.length > 1 ? `${path} · #${i + 1}` : path} collapse={false} />)
       )}
-      {st?.userModified && <div className="tool-meta">用户在权限对话框里修改过内容</div>}
+      {st?.userModified && <div className="tool-meta">{tr('用户在权限对话框里修改过内容')}</div>}
       {r?.isError && <ErrorPre text={r.content} />}
     </>
   );
@@ -117,8 +118,7 @@ export function FileLink({ path, line, children }: { path: string; line?: number
     if (e.altKey) { if (sid) useStore.setState({ inspect: { sessionId: sid, file: { path, line } } }); return; }
     st.openTile({ id: `d${Date.now().toString(36)}`, kind: 'doc', path, line }, 'tab');
   };
-  return <button className="file-link" onClick={open} title={`${path}
-Alt+点击 在详情面板查看`}>{children ?? path}</button>;
+  return <button className="file-link" onClick={open} title={tr("{path}\nAlt+点击 在详情面板查看", { path })}>{children ?? path}</button>;
 }
 
 export function FileContentPreview({ text, path }: { text: string; path?: string }) {

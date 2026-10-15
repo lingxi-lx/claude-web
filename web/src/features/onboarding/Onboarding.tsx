@@ -8,8 +8,9 @@ import { fillComposer } from '@/features/composer/fill';
 import { QuickConnect } from '@/features/providers/QuickConnect';
 import { loginInTerminal } from '@/features/providers/ConnectModel';
 import { STEP_TITLE, currentStep, onboardingSteps, recentFolders } from './steps';
+import { tr } from '@/i18n';
 
-const STEP_LABEL = { login: '接一个模型', project: '选一个项目文件夹' } as const;
+const STEP_LABEL = { login: tr('接一个模型'), project: tr('选一个项目文件夹') } as const;
 
 /**
  * First-run wizard (spec §5.8), two steps: ① connect a model — skipped when the Claude account is logged in or a
@@ -78,41 +79,41 @@ export function Onboarding() {
   const allSteps: ('login' | 'project')[] = ['login', 'project'];
   return (
     <div className="modal-bg" style={{ zIndex: 150 }}>
-      <div className="modal onboarding" role="dialog" aria-label="开始使用" data-step={step ?? 'checking'}>
+      <div className="modal onboarding" role="dialog" aria-label={tr('开始使用')} data-step={step ?? 'checking'}>
         <ol className="ob-steps">
           {allSteps.map((s, i) => {
             // the login step is done (logged in, or a provider to use) or was skipped
             const done = !pending && s === 'login' && !steps.includes('login');
             const skippedHere = !pending && s === 'login' && steps.includes('login') && step === 'project';
-            return <li key={s} className={clsx(s === step && 'cur', done && 'done', skippedHere && 'skipped')}>{done ? <Icon name="check" size={12} /> : <span className="num">{i + 1}</span>}{STEP_LABEL[s]}{skippedHere ? '（已跳过）' : ''}</li>;
+            return <li key={s} className={clsx(s === step && 'cur', done && 'done', skippedHere && 'skipped')}>{done ? <Icon name="check" size={12} /> : <span className="num">{i + 1}</span>}{STEP_LABEL[s]}{skippedHere ? tr('（已跳过）') : ''}</li>;
           })}
         </ol>
         {pending && (
           <>
             <h3>{STEP_TITLE.checking}</h3>
-            <p className="ob-checking" role="status"><span className="spin" aria-hidden />正在检查登录…</p>
+            <p className="ob-checking" role="status"><span className="spin" aria-hidden />{tr('正在检查登录…')}</p>
           </>
         )}
         {step === 'login' && (
           <>
             <h3>{STEP_TITLE.login}</h3>
-            <p>先接一个模型：有 API Key（中转站、DeepSeek、Kimi、智谱……）就在下面填，测试通过就能用。有 Claude Pro / Max 订阅的，也可以直接用 Claude 账号。</p>
+            <p>{tr('先接一个模型：有 API Key（中转站、DeepSeek、Kimi、智谱……）就在下面填，测试通过就能用。有 Claude Pro / Max 订阅的，也可以直接用 Claude 账号。')}</p>
             {/* saved → a provider exists → this step drops out of `steps` and the folder step shows */}
             <QuickConnect makeDefault onDone={() => {}} />
             <div className="ob-actions">
-              <button className="link" data-ob="login" onClick={login}><Icon name="terminal" size={13} /> 用 Claude 账号登录</button>
-              <button className="link" disabled={checking} onClick={() => check(true)}>{checking ? '检查中…' : '已经登录了？重新检查'}</button>
+              <button className="link" data-ob="login" onClick={login}><Icon name="terminal" size={13} /> {tr('用 Claude 账号登录')}</button>
+              <button className="link" disabled={checking} onClick={() => check(true)}>{checking ? tr('检查中…') : tr('已经登录了？重新检查')}</button>
               <span className="grow" />
-              <button className="btn ghost" data-ob="skip" onClick={() => setSkipped(true)}>先跳过</button>
+              <button className="btn ghost" data-ob="skip" onClick={() => setSkipped(true)}>{tr('先跳过')}</button>
             </div>
           </>
         )}
         {step === 'project' && (
           <>
             <h3>{STEP_TITLE.project}</h3>
-            <p>Claude 在这个文件夹里读代码、改文件。以后可以在侧栏添加更多项目。</p>
+            <p>{tr('Claude 在这个文件夹里读代码、改文件。以后可以在侧栏添加更多项目。')}</p>
             {folders.length > 0 && (
-              <div className="ob-folders" role="list" aria-label="最近用过的文件夹">
+              <div className="ob-folders" role="list" aria-label={tr('最近用过的文件夹')}>
                 {folders.map((p) => (
                   <button key={p} role="listitem" className="ob-folder" data-ob="folder" disabled={busy} onClick={() => void use(p)} title={p}>
                     <Icon name="folder" size={15} /><span className="grow"><span className="nm">{basename(p)}</span><span className="path">{p}</span></span><Icon name="arrowRight" size={13} />
@@ -121,9 +122,9 @@ export function Onboarding() {
               </div>
             )}
             <div className="ob-actions">
-              <button className={clsx('btn', !folders.length && 'primary')} disabled={busy} data-ob="browse" onClick={() => void browse()}><Icon name="folder" size={14} /> {folders.length ? '其它文件夹…' : '选择文件夹…'}</button>
+              <button className={clsx('btn', !folders.length && 'primary')} disabled={busy} data-ob="browse" onClick={() => void browse()}><Icon name="folder" size={14} /> {folders.length ? tr('其它文件夹…') : tr('选择文件夹…')}</button>
               <span className="grow" />
-              <button className="btn ghost" onClick={finish}>以后再说</button>
+              <button className="btn ghost" onClick={finish}>{tr('以后再说')}</button>
             </div>
           </>
         )}

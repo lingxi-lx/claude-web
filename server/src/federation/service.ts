@@ -5,6 +5,7 @@ import type { AgentKind, ClientRequest, RemoteHost, ServerEvent, SessionSummary,
 import { PeerClient, type PeerClientOptions, type PeerEndpoint } from './peer-client.js';
 import { inbound, outbound, planRoute, importList, refusedFromPeer, rewriteEvent, type PeerRef } from './rewrite.js';
 import { SELF_PEER, SERVER_ID_CONFLICT, parsePeerId, type PeerInfo, type PeerRecord, type PeerRequest, type PeerState } from './types.js';
+import { tr } from '../i18n/index.js';
 
 /** What the service needs from MetaStore (peers + serverId + ssh hosts). */
 export interface FederationStore {
@@ -70,12 +71,12 @@ export const selfProof = (nonce: string, bootId: string) => sha(`cw-self:${nonce
 /** `http://1.2.3.4:3091/` → `http://1.2.3.4:3091`; a bare `host:port` gets http://. */
 export function normalizePeerUrl(raw: string): string {
   let s = (raw ?? '').trim();
-  if (!s) throw new Error('需要地址，例如 http://192.168.1.20:3091');
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s) && !/^https?:\/\//i.test(s)) throw new Error(`只支持 http / https：${raw}`);
+  if (!s) throw new Error(tr('需要地址，例如 http://192.168.1.20:3091'));
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s) && !/^https?:\/\//i.test(s)) throw new Error(tr('只支持 http / https：{raw}', { raw }));
   if (!/^https?:\/\//i.test(s)) s = `http://${s}`;
   let u: URL;
-  try { u = new URL(s); } catch { throw new Error(`地址不对：${raw}`); }
-  if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error(`只支持 http / https：${raw}`);
+  try { u = new URL(s); } catch { throw new Error(tr('地址不对：{raw}', { raw })); }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error(tr('只支持 http / https：{raw}', { raw }));
   return `${u.protocol}//${u.host}${u.pathname.replace(/\/+$/, '')}`;
 }
 
@@ -156,10 +157,10 @@ export class FederationService extends EventEmitter {
       const cur = this.rec(p.id) ?? p;
       if (cur.via === 'ssh') {
         const host = this.d.store.remoteHosts().find((h) => h.id === cur.hostId);
-        if (!host) throw new Error('对应的 SSH 主机已被删除');
-        if (!this.d.tunnels) throw new Error('SSH 隧道不可用');
+        if (!host) throw new Error(tr('对应的 SSH 主机已被删除'));
+        if (!this.d.tunnels) throw new Error(tr('SSH 隧道不可用'));
         const t = await this.d.tunnels.open(host);
-        if (t.state !== 'up') throw new Error(t.error || 'SSH 隧道没有连上');
+        if (t.state !== 'up') throw new Error(t.error || tr('SSH 隧道没有连上'));
         return { url: `http://127.0.0.1:${t.localPort}`, token: host.token ?? '' };
       }
       return { url: cur.url, token: await this.d.secrets.reveal(cur.token) };
@@ -201,9 +202,9 @@ export class FederationService extends EventEmitter {
     const id = randomBytes(5).toString('hex').replace(/[^a-z0-9]/g, '').slice(0, 10) || Date.now().toString(36);
     if (o.hostId) {
       const host = this.d.store.remoteHosts().find((h) => h.id === o.hostId);
-      if (!host) throw new Error('SSH 主机不存在');
+      if (!host) throw new Error(tr('SSH 主机不存在'));
       const dup = this.d.store.peers().find((p) => p.via === 'ssh' && p.hostId === o.hostId);
-      if (dup) throw new Error(`已经加入过（「${dup.name}」）`);
+      if (dup) throw new Error(tr('已经加入过（「{name}」）', { name: dup.name }));
       rec = { id, name: (o.name ?? '').trim() || host.name || host.target, url: '', via: 'ssh', hostId: host.id, token: '', enabled: true, addedAt: Date.now() };
     } else {
       const url = normalizePeerUrl(o.url ?? '');
@@ -224,7 +225,7 @@ export class FederationService extends EventEmitter {
       await this.remove(rec.id);
       // the device token we just redeemed was minted by OUR OWN listener: don't leave it behind
       if (pairedDevice) await this.d.revokeDevice?.(pairedDevice).catch(() => {});
-      throw new Error('这个地址就是本机，不能把自己加为其它机器');
+      throw new Error(tr('这个地址就是本机，不能把自己加为其它机器'));
     }
     if (c.state === 'offline' && c.error === SERVER_ID_CONFLICT) { await this.remove(rec.id); throw new Error(SERVER_ID_CONFLICT); }
     if (!o.name && c.remote.name && rec.via === 'direct') { rec = { ...(this.rec(rec.id) ?? rec), name: c.remote.name }; await this.d.store.setPeer(rec); }
@@ -240,29 +241,29 @@ export class FederationService extends EventEmitter {
     let j: any = null;
     try { j = await (await this.fetchFn(`${url}/api/health?nonce=${nonce}`, { signal: AbortSignal.timeout(5000) })).json(); } catch { return; /* pair() reports reachability */ }
     if (!j?.serverIdHash || j.serverIdHash !== serverIdHash(this.serverId)) return;
-    throw new Error(j.selfProof === selfProof(nonce, this.bootId) ? `${SELF_PEER}，不能把自己加为其它机器` : SERVER_ID_CONFLICT);
+    throw new Error(j.selfProof === selfProof(nonce, this.bootId) ? tr('{SELF_PEER}，不能把自己加为其它机器', { SELF_PEER }) : SERVER_ID_CONFLICT);
   }
 
   /** Redeem a pairing code on the other machine's /api/pair (the same endpoint a phone uses). */
   private async pair(url: string, code: string): Promise<{ token: string; deviceId?: string }> {
-    if (!/^\d{6}$/.test(code.trim())) throw new Error('配对码是 6 位数字（在那台机器的 设置 → 手机与其它电脑 里生成）');
+    if (!/^\d{6}$/.test(code.trim())) throw new Error(tr('配对码是 6 位数字（在那台机器的 设置 → 手机与其它电脑 里生成）'));
     let r: Response;
     try {
       r = await this.fetchFn(`${url}/api/pair`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: code.trim(), name: `${this.name}（Claude Web）` }), signal: AbortSignal.timeout(10_000) });
     } catch (e: any) {
-      throw new Error(`连不上 ${url}：${e?.cause?.code ?? e?.message ?? e}（对方要打开「允许其它设备访问」）`);
+      throw new Error(tr('连不上 {url}：{code}（对方要打开「允许其它设备访问」）', { url, code: e?.cause?.code ?? e?.message ?? e }));
     }
     let j: any = {};
     try { j = await r.json(); } catch { /* ignore */ }
-    if (!r.ok || !j?.token) throw new Error(j?.error || `配对失败（HTTP ${r.status}）`);
+    if (!r.ok || !j?.token) throw new Error(j?.error || tr('配对失败（HTTP {status}）', { status: r.status }));
     return { token: String(j.token), deviceId: typeof j.device?.id === 'string' ? j.device.id : undefined };
   }
 
   /** New pairing code for an existing (e.g. revoked) peer: same id, so its sessions keep their ids. */
   async repair(id: string, code: string): Promise<PeerInfo> {
     const cur = this.rec(id);
-    if (!cur) throw new Error('没有这台机器');
-    if (cur.via !== 'direct') throw new Error('SSH 方式的机器用主机配置里的令牌，改主机配置即可');
+    if (!cur) throw new Error(tr('没有这台机器'));
+    if (cur.via !== 'direct') throw new Error(tr('SSH 方式的机器用主机配置里的令牌，改主机配置即可'));
     await this.checkNotSelf(cur.url);
     const { token } = await this.pair(cur.url, code);
     const rec = { ...cur, token: await this.d.secrets.protect(token, `peer-${id}`), enabled: true };
@@ -276,7 +277,7 @@ export class FederationService extends EventEmitter {
   /** Reconnect now (after the cause was fixed elsewhere — e.g. an ssh host's token). */
   async retry(id: string): Promise<PeerInfo[]> {
     const cur = this.rec(id);
-    if (!cur) throw new Error('没有这台机器');
+    if (!cur) throw new Error(tr('没有这台机器'));
     if (cur.enabled) {
       if (cur.via === 'ssh' && cur.hostId) await this.d.tunnels?.close(cur.hostId).catch(() => {});
       this.spawn(cur);
@@ -295,7 +296,7 @@ export class FederationService extends EventEmitter {
 
   async update(id: string, patch: { name?: string; enabled?: boolean }): Promise<PeerInfo[]> {
     const cur = this.rec(id);
-    if (!cur) throw new Error('没有这台机器');
+    if (!cur) throw new Error(tr('没有这台机器'));
     const rec = { ...cur, ...(patch.name?.trim() ? { name: patch.name.trim().slice(0, 60) } : {}), ...(patch.enabled !== undefined ? { enabled: !!patch.enabled } : {}) };
     await this.d.store.setPeer(rec);
     if (patch.enabled !== undefined && patch.enabled !== cur.enabled) this.spawn(rec);
@@ -320,16 +321,16 @@ export class FederationService extends EventEmitter {
   private forward<T = unknown>(peerId: string, req: ClientRequest, via: string[]): Promise<T> {
     const rec = this.rec(peerId);
     const c = this.clients.get(peerId);
-    if (!rec || !c) return Promise.reject(new Error('没有这台机器（已移除？）'));
-    if (!rec.enabled) return Promise.reject(new Error(`机器「${rec.name}」已停用`));
-    if (c.state !== 'online') return Promise.reject(new Error(c.state === 'unauthorized' ? `机器「${rec.name}」令牌失效，请重新配对` : `机器「${rec.name}」离线`));
+    if (!rec || !c) return Promise.reject(new Error(tr('没有这台机器（已移除？）')));
+    if (!rec.enabled) return Promise.reject(new Error(tr('机器「{name}」已停用', { name: rec.name })));
+    if (c.state !== 'online') return Promise.reject(new Error(c.state === 'unauthorized' ? tr('机器「{name}」令牌失效，请重新配对', { name: rec.name }) : tr('机器「{name}」离线', { name: rec.name })));
     return c.request<T>(req, [...via, this.serverId], req.kind === 'session.open' ? OPEN_TIMEOUT : undefined);
   }
 
   /** undefined: not federation's business, the hub handles it as usual. */
   route(req: ClientRequest, ctx: RouteCtx): Promise<unknown> | undefined {
     const via = Array.isArray(ctx.via) ? ctx.via.filter((x): x is string => typeof x === 'string') : [];
-    if (this.serverId && via.includes(this.serverId)) return Promise.reject(new Error('检测到跨机器转发环路，已拒绝'));
+    if (this.serverId && via.includes(this.serverId)) return Promise.reject(new Error(tr('检测到跨机器转发环路，已拒绝')));
     const fromPeer = via.length > 0 || !!ctx.peerConn;
     // another machine must not manage (or even read) this machine's list of machines, nor speak for its built-in browser
     const refused = fromPeer ? refusedFromPeer(req) : null;
@@ -348,7 +349,7 @@ export class FederationService extends EventEmitter {
     }
     const plan = planRoute(req);
     if (plan.kind === 'none' || plan.kind === 'local') return undefined;
-    if (fromPeer) return Promise.reject(new Error('不支持多跳转发'));
+    if (fromPeer) return Promise.reject(new Error(tr('不支持多跳转发')));
     if (plan.kind === 'reject') return Promise.reject(new Error(plan.reason));
     if (plan.kind === 'forward') return this.forward(plan.peerId, outbound(req), via).then((d) => inbound(req.kind, d, this.ref(plan.peerId)));
     return this.split(req as Extract<ClientRequest, { kind: 'library.archive' | 'library.delete' }>, ctx);
@@ -444,18 +445,18 @@ export class FederationService extends EventEmitter {
 
   async handover(req: Extract<PeerRequest, { kind: 'peers.handover' }>) {
     const p = parsePeerId(req.sessionId);
-    if (!p) throw new Error('不是其它机器上的对话');
-    if (!this.d.handover) throw new Error('交接不可用');
-    if (!req.cwd?.trim()) throw new Error('需要本机的工作目录');
+    if (!p) throw new Error(tr('不是其它机器上的对话'));
+    if (!this.d.handover) throw new Error(tr('交接不可用'));
+    if (!req.cwd?.trim()) throw new Error(tr('需要本机的工作目录'));
     let summary = this.lists.get(p.peerId)?.items.find((s) => s.sessionId === req.sessionId);
     if (!summary) {
       // not in the cache (fork, list not fetched yet): ask the peer — the briefing must name the right source agent
       const fresh = importList(await this.forward(p.peerId, { kind: 'sessions.list' }, []), this.ref(p.peerId));
       summary = fresh.find((s) => s.sessionId === req.sessionId);
-      if (!summary) throw new Error(`在机器「${this.ref(p.peerId).name}」上找不到这个对话（已删除？）`);
+      if (!summary) throw new Error(tr('在机器「{name}」上找不到这个对话（已删除？）', { name: this.ref(p.peerId).name }));
     }
     const from = (summary.agent ?? 'claude') as AgentKind;
-    const title = summary.title ? `${summary.title}（来自 ${this.ref(p.peerId).name}）` : undefined;
+    const title = summary.title ? tr('{title}（来自 {name}）', { title: summary.title, name: this.ref(p.peerId).name }) : undefined;
     const r = await this.d.handover({
       sessionId: req.sessionId,
       agent: req.agent,

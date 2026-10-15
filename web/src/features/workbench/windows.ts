@@ -4,6 +4,7 @@ import { winId } from '@/store/paneContext';
 import { desktop } from '@/desktop';
 import { canOpenWindow } from '@/ws/tunnel';
 import type { Group } from '@/model/layout';
+import { tr } from '@/i18n';
 
 type Msg =
   | { t: 'hello'; from: string }
@@ -45,7 +46,7 @@ export function sendGroupTo(groupId: string, to: string): Promise<void> {
   const g = st.layout.groups.find((x) => x.id === groupId);
   if (!g || !ch) return Promise.resolve();
   return new Promise((resolve) => {
-    const timer = setTimeout(() => { waiting.delete(groupId); st.toast('目标窗口没有响应'); resolve(); }, 8000);
+    const timer = setTimeout(() => { waiting.delete(groupId); st.toast(tr('目标窗口没有响应')); resolve(); }, 8000);
     waiting.set(groupId, () => {
       clearTimeout(timer);
       useStore.getState().dispatchLayout({ t: 'group.remove', id: groupId });
@@ -62,13 +63,13 @@ export function sendGroupTo(groupId: string, to: string): Promise<void> {
 export async function offerGroupToNewWindow(groupId: string) {
   if (!canOpenWindow()) return;
   const st = useStore.getState();
-  if (st.layout.groups.length < 2) { st.toast('至少保留一个分组在当前窗口；先新建一个分组再迁移'); return; }
+  if (st.layout.groups.length < 2) { st.toast(tr('至少保留一个分组在当前窗口；先新建一个分组再迁移')); return; }
   if (!desktop?.newWindow) { window.open(`${location.pathname}?${new URLSearchParams({ ...Object.fromEntries(new URLSearchParams(location.search)), win: `w${Date.now().toString(36)}` })}`, '_blank'); return; }
   const id = await desktop.newWindow();
   // wait for the peer's hello
   const until = Date.now() + 15000;
   while (!peers.has(id) && Date.now() < until) await new Promise((r) => setTimeout(r, 100));
-  if (!peers.has(id)) { st.toast('新窗口没有就绪'); return; }
+  if (!peers.has(id)) { st.toast(tr('新窗口没有就绪')); return; }
   await sendGroupTo(groupId, id);
 }
 

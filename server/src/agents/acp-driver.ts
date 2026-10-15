@@ -9,6 +9,7 @@ import { webAcpMcpServers } from '../web/launcher.js';
 import { MessageSynth, mapToolName } from './normalize.js';
 import type { AgentTranscripts } from './transcript.js';
 import type { AgentDriver } from './types.js';
+import { tr } from '../i18n/index.js';
 
 interface PendingPerm { event: PermissionRequestEvent; resolve: (r: any) => void; options: { optionId: string; kind: string }[] }
 
@@ -72,7 +73,7 @@ export class AcpDriver extends EventEmitter implements AgentDriver {
     try {
       const rpc = new JsonRpcProcess(this.launch.command, this.launch.args, { cwd: this.cwd, env: this.launch.env });
       this.rpc = rpc;
-      rpc.on('exit', (code, err) => { if (!this.closed) { this.setState('error', `${this.launch.name} 退出（${code}）${err ? ` ${err}` : ''}\n${rpc.stderrTail.slice(-800)}`); } });
+      rpc.on('exit', (code, err) => { if (!this.closed) { this.setState('error', tr("{name} 退出（{code}）{v}\n{stderrTail}", { name: this.launch.name, code, v: err ? ` ${err}` : '', stderrTail: rpc.stderrTail.slice(-800) })); } });
       rpc.on('notification', (method, p) => this.onNotification(method, p));
       rpc.onRequest('session/request_permission', (p) => this.onPermission(p));
       rpc.onRequest('fs/read_text_file', async (p) => ({ content: await fs.readFile(p.path, 'utf8') }));
@@ -94,7 +95,7 @@ export class AcpDriver extends EventEmitter implements AgentDriver {
           try { return await rpc.request('session/new', { cwd: this.cwd, mcpServers }, 120_000); } catch (e) {
             if (!mcpServers.length) throw e;
             const r = await rpc.request('session/new', { cwd: this.cwd, mcpServers: [] }, 120_000);
-            this.push(this.synth.systemNote(`${this.launch.name} 不接受${mcpServers.map((s) => (s.name === 'web' ? '联网' : '共享记忆')).join(' / ')} MCP，已改为不带它启动。`, 'warning'));
+            this.push(this.synth.systemNote(tr('{name} 不接受{map} MCP，已改为不带它启动。', { name: this.launch.name, map: mcpServers.map((s) => (s.name === 'web' ? tr('联网') : tr('共享记忆'))).join(' / ') }), 'warning'));
             return r;
           }
         };
@@ -106,11 +107,11 @@ export class AcpDriver extends EventEmitter implements AgentDriver {
           if (silent && /auth|api key|login|credential|-32000/i.test(String(e.message))) {
             try { await rpc.request('authenticate', { methodId: silent.id }, 60_000); r = await newSession(); } catch { /* fall through to the hint */ }
           }
-          if (!r) throw new Error(`${e.message}${this.launch.login ? `\n需要先登录：在终端里运行 \`${this.launch.login}\`（设置 → Agents 与子代理 → 其它 Agent 有「登录」按钮）` : ''}`);
+          if (!r) throw new Error(`${e.message}${this.launch.login ? tr("\n需要先登录：在终端里运行 `{login}`（设置 → Agents 与子代理 → 其它 Agent 有「登录」按钮）", { login: this.launch.login }) : ''}`);
         }
         this.acpSessionId = r.sessionId;
         await this.transcripts.patchHead(this.sessionId, { nativeSessionId: r.sessionId });
-        if (params.sessionId && this.resumeHistory?.length) this.push(this.synth.systemNote(`${this.launch.name} 不支持恢复上下文，已新开一个对话；上面的历史仅供查看。`, 'warning'));
+        if (params.sessionId && this.resumeHistory?.length) this.push(this.synth.systemNote(tr('{name} 不支持恢复上下文，已新开一个对话；上面的历史仅供查看。', { name: this.launch.name }), 'warning'));
       }
       if (this.model && this.caps?.sessionCapabilities?.setModel !== false) {
         try { await rpc.request('session/set_model', { sessionId: this.acpSessionId, modelId: this.model }, 30_000); } catch { /* not supported */ }
@@ -120,7 +121,7 @@ export class AcpDriver extends EventEmitter implements AgentDriver {
       this.emit('info', this.info);
       this.flush();
     } catch (e: any) {
-      this.setState('error', `${this.launch.name} 启动失败：${e.message}${this.rpc?.stderrTail ? `\n${this.rpc.stderrTail.slice(-800)}` : ''}`);
+      this.setState('error', tr('{name} 启动失败：{message}{v}', { name: this.launch.name, message: e.message, v: this.rpc?.stderrTail ? `\n${this.rpc.stderrTail.slice(-800)}` : '' }));
     }
   }
 
@@ -265,7 +266,7 @@ export class AcpDriver extends EventEmitter implements AgentDriver {
     this.model = model;
     this.synth.setModel(model);
     this.info.model = model;
-    if (this.rpc && this.acpSessionId) await this.rpc.request('session/set_model', { sessionId: this.acpSessionId, modelId: model }, 30_000).catch((e) => { throw new Error(`该 agent 不支持切换模型：${e.message}`); });
+    if (this.rpc && this.acpSessionId) await this.rpc.request('session/set_model', { sessionId: this.acpSessionId, modelId: model }, 30_000).catch((e) => { throw new Error(tr('该 agent 不支持切换模型：{message}', { message: e.message })); });
     this.emit('info', this.info);
   }
   async close() {

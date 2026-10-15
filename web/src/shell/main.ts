@@ -11,6 +11,7 @@ import { BROKERS_KEY, STUN_KEY, brokerOverride, dialLists, overrideNote, stunOve
 import { BAD_LISTS, linkKey, linkState, pairPlan, parsePairLink, rememberLink, type LinkMemory, type PairLink } from './pair-link';
 import { Session, ShellError, explain, pairWith, type Dialer, type SessionView } from './session';
 import { Ui, type BarState } from './ui';
+import { tr } from './i18n';
 
 const scope = new URL('./', location.href).href;
 const SW_URL = new URL('sw.js', scope).href;
@@ -29,9 +30,9 @@ const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform 
 const standalone = (navigator as Navigator & { standalone?: boolean }).standalone === true || matchMedia('(display-mode: standalone)').matches;
 
 const STEP: Record<DialState, string> = {
-  finding: '正在找电脑…',
-  connecting: '找到了，正在直连…',
-  relay: '直连没打通，正在改用慢速转发…',
+  finding: tr('正在找电脑…'),
+  connecting: tr('找到了，正在直连…'),
+  relay: tr('直连没打通，正在改用慢速转发…'),
 };
 
 /** No RTCPeerConnection here (C4): the dial goes straight to the slow relay, so this is never constructed. */
@@ -257,11 +258,11 @@ async function takeLink(p: PairLink, plan: 'ask' | 'pair', pasted = false): Prom
 async function pair(p: PairLink, key: string): Promise<void> {
   leave();
   const mine = ++flow;
-  const title = `正在配对 ${p.pc || '电脑'}`;
-  ui.busy(title, '正在准备…', { cancel: back });
+  const title = tr('正在配对 {pc}', { pc: p.pc || tr('电脑') });
+  ui.busy(title, tr('正在准备…'), { cancel: back });
   // before any dial: the code is single-use, a browser that cannot run the app must not spend it
   if (!(await appReady())) {
-    if (mine === flow) ui.failed('配对没有成功', noWorker(), { back });
+    if (mine === flow) ui.failed(tr('配对没有成功'), noWorker(), { back });
     return;
   }
   if (mine !== flow) return;
@@ -283,7 +284,7 @@ async function pair(p: PairLink, key: string): Promise<void> {
     if (ac.signal.aborted) return;
     // refused by the PC (a wrong code, too many tries): this link is spent
     if (e instanceof ShellError && e.pcAnswered) setLocal(LINKS_KEY, JSON.stringify(rememberLink(linkMemory(), key, Date.now(), true)));
-    if (mine === flow) ui.failed('配对没有成功', explain(e, { rtcMissing }), { retry: () => void pair(p, key), back });
+    if (mine === flow) ui.failed(tr('配对没有成功'), explain(e, { rtcMissing }), { retry: () => void pair(p, key), back });
   }
 }
 
@@ -292,11 +293,11 @@ const relayBar = (): BarState => ({ text: SAY.relay, tone: 'warn', closable: tru
 async function connect(d: DeviceRec, justPaired = false): Promise<void> {
   leave();
   const mine = ++flow;
-  const title = `正在连接 ${d.pcName}`;
+  const title = tr('正在连接 {pcName}', { pcName: d.pcName });
   ui.busy(title, STEP.finding, { cancel: back });
   const caches = await appReady();
   if (mine !== flow) return;
-  if (!caches) return ui.failed('没连上', noWorker(), { retry: () => void connect(d), back });
+  if (!caches) return ui.failed(tr('没连上'), noWorker(), { retry: () => void connect(d), back });
   const s: Session = new Session({
     device: d,
     dialer,
@@ -319,11 +320,11 @@ function view(s: Session, v: SessionView, title: string): void {
   const open = s.isOpen;
   switch (v.k) {
     case 'dialing':
-      if (open) ui.setBar({ text: `连接断了，正在重新连接：${STEP[v.step]}`, tone: 'warn', busy: true });
+      if (open) ui.setBar({ text: tr('连接断了，正在重新连接：{v}', { v: STEP[v.step] }), tone: 'warn', busy: true });
       else ui.busy(title, STEP[v.step], { cancel: back });
       return;
     case 'files': {
-      const line = `正在取界面文件…（${v.done}/${v.total}）`;
+      const line = tr('正在取界面文件…（{done}/{total}）', { done: v.done, total: v.total });
       if (open) ui.setBar({ text: line, tone: 'info', busy: true });
       else ui.busy(title, line, { progress: v.total ? v.done / v.total : 0, cancel: back });
       return;
@@ -333,23 +334,23 @@ function view(s: Session, v: SessionView, title: string): void {
       ui.setBar(v.kind === 'relay' ? relayBar() : null);
       return;
     case 'relinking':
-      if (open) ui.setBar({ text: '连接断了，正在重新连接…', tone: 'warn', busy: true });
-      else ui.busy(title, '连接断了，正在重新连接…', { cancel: back });
+      if (open) ui.setBar({ text: tr('连接断了，正在重新连接…'), tone: 'warn', busy: true });
+      else ui.busy(title, tr('连接断了，正在重新连接…'), { cancel: back });
       return;
     case 'linked':
       ui.setBar(v.kind === 'relay' ? relayBar() : null);
       return;
     case 'updating':
-      ui.setBar({ text: '电脑上的 Claude Web 更新了，正在取新版本的界面文件…', tone: 'info', busy: true });
+      ui.setBar({ text: tr('电脑上的 Claude Web 更新了，正在取新版本的界面文件…'), tone: 'info', busy: true });
       return;
     case 'refused':
       ui.setBar({ text: v.text, tone: 'warn', closable: true });
       return;
     case 'down':
-      ui.setBar({ text: v.why.text, raw: v.why.raw, tone: 'err', actions: [{ label: '重新连接', run: () => void s.redial() }, { label: '返回', run: back }] });
+      ui.setBar({ text: v.why.text, raw: v.why.raw, tone: 'err', actions: [{ label: tr('重新连接'), run: () => void s.redial() }, { label: tr('返回'), run: back }] });
       return;
     case 'failed':
-      ui.failed('没连上', v.why, { retry: () => void connect(s.device), back });
+      ui.failed(tr('没连上'), v.why, { retry: () => void connect(s.device), back });
       return;
   }
 }

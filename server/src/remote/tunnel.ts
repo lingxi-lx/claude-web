@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import net from 'node:net';
 import { EventEmitter } from 'node:events';
 import type { RemoteHost, TunnelInfo } from '../protocol.js';
+import { tr } from '../i18n/index.js';
 
 /**
  * SSH port-forward manager: `ssh -N -L 127.0.0.1:<local>:127.0.0.1:<remotePort> user@host` makes a claude-web
@@ -28,15 +29,15 @@ export class TunnelManager extends EventEmitter {
     const entry = { info, proc, log: '' };
     this.tunnels.set(host.id, entry);
     proc.stderr?.on('data', (d: Buffer) => { entry.log = (entry.log + d.toString()).slice(-2000); });
-    proc.on('exit', (code) => { info.state = 'down'; info.error = info.error || `ssh 退出 ${code}${entry.log ? `: ${entry.log.trim().split('\n').pop()}` : ''}`; this.emit('changed'); });
-    proc.on('error', (e) => { info.state = 'down'; info.error = e.message.includes('ENOENT') ? '找不到 ssh（请安装 OpenSSH 客户端）' : e.message; this.emit('changed'); });
+    proc.on('exit', (code) => { info.state = 'down'; info.error = info.error || tr('ssh 退出 {code}{v}', { code, v: entry.log ? `: ${entry.log.trim().split('\n').pop()}` : '' }); this.emit('changed'); });
+    proc.on('error', (e) => { info.state = 'down'; info.error = e.message.includes('ENOENT') ? tr('找不到 ssh（请安装 OpenSSH 客户端）') : e.message; this.emit('changed'); });
     // wait until the local end accepts connections (ssh sets up the forward after auth)
     const deadline = Date.now() + 20_000;
     while (Date.now() < deadline && info.state === 'connecting') {
       if (await canConnect(localPort)) { info.state = 'up'; break; }
       await new Promise((r) => setTimeout(r, 300));
     }
-    if (info.state === 'connecting') { info.state = 'down'; info.error = entry.log.trim().split('\n').pop() || 'ssh 连接超时（检查密钥 / 主机名 / 端口）'; try { proc.kill(); } catch { /* ignore */ } }
+    if (info.state === 'connecting') { info.state = 'down'; info.error = entry.log.trim().split('\n').pop() || tr('ssh 连接超时（检查密钥 / 主机名 / 端口）'); try { proc.kill(); } catch { /* ignore */ } }
     this.emit('changed');
     return info;
   }
@@ -72,7 +73,7 @@ export class TunnelManager extends EventEmitter {
 
 /** A target like `-oProxyCommand=…` would be parsed by ssh as an option and run a local command. */
 export function assertTarget(target: string) {
-  if (!target?.trim() || target.trim().startsWith('-')) throw new Error(`无效的 SSH 目标：${target}`);
+  if (!target?.trim() || target.trim().startsWith('-')) throw new Error(tr('无效的 SSH 目标：{target}', { target }));
 }
 
 function freePort(): Promise<number> {

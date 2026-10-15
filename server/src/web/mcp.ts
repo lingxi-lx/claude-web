@@ -17,6 +17,7 @@ import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { CHARACTER_TOOLS } from '../characters/tool-defs.js';
+import { tr } from '../i18n/index.js';
 
 const PROTOCOL_VERSION = '2025-06-18';
 /** Longer than the server's own bounds (30 s for the browser, a few engines × 15 s for a search). */
@@ -168,30 +169,30 @@ function secret(env: NodeJS.ProcessEnv): string {
 export function callServer(tool: string, args: Record<string, unknown>, env: NodeJS.ProcessEnv = process.env, timeoutMs = CALL_TIMEOUT_MS): Promise<ToolAnswer> {
   return new Promise<ToolAnswer>((resolve) => {
     let target: URL;
-    try { target = new URL('/api/web/tool', env.CW_WEB_URL); } catch { resolve(failed('联网工具没有配置好（缺少 CW_WEB_URL）。')); return; }
-    if (target.protocol !== 'http:') { resolve(failed('联网工具没有配置好（CW_WEB_URL 应该是本机的 http 地址）。')); return; }
+    try { target = new URL('/api/web/tool', env.CW_WEB_URL); } catch { resolve(failed(tr('联网工具没有配置好（缺少 CW_WEB_URL）。'))); return; }
+    if (target.protocol !== 'http:') { resolve(failed(tr('联网工具没有配置好（CW_WEB_URL 应该是本机的 http 地址）。'))); return; }
     const body = Buffer.from(JSON.stringify({ sessionId: env.CW_SESSION_ID ?? '', tool, args }));
     const req = http.request(target, { method: 'POST', agent: DIRECT, headers: { 'content-type': 'application/json', 'content-length': body.length, authorization: `Bearer ${secret(env)}` }, timeout: timeoutMs }, (res) => {
       const chunks: Buffer[] = [];
       res.on('data', (c: Buffer) => chunks.push(c));
-      res.on('error', (e) => resolve(failed(`和 Claude Web 的连接断了：${e.message}`)));
+      res.on('error', (e) => resolve(failed(tr('和 Claude Web 的连接断了：{message}', { message: e.message }))));
       res.on('end', () => {
         const text = Buffer.concat(chunks).toString('utf8');
         if (res.statusCode !== 200) {
           // 401 / 404: this process outlived the server that started it (a restart makes a new secret)
-          resolve(failed(res.statusCode === 401 || res.statusCode === 404 ? '联网工具连不上启动它的 Claude Web（可能已经重启）。重新打开这个对话再试。' : `Claude Web 没有完成这次调用（HTTP ${res.statusCode}）${text ? `：${text.slice(0, 300)}` : ''}`));
+          resolve(failed(res.statusCode === 401 || res.statusCode === 404 ? tr('联网工具连不上启动它的 Claude Web（可能已经重启）。重新打开这个对话再试。') : tr('Claude Web 没有完成这次调用（HTTP {statusCode}）{v}', { statusCode: res.statusCode, v: text ? `：${text.slice(0, 300)}` : '' })));
           return;
         }
         try {
           const j = JSON.parse(text);
-          resolve(Array.isArray(j?.content) ? { content: j.content, ...(j.isError ? { isError: true } : {}) } : failed('Claude Web 的回答读不懂。'));
+          resolve(Array.isArray(j?.content) ? { content: j.content, ...(j.isError ? { isError: true } : {}) } : failed(tr('Claude Web 的回答读不懂。')));
         } catch {
-          resolve(failed('Claude Web 的回答读不懂。'));
+          resolve(failed(tr('Claude Web 的回答读不懂。')));
         }
       });
     });
-    req.on('timeout', () => req.destroy(new Error('超时')));
-    req.on('error', (e) => resolve(failed(`联网工具连不上 Claude Web：${e.message}`)));
+    req.on('timeout', () => req.destroy(new Error(tr('超时'))));
+    req.on('error', (e) => resolve(failed(tr('联网工具连不上 Claude Web：{message}', { message: e.message }))));
     req.end(body);
   });
 }

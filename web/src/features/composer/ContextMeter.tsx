@@ -6,6 +6,7 @@ import { clsx } from '@/util';
 import { useDropdown } from '@/ui/menus';
 import { meterMode, ringLevel, sessionTotals, usageLines } from './stats';
 import { BAR_ID } from './ids';
+import { tr } from '@/i18n';
 
 /** The header ··· 「本对话用量」 asks the composer of its tile for the card (`showUsageCard`). */
 export const USAGE_CARD_EVENT = 'cw:usage-card';
@@ -54,7 +55,7 @@ export function ContextMeter({ sessionId }: { sessionId: string }) {
     <>
       <span ref={anchor} className="ctx-anchor" aria-hidden />
       {ring && (
-        <button ref={btn} type="button" data-id={BAR_ID.meter} className={clsx('ctx-meter', level)} aria-label={`本对话用量，上下文 ${pct}%`} aria-expanded={show}
+        <button ref={btn} type="button" data-id={BAR_ID.meter} className={clsx('ctx-meter', level)} aria-label={tr('本对话用量，上下文 {pct}%', { pct })} aria-expanded={show}
           onClick={() => setPinned((v) => !v)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} onFocus={() => setHover(true)} onBlur={() => { setHover(false); setPinned(false); }}>
           <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
             <circle cx="8" cy="8" r={r} fill="none" stroke="var(--edge-strong)" strokeWidth="2" />
@@ -64,8 +65,8 @@ export function ContextMeter({ sessionId }: { sessionId: string }) {
         </button>
       )}
       {show && rect && createPortal(
-        <div ref={card} className="ctx-card" role={asked ? 'dialog' : 'tooltip'} aria-label="本对话用量" style={{ position: 'fixed', right: Math.max(8, window.innerWidth - rect.right), bottom: window.innerHeight - rect.top + 6 }}>
-          <div className="ctx-card-h">本对话用量</div>
+        <div ref={card} className="ctx-card" role={asked ? 'dialog' : 'tooltip'} aria-label={tr('本对话用量')} style={{ position: 'fixed', right: Math.max(8, window.innerWidth - rect.right), bottom: window.innerHeight - rect.top + 6 }}>
+          <div className="ctx-card-h">{tr('本对话用量')}</div>
           {lines.map(([k, v]) => <div key={k} className="ctx-row"><span className="k">{k}</span><span className="v">{v}</span></div>)}
         </div>,
         document.body,

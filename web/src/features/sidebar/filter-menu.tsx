@@ -6,6 +6,7 @@ import { useStore } from '@/store';
 import { Menu } from './menus';
 import type { MachineCount } from './filter';
 import type { FilterId } from './entries';
+import { tr } from '@/i18n';
 
 export type SourceChip = Pick<SourceStatus, 'kind' | 'name' | 'error' | 'loading'>;
 
@@ -40,32 +41,32 @@ export function FilterMenu(p: FilterMenuProps) {
   useEffect(() => { q.current?.focus({ preventScroll: true }); }, []);
   const openLibrary = () => { p.onClose(); useStore.getState().openSettings({ section: 'library' }); };
   return (
-    <Menu onClose={p.onClose} className="sb-filter" label="筛选对话">
+    <Menu onClose={p.onClose} className="sb-filter" label={tr('筛选对话')}>
       <div className="sb-filter-q" data-id={id('query')}>
         <Icon name="search" size={13} />
-        <input ref={q} placeholder="筛选对话…" value={p.query} onChange={(e) => p.setQuery(e.target.value)} aria-label="按标题、首条消息或目录筛选" />
-        {p.query && <button className="icon-btn xs" title="清空" aria-label="清空" onClick={() => p.setQuery('')}><Icon name="close" size={12} /></button>}
+        <input ref={q} placeholder={tr('筛选对话…')} value={p.query} onChange={(e) => p.setQuery(e.target.value)} aria-label={tr('按标题、首条消息或目录筛选')} />
+        {p.query && <button className="icon-btn xs" title={tr('清空')} aria-label={tr('清空')} onClick={() => p.setQuery('')}><Icon name="close" size={12} /></button>}
       </div>
-      <div className="menu-label">来源</div>
-      <div role="group" aria-label="按来源筛选" data-id={id('source')}>
+      <div className="menu-label">{tr('来源')}</div>
+      <div role="group" aria-label={tr('按来源筛选')} data-id={id('source')}>
         <button role="menuitemradio" aria-checked={p.source === 'all'} className={clsx(p.source === 'all' && 'on')} onClick={() => p.setSource('all')}>
-          <Icon name="check" size={13} className="ck" /> 全部<span className="n">{p.total}</span>
+          <Icon name="check" size={13} className="ck" /> {tr('全部')}<span className="n">{p.total}</span>
         </button>
         {p.sources.map((x) => (
-          <button key={x.kind} role="menuitemradio" aria-checked={p.source === x.kind} className={clsx(p.source === x.kind && 'on')} onClick={() => p.setSource(x.kind)} title={x.error ? `${x.name}：${x.error}` : x.loading ? `${x.name}：读取中` : x.name}>
+          <button key={x.kind} role="menuitemradio" aria-checked={p.source === x.kind} className={clsx(p.source === x.kind && 'on')} onClick={() => p.setSource(x.kind)} title={x.error ? `${x.name}：${x.error}` : x.loading ? tr('{name}：读取中', { name: x.name }) : x.name}>
             <Icon name="check" size={13} className="ck" /><Icon name={AGENT_ICONS[x.kind] ?? 'agent'} size={13} /> {x.name}
             {x.error && <span className="warn-dot" />}
-            {x.loading && !p.counts[x.kind] ? <span className="spinner" aria-label="读取中" /> : <span className="n">{p.counts[x.kind] ?? 0}</span>}
+            {x.loading && !p.counts[x.kind] ? <span className="spinner" aria-label={tr('读取中')} /> : <span className="n">{p.counts[x.kind] ?? 0}</span>}
           </button>
         ))}
       </div>
       {p.showMachines && (
         <>
-          <div className="menu-label">机器</div>
-          <div role="group" aria-label="按机器筛选" data-id={id('machine')}>
-            <button role="menuitemradio" aria-checked={p.machine === 'all'} className={clsx(p.machine === 'all' && 'on')} onClick={() => p.setMachine('all')}><Icon name="check" size={13} className="ck" /> 所有机器</button>
+          <div className="menu-label">{tr('机器')}</div>
+          <div role="group" aria-label={tr('按机器筛选')} data-id={id('machine')}>
+            <button role="menuitemradio" aria-checked={p.machine === 'all'} className={clsx(p.machine === 'all' && 'on')} onClick={() => p.setMachine('all')}><Icon name="check" size={13} className="ck" /> {tr('所有机器')}</button>
             {p.machines.map((m) => (
-              <button key={m.id} role="menuitemradio" aria-checked={p.machine === m.id} className={clsx(p.machine === m.id && 'on', m.offline && 'off')} onClick={() => p.setMachine(m.id)} title={m.offline ? `${m.name}：离线（显示上次的列表，只读）` : m.name}>
+              <button key={m.id} role="menuitemradio" aria-checked={p.machine === m.id} className={clsx(p.machine === m.id && 'on', m.offline && 'off')} onClick={() => p.setMachine(m.id)} title={m.offline ? tr('{name}：离线（显示上次的列表，只读）', { name: m.name }) : m.name}>
                 <Icon name="check" size={13} className="ck" /><Icon name={m.id === 'local' ? 'device' : 'machine'} size={13} /> {m.name}{m.offline && <span className="warn-dot" />}<span className="n">{m.n}</span>
               </button>
             ))}
@@ -74,13 +75,13 @@ export function FilterMenu(p: FilterMenuProps) {
       )}
       <div className="menu-sep" />
       <button data-id={id('archived')} role="menuitemcheckbox" aria-checked={p.showArchived} className={clsx(p.showArchived && 'on')} onClick={() => p.setShowArchived(!p.showArchived)}>
-        <Icon name="check" size={13} className="ck" /> 显示已归档的对话
+        <Icon name="check" size={13} className="ck" /> {tr('显示已归档的对话')}
       </button>
-      <button data-id={id('select')} onClick={() => { p.onClose(); p.onSelect(); }} title="也可以按住 Shift 点对话">
-        <Icon name="checkCircle" size={13} /> 选择多个…<span className="n">批量归档 / 删除</span>
+      <button data-id={id('select')} onClick={() => { p.onClose(); p.onSelect(); }} title={tr('也可以按住 Shift 点对话')}>
+        <Icon name="checkCircle" size={13} /> {tr('选择多个…')}<span className="n">{tr('批量归档 / 删除')}</span>
       </button>
       <div className="menu-sep" />
-      <button data-id={id('library')} onClick={openLibrary}><Icon name="settings" size={13} /> 管理对话来源…</button>
+      <button data-id={id('library')} onClick={openLibrary}><Icon name="settings" size={13} /> {tr('管理对话来源…')}</button>
     </Menu>
   );
 }

@@ -9,13 +9,14 @@ import { openReview } from '@/features/workbench/right-panel';
 import { fillComposer } from '@/features/composer/fill';
 import { CHECKLIST_KEY, checklistView, readChecklist, type ChecklistId } from './model';
 import { markChecklist } from './checklist-sync';
+import { tr } from '@/i18n';
 
 /** What each step says; the palette step also carries the shortcuts the old 就绪 page listed (spec §5.8). */
 const STEP: Record<ChecklistId, { label: string; hint: string; action: string }> = {
-  project: { label: '选一个项目', hint: '打开一个文件夹，Claude 就在里面工作', action: '打开文件夹' },
-  send: { label: '发出第一个任务', hint: '在上面的输入框里说要做什么，回车发送', action: '写一个' },
-  review: { label: '审阅一次改动', hint: '看看 Claude 改了哪些文件', action: '去看看' },
-  palette: { label: `试试 ${modKey} K`, hint: `${modKey}+K 搜对话、命令和设置；${modKey}+, 打开设置；按 ? 看全部快捷键`, action: '试试' },
+  project: { label: tr('选一个项目'), hint: tr('打开一个文件夹，Claude 就在里面工作'), action: tr('打开文件夹') },
+  send: { label: tr('发出第一个任务'), hint: tr('在上面的输入框里说要做什么，回车发送'), action: tr('写一个') },
+  review: { label: tr('审阅一次改动'), hint: tr('看看 Claude 改了哪些文件'), action: tr('去看看') },
+  palette: { label: tr('试试 {modKey} K', { modKey }), hint: tr('{modKey}+K 搜对话、命令和设置；{modKey2}+, 打开设置；按 ? 看全部快捷键', { modKey, modKey2: modKey }), action: tr('试试') },
 };
 
 async function pickProject(tileId: string) {
@@ -29,7 +30,7 @@ async function pickProject(tileId: string) {
 function goReview() {
   const st = useStore.getState();
   const s = [...st.sessions].filter((x) => !x.peer && !x.parentId).sort((a, b) => b.lastModified - a.lastModified)[0];
-  if (!s) { st.toast('先发出一个任务：Claude 改了文件之后，就能在这里审阅'); return; }
+  if (!s) { st.toast(tr('先发出一个任务：Claude 改了文件之后，就能在这里审阅')); return; }
   if (st.open[s.sessionId]) st.openInPane(s.sessionId, 'replace');
   else void st.loadHistory(s.sessionId);
   openReview({ scope: 'session' });
@@ -57,17 +58,17 @@ export function Checklist({ tileId }: { tileId: string }) {
   const next = STEP[view.next];
   const dismiss = () => void useStore.getState().setSetting(CHECKLIST_KEY, { ...stored, dismissed: true });
   return (
-    <section className={clsx('guide', open && 'open')} aria-label="入门清单">
+    <section className={clsx('guide', open && 'open')} aria-label={tr('入门清单')}>
       <div className="guide-row">
-        <button className="guide-count" aria-expanded={open} onClick={() => setOpen(!open)} title={open ? '收起' : '展开全部 4 步'}>
+        <button className="guide-count" aria-expanded={open} onClick={() => setOpen(!open)} title={open ? tr('收起') : tr('展开全部 4 步')}>
           <Icon name="checkCircle" size={16} className="ok" />
-          <span className="n">入门 {view.done}/{view.total}</span>
+          <span className="n">{tr('入门 {done}/{total}', { done: view.done, total: view.total })}</span>
           <span className="prog" aria-hidden><i style={{ width: `${(view.done / view.total) * 100}%` }} /></span>
         </button>
-        {!open && <span className="guide-next">下一步：<b>{next.label}</b><span className="h">，{next.hint}</span></span>}
+        {!open && <span className="guide-next">{tr('下一步：')}<b>{next.label}</b><span className="h">，{next.hint}</span></span>}
         {open && <span className="grow" />}
         {!open && <button className="btn sm" data-step={view.next} onClick={() => run(view.next!, tileId)}>{next.action}</button>}
-        <button className="icon-btn xs" title="不再显示入门清单" aria-label="不再显示入门清单" onClick={dismiss}><Icon name="close" size={13} /></button>
+        <button className="icon-btn xs" title={tr('不再显示入门清单')} aria-label={tr('不再显示入门清单')} onClick={dismiss}><Icon name="close" size={13} /></button>
       </div>
       {open && (
         <ol className="guide-steps">

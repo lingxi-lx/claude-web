@@ -4,6 +4,7 @@ import { Icon } from '@/ui/icons';
 import { CharacterIcon } from './Character';
 import { agentColor, agentStateText, taskStateText } from './model';
 import { openBackground, useBackground } from './state';
+import { tr } from '@/i18n';
 
 /**
  * In a conversation's Workflow card: the workflow's agents as it runs — a chip each, in its colour, by phase — and
@@ -20,9 +21,9 @@ export function WorkflowLive({ toolUseId, onlyRunning }: { toolUseId: string; on
   return (
     <div className={clsx('bg-wf', task.status === 'running' && 'live')} data-task={task.id}>
       <div className="bg-wf-head">
-        <span className="t">{task.status === 'running' ? `${running} 个在跑 · ${done}/${task.agents.length} 完成` : `${taskStateText(task)} · ${done}/${task.agents.length} 完成`}</span>
+        <span className="t">{task.status === 'running' ? tr('{running} 个在跑 · {done}/{agentsCount} 完成', { running, done, agentsCount: task.agents.length }) : tr('{taskStateText} · {done}/{agentsCount} 完成', { taskStateText: taskStateText(task), done, agentsCount: task.agents.length })}</span>
         <span className="grow" />
-        <button className="btn sm" onClick={() => openBackground(sessionId, task.id)}><Icon name="office" size={13} />在「后台」里看</button>
+        <button className="btn sm" onClick={() => openBackground(sessionId, task.id)}><Icon name="office" size={13} />{tr('在「后台」里看')}</button>
       </div>
       {phases.map((p) => {
         const agents = task.agents.filter((a) => (p.index ? a.phase === p.index : true));

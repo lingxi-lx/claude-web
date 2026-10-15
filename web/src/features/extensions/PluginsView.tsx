@@ -7,6 +7,7 @@ import { dlg } from '@/ui/dialog';
 import { imeComposing } from '@/ui/ime';
 import { Segmented } from '@/ui/Segmented';
 import { shownPlugins, type Show } from './plugins-model';
+import { tr } from '@/i18n';
 
 interface Plugin { id: string; version?: string; scope?: string; enabled?: boolean; manifest?: { name?: string; description?: string }; components?: { skills?: number; commands?: number; agents?: number; hooks?: boolean; mcp?: boolean } }
 interface Market { name: string; source?: { source?: string; repo?: string; url?: string; path?: string } }
@@ -15,11 +16,11 @@ interface Market { name: string; source?: { source?: string; repo?: string; url?
 export function pluginParts(c: Plugin['components']): string {
   if (!c) return '';
   const out: string[] = [];
-  if (c.skills) out.push(`${c.skills} 个 Skill`);
-  if (c.commands) out.push(`${c.commands} 条命令`);
-  if (c.agents) out.push(`${c.agents} 个子代理`);
+  if (c.skills) out.push(tr('{skills} 个 Skill', { skills: c.skills }));
+  if (c.commands) out.push(tr('{commands} 条命令', { commands: c.commands }));
+  if (c.agents) out.push(tr('{agents} 个子代理', { agents: c.agents }));
   if (c.hooks) out.push('Hooks');
-  if (c.mcp) out.push('连接器');
+  if (c.mcp) out.push(tr('连接器'));
   return out.join(' · ');
 }
 
@@ -48,7 +49,7 @@ export function PluginsView() {
     setBusy(key);
     try {
       const r = await ws.request<{ code?: number; stderr?: string } | undefined>(req as never);
-      if (r && r.code) toast((r.stderr || '').trim().split('\n').pop() || '没有成功');
+      if (r && r.code) toast((r.stderr || '').trim().split('\n').pop() || tr('没有成功'));
       else if (said) toast(said, true);
     } catch (e: any) { toast(e.message); }
     setBusy(null);
@@ -59,11 +60,11 @@ export function PluginsView() {
     <div className="cx">
       <section className="cx-sec" data-id="installed">
         <div className="cx-h">
-          <h3>已安装</h3>{plugins && <span className="n">{plugins.length}</span>}
+          <h3>{tr('已安装')}</h3>{plugins && <span className="n">{plugins.length}</span>}
           <span className="grow" />
           {plugins && plugins.length > 0 && (() => {
             const on = plugins.filter((p) => p.enabled).length;
-            return <Segmented className="cx-seg" label="按状态筛选" arrows value={show} onChange={setShow} options={[{ value: 'all', label: '全部' }, { value: 'on', label: `已启用 ${on}` }, { value: 'off', label: `已停用 ${plugins.length - on}` }]} />;
+            return <Segmented className="cx-seg" label={tr('按状态筛选')} arrows value={show} onChange={setShow} options={[{ value: 'all', label: tr('全部') }, { value: 'on', label: tr('已启用 {on}', { on }) }, { value: 'off', label: tr('已停用 {pluginsCount}', { pluginsCount: plugins.length - on }) }]} />;
           })()}
         </div>
         <div className="cx-grid one">
@@ -75,30 +76,30 @@ export function PluginsView() {
                 <span className="tile-ic tint-info"><Icon name="artifact" size={18} /></span>
                 <span className="cx-tx">
                   <span className="cx-n">{p.manifest?.name ?? name}<span className="cx-ver">{[p.version && `v${p.version}`, market].filter(Boolean).join(' · ')}</span></span>
-                  <span className="cx-d">{[p.manifest?.description, parts].filter(Boolean).join(' — ') || '（没有写说明）'}</span>
+                  <span className="cx-d">{[p.manifest?.description, parts].filter(Boolean).join(' — ') || tr('（没有写说明）')}</span>
                 </span>
-                <button className="icon-btn cx-rm" disabled={!!busy} title="卸载" aria-label={`卸载 ${name}`} onClick={async () => { if (await dlg.confirm(`卸载插件「${p.manifest?.name ?? name}」？`, { danger: true })) void run(`rm:${p.id}`, { kind: 'config.plugin.uninstall', name: p.id }); }}><Icon name="trash" size={15} /></button>
-                <button className={clsx('toggle', p.enabled && 'on')} role="switch" aria-checked={!!p.enabled} disabled={!!busy} title={p.enabled ? '停用' : '启用'} aria-label={`${p.enabled ? '停用' : '启用'} ${name}`} onClick={() => void run(`tg:${p.id}`, { kind: 'config.plugin.toggle', name: p.id, enable: !p.enabled })} />
+                <button className="icon-btn cx-rm" disabled={!!busy} title={tr('卸载')} aria-label={tr('卸载 {name}', { name })} onClick={async () => { if (await dlg.confirm(tr('卸载插件「{name}」？', { name: p.manifest?.name ?? name }), { danger: true })) void run(`rm:${p.id}`, { kind: 'config.plugin.uninstall', name: p.id }); }}><Icon name="trash" size={15} /></button>
+                <button className={clsx('toggle', p.enabled && 'on')} role="switch" aria-checked={!!p.enabled} disabled={!!busy} title={p.enabled ? tr('停用') : tr('启用')} aria-label={`${p.enabled ? tr('停用') : tr('启用')} ${name}`} onClick={() => void run(`tg:${p.id}`, { kind: 'config.plugin.toggle', name: p.id, enable: !p.enabled })} />
               </div>
             );
           })}
         </div>
-        {!plugins && <div className="cx-none">读取中…</div>}
-        {plugins && !plugins.length && <div className="cx-none">还没有插件。在下面按「名字@市场」装一个。</div>}
-        {plugins && plugins.length > 0 && !shownPlugins(plugins, show).length && <div className="cx-none">{show === 'on' ? '没有启用的插件。' : '没有停用的插件。'}</div>}
-        {plugins && plugins.length > 0 && <div className="cx-hint">启用、停用或安装之后，已经在跑的对话要重新开始才用得上（对话右上角 ··· →「结束进程」，再发一条消息）。</div>}
+        {!plugins && <div className="cx-none">{tr('读取中…')}</div>}
+        {plugins && !plugins.length && <div className="cx-none">{tr('还没有插件。在下面按「名字@市场」装一个。')}</div>}
+        {plugins && plugins.length > 0 && !shownPlugins(plugins, show).length && <div className="cx-none">{show === 'on' ? tr('没有启用的插件。') : tr('没有停用的插件。')}</div>}
+        {plugins && plugins.length > 0 && <div className="cx-hint">{tr('启用、停用或安装之后，已经在跑的对话要重新开始才用得上（对话右上角 ··· →「结束进程」，再发一条消息）。')}</div>}
       </section>
 
       <section className="cx-sec" data-id="install">
-        <div className="cx-h"><h3>安装插件</h3></div>
+        <div className="cx-h"><h3>{tr('安装插件')}</h3></div>
         <div className="cx-form">
-          <input className="field" value={spec} placeholder="名字@市场，例如 superpowers@claude-plugins-official" aria-label="插件" onChange={(e) => setSpec(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !imeComposing(e.nativeEvent) && spec.trim()) void run('install', { kind: 'config.plugin.install', spec: spec.trim() }, '装好了').then(() => setSpec('')); }} />
-          <button className="btn primary" disabled={!!busy || !spec.trim()} onClick={() => void run('install', { kind: 'config.plugin.install', spec: spec.trim() }, '装好了').then(() => setSpec(''))}>{busy === 'install' ? '安装中…' : '安装'}</button>
+          <input className="field" value={spec} placeholder={tr('名字@市场，例如 superpowers@claude-plugins-official')} aria-label={tr('插件')} onChange={(e) => setSpec(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !imeComposing(e.nativeEvent) && spec.trim()) void run('install', { kind: 'config.plugin.install', spec: spec.trim() }, tr('装好了')).then(() => setSpec('')); }} />
+          <button className="btn primary" disabled={!!busy || !spec.trim()} onClick={() => void run('install', { kind: 'config.plugin.install', spec: spec.trim() }, tr('装好了')).then(() => setSpec(''))}>{busy === 'install' ? tr('安装中…') : tr('安装')}</button>
         </div>
       </section>
 
       <section className="cx-sec" data-id="markets">
-        <div className="cx-h"><h3>市场</h3><span className="n">{markets.length}</span></div>
+        <div className="cx-h"><h3>{tr('市场')}</h3><span className="n">{markets.length}</span></div>
         <div className="cx-grid">
           {markets.map((m) => (
             <div key={m.name} className="cx-row">
@@ -108,8 +109,8 @@ export function PluginsView() {
           ))}
         </div>
         <div className="cx-form">
-          <input className="field" value={mkSrc} placeholder="添加市场：owner/repo、git 地址，或本机的文件夹路径" aria-label="市场来源" onChange={(e) => setMkSrc(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !imeComposing(e.nativeEvent) && mkSrc.trim()) void run('market', { kind: 'config.marketplace.add', source: mkSrc.trim() }, '已添加').then(() => setMkSrc('')); }} />
-          <button className="btn" disabled={!!busy || !mkSrc.trim()} onClick={() => void run('market', { kind: 'config.marketplace.add', source: mkSrc.trim() }, '已添加').then(() => setMkSrc(''))}>{busy === 'market' ? '添加中…' : '添加市场'}</button>
+          <input className="field" value={mkSrc} placeholder={tr('添加市场：owner/repo、git 地址，或本机的文件夹路径')} aria-label={tr('市场来源')} onChange={(e) => setMkSrc(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !imeComposing(e.nativeEvent) && mkSrc.trim()) void run('market', { kind: 'config.marketplace.add', source: mkSrc.trim() }, tr('已添加')).then(() => setMkSrc('')); }} />
+          <button className="btn" disabled={!!busy || !mkSrc.trim()} onClick={() => void run('market', { kind: 'config.marketplace.add', source: mkSrc.trim() }, tr('已添加')).then(() => setMkSrc(''))}>{busy === 'market' ? tr('添加中…') : tr('添加市场')}</button>
         </div>
       </section>
     </div>

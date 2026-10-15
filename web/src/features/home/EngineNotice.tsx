@@ -4,8 +4,9 @@ import { Icon } from '@/ui/icons';
 import { authChecker } from '@/features/workbench/auth-check';
 import { engineNotice, type NoticeAction } from './model';
 import { connectModel, loginInTerminal } from '@/features/providers/ConnectModel';
+import { tr } from '@/i18n';
 
-const ACTION_LABEL: Record<NoticeAction, string> = { login: '用 Claude 账号登录', provider: '接一个模型', runtime: '查看运行内核' };
+const ACTION_LABEL: Record<NoticeAction, string> = { login: tr('用 Claude 账号登录'), provider: tr('接一个模型'), runtime: tr('查看运行内核') };
 
 function act(a: NoticeAction) {
   if (a === 'login') loginInTerminal();
@@ -52,7 +53,7 @@ export function EngineNotice() {
       <Icon name="alert" size={14} />
       <span className="t">{n.text}</span>
       {n.actions.map((a, i) => <button key={a} className={i === 0 ? 'btn sm primary' : 'btn sm'} data-act={a} onClick={() => act(a)}>{ACTION_LABEL[a]}</button>)}
-      {n.kind === 'login' && <button className="link" disabled={checking} onClick={() => void checker.check(true).catch(() => {})}>{checking ? '检查中…' : '重新检查'}</button>}
+      {n.kind === 'login' && <button className="link" disabled={checking} onClick={() => void checker.check(true).catch(() => {})}>{checking ? tr('检查中…') : tr('重新检查')}</button>}
     </div>
   );
 }

@@ -18,6 +18,7 @@ import { imeComposing } from '@/ui/ime';
 import { canZoom, useZoom } from '@/ui/zoom';
 import { zoomPercent } from '@/ui/zoom-math';
 import { commandHits } from './filter';
+import { tr } from '@/i18n';
 
 interface Cmd { id: string; label: string; sub?: string; ic?: IconName; group: string; run: () => void }
 
@@ -63,42 +64,42 @@ export function CommandPalette() {
   const showView = (view: WbView) => openSessionView(view);
   const commands = useMemo<Cmd[]>(() => {
     // the label says what the toggle will do right now (a hidden or minimized panel is opened; the terminal is hidden, not closed)
-    const panel = (p: (typeof PANELS)[number]): Cmd => ({ id: `panel.${p.id}`, label: panelCommandLabel(st.layout.dock, p, st.settings['ui.workbench'] === true), ic: p.icon, group: '面板', run: () => st.togglePanel(p.id) });
+    const panel = (p: (typeof PANELS)[number]): Cmd => ({ id: `panel.${p.id}`, label: panelCommandLabel(st.layout.dock, p, st.settings['ui.workbench'] === true), ic: p.icon, group: tr('面板'), run: () => st.togglePanel(p.id) });
     const c: Cmd[] = [
-      { id: 'new', label: '新对话', sub: keyLabel(SHORTCUTS[0]), ic: 'plus', group: '对话', run: () => runCommand('new') },
-      { id: 'ws.add', label: '打开项目文件夹…', ic: 'folder', group: '对话', run: async () => { const p = await ws.request<string | null>({ kind: 'fs.pickDir' }); if (p) await st.addWorkspace(p); } },
-      { id: 'sidebar', label: st.sidebarOpen ? '收起侧栏' : '展开侧栏', sub: 'Ctrl+B', ic: 'sidebar', group: '视图', run: () => useStore.setState((s) => ({ sidebarOpen: !s.sidebarOpen })) },
-      { id: 'archived', label: st.showArchived ? '隐藏已归档的对话' : '显示已归档的对话', ic: 'archive', group: '视图', run: () => useStore.setState((s) => ({ showArchived: !s.showArchived })) },
-      { id: 'keys', label: '键盘快捷键', sub: '?', ic: 'keyboard', group: '视图', run: () => useStore.setState({ shortcutsOpen: true }) },
-      { id: 'settings', label: '设置…', sub: 'Ctrl+,', ic: 'settings', group: '视图', run: () => st.openSettings() },
+      { id: 'new', label: tr('新对话'), sub: keyLabel(SHORTCUTS[0]), ic: 'plus', group: tr('对话'), run: () => runCommand('new') },
+      { id: 'ws.add', label: tr('打开项目文件夹…'), ic: 'folder', group: tr('对话'), run: async () => { const p = await ws.request<string | null>({ kind: 'fs.pickDir' }); if (p) await st.addWorkspace(p); } },
+      { id: 'sidebar', label: st.sidebarOpen ? tr('收起侧栏') : tr('展开侧栏'), sub: 'Ctrl+B', ic: 'sidebar', group: tr('视图'), run: () => useStore.setState((s) => ({ sidebarOpen: !s.sidebarOpen })) },
+      { id: 'archived', label: st.showArchived ? tr('隐藏已归档的对话') : tr('显示已归档的对话'), ic: 'archive', group: tr('视图'), run: () => useStore.setState((s) => ({ showArchived: !s.showArchived })) },
+      { id: 'keys', label: tr('键盘快捷键'), sub: '?', ic: 'keyboard', group: tr('视图'), run: () => useStore.setState({ shortcutsOpen: true }) },
+      { id: 'settings', label: tr('设置…'), sub: 'Ctrl+,', ic: 'settings', group: tr('视图'), run: () => st.openSettings() },
       // 界面缩放: the desktop app's whole-window zoom (a browser has its own)
-      ...(canZoom ? SHORTCUTS.filter((x) => x.id.startsWith('zoom.')).map<Cmd>((x) => ({ id: x.id, label: x.id === 'zoom.reset' ? `${x.label}（现在 ${zoomPercent(zoom)}）` : x.label, sub: keyLabel(x), ic: x.id === 'zoom.in' ? 'zoomIn' : x.id === 'zoom.out' ? 'zoomOut' : 'zoom', group: '视图', run: () => runCommand(x.id) })) : []),
+      ...(canZoom ? SHORTCUTS.filter((x) => x.id.startsWith('zoom.')).map<Cmd>((x) => ({ id: x.id, label: x.id === 'zoom.reset' ? tr('{label}（现在 {zoomPercent}）', { label: x.label, zoomPercent: zoomPercent(zoom) }) : x.label, sub: keyLabel(x), ic: x.id === 'zoom.in' ? 'zoomIn' : x.id === 'zoom.out' ? 'zoomOut' : 'zoom', group: tr('视图'), run: () => runCommand(x.id) })) : []),
       // workbench verbs come straight from the shortcut table so labels / keys never drift
       ...SHORTCUTS.filter((x) => ['group.new', 'group.close', 'group.next', 'pane.splitRight', 'pane.splitDown', 'tile.close', 'pane.zoom', 'pane.next', 'tile.new', 'dock.toggle', 'dock.minimize'].includes(x.id))
-        .map<Cmd>((x) => ({ id: `wb.${x.id}`, label: x.label, sub: keyLabel(x), ic: x.group === '分组' ? 'board' : x.group === '分屏' ? 'splitRight' : 'inspector', group: '工作台', run: () => runCommand(x.id) })),
-      { id: 'ui.workbench', label: `${st.settings['ui.workbench'] === true ? '隐藏' : '显示'}工作台工具（分组栏 / 标签条 / 面板图标栏）`, ic: 'board', group: '工作台', run: () => void st.setSetting('ui.workbench', st.settings['ui.workbench'] !== true) },
-      ...(['single', 'cols2', 'cols3', 'grid2x2', 'mainSide'] as const).map<Cmd>((p) => ({ id: `preset.${p}`, label: `布局预设: ${{ single: '不分屏', cols2: '左右两栏', cols3: '三栏', grid2x2: '四宫格', mainSide: '主 + 侧' }[p]}`, ic: 'zoom', group: '工作台', run: () => st.dispatchLayout({ t: 'pane.preset', preset: p }) })),
-      { id: 'orch.new', label: '新建编排', sub: '多 agent 工作流', ic: 'orchestra', group: '编排', run: () => useOrch.getState().ask('new') },
-      { id: 'orch.run', label: '运行编排…', ic: 'play', group: '编排', run: () => useOrch.getState().ask('run') },
+        .map<Cmd>((x) => ({ id: `wb.${x.id}`, label: x.label, sub: keyLabel(x), ic: x.group === tr('分组') ? 'board' : x.group === tr('分屏') ? 'splitRight' : 'inspector', group: tr('工作台'), run: () => runCommand(x.id) })),
+      { id: 'ui.workbench', label: tr('{v}工作台工具（分组栏 / 标签条 / 面板图标栏）', { v: st.settings['ui.workbench'] === true ? tr('隐藏') : tr('显示') }), ic: 'board', group: tr('工作台'), run: () => void st.setSetting('ui.workbench', st.settings['ui.workbench'] !== true) },
+      ...(['single', 'cols2', 'cols3', 'grid2x2', 'mainSide'] as const).map<Cmd>((p) => ({ id: `preset.${p}`, label: tr('布局预设: {v}', { v: { single: tr('不分屏'), cols2: tr('左右两栏'), cols3: tr('三栏'), grid2x2: tr('四宫格'), mainSide: tr('主 + 侧') }[p] }), ic: 'zoom', group: tr('工作台'), run: () => st.dispatchLayout({ t: 'pane.preset', preset: p }) })),
+      { id: 'orch.new', label: tr('新建编排'), sub: tr('多 agent 工作流'), ic: 'orchestra', group: tr('编排'), run: () => useOrch.getState().ask('new') },
+      { id: 'orch.run', label: tr('运行编排…'), ic: 'play', group: tr('编排'), run: () => useOrch.getState().ask('run') },
       // not inside the phone shell: a new window there would have no tunnel to the computer
-      ...(canOpenWindow() ? [{ id: 'window.new', label: '在新窗口打开当前分组', ic: 'copy' as const, group: '工作台', run: () => runCommand('window.new') }] : []),
+      ...(canOpenWindow() ? [{ id: 'window.new', label: tr('在新窗口打开当前分组'), ic: 'copy' as const, group: tr('工作台'), run: () => runCommand('window.new') }] : []),
       ...PANELS.map(panel),
-      ...THEMES.map<Cmd>((t) => ({ id: `theme.${t}`, label: `主题: ${t}${st.theme === t ? '（当前）' : ''}`, ic: 'moon', group: '主题', run: () => st.setTheme(t) })),
+      ...THEMES.map<Cmd>((t) => ({ id: `theme.${t}`, label: tr('主题: {t}{v}', { t, v: st.theme === t ? tr('（当前）') : '' }), ic: 'moon', group: tr('主题'), run: () => st.setTheme(t) })),
     ];
     if (active) {
       const live = active.state !== 'history' && active.state !== 'closed' && active.state !== 'error';
       c.unshift(
-        { id: 's.fork', label: '从这里分叉当前对话', ic: 'branch', group: '当前对话', run: () => void st.openSession({ sessionId: active.sessionId, cwd: active.cwd, fork: true, ...forkCarry(active.sessionId) }) },
-        { id: 's.pin', label: st.sessionMeta[active.sessionId]?.pinned ? '取消置顶' : '置顶当前对话', ic: 'pin', group: '当前对话', run: () => void st.setSessionMeta(active.sessionId, { pinned: !st.sessionMeta[active.sessionId]?.pinned }) },
-        { id: 's.archive', label: st.sessionMeta[active.sessionId]?.archived ? '取消归档' : '归档当前对话', ic: 'archive', group: '当前对话', run: () => void st.setSessionMeta(active.sessionId, { archived: !st.sessionMeta[active.sessionId]?.archived }) },
-        { id: 's.traj', label: `对话 / ${TERMS.trajectory}`, sub: 'Alt+J', ic: 'workflow', group: '当前对话', run: () => runCommand('tab') },
-        { id: 's.export', label: '导出为 HTML', ic: 'share', group: '当前对话', run: () => shareConversation(active.sessionId) },
+        { id: 's.fork', label: tr('从这里分叉当前对话'), ic: 'branch', group: tr('当前对话'), run: () => void st.openSession({ sessionId: active.sessionId, cwd: active.cwd, fork: true, ...forkCarry(active.sessionId) }) },
+        { id: 's.pin', label: st.sessionMeta[active.sessionId]?.pinned ? tr('取消置顶') : tr('置顶当前对话'), ic: 'pin', group: tr('当前对话'), run: () => void st.setSessionMeta(active.sessionId, { pinned: !st.sessionMeta[active.sessionId]?.pinned }) },
+        { id: 's.archive', label: st.sessionMeta[active.sessionId]?.archived ? tr('取消归档') : tr('归档当前对话'), ic: 'archive', group: tr('当前对话'), run: () => void st.setSessionMeta(active.sessionId, { archived: !st.sessionMeta[active.sessionId]?.archived }) },
+        { id: 's.traj', label: tr('对话 / {trajectory}', { trajectory: TERMS.trajectory }), sub: 'Alt+J', ic: 'workflow', group: tr('当前对话'), run: () => runCommand('tab') },
+        { id: 's.export', label: tr('导出为 HTML'), ic: 'share', group: tr('当前对话'), run: () => shareConversation(active.sessionId) },
         // the per-session views that used to be the workbench tab row (改动 / Git / 文件 / 搜索 / 定时任务 / 生成的文件 / Issue 与 PR)
-        ...viewCommands(!!parsePeerId(active.sessionId)).map<Cmd>((v) => ({ id: `s.${v.id}`, label: v.label, ic: v.icon, group: '当前对话', run: () => showView(v.view) })),
-        ...(parsePeerId(active.sessionId) ? [] : [{ id: 's.open', label: '在资源管理器打开目录', ic: 'folder' as const, group: '当前对话', run: () => void ws.request({ kind: 'shell.open', path: active.cwd }).catch((e) => useStore.getState().toast(e.message)) },
-        { id: 's.code', label: '在 VS Code 打开目录', ic: 'keyboard' as const, group: '当前对话', run: () => void ws.request({ kind: 'shell.open', path: active.cwd, app: 'code' }).catch((e) => useStore.getState().toast(e.message)) }]),
-        live ? { id: 's.stop', label: '结束当前对话的进程', ic: 'stop', group: '当前对话', run: () => void st.closeSession(active.sessionId) } : { id: 's.resume', label: '恢复当前对话的进程', ic: 'play', group: '当前对话', run: () => void st.openSession({ sessionId: active.sessionId, cwd: active.cwd }) },
-        ...(live ? [{ id: 's.compact', label: '/compact 压缩上下文', ic: 'copy' as const, group: '当前对话', run: () => void st.send(active.sessionId, '/compact') }] : []),
+        ...viewCommands(!!parsePeerId(active.sessionId)).map<Cmd>((v) => ({ id: `s.${v.id}`, label: v.label, ic: v.icon, group: tr('当前对话'), run: () => showView(v.view) })),
+        ...(parsePeerId(active.sessionId) ? [] : [{ id: 's.open', label: tr('在资源管理器打开目录'), ic: 'folder' as const, group: tr('当前对话'), run: () => void ws.request({ kind: 'shell.open', path: active.cwd }).catch((e) => useStore.getState().toast(e.message)) },
+        { id: 's.code', label: tr('在 VS Code 打开目录'), ic: 'keyboard' as const, group: tr('当前对话'), run: () => void ws.request({ kind: 'shell.open', path: active.cwd, app: 'code' }).catch((e) => useStore.getState().toast(e.message)) }]),
+        live ? { id: 's.stop', label: tr('结束当前对话的进程'), ic: 'stop', group: tr('当前对话'), run: () => void st.closeSession(active.sessionId) } : { id: 's.resume', label: tr('恢复当前对话的进程'), ic: 'play', group: tr('当前对话'), run: () => void st.openSession({ sessionId: active.sessionId, cwd: active.cwd }) },
+        ...(live ? [{ id: 's.compact', label: tr('/compact 压缩上下文'), ic: 'copy' as const, group: tr('当前对话'), run: () => void st.send(active.sessionId, '/compact') }] : []),
       );
     }
     return c;
@@ -135,10 +136,10 @@ export function CommandPalette() {
   return (
     <div className="palette-bg" onMouseDown={(e) => e.target === e.currentTarget && close()}>
       <div className="cmdk" onKeyDown={onKey}>
-        <input ref={inp} value={q} onChange={(e) => setQ(e.target.value)} placeholder="输入命令，或搜索对话（全文）…  > 只搜命令 · agent:codex · in:目录" />
+        <input ref={inp} value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr('输入命令，或搜索对话（全文）…  > 只搜命令 · agent:codex · in:目录')} />
         <div className="list">
           {items.map((it, i) => {
-            const group = it.kind === 'cmd' ? it.c.group : hits.length ? '对话 · 全文匹配' : ql ? '匹配的对话' : '最近的对话';
+            const group = it.kind === 'cmd' ? it.c.group : hits.length ? tr('对话 · 全文匹配') : ql ? tr('匹配的对话') : tr('最近的对话');
             const head = group !== lastGroup ? <div className="grp" key={`g${i}`}>{group}</div> : null;
             lastGroup = group;
             return (
@@ -153,9 +154,9 @@ export function CommandPalette() {
               </div>
             );
           })}
-          {!items.length && <div className="empty">没有匹配</div>}
+          {!items.length && <div className="empty">{tr('没有匹配')}</div>}
         </div>
-        <div className="foot"><span>↑↓ 选择</span><span>Enter 执行</span><span>Esc 关闭</span><span>&gt; 只看命令</span></div>
+        <div className="foot"><span>{tr('↑↓ 选择')}</span><span>{tr('Enter 执行')}</span><span>{tr('Esc 关闭')}</span><span>{tr('> 只看命令')}</span></div>
       </div>
     </div>
   );

@@ -8,6 +8,7 @@ import { PluginsView } from './PluginsView';
 import { EXTENSIONS_TITLE, EXTENSION_TAB_INFO, closeExtensions, showExtensionTab, useExtensions, type ExtensionTab } from './state';
 
 import { EXTENSION_NAV as TABS } from './ExtensionsSide';
+import { tr } from '@/i18n';
 
 function Body({ tab }: { tab: ExtensionTab }) {
   switch (tab) {
@@ -46,7 +47,7 @@ export function ExtensionsPage() {
     >
       {seen.map((t) => (
         <div key={t} className={clsx('over-body ext-body narrow')} data-body={t} hidden={t !== tab}>
-          <ErrorBoundary area={`扩展 · ${EXTENSION_TAB_INFO[t].label}`}><Body tab={t} /></ErrorBoundary>
+          <ErrorBoundary area={tr('扩展 · {label}', { label: EXTENSION_TAB_INFO[t].label })}><Body tab={t} /></ErrorBoundary>
         </div>
       ))}
     </OverPage>

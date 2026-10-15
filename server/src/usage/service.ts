@@ -5,6 +5,7 @@ import path from 'node:path';
 import { projectsDir } from '../sessions/service.js';
 import { claudePrice, inputIncludesCacheRead, isClaudeModel } from './pricing.js';
 import type { ProviderTimeline, TurnProvider } from './timeline.js';
+import { tr } from '../i18n/index.js';
 
 export interface UsageBucket {
   input: number;
@@ -21,7 +22,7 @@ export interface UsageBucket {
 export type SessionProviderLookup = (sessionId: string) => Promise<ProviderTimeline | undefined>;
 
 const empty = (): UsageBucket => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, turns: 0, costUsd: 0, costUnknown: 0 });
-const ACCOUNT: TurnProvider = { name: 'Claude 账号' };
+const ACCOUNT: TurnProvider = { name: tr('Claude 账号') };
 
 export interface SessionUsage {
   total: UsageBucket;

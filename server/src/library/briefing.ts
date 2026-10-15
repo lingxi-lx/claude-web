@@ -1,5 +1,6 @@
 import { messagesToEvents, type CanonicalLog } from '../session/canonical.js';
 import { renderBriefing } from '../session/handoff.js';
+import { tr } from '../i18n/index.js';
 
 /**
  * Referencing another session's history from inside a conversation.
@@ -59,7 +60,7 @@ export async function expandSessionRefs(text: string, readAll: (id: string) => P
       replacement = `<referenced-session id="${idRaw}" title="${titleRaw}">\n${briefing}\n</referenced-session>`;
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e);
-      replacement = `<referenced-session id="${idRaw}" title="${titleRaw}" error="无法读取：${escapeAttr(reason)}" />`;
+      replacement = tr('<referenced-session id="{idRaw}" title="{titleRaw}" error="无法读取：{escapeAttr}" />', { idRaw, titleRaw, escapeAttr: escapeAttr(reason) });
     }
     const at = m.index ?? text.indexOf(whole, last);
     out += text.slice(last, at) + replacement;

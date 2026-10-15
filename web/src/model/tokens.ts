@@ -1,3 +1,4 @@
+import { tr } from '@/i18n';
 /** Input tokens as the APIs count them apart: uncached, read from the cache, written to the cache. */
 export interface InputTokens { input: number; cacheRead: number; cacheWrite: number }
 
@@ -38,10 +39,10 @@ export function usageParts(usage: unknown, fmt: (n: number) => string): { text: 
   const u = sdkInput(usage);
   if (!u) return [];
   const all = inputTotal(u);
-  const breakdown = `输入 ${fmt(all)}：从缓存读 ${fmt(u.cacheRead)} · 写进缓存 ${fmt(u.cacheWrite)} · 没走缓存 ${fmt(u.input)}`;
-  const out: { text: string; title?: string }[] = [{ text: `↑${fmt(all)} ↓${fmt(u.output)}`, title: `${breakdown}\n输出 ${fmt(u.output)}` }];
+  const breakdown = tr('输入 {all}：从缓存读 {cacheRead} · 写进缓存 {cacheWrite} · 没走缓存 {input}', { all: fmt(all), cacheRead: fmt(u.cacheRead), cacheWrite: fmt(u.cacheWrite), input: fmt(u.input) });
+  const out: { text: string; title?: string }[] = [{ text: `↑${fmt(all)} ↓${fmt(u.output)}`, title: tr("{breakdown}\n输出 {output}", { breakdown, output: fmt(u.output) }) }];
   if (all > 0 && u.cacheKnown) {
-    out.push({ text: `缓存 ${pct(hitRate(u))}`, title: `缓存命中：这一轮的输入有 ${pct(hitRate(u))} 是从缓存读的（按便宜得多的价格算）\n${breakdown}` });
+    out.push({ text: tr('缓存 {pct}', { pct: pct(hitRate(u)) }), title: tr("缓存命中：这一轮的输入有 {pct} 是从缓存读的（按便宜得多的价格算）\n{breakdown}", { pct: pct(hitRate(u)), breakdown }) });
   }
   return out;
 }

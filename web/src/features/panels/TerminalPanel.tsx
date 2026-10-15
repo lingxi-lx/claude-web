@@ -3,6 +3,7 @@ import { useScopedSession, useStore } from '@/store';
 import { ws } from '@/ws/client';
 import { parsePeerId } from '@shared';
 import { NO_MODS, PASTE_DENIED, PASTE_EMPTY, PASTE_NO_API, TERM_KEYS, TERM_KEYS_LABEL, applyMods, pasteBytes, pressKey, type Mods, type TermKeyId, type TermModes } from './term-keys';
+import { tr } from '@/i18n';
 
 /** The bundled mono face first (tokens.css `--mono`), then what the system has. */
 const TERM_FONT = "'JetBrains Mono Variable', 'Cascadia Code', Consolas, monospace";
@@ -87,7 +88,7 @@ export function TerminalPanel({ cwd, cmd, visible = true }: { cwd?: string; cmd?
         });
         off = ws.on((e) => {
           if (e.kind === 'terminal.data' && e.termId === id) term.write(e.data);
-          if (e.kind === 'terminal.exit' && e.termId === id) term.write(`\r\n[进程退出 ${e.code}]`);
+          if (e.kind === 'terminal.exit' && e.termId === id) term.write(tr("\r\n[进程退出 {code}]", { code: e.code }));
         });
         // fit() resizes the observed box: defer it a frame, or the browser reports "ResizeObserver loop completed"
         ro = new ResizeObserver(() => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => fitRef.current()); });
@@ -116,8 +117,8 @@ export function TerminalPanel({ cwd, cmd, visible = true }: { cwd?: string; cmd?
   if (err)
     return (
       <div className="empty">
-        终端不可用：{err}
-        <div style={{ marginTop: 8, fontSize: 12 }}>在 claude-web 目录运行 <code>npm i -w server node-pty</code>（需要 VS Build Tools）后重启服务。</div>
+        {tr('终端不可用：{err}', { err })}
+        <div style={{ marginTop: 8, fontSize: 12 }}>{tr('在 claude-web 目录运行')} <code>npm i -w server node-pty</code>{tr('（需要 VS Build Tools）后重启服务。')}</div>
       </div>
     );
 

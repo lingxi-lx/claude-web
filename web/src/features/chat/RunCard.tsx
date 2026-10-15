@@ -3,6 +3,7 @@ import { useStore } from '@/store';
 import { getToolDef } from './tools/registry';
 import { clsx } from '@/util';
 import { RUN_TAB_IN_MS, RUN_TAB_OUT_MS, elapsedText, lingerPhase, runStatus, swapCount, type LingerPhase, type RunStatus, type StepLabeler } from './run-status';
+import { tr } from '@/i18n';
 
 const stepLabel: StepLabeler = (name, input) => {
   const def = getToolDef(name);
@@ -78,11 +79,11 @@ export function RunCard({ sessionId }: { sessionId: string }) {
       <span key={st.key} className={clsx('what', swap && 'swap')}>
         <span className="rc-words">{st.text}{st.target && <span className="tgt">{st.target}</span>}</span>
       </span>
-      {st.total > 0 && <span className="meta">{st.done}/{st.total} 步</span>}
-      {st.tasks > 0 && <span className="meta">{st.tasks} 个子代理</span>}
+      {st.total > 0 && <span className="meta">{tr('{done}/{total} 步', { done: st.done, total: st.total })}</span>}
+      {st.tasks > 0 && <span className="meta">{tr('{tasks} 个子代理', { tasks: st.tasks })}</span>}
       <span className="grow" />
       {v.clock && <span className="clock">{v.clock}</span>}
-      <button type="button" className="rc-stop" title="中断这一轮 (Esc)" tabIndex={leaving ? -1 : undefined} onClick={() => { if (!leaving) void interrupt(sessionId); }}>停止</button>
+      <button type="button" className="rc-stop" title={tr('中断这一轮 (Esc)')} tabIndex={leaving ? -1 : undefined} onClick={() => { if (!leaving) void interrupt(sessionId); }}>{tr('停止')}</button>
     </div>
   );
 }

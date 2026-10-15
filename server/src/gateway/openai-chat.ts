@@ -2,6 +2,7 @@
 import { newId, safeJson, type IrEvent, type IrMessage, type IrPart, type IrRequest, type IrResponse, type IrStop, type IrTool, type IrUsage, type StreamParser, type StreamRenderer } from './ir.js';
 import { sse } from './sse.js';
 import { CACHE_KEY_MAX } from './cache.js';
+import { tr } from '../i18n/index.js';
 
 function contentParts(c: unknown): IrPart[] {
   if (typeof c === 'string') return c ? [{ type: 'text', text: c }] : [];
@@ -214,7 +215,7 @@ export class ChatStreamParser implements StreamParser {
   }
   end(): IrEvent[] {
     if (this.done) return [];
-    return this.started ? this.finish() : [{ t: 'error', message: '上游流意外结束' }];
+    return this.started ? this.finish() : [{ t: 'error', message: tr('上游流意外结束') }];
   }
 }
 
@@ -259,6 +260,6 @@ export class ChatStreamRenderer implements StreamRenderer {
     return '';
   }
   end(): string {
-    return this.finished ? '' : this.push({ t: 'error', message: '上游流意外结束' });
+    return this.finished ? '' : this.push({ t: 'error', message: tr('上游流意外结束') });
   }
 }

@@ -1,3 +1,4 @@
+import { tr } from '@/i18n';
 // Pure helpers that turn SDK error / timing signals into UI-facing health state. No DOM, no store.
 
 export type ErrorKind = 'throttled' | 'quota' | 'balance' | 'network' | 'credential' | 'context' | 'output_cap' | 'server' | 'refusal' | 'aborted' | 'unknown';
@@ -39,31 +40,31 @@ export function classifyError(s: ErrorSignal): ErrorKind {
 }
 
 export const ERROR_LABEL: Record<ErrorKind, string> = {
-  throttled: '被限流',
-  quota: '额度用尽',
-  balance: '余额不足',
-  network: '网络错误',
-  credential: '凭证失效',
-  context: '上下文过长',
-  output_cap: '输出超限',
-  server: '上游故障',
-  refusal: '模型拒答',
-  aborted: '已中断',
-  unknown: '未知错误',
+  throttled: tr('被限流'),
+  quota: tr('额度用尽'),
+  balance: tr('余额不足'),
+  network: tr('网络错误'),
+  credential: tr('凭证失效'),
+  context: tr('上下文过长'),
+  output_cap: tr('输出超限'),
+  server: tr('上游故障'),
+  refusal: tr('模型拒答'),
+  aborted: tr('已中断'),
+  unknown: tr('未知错误'),
 };
 
 export const ERROR_HINT: Record<ErrorKind, string> = {
-  throttled: '等待片刻后重试；订阅额度看顶栏的环。',
-  quota: '本窗口额度已用完，等重置或换供应商 / 模型。',
-  balance: '供应商账户的余额不够了：去供应商那里充值，或在模型菜单里换一个供应商。',
-  network: '检查网络或 Base URL；中转站可能暂时不可达。',
-  credential: '供应商的 API Key 不对或过期（设置 → 供应商），或 Claude 账号登录失效（终端里运行 claude auth login）。',
-  context: '对话太长了：/compact 压缩，或从某条消息分叉一个新对话。',
-  output_cap: '单次输出超过上限，让模型分段继续。',
-  server: '上游 5xx / 过载，稍后重试通常就好。',
-  refusal: '模型拒绝了这个请求；换个说法或换模型。',
-  aborted: '这一轮被中断了，可以直接继续发消息。',
-  unknown: '看结果行里的原始错误文本。',
+  throttled: tr('等待片刻后重试；订阅额度看顶栏的环。'),
+  quota: tr('本窗口额度已用完，等重置或换供应商 / 模型。'),
+  balance: tr('供应商账户的余额不够了：去供应商那里充值，或在模型菜单里换一个供应商。'),
+  network: tr('检查网络或 Base URL；中转站可能暂时不可达。'),
+  credential: tr('供应商的 API Key 不对或过期（设置 → 供应商），或 Claude 账号登录失效（终端里运行 claude auth login）。'),
+  context: tr('对话太长了：/compact 压缩，或从某条消息分叉一个新对话。'),
+  output_cap: tr('单次输出超过上限，让模型分段继续。'),
+  server: tr('上游 5xx / 过载，稍后重试通常就好。'),
+  refusal: tr('模型拒绝了这个请求；换个说法或换模型。'),
+  aborted: tr('这一轮被中断了，可以直接继续发消息。'),
+  unknown: tr('看结果行里的原始错误文本。'),
 };
 
 /**
@@ -76,14 +77,14 @@ export const ERROR_HINT: Record<ErrorKind, string> = {
  */
 /** Under the first retry of a refused key, worded like `noResponseHint` for what the conversation talks to. */
 export function credentialHint(provider?: string): string {
-  if (provider) return `「${provider}」拒绝了这个 API Key：检查 设置 → 供应商 →「${provider}」里的 Key（可以点「测试连接」）。`;
-  return '这个对话用的是「Claude 账号」，没有经过你添加的供应商（中转）：被拒的是 Claude 账号的登录，或者 ~/.claude/settings.json 里写的 Key。要用供应商：点输入框右下角的模型按钮，在供应商那一节选一个模型。';
+  if (provider) return tr('「{provider}」拒绝了这个 API Key：检查 设置 → 供应商 →「{provider2}」里的 Key（可以点「测试连接」）。', { provider, provider2: provider });
+  return tr('这个对话用的是「Claude 账号」，没有经过你添加的供应商（中转）：被拒的是 Claude 账号的登录，或者 ~/.claude/settings.json 里写的 Key。要用供应商：点输入框右下角的模型按钮，在供应商那一节选一个模型。');
 }
 
 export function noResponseHint(provider?: string): string {
-  const why = '具体原因要等十次重试走完才会显示；常见原因：代理（梯子）没开或端口不对，或者域名解析不了。';
-  if (provider) return `连不上「${provider}」。${why}想马上知道：设置 → 供应商 →「${provider}」的「测试连接」。`;
-  return `这个对话用的是「Claude 账号」，没有经过你添加的供应商（中转）。要用供应商：点输入框右下角的模型按钮，在供应商那一节选一个模型。${why}`;
+  const why = tr('具体原因要等十次重试走完才会显示；常见原因：代理（梯子）没开或端口不对，或者域名解析不了。');
+  if (provider) return tr('连不上「{provider}」。{why}想马上知道：设置 → 供应商 →「{provider2}」的「测试连接」。', { provider, why, provider2: provider });
+  return tr('这个对话用的是「Claude 账号」，没有经过你添加的供应商（中转）。要用供应商：点输入框右下角的模型按钮，在供应商那一节选一个模型。{why}', { why });
 }
 
 export interface StallInput {
@@ -142,10 +143,10 @@ export function compactionNotice(meta: { trigger?: string; pre_tokens?: number; 
   const pre = meta?.pre_tokens ?? 0;
   const post = meta?.post_tokens;
   const auto = meta?.trigger === 'auto';
-  const head = auto ? '上下文已自动压缩' : '上下文已压缩';
+  const head = auto ? tr('上下文已自动压缩') : tr('上下文已压缩');
   if (pre && post !== undefined && post !== null && post <= pre) {
     const pct = Math.round(((pre - post) / pre) * 100);
-    return `${head} · 释放 ${pct}%（${fmtK(pre)} → ${fmtK(post)}）`;
+    return tr('{head} · 释放 {pct}%（{fmtK} → {fmtK2}）', { head, pct, fmtK: fmtK(pre), fmtK2: fmtK(post) });
   }
   return pre ? `${head}（${fmtK(pre)} tok）` : head;
 }

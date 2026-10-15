@@ -8,6 +8,7 @@ import { dlg } from '@/ui/dialog';
 import { Icon } from '@/ui/icons';
 import { useDropdown } from '@/ui/menus';
 import { imeComposing } from '@/ui/ime';
+import { tr, dateLocale } from '@/i18n';
 
 function join(dir: string, name: string) {
   const sep = dir.includes('\\') ? '\\' : '/';
@@ -74,7 +75,7 @@ function Node({ path, name, depth, ctx, forceOpen }: { path: string; name: strin
       ) : (
         <FileRow key={k.name} entry={k} path={join(path, k.name)} depth={depth + 1} ctx={ctx} />
       )))}
-      {isOpen && visible && !visible.length && !err && depth > 0 && <div className="ft-row muted" style={{ paddingLeft: 6 + (depth + 1) * 12 }}>（空）</div>}
+      {isOpen && visible && !visible.length && !err && depth > 0 && <div className="ft-row muted" style={{ paddingLeft: 6 + (depth + 1) * 12 }}>{tr('（空）')}</div>}
     </div>
   );
 }
@@ -91,7 +92,7 @@ function FileRow({ entry, path, depth, ctx }: { entry: FsEntry; path: string; de
       onContextMenu={(e) => { e.preventDefault(); ctx.setSelected(path); ctx.setMenu({ path, dir: false, x: e.clientX, y: e.clientY }); }}
       draggable
       onDragStart={(e) => { e.dataTransfer.setData('text/plain', path); e.dataTransfer.setData(MIME_SESSION + '-file', path); }}
-      title={`${path}${entry.size !== undefined ? ` · ${entry.size.toLocaleString()} B` : ''}`}
+      title={`${path}${entry.size !== undefined ? ` · ${entry.size.toLocaleString(dateLocale())} B` : ''}`}
     >
       <span className="chev" style={{ visibility: 'hidden' }}><Icon name="chevronRight" size={11} /></span>
       <span className="ic"><Icon name="read" size={13} /></span>
@@ -125,25 +126,25 @@ function ContextMenu({ m, ctx, onClose }: { m: NonNullable<Ctx['menu']>; ctx: Ct
     ctx.reload(dir);
   };
   const trash = async () => {
-    if (!(await dlg.confirm('移到回收站？', { message: m.path, danger: true, okLabel: '移到回收站' }))) return;
+    if (!(await dlg.confirm(tr('移到回收站？'), { message: m.path, danger: true, okLabel: tr('移到回收站') }))) return;
     await ws.request({ kind: 'fs.trash', paths: [m.path] }).catch((e) => st.toast(e.message));
     ctx.reload(parentOf(m.path));
   };
   return (
-    <div ref={box} className="menu ft-menu" role="menu" aria-label="文件操作" style={{ position: 'fixed', left: Math.min(m.x, window.innerWidth - 220), top: Math.min(m.y, window.innerHeight - 320) }} onClick={(e) => e.stopPropagation()}>
-      {!m.dir && <button onClick={act(() => st.openTile({ id: `d${Date.now()}`, kind: 'doc', path: m.path }, 'tab'))}>打开</button>}
-      {!m.dir && <button onClick={act(() => { const before = st.layout; st.dispatchLayout({ t: 'pane.split', paneId: (st.layout.groups.find((g) => g.id === st.layout.activeGroupId) ?? st.layout.groups[0]).focusedPaneId, dir: 'row' }); if (useStore.getState().layout !== before) useStore.getState().openTile({ id: `d${Date.now()}`, kind: 'doc', path: m.path }, 'replace'); })}>在右侧分屏打开</button>}
-      {!m.dir && ctx.git.get(norm(m.path)) && <button onClick={act(() => st.openTile({ id: `df${Date.now()}`, kind: 'diff', sessionId: '', path: m.path }, 'tab'))}>查看改动 (diff)</button>}
-      <button onClick={act(() => ctx.setEditing({ path: dir, mode: 'newFile' }))}>新建文件</button>
-      <button onClick={act(() => ctx.setEditing({ path: dir, mode: 'newDir' }))}>新建文件夹</button>
-      <button onClick={act(() => ctx.setEditing({ path: m.path, mode: 'rename' }))}>重命名 (F2)</button>
-      {!m.dir && <button onClick={act(copyPath)}>创建副本</button>}
-      <button onClick={act(() => navigator.clipboard.writeText(m.path))}>复制路径</button>
-      <button onClick={act(() => navigator.clipboard.writeText(m.path.slice(ctx.root.length).replace(/^[\\/]/, '')))}>复制相对路径</button>
-      <button onClick={act(() => ws.request({ kind: 'shell.open', path: m.dir ? m.path : parentOf(m.path) }))}>在资源管理器显示</button>
-      <button onClick={act(() => ws.request({ kind: 'shell.open', path: m.path, app: 'code' }))}>在 VS Code 打开</button>
-      {m.dir && <button onClick={act(() => st.openTile({ id: `t${Date.now()}`, kind: 'term', cwd: m.path }, 'tab'))}>在这里开终端</button>}
-      <button className="danger" onClick={act(trash)}>移到回收站</button>
+    <div ref={box} className="menu ft-menu" role="menu" aria-label={tr('文件操作')} style={{ position: 'fixed', left: Math.min(m.x, window.innerWidth - 220), top: Math.min(m.y, window.innerHeight - 320) }} onClick={(e) => e.stopPropagation()}>
+      {!m.dir && <button onClick={act(() => st.openTile({ id: `d${Date.now()}`, kind: 'doc', path: m.path }, 'tab'))}>{tr('打开')}</button>}
+      {!m.dir && <button onClick={act(() => { const before = st.layout; st.dispatchLayout({ t: 'pane.split', paneId: (st.layout.groups.find((g) => g.id === st.layout.activeGroupId) ?? st.layout.groups[0]).focusedPaneId, dir: 'row' }); if (useStore.getState().layout !== before) useStore.getState().openTile({ id: `d${Date.now()}`, kind: 'doc', path: m.path }, 'replace'); })}>{tr('在右侧分屏打开')}</button>}
+      {!m.dir && ctx.git.get(norm(m.path)) && <button onClick={act(() => st.openTile({ id: `df${Date.now()}`, kind: 'diff', sessionId: '', path: m.path }, 'tab'))}>{tr('查看改动 (diff)')}</button>}
+      <button onClick={act(() => ctx.setEditing({ path: dir, mode: 'newFile' }))}>{tr('新建文件')}</button>
+      <button onClick={act(() => ctx.setEditing({ path: dir, mode: 'newDir' }))}>{tr('新建文件夹')}</button>
+      <button onClick={act(() => ctx.setEditing({ path: m.path, mode: 'rename' }))}>{tr('重命名 (F2)')}</button>
+      {!m.dir && <button onClick={act(copyPath)}>{tr('创建副本')}</button>}
+      <button onClick={act(() => navigator.clipboard.writeText(m.path))}>{tr('复制路径')}</button>
+      <button onClick={act(() => navigator.clipboard.writeText(m.path.slice(ctx.root.length).replace(/^[\\/]/, '')))}>{tr('复制相对路径')}</button>
+      <button onClick={act(() => ws.request({ kind: 'shell.open', path: m.dir ? m.path : parentOf(m.path) }))}>{tr('在资源管理器显示')}</button>
+      <button onClick={act(() => ws.request({ kind: 'shell.open', path: m.path, app: 'code' }))}>{tr('在 VS Code 打开')}</button>
+      {m.dir && <button onClick={act(() => st.openTile({ id: `t${Date.now()}`, kind: 'term', cwd: m.path }, 'tab'))}>{tr('在这里开终端')}</button>}
+      <button className="danger" onClick={act(trash)}>{tr('移到回收站')}</button>
     </div>
   );
 }
@@ -186,14 +187,14 @@ export function FileTree({ root, gitStatus }: { root: string; gitStatus?: GitSta
     return { git, gitDirs };
   }, [gitStatus]);
 
-  if (!root) return <div className="empty">没有工作目录</div>;
+  if (!root) return <div className="empty">{tr('没有工作目录')}</div>;
   const ctx: Ctx = { root, filter, git, gitDirs, reload, tick, menu, setMenu, editing, setEditing, selected, setSelected };
   return (
     <div className="filetree">
       <div className="ft-head">
-        <input className="field" placeholder="筛选文件名…" value={filter} onChange={(e) => setFilter(e.target.value.toLowerCase())} />
-        <button className="icon-btn" title="新建文件" onClick={() => setEditing({ path: selected && git ? (selected && !selected.includes('.') ? selected : parentOf(selected)) : root, mode: 'newFile' })} aria-label="新建文件"><Icon name="plus" size={14} /></button>
-        <button className="icon-btn" title="刷新" aria-label="刷新" onClick={() => reload(root)}><Icon name="refresh" size={14} /></button>
+        <input className="field" placeholder={tr('筛选文件名…')} value={filter} onChange={(e) => setFilter(e.target.value.toLowerCase())} />
+        <button className="icon-btn" title={tr('新建文件')} onClick={() => setEditing({ path: selected && git ? (selected && !selected.includes('.') ? selected : parentOf(selected)) : root, mode: 'newFile' })} aria-label={tr('新建文件')}><Icon name="plus" size={14} /></button>
+        <button className="icon-btn" title={tr('刷新')} aria-label={tr('刷新')} onClick={() => reload(root)}><Icon name="refresh" size={14} /></button>
       </div>
       <div className="ft-body" onContextMenu={(e) => { if (e.target === e.currentTarget) { e.preventDefault(); setMenu({ path: root, dir: true, x: e.clientX, y: e.clientY }); } }}>
         <Node path={root} name={root} depth={0} ctx={ctx} forceOpen />

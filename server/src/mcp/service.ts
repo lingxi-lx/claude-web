@@ -1,4 +1,5 @@
 import { mcpList } from '../config/service.js';
+import { tr } from '../i18n/index.js';
 
 export interface McpHealth { name: string; status: 'connected' | 'failed' | 'needs-auth' | 'unknown'; detail: string }
 export interface RegistryServer { name: string; description: string; repo?: string; install?: { transport: 'stdio' | 'http' | 'sse'; command?: string; args?: string[]; url?: string; env?: string[] }; kind: 'npm' | 'pypi' | 'remote' | 'other' }
@@ -24,7 +25,7 @@ export class McpService {
     if (q.trim()) u.searchParams.set('search', q.trim());
     u.searchParams.set('limit', String(limit));
     const res = await fetch(u, { signal: AbortSignal.timeout(15_000) });
-    if (!res.ok) throw new Error(`注册表 ${res.status}`);
+    if (!res.ok) throw new Error(tr('注册表 {status}', { status: res.status }));
     const j: any = await res.json();
     const list: any[] = j.servers ?? j.data ?? [];
     return list.map((raw) => {

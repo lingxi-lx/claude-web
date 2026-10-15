@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { chunk, jsonFetch, type AdapterState, type ImAdapter, type OutboundOptions } from './types.js';
+import { tr } from '../i18n/index.js';
 
 /** Telegram Bot API over long polling (no public URL needed). Buttons are inline keyboards → callback_query. */
 export class TelegramAdapter extends EventEmitter implements ImAdapter {
@@ -61,7 +62,7 @@ export class TelegramAdapter extends EventEmitter implements ImAdapter {
   async stop() { this.running = false; this.ac?.abort(); this.ac = null; this.setState('stopped'); }
 
   async send(chatId: string, text: string, o: OutboundOptions = {}) {
-    const parts = chunk(text || '(空)', this.maxLen);
+    const parts = chunk(text || tr('(空)'), this.maxLen);
     for (let i = 0; i < parts.length; i++) {
       const last = i === parts.length - 1;
       const body: any = { chat_id: chatId, text: parts[i], disable_web_page_preview: true };

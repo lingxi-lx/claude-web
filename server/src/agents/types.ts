@@ -6,6 +6,7 @@ import { EventEmitter } from 'node:events';
 import type { AgentKind, AgentInfo, EffortLevel, OpenSessionParams, PermissionMode, PermissionRequestEvent, PermissionResponse, RunnerState, SessionInfoSnapshot, AttachmentRef } from '../protocol.js';
 import type { MetaStore } from '../meta/store.js';
 import { modelsFor } from '../models/catalog.js';
+import { tr } from '../i18n/index.js';
 
 const catalogIds = (k: AgentKind) => modelsFor(k).map((m) => m.value);
 
@@ -84,11 +85,11 @@ interface Probe { version: string; ok: boolean; path?: string; from?: string; er
 
 /** Why `<cmd> --version` failed, in one short line (never the whole stderr: it can be pages of a stack trace). */
 export function versionError(e: any, shown: string): string {
-  if (e?.killed || e?.signal === 'SIGTERM' || /ETIMEDOUT|timed out/i.test(String(e?.message))) return `找到了 ${shown}，但「${shown} --version」${AgentRegistry.VERSION_TIMEOUT_MS / 1000} 秒没有回答（第一次启动或杀毒软件扫描时常见，点「重新检测」再试）`;
+  if (e?.killed || e?.signal === 'SIGTERM' || /ETIMEDOUT|timed out/i.test(String(e?.message))) return tr('找到了 {shown}，但「{shown2} --version」{VERSION_TIMEOUT_MS} 秒没有回答（第一次启动或杀毒软件扫描时常见，点「重新检测」再试）', { shown, shown2: shown, VERSION_TIMEOUT_MS: AgentRegistry.VERSION_TIMEOUT_MS / 1000 });
   // a Node crash prints the source line and a caret before the message: skip those and the stack frames
   const lines = `${e?.stderr ?? ''}\n${e?.stdout ?? ''}`.split('\n').map((l) => l.trim()).filter((l) => l && !/^at\s|^\^+$|^node:internal|new Error\(|^\{|^\}|^code:|^requireStack/.test(l));
   const last = lines.find((l) => /^\w*Error\b|^error\b/i.test(l)) ?? lines.find((l) => /cannot|not found|找不到|无法/i.test(l)) ?? lines[lines.length - 1] ?? e?.message ?? String(e);
-  return `找到了 ${shown}，但「${shown} --version」失败：${String(last).slice(0, 200)}`;
+  return tr('找到了 {shown}，但「{shown2} --version」失败：{last}', { shown, shown2: shown, last: String(last).slice(0, 200) });
 }
 
 /** Detect installed agents and merge user overrides (meta settings `agents.<kind>`). */
@@ -115,7 +116,7 @@ export class AgentRegistry {
 
   def(kind: AgentKind): AgentDef {
     const d = this.defs().find((x) => x.kind === kind);
-    if (!d) throw new Error(`未知 agent：${kind}`);
+    if (!d) throw new Error(tr('未知 agent：{kind}', { kind }));
     return d;
   }
 
@@ -172,7 +173,7 @@ export class AgentRegistry {
       let from: string | undefined;
       if (!file && !ownCommand) { const b = this.loc.bundled(kind); if (b) ({ file, from } = b); }
       let out: Probe;
-      if (!file) out = { ok: false, version: '', error: ownCommand ? `找不到「${command}」（设置的命令不在 PATH 里，也不是存在的文件）` : `这台电脑的 PATH 里没有 ${command}` };
+      if (!file) out = { ok: false, version: '', error: ownCommand ? tr('找不到「{command}」（设置的命令不在 PATH 里，也不是存在的文件）', { command }) : tr('这台电脑的 PATH 里没有 {command}', { command }) };
       else {
         try {
           const r = resolveSpawn(file, versionArgs);

@@ -1,6 +1,7 @@
 // Pure reducer: SDK messages (live or from transcript) -> renderable conversation tree.
 // Kept framework-free so it can be unit tested against captured message streams (see __fixtures__).
 import { classifyError, type ErrorKind } from './health';
+import { tr } from '@/i18n';
 
 export interface TextBlock { type: 'text'; text: string }
 export interface ThinkingBlock {
@@ -226,7 +227,7 @@ function dispatch(c: Conversation, m: any): void {
     case 'rate_limit_event': {
       const i = m.rate_limit_info ?? {};
       c.rateLimit = { status: i.status ?? 'allowed', resetsAt: i.resetsAt, type: i.rateLimitType, utilization: i.utilization, errorCode: i.errorCode, at: clock() };
-      if (i.status === 'rejected') c.items.push({ kind: 'system', id: m.uuid ?? `rl-${clock()}`, subtype: 'rate_limit', level: 'warn', text: `额度已用尽（${labelLimit(i.rateLimitType)}）${i.resetsAt ? ` · ${resetText(i.resetsAt)}` : ''}`, data: i });
+      if (i.status === 'rejected') c.items.push({ kind: 'system', id: m.uuid ?? `rl-${clock()}`, subtype: 'rate_limit', level: 'warn', text: tr('额度已用尽（{labelLimit}）{v}', { labelLimit: labelLimit(i.rateLimitType), v: i.resetsAt ? ` · ${resetText(i.resetsAt)}` : '' }), data: i });
       return;
     }
     case 'conversation_reset':
@@ -234,7 +235,7 @@ function dispatch(c: Conversation, m: any): void {
       c.toolIndex.clear();
       c.streaming.clear();
       c.tasks.clear();
-      c.items.push({ kind: 'system', id: m.uuid ?? `reset-${clock()}`, subtype: 'reset', text: '对话已重置（/clear）', data: m.new_conversation_id });
+      c.items.push({ kind: 'system', id: m.uuid ?? `reset-${clock()}`, subtype: 'reset', text: tr('对话已重置（/clear）'), data: m.new_conversation_id });
       return;
     default:
       return;
@@ -242,13 +243,13 @@ function dispatch(c: Conversation, m: any): void {
 }
 
 function labelLimit(t?: string) {
-  return t === 'five_hour' ? '5 小时窗口' : t === 'seven_day' ? '7 天窗口' : t === 'seven_day_opus' ? '7 天 Opus' : t === 'seven_day_sonnet' ? '7 天 Sonnet' : t === 'overage' ? '超额' : t ?? '';
+  return t === 'five_hour' ? tr('5 小时窗口') : t === 'seven_day' ? tr('7 天窗口') : t === 'seven_day_opus' ? tr('7 天 Opus') : t === 'seven_day_sonnet' ? tr('7 天 Sonnet') : t === 'overage' ? tr('超额') : t ?? '';
 }
 function resetText(resetsAt: number) {
   const ms = resetsAt * (resetsAt < 1e12 ? 1000 : 1) - clock();
-  if (ms <= 0) return '即将重置';
+  if (ms <= 0) return tr('即将重置');
   const m = Math.round(ms / 60_000);
-  return m < 60 ? `${m} 分钟后重置` : `${Math.floor(m / 60)} 小时 ${m % 60} 分后重置`;
+  return m < 60 ? tr('{m} 分钟后重置', { m }) : tr('{m} 小时 {m2} 分后重置', { m: Math.floor(m / 60), m2: m % 60 });
 }
 
 /**
@@ -545,7 +546,7 @@ function applyUser(c: Conversation, m: any) {
         if (c.runningTool?.id === b.id) c.runningTool = null;
       }
     }
-    list.push({ kind: 'system', id: m.uuid ?? `int-${clock()}`, ts: m.timestamp, subtype: 'interrupted', text: '已中断' });
+    list.push({ kind: 'system', id: m.uuid ?? `int-${clock()}`, ts: m.timestamp, subtype: 'interrupted', text: tr('已中断') });
     return;
   }
   const isMeta = m.isMeta || m.isSynthetic || /^<(command-name|local-command|system-reminder|task-notification)/.test(rawText.trim());
@@ -602,7 +603,7 @@ function applySystem(c: Conversation, m: any) {
     case 'status': {
       if (m.status === 'compacting') c.compacting = true;
       else if (c.compacting && m.status !== 'compacting') c.compacting = false;
-      if (m.compact_result === 'failed') c.items.push({ kind: 'system', id: m.uuid ?? `cf-${clock()}`, subtype: 'compact_failed', level: 'error', text: `上下文压缩失败${m.compact_error ? `：${m.compact_error}` : ''}` });
+      if (m.compact_result === 'failed') c.items.push({ kind: 'system', id: m.uuid ?? `cf-${clock()}`, subtype: 'compact_failed', level: 'error', text: tr('上下文压缩失败{v}', { v: m.compact_error ? `：${m.compact_error}` : '' }) });
       return;
     }
     case 'cw_notice': {
@@ -615,8 +616,8 @@ function applySystem(c: Conversation, m: any) {
       const meta = m.compact_metadata ?? {};
       const pre = meta.pre_tokens ?? 0, post = meta.post_tokens;
       const pct = pre && post !== undefined && post <= pre ? Math.round(((pre - post) / pre) * 100) : undefined;
-      const head = meta.trigger === 'auto' ? '上下文已自动压缩' : '上下文已压缩';
-      c.items.push({ kind: 'system', id: m.uuid, subtype: 'compact', text: pct !== undefined ? `${head} · 释放 ${pct}%` : `${head}${pre ? `（${Math.round(pre / 1000)}K tok）` : ''}`, data: meta });
+      const head = meta.trigger === 'auto' ? tr('上下文已自动压缩') : tr('上下文已压缩');
+      c.items.push({ kind: 'system', id: m.uuid, subtype: 'compact', text: pct !== undefined ? tr('{head} · 释放 {pct}%', { head, pct }) : `${head}${pre ? `（${Math.round(pre / 1000)}K tok）` : ''}`, data: meta });
       return;
     }
     case 'task_started': {
@@ -671,23 +672,23 @@ function applySystem(c: Conversation, m: any) {
       const noReply = m.error_status == null && !m.no_response && (!m.error || m.error === 'unknown');
       const first = (m.attempt ?? 1) <= 1;
       const hint = first && kind === 'credential' ? { hintKey: 'credential' } : first && noReply ? { hintKey: 'no_response' } : {};
-      const why = m.no_response ? `${Math.round((m.no_response.waited_ms ?? 0) / 1000)} 秒没有收到回应` : noReply ? '连不上服务器' : `${m.error ?? ''}${m.error_status ? ` HTTP ${m.error_status}` : ''}`;
-      c.items.push({ kind: 'system', id: m.uuid, subtype: 'retry', level: 'warn', text: `API 重试 ${m.attempt ?? ''}/${m.max_retries ?? ''}（${why}）${m.retry_delay_ms ? ` · ${Math.round(m.retry_delay_ms / 1000)}s 后` : ''}`, data: { kind, error: m.error, status: m.error_status, delayMs: m.retry_delay_ms, ...hint } });
+      const why = m.no_response ? tr('{waited_ms} 秒没有收到回应', { waited_ms: Math.round((m.no_response.waited_ms ?? 0) / 1000) }) : noReply ? tr('连不上服务器') : `${m.error ?? ''}${m.error_status ? ` HTTP ${m.error_status}` : ''}`;
+      c.items.push({ kind: 'system', id: m.uuid, subtype: 'retry', level: 'warn', text: tr('API 重试 {attempt}/{max_retries}（{why}）{v}', { attempt: m.attempt ?? '', max_retries: m.max_retries ?? '', why, v: m.retry_delay_ms ? tr(' · {retry_delay_ms}s 后', { retry_delay_ms: Math.round(m.retry_delay_ms / 1000) }) : '' }), data: { kind, error: m.error, status: m.error_status, delayMs: m.retry_delay_ms, ...hint } });
       return;
     }
     case 'model_refusal_fallback':
       evict(c, m.retracted_message_uuids);
-      c.items.push({ kind: 'system', id: m.uuid, subtype: 'refusal', level: 'warn', text: `模型拒答，已用 ${m.fallback_model ?? '备用模型'} 重试${m.api_refusal_category ? `（${m.api_refusal_category}）` : ''}`, data: m });
+      c.items.push({ kind: 'system', id: m.uuid, subtype: 'refusal', level: 'warn', text: tr('模型拒答，已用 {fallback_model} 重试{v}', { fallback_model: m.fallback_model ?? tr('备用模型'), v: m.api_refusal_category ? `（${m.api_refusal_category}）` : '' }), data: m });
       return;
     case 'model_refusal_no_fallback':
-      c.items.push({ kind: 'system', id: m.uuid, subtype: 'refusal', level: 'error', text: `模型拒答${m.api_refusal_category ? `（${m.api_refusal_category}）` : ''}${m.api_refusal_explanation ? `：${m.api_refusal_explanation}` : ''}`, data: m });
+      c.items.push({ kind: 'system', id: m.uuid, subtype: 'refusal', level: 'error', text: tr('模型拒答{v}{v2}', { v: m.api_refusal_category ? `（${m.api_refusal_category}）` : '', v2: m.api_refusal_explanation ? `：${m.api_refusal_explanation}` : '' }), data: m });
       return;
     case 'informational':
     case 'notification':
       c.items.push({ kind: 'system', id: m.uuid, subtype: m.subtype, text: m.message ?? m.content ?? JSON.stringify(m) });
       return;
     case 'permission_denied':
-      c.items.push({ kind: 'system', id: m.uuid, subtype: 'denied', level: 'warn', text: `权限拒绝: ${m.tool_name ?? ''} ${m.reason ?? ''}` });
+      c.items.push({ kind: 'system', id: m.uuid, subtype: 'denied', level: 'warn', text: tr('权限拒绝: {tool_name} {reason}', { tool_name: m.tool_name ?? '', reason: m.reason ?? '' }) });
       return;
     default:
       return;

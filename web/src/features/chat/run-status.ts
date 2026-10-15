@@ -2,6 +2,7 @@
 // Pure: the tab itself is RunCard.tsx, the tool vocabulary comes in as a function (tools/registry draws components).
 import type { Conversation } from '@/model/conversation';
 import { basename } from '@/util';
+import { tr } from '@/i18n';
 
 /** A tool call in a few words: its verb, its argument, and what kind of tool it is (the registry's category). */
 export type StepLabeler = (name: string, input: Record<string, unknown>) => { verb?: string; arg?: string; category?: string } | null;
@@ -28,13 +29,13 @@ export function runStatus(c: Conversation, state: string, label: StepLabeler): R
   const l = rt ? label(rt.name, rt.input) : null;
 
   let kind: RunStatus['kind'], text: string, target = '';
-  if (c.compacting) { kind = 'compacting'; text = '压缩上下文'; }
-  else if (state === 'waiting') { kind = 'waiting'; text = '等待你的确认'; }
+  if (c.compacting) { kind = 'compacting'; text = tr('压缩上下文'); }
+  else if (state === 'waiting') { kind = 'waiting'; text = tr('等待你的确认'); }
   else if (rt) {
     kind = 'tool';
     text = l?.verb || rt.name;
     target = l?.arg ? (l.category === 'read' || l.category === 'edit' ? basename(l.arg) : l.arg) : '';
-  } else { kind = 'thinking'; text = '思考中'; }
+  } else { kind = 'thinking'; text = tr('思考中'); }
 
   // how much of this turn is behind us
   let done = 0, total = 0;

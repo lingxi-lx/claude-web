@@ -1,16 +1,19 @@
 // Appearance settings live in meta.json (`ui.*`) and are applied as data attributes / CSS variables on <html>.
 import { THEMES, type Theme } from '@/store';
+import { tr } from '@/i18n';
 
 export type UiTheme = Theme | 'system';
 export const FONT_SIZES = [12, 13, 14, 15, 16] as const;
-export const DENSITIES = [{ id: 'compact', l: '紧凑' }, { id: 'comfortable', l: '舒适' }] as const;
+/** The language setting's choices; each language is named in itself. */
+export const LANGUAGES = [{ id: 'auto', l: tr('跟随系统') }, { id: 'zh', l: '中文' }, { id: 'en', l: 'English' }];
+export const DENSITIES = [{ id: 'compact', l: tr('紧凑') }, { id: 'comfortable', l: tr('舒适') }] as const;
 export const CJK_FONTS = [
-  { id: '', l: '系统默认' },
-  { id: '"Microsoft YaHei UI", "Microsoft YaHei"', l: '微软雅黑' },
-  { id: '"PingFang SC", "Hiragino Sans GB"', l: '苹方' },
-  { id: '"Noto Sans CJK SC", "Source Han Sans SC"', l: '思源黑体' },
-  { id: '"LXGW WenKai", "霞鹜文楷"', l: '霞鹜文楷' },
-  { id: '"Sarasa UI SC", "更纱黑体 UI SC"', l: '更纱黑体' },
+  { id: '', l: tr('系统默认') },
+  { id: '"Microsoft YaHei UI", "Microsoft YaHei"', l: tr('微软雅黑') },
+  { id: '"PingFang SC", "Hiragino Sans GB"', l: tr('苹方') },
+  { id: '"Noto Sans CJK SC", "Source Han Sans SC"', l: tr('思源黑体') },
+  { id: '"LXGW WenKai", "霞鹜文楷"', l: tr('霞鹜文楷') },
+  { id: '"Sarasa UI SC", "更纱黑体 UI SC"', l: tr('更纱黑体') },
 ];
 
 const mq = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;

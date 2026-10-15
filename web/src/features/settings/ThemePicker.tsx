@@ -3,6 +3,7 @@ import { useStore } from '@/store';
 import { clsx } from '@/util';
 import { Icon } from '@/ui/icons';
 import { QUICK_THEMES, THEME_LABEL, THEME_ORDER, THEME_PREVIEW, themeChoice, type ThemeChoice } from './theme-preview';
+import { tr } from '@/i18n';
 
 // Picking a theme (final review §9 #3): `ui.theme` through setSetting, which applies it at once (the store's
 // setTheme, the desktop title bar). Two places: the account popover's three and 设置 → 外观's swatches.
@@ -17,7 +18,7 @@ function useTheme(): [ThemeChoice | null, (t: ThemeChoice) => void] {
 export function ThemeQuick({ dataId }: { dataId?: string }) {
   const [cur, pick] = useTheme();
   return (
-    <div className="theme-quick" role="radiogroup" aria-label="主题" data-id={dataId}>
+    <div className="theme-quick" role="radiogroup" aria-label={tr('主题')} data-id={dataId}>
       {QUICK_THEMES.map((t) => (
         <button key={t} role="radio" aria-checked={cur === t} className={clsx(cur === t && 'on')} data-theme-pick={t} onClick={(e) => { e.stopPropagation(); pick(t); }}>
           <Icon name={t === 'light' ? 'sun' : t === 'dark' ? 'moon' : 'monitor'} size={13} />{THEME_LABEL[t]}

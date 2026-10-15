@@ -1,4 +1,5 @@
 import { PANEL_TITLES, type Tile } from '@/model/layout';
+import { tr } from '@/i18n';
 
 const tail = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() || p;
 
@@ -9,11 +10,11 @@ const tail = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() || p;
  */
 export function tileArea(tile: Tile): string {
   switch (tile.kind) {
-    case 'chat': return `对话 · ${tile.sessionId ? tile.sessionId.slice(0, 8) : '新对话'}`;
-    case 'doc': return `文档 · ${tail(tile.path)}`;
-    case 'diff': return `差异 · ${tail(tile.path)}`;
-    case 'term': return '终端';
-    case 'browser': return '浏览器';
-    case 'panel': return `面板 · ${PANEL_TITLES[tile.panel] ?? tile.panel}`;
+    case 'chat': return tr('对话 · {sessionId}', { sessionId: tile.sessionId ? tile.sessionId.slice(0, 8) : tr('新对话') });
+    case 'doc': return tr('文档 · {tail}', { tail: tail(tile.path) });
+    case 'diff': return tr('差异 · {tail}', { tail: tail(tile.path) });
+    case 'term': return tr('终端');
+    case 'browser': return tr('浏览器');
+    case 'panel': return tr('面板 · {panel}', { panel: PANEL_TITLES[tile.panel] ?? tile.panel });
   }
 }

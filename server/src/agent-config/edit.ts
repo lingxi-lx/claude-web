@@ -4,6 +4,7 @@
 // Every edit re-parses its result; a mismatch throws instead of writing something half-right.
 import { parse as tomlParse, stringify as tomlStringify } from 'smol-toml';
 import * as jsonc from 'jsonc-parser';
+import { tr } from '../i18n/index.js';
 
 export type ConfigFormat = 'toml' | 'json';
 
@@ -16,8 +17,8 @@ export function parseConfig(text: string, format: ConfigFormat): Record<string, 
   if (format === 'toml') return tomlParse(text) as Record<string, unknown>;
   const errors: jsonc.ParseError[] = [];
   const v = jsonc.parse(text, errors, { allowTrailingComma: true, disallowComments: false });
-  if (errors.length) throw new Error(`JSON 解析失败：${jsonc.printParseErrorCode(errors[0].error)} @${errors[0].offset}`);
-  if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Error('配置文件的顶层不是对象');
+  if (errors.length) throw new Error(tr('JSON 解析失败：{printParseErrorCode} @{offset}', { printParseErrorCode: jsonc.printParseErrorCode(errors[0].error), offset: errors[0].offset }));
+  if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Error(tr('配置文件的顶层不是对象'));
   return v as Record<string, unknown>;
 }
 
@@ -64,7 +65,7 @@ export function setTomlTopLevel(text: string, key: string, value: string | undef
   if (at >= 0) {
     const line = rows[at].text;
     let single: Record<string, unknown>;
-    try { single = tomlParse(line) as Record<string, unknown>; } catch { throw new Error(`${key} 的值跨多行，不能定点修改`); }
+    try { single = tomlParse(line) as Record<string, unknown>; } catch { throw new Error(tr('{key} 的值跨多行，不能定点修改', { key })); }
     // keep a trailing comment: the first `#` after which the line still parses to the same value
     let comment = '';
     for (let i = line.indexOf('#'); i > 0; i = line.indexOf('#', i + 1)) {
@@ -84,7 +85,7 @@ export function setTomlTopLevel(text: string, key: string, value: string | undef
   const after = parseConfig(out, 'toml');
   const expect = { ...before } as Record<string, unknown>;
   if (value === undefined) delete expect[key]; else expect[key] = value;
-  if (canon(after) !== canon(expect)) throw new Error(`改写 ${key} 后文件结构不一致，已放弃`);
+  if (canon(after) !== canon(expect)) throw new Error(tr('改写 {key} 后文件结构不一致，已放弃', { key }));
   return out;
 }
 
@@ -98,7 +99,7 @@ export function appendTomlTable(text: string, tablePath: string[], entries: Reco
   const doc = parseConfig(out, 'toml') as any; // throws on e.g. a duplicate table
   let node = doc;
   for (const k of tablePath) node = node?.[k];
-  if (canon(node) !== canon(entries)) throw new Error(`追加 [${tablePath.join('.')}] 后内容不一致，已放弃`);
+  if (canon(node) !== canon(entries)) throw new Error(tr('追加 [{tablePath}] 后内容不一致，已放弃', { tablePath: tablePath.join('.') }));
   return out;
 }
 
@@ -113,7 +114,7 @@ export function setJsonPath(text: string, jsonPath: string[], value: unknown): s
   const out = bom + jsonc.applyEdits(src, edits);
   let node: any = parseConfig(out, 'json');
   for (const k of jsonPath) node = node?.[k];
-  if (canon(node) !== canon(value)) throw new Error(`改写 ${jsonPath.join('.')} 后内容不一致，已放弃`);
+  if (canon(node) !== canon(value)) throw new Error(tr('改写 {jsonPath} 后内容不一致，已放弃', { jsonPath: jsonPath.join('.') }));
   return out;
 }
 

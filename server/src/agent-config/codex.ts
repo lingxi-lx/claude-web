@@ -6,14 +6,15 @@ import type { AgentConfigBackup, AgentSettingField, McpSpec } from './types.js';
 import { checkField, cliEnv, fieldValue, fileList, homeOf, readConfig, standardFiles, type AdapterCtx, type AgentConfigAdapter } from './adapter.js';
 import { runCliOk } from './cli.js';
 import { appendTomlTable, setTomlTopLevel } from './edit.js';
+import { tr } from '../i18n/index.js';
 
 // enum values as the CLI itself reports them for a bad value (codex-cli 0.155: "expected one of …");
 // model_reasoning_effort accepts any string, these are the documented levels
 const FIELDS: Omit<AgentSettingField, 'value'>[] = [
-  { key: 'model', label: '默认模型', type: 'string', hint: 'config.toml 的 model' },
-  { key: 'model_reasoning_effort', label: '推理强度', type: 'enum', options: ['minimal', 'low', 'medium', 'high', 'xhigh'] },
-  { key: 'approval_policy', label: '审批策略', type: 'enum', options: ['untrusted', 'on-failure', 'on-request', 'never'] },
-  { key: 'sandbox_mode', label: '沙箱', type: 'enum', options: ['read-only', 'workspace-write', 'danger-full-access'] },
+  { key: 'model', label: tr('默认模型'), type: 'string', hint: tr('config.toml 的 model') },
+  { key: 'model_reasoning_effort', label: tr('推理强度'), type: 'enum', options: ['minimal', 'low', 'medium', 'high', 'xhigh'] },
+  { key: 'approval_policy', label: tr('审批策略'), type: 'enum', options: ['untrusted', 'on-failure', 'on-request', 'never'] },
+  { key: 'sandbox_mode', label: tr('沙箱'), type: 'enum', options: ['read-only', 'workspace-write', 'danger-full-access'] },
 ];
 
 export class CodexConfigAdapter implements AgentConfigAdapter {
@@ -42,7 +43,7 @@ export class CodexConfigAdapter implements AgentConfigAdapter {
   }
 
   async mcpAdd(spec: McpSpec): Promise<string> {
-    if (spec.transport === 'sse') throw new Error('Codex 只支持 stdio 与 streamable HTTP，不支持 SSE');
+    if (spec.transport === 'sse') throw new Error(tr('Codex 只支持 stdio 与 streamable HTTP，不支持 SSE'));
     const args = ['mcp', 'add', spec.name];
     if (spec.transport === 'stdio') {
       for (const [k, v] of Object.entries(spec.env ?? {})) args.push('--env', `${k}=${v}`);
@@ -53,15 +54,15 @@ export class CodexConfigAdapter implements AgentConfigAdapter {
     const headers = spec.transport === 'http' ? spec.headers ?? {} : {};
     if (Object.keys(headers).length) {
       await this.ctx.backups.writeChecked('codex', file, (t) => appendTomlTable(t, ['mcp_servers', spec.name, 'http_headers'], headers), `mcp ${spec.name} http_headers`);
-      return `已通过 codex mcp add 添加，并写入 ${Object.keys(headers).length} 个 header`;
+      return tr('已通过 codex mcp add 添加，并写入 {keysCount} 个 header', { keysCount: Object.keys(headers).length });
     }
-    return '已通过 codex mcp add 添加';
+    return tr('已通过 codex mcp add 添加');
   }
 
   async mcpRemove(name: string): Promise<string> {
     const { result } = await this.ctx.backups.guard('codex', this.configPath(), `mcp remove ${name}`, () => runCliOk(this.ctx.cli(), ['mcp', 'remove', name]));
-    if (/No MCP server named/i.test(result.stdout + result.stderr)) throw new Error(`Codex 里没有名为 ${name} 的 MCP 服务器`);
-    return '已通过 codex mcp remove 删除';
+    if (/No MCP server named/i.test(result.stdout + result.stderr)) throw new Error(tr('Codex 里没有名为 {name} 的 MCP 服务器', { name }));
+    return tr('已通过 codex mcp remove 删除');
   }
 
   async settings(): Promise<AgentSettingField[]> {
@@ -71,6 +72,6 @@ export class CodexConfigAdapter implements AgentConfigAdapter {
 
   async setSetting(key: string, value: string | null): Promise<AgentConfigBackup | null> {
     checkField(FIELDS, key, value);
-    return this.ctx.backups.writeChecked('codex', this.configPath(), (t) => setTomlTopLevel(t, key, value || undefined), `设置 ${key}`);
+    return this.ctx.backups.writeChecked('codex', this.configPath(), (t) => setTomlTopLevel(t, key, value || undefined), tr('设置 {key}', { key }));
   }
 }

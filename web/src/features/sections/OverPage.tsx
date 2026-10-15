@@ -4,6 +4,7 @@ import { clsx } from '@/util';
 import { Icon, type IconName } from '@/ui/icons';
 import { anchoredMenuOpen } from '@/ui/menus';
 import { SidebarReveal } from '@/features/workbench/pane-edge';
+import { tr } from '@/i18n';
 
 /** Something else has the keyboard's Esc: a dialog, a menu, the palette, the settings page, the shortcut sheet. */
 const escTaken = () => {
@@ -107,7 +108,7 @@ export function OverPage(p: {
           <span className="grow" />
           {p.actions}
         </div>
-        <button className="icon-btn over-close" title="关闭 (Esc)" aria-label={`关闭${p.label}`} onClick={p.onClose}><Icon name="close" size={16} /></button>
+        <button className="icon-btn over-close" title={tr('关闭 (Esc)')} aria-label={tr('关闭{label}', { label: p.label })} onClick={p.onClose}><Icon name="close" size={16} /></button>
       </div>
       {p.showTabs && (
         <div className={clsx('utabs over-tabs', `${n}-tabs`)} role="tablist" aria-label={p.label}>

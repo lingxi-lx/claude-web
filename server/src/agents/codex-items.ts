@@ -1,4 +1,5 @@
 import { MessageSynth } from './normalize.js';
+import { tr } from '../i18n/index.js';
 
 /** Per-item running state, keyed by item id: what tool it became and its aggregated output so far. */
 export type CodexItemState = Map<string, { type: string; toolName?: string; output: string }>;
@@ -38,7 +39,7 @@ export function codexItemMessages(synth: MessageSynth, seen: CodexItemState, ite
       if (completed) out.push(synth.toolResult(item.id, (item.contentItems ?? []).map((c: any) => c.text ?? JSON.stringify(c)).join('\n'), item.success === false));
       break;
     }
-    case 'plan': if (completed && item.text) out.push(...synth.delta('text', `\n\n**计划**\n${item.text}\n`)); break;
+    case 'plan': if (completed && item.text) out.push(...synth.delta('text', tr("\n\n**计划**\n{text}\n", { text: item.text }))); break;
     case 'webSearch': {
       if (!known) { seen.set(item.id, { type: item.type, toolName: 'WebSearch', output: '' }); out.push(...synth.toolUse(item.id, 'WebSearch', { query: item.query })); }
       if (completed) out.push(synth.toolResult(item.id, item.query ?? 'done'));

@@ -8,6 +8,7 @@ import { clsx } from '@/util';
 import { agentColor, agentStateText, taskStateText } from './model';
 import { agentTip } from './Character';
 import { clip, pressKeys, textWidth } from './text';
+import { tr } from '@/i18n';
 
 type Pick = (agentKey: string, taskId: string) => void;
 type State = BgAgent['state'];
@@ -49,7 +50,7 @@ export function CommandGraph({ session, taskId, compact, onPick }: { session: Bg
 
   return (
     <div className={clsx('bg-graph', compact && 'compact')}>
-      <svg className="bg-graph-svg" viewBox={`0 0 ${W} ${H}`} role="group" aria-label="指挥台">
+      <svg className="bg-graph-svg" viewBox={`0 0 ${W} ${H}`} role="group" aria-label={tr('指挥台')}>
         <ellipse className="bg-orbit" cx={cx} cy={cy} rx={outer.rx} ry={outer.ry} />
         {shown.length > outerN && <ellipse className="bg-orbit" cx={cx} cy={cy} rx={inner.rx} ry={inner.ry} />}
         {nodes.map((n) => (
@@ -57,11 +58,11 @@ export function CommandGraph({ session, taskId, compact, onPick }: { session: Bg
         ))}
         <g className="bg-hub">
           <rect x={cx - 48} y={cy - 18} width={96} height={36} rx={9} />
-          <text className="bg-hub-name" x={cx} y={cy - 2}>主对话</text>
-          <text className="bg-hub-sub" x={cx} y={cy + 11}>{running ? `${running} 个在跑` : '没有在跑的'}</text>
+          <text className="bg-hub-name" x={cx} y={cy - 2}>{tr('主对话')}</text>
+          <text className="bg-hub-sub" x={cx} y={cy + 11}>{running ? tr('{running} 个在跑', { running }) : tr('没有在跑的')}</text>
         </g>
         {nodes.map((n) => <GraphNode key={n.id} n={n} cy={cy} compact={!!compact} onPick={onPick} />)}
-        {more > 0 && <text className="bg-graph-more" x={W - 8} y={H - 8}>还有 {more} 个</text>}
+        {more > 0 && <text className="bg-graph-more" x={W - 8} y={H - 8}>{tr('还有 {more} 个', { more })}</text>}
       </svg>
     </div>
   );

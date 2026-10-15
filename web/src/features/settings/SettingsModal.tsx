@@ -5,7 +5,7 @@ import { ws } from '@/ws/client';
 import { desktop } from '@/desktop';
 import { ZoomControl } from './ZoomControl';
 import { Mcp, McpAddJson, Overview, Plugins, ProviderProfiles, Settings, SimpleList } from '@/features/panels/ConfigPanel';
-import { CJK_FONTS, DENSITIES, FONT_SIZES } from './ui-settings';
+import { CJK_FONTS, DENSITIES, FONT_SIZES, LANGUAGES } from './ui-settings';
 import { ThemeSwatches } from './ThemePicker';
 import { SkillsBackup, SkillsSection } from './SkillsSection';
 import { ToolsSection } from './ToolsSection';
@@ -37,6 +37,7 @@ import {
 import { NumberSelect, Row, Seg, Select, Toggle } from './controls';
 import { coverApp } from './cover';
 import { WebSettings } from '@/features/browser/WebSettings';
+import { tr } from '@/i18n';
 
 export { Row } from './controls';
 
@@ -48,7 +49,7 @@ const CONTROLS: Record<EntryId, (e: EntryMeta) => ReactNode> = {
   'ui.defaultMode': (e) => <Select k={e.id} def="default" label={e.label} options={DEFAULT_MODES.map((m) => ({ id: m, l: MODE_LABEL[m] }))} />,
   autoContinueOnReset: (e) => <Toggle k={e.id} label={e.label} />,
   'ui.showThinking': (e) => <Toggle k={e.id} label={e.label} />,
-  'ui.diffMode': (e) => <Seg k={e.id} def="unified" label={e.label} options={[{ id: 'unified', l: '上下对照' }, { id: 'split', l: '左右并排' }]} />,
+  'ui.diffMode': (e) => <Seg k={e.id} def="unified" label={e.label} options={[{ id: 'unified', l: tr('上下对照') }, { id: 'split', l: tr('左右并排') }]} />,
   'ui.inlineDiffs': (e) => <Toggle k={e.id} label={e.label} />,
   'ui.workbench': (e) => <Toggle k={e.id} label={e.label} />,
   'ui.autoSave': (e) => <Toggle k={e.id} def label={e.label} />,
@@ -59,6 +60,7 @@ const CONTROLS: Record<EntryId, (e: EntryMeta) => ReactNode> = {
   'orchestra.maxParallel': (e) => <NumberSelect k={e.id} def={3} label={e.label} options={[1, 2, 3, 4, 6, 8]} />,
   'cafe.rate': (e) => <NumberSelect k={e.id} def={5} label={e.label} options={[0, 2, 3, 5, 8, 10, 15]} />,
   'cafe.sound': (e) => <Toggle k={e.id} label={e.label} />,
+  'ui.language': (e) => <Select k={e.id} def="auto" label={e.label} options={LANGUAGES} />,
   'ui.theme': (e) => <ThemeSwatches label={e.label} />,
   'ui.zoom': (e) => <ZoomControl label={e.label} />,
   'ui.fontSize': (e) => <NumberSelect k={e.id} def={14} label={e.label} options={FONT_SIZES} />,
@@ -84,7 +86,7 @@ const BODIES: Record<BodyId, () => ReactNode> = {
   skills: () => <SkillsSection />,
   skillsBackup: () => <SkillsBackup />,
   agents: () => <AgentsSection />,
-  subagents: () => <SimpleList kind="config.agents" empty="还没有子代理。~/.claude/agents 里的 .md 文件和插件带的子代理会出现在这里。" render={(a) => <div className="grow"><div>{a.name} <span style={muted}>{a.source}{a.model ? ` · ${a.model}` : ''}</span></div><div className="sub">{a.description}</div></div>} />,
+  subagents: () => <SimpleList kind="config.agents" empty={tr('还没有子代理。~/.claude/agents 里的 .md 文件和插件带的子代理会出现在这里。')} render={(a) => <div className="grow"><div>{a.name} <span style={muted}>{a.source}{a.model ? ` · ${a.model}` : ''}</span></div><div className="sub">{a.description}</div></div>} />,
   memory: () => <MemorySettings />,
   remote: () => <RemoteSection />,
   anywhere: () => <AnywhereMore />,
@@ -94,7 +96,7 @@ const BODIES: Record<BodyId, () => ReactNode> = {
   web: () => <WebSettings />,
   library: () => <LibrarySection />,
   secrets: () => <SecretsSection />,
-  hooks: () => <SimpleList kind="config.hooks" empty="还没有 Hooks。settings.json 或插件里配置的会出现在这里。" render={(h) => <div className="grow"><div>{h.event} <span style={muted}>{h.matcher ? `matcher: ${h.matcher}` : ''} · {h.source}</span></div><div className="sub">{(h.hooks ?? []).map((x: any) => x.command ?? x.type).join(' ; ')}</div></div>} />,
+  hooks: () => <SimpleList kind="config.hooks" empty={tr('还没有 Hooks。settings.json 或插件里配置的会出现在这里。')} render={(h) => <div className="grow"><div>{h.event} <span style={muted}>{h.matcher ? `matcher: ${h.matcher}` : ''} · {h.source}</span></div><div className="sub">{(h.hooks ?? []).map((x: any) => x.command ?? x.type).join(' ; ')}</div></div>} />,
   env: () => <EnvEditor bare />,
   tools: () => <ToolsSection />,
   diagnostics: () => <DiagnosticsSection />,
@@ -218,7 +220,7 @@ function SettingsPage({ open }: { open: { section?: string; query?: string; reve
       className={clsx('modal settings sp', phonePage && 'phone-page', searching && 'searching')}
       role="dialog"
       aria-modal="true"
-      aria-label="设置"
+      aria-label={tr('设置')}
       data-section={sec.id}
       data-tab={activeTab(sec, target.tab)?.id}
       onKeyDown={(e) => {
@@ -229,11 +231,11 @@ function SettingsPage({ open }: { open: { section?: string; query?: string; reve
     >
       <nav className="sp-nav">
         <div className="sp-nav-top">
-          <button className="sp-back" onClick={close} title="返回 (Esc)"><Icon name="restore" size={16} />返回</button>
+          <button className="sp-back" onClick={close} title={tr('返回 (Esc)')}><Icon name="restore" size={16} />{tr('返回')}</button>
         </div>
         <label className="sp-search">
           <Icon name="search" size={14} />
-          <input ref={inp} placeholder="搜索设置" value={q} onChange={(e) => setQ(e.target.value)} aria-label="搜索设置" />
+          <input ref={inp} placeholder={tr('搜索设置')} value={q} onChange={(e) => setQ(e.target.value)} aria-label={tr('搜索设置')} />
           {!q && <span className="kbd">/</span>}
         </label>
         <div className="sp-groups">
@@ -244,7 +246,7 @@ function SettingsPage({ open }: { open: { section?: string; query?: string; reve
             </div>
           ))}
           <div className={clsx('sp-g sp-adv', advOpen && 'open')}>
-            <button className="sp-gh sp-adv-h" aria-expanded={advOpen} onClick={() => setAdvOpen(!advOpen)}>高级<Icon name={advOpen ? 'chevronDown' : 'chevronRight'} size={12} /></button>
+            <button className="sp-gh sp-adv-h" aria-expanded={advOpen} onClick={() => setAdvOpen(!advOpen)}>{tr('高级')}<Icon name={advOpen ? 'chevronDown' : 'chevronRight'} size={12} /></button>
             {advOpen ? ADVANCED_SECTIONS.map(navItem) : <button className="sp-adv-sub" onClick={() => setAdvOpen(true)}>{ADVANCED_SECTIONS.map((s) => s.l).join(' · ')}</button>}
           </div>
         </div>
@@ -255,7 +257,7 @@ function SettingsPage({ open }: { open: { section?: string; query?: string; reve
         <div className="sp-drag" />
         <div className="sp-scroll" ref={scroller}>
           <div className="sp-inner">
-            <button className="sp-phone-back" onClick={() => setPhonePage(false)}><Icon name="restore" size={15} />全部设置</button>
+            <button className="sp-phone-back" onClick={() => setPhonePage(false)}><Icon name="restore" size={15} />{tr('全部设置')}</button>
             {searching ? (
               <SearchResults q={q} hits={hits} pick={pick} />
             ) : (
@@ -293,11 +295,11 @@ function VersionLine({ onOpen }: { onOpen: () => void }) {
     void desktop.updateState?.().then((s) => s && setSt(s));
     return off;
   }, []);
-  const note = st?.status === 'none' ? '已是最新' : st?.status === 'available' ? `有新版本 ${st.version ?? ''}` : st?.status === 'downloaded' ? '重启即可更新' : st?.status === 'downloading' ? '下载更新中' : '';
+  const note = st?.status === 'none' ? tr('已是最新') : st?.status === 'available' ? tr('有新版本 {version}', { version: st.version ?? '' }) : st?.status === 'downloaded' ? tr('重启即可更新') : st?.status === 'downloading' ? tr('下载更新中') : '';
   return (
-    <button className="sp-ver" onClick={onOpen} title="更新">
+    <button className="sp-ver" onClick={onOpen} title={tr('更新')}>
       <span className={clsx('dot', st?.status === 'none' && 'ok', (st?.status === 'available' || st?.status === 'downloaded') && 'new')} />
-      {desktop ? `Claude Web ${desktop.version}` : 'Claude Web · 网页版'}{note && ` · ${note}`}
+      {desktop ? `Claude Web ${desktop.version}` : tr('Claude Web · 网页版')}{note && ` · ${note}`}
     </button>
   );
 }
@@ -305,7 +307,7 @@ function VersionLine({ onOpen }: { onOpen: () => void }) {
 function EntryRow({ sec, e, reveal }: { sec: SectionMeta; e: EntryMeta; reveal?: string }) {
   return (
     <div className={clsx('sp-row-wrap', reveal === e.id && 'reveal')} data-entry={e.id}>
-      <ErrorBoundary area={`设置 · ${sec.l} · ${e.label}`} compact>
+      <ErrorBoundary area={tr('设置 · {l} · {label}', { l: sec.l, label: e.label })} compact>
         <Row label={e.label} hint={e.hint} tag={e.tag}>{CONTROLS[e.id](e)}</Row>
       </ErrorBoundary>
     </div>
@@ -319,7 +321,7 @@ function More({ open, onToggle, hint, children }: { open: boolean; onToggle: () 
   return (
     <div className={clsx('sp-more', open && 'open')}>
       <button className="sp-more-h" aria-expanded={open} onClick={onToggle}>
-        <Icon name={open ? 'chevronDown' : 'chevronRight'} size={14} />更多选项{hint && !open && <span className="faint">· {hint}</span>}
+        <Icon name={open ? 'chevronDown' : 'chevronRight'} size={14} />{tr('更多选项')}{hint && !open && <span className="faint">· {hint}</span>}
       </button>
       {mounted && <div className="sp-more-body" hidden={!open}>{children}</div>}
     </div>
@@ -342,7 +344,7 @@ function Page({ sec, tab, reveal, moreOpen, setMoreOpen, setTab }: { sec: Sectio
   }
   const body = (b: BodyId) => (
     <div key={b} className="sp-body" data-body={b}>
-      <ErrorBoundary area={parts === 1 && !t ? `设置 · ${sec.l}` : `设置 · ${sec.l} · ${BODY_INFO[b].l}`} resetKeys={[sec.id, t?.id]}>{BODIES[b]()}</ErrorBoundary>
+      <ErrorBoundary area={parts === 1 && !t ? tr('设置 · {l}', { l: sec.l }) : tr('设置 · {l} · {l2}', { l: sec.l, l2: BODY_INFO[b].l })} resetKeys={[sec.id, t?.id]}>{BODIES[b]()}</ErrorBoundary>
     </div>
   );
   return (
@@ -374,12 +376,12 @@ function Page({ sec, tab, reveal, moreOpen, setMoreOpen, setTab }: { sec: Sectio
 function SearchResults({ q, hits, pick }: { q: string; hits: SettingsHit[]; pick: (t: SettingsTarget) => void }) {
   return (
     <>
-      <h1 className="sp-title q">搜索「{q.trim()}」</h1>
-      <div className="sp-lead">{hits.length ? `${hits.length} 条结果` : '没有匹配的设置。试试别的说法，或者换成英文 / 旧名称。'}</div>
+      <h1 className="sp-title q">{tr('搜索「{q}」', { q: q.trim() })}</h1>
+      <div className="sp-lead">{hits.length ? tr('{hitsCount} 条结果', { hitsCount: hits.length }) : tr('没有匹配的设置。试试别的说法，或者换成英文 / 旧名称。')}</div>
       <div className="sp-hits">
         {hits.map((h) => h.kind === 'entry' ? (
           <div key={`e:${h.entry.id}`} className="sp-hit">
-            <button className="sp-crumb" title="打开这一页" onClick={() => pick({ section: h.section.id, reveal: h.entry.id, more: h.entry.more })}>{h.crumb}</button>
+            <button className="sp-crumb" title={tr('打开这一页')} onClick={() => pick({ section: h.section.id, reveal: h.entry.id, more: h.entry.more })}>{h.crumb}</button>
             <div className="sp-card"><EntryRow sec={h.section} e={h.entry} /></div>
           </div>
         ) : (

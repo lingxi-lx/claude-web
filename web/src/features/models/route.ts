@@ -1,5 +1,6 @@
 import type { AgentKind, Provider } from '@shared';
 import { AGENTS_SETTING_PATH, OWN_PROVIDER, type ModelMenuItem } from './menu';
+import { tr } from '@/i18n';
 
 /** What picking an entry in a live session's model menu does. */
 export type PickAction =
@@ -26,7 +27,7 @@ export interface PickContext {
  * with history behind it the next turn pays full price for the whole context once — say so.
  */
 export function switchedNote(label: string, hasContext: boolean): string {
-  return hasContext ? `已切换到 ${label}（提示缓存不跨模型 / 供应商，下一轮会按全价重新计费全部上下文）` : `已切换到 ${label}`;
+  return hasContext ? tr('已切换到 {label}（提示缓存不跨模型 / 供应商，下一轮会按全价重新计费全部上下文）', { label }) : tr('已切换到 {label}', { label });
 }
 
 /**
@@ -37,7 +38,7 @@ export function routePick(it: ModelMenuItem, c: PickContext): PickAction {
   if (it.unavailable) return { kind: 'error', message: it.unavailable };
   if (it.agent && it.agent !== c.agent) {
     return c.remote
-      ? { kind: 'error', message: '其它机器上的对话在这里只能换模型；要交给本机的 Agent，用右上角 ··· 里的「交给本机的 Agent 继续」' }
+      ? { kind: 'error', message: tr('其它机器上的对话在这里只能换模型；要交给本机的 Agent，用右上角 ··· 里的「交给本机的 Agent 继续」') }
       : { kind: 'handover', agent: it.agent, model: it.model || undefined };
   }
   const own = it.providerId === OWN_PROVIDER;
@@ -47,10 +48,10 @@ export function routePick(it: ModelMenuItem, c: PickContext): PickAction {
     if (!model) {
       if (own && c.agent === 'claude') model = 'default';
       else if (own) {
-        if (!c.agentDefault) return { kind: 'error', message: `这个 Agent 没有配置默认模型（${AGENTS_SETTING_PATH} 里可以设），请选一个具体的模型` };
+        if (!c.agentDefault) return { kind: 'error', message: tr('这个 Agent 没有配置默认模型（{AGENTS_SETTING_PATH} 里可以设），请选一个具体的模型', { AGENTS_SETTING_PATH }) };
         model = c.agentDefault;
       } else {
-        if (!profile?.defaultModel) return { kind: 'error', message: `供应商「${profile?.name ?? it.providerName}」没有设默认模型，请选一个具体的模型` };
+        if (!profile?.defaultModel) return { kind: 'error', message: tr('供应商「{name}」没有设默认模型，请选一个具体的模型', { name: profile?.name ?? it.providerName }) };
         model = profile.defaultModel;
       }
     }

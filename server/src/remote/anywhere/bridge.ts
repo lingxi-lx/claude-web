@@ -16,9 +16,10 @@ import {
   text,
   type Link,
 } from './core/index.js';
+import { tr } from '../../i18n/index.js';
 
 /** The 413 body for /api/file and /api/attachments over the slow relay (the phone shows it where the preview would be). */
-export const RELAY_REFUSED = '慢速转发时不能预览 / 上传文件';
+export const RELAY_REFUSED = tr('慢速转发时不能预览 / 上传文件');
 /** Largest response sent over the slow relay; anything longer is a 413. */
 export const RELAY_MAX_RESPONSE_BYTES = 2_097_152;
 /**
@@ -28,10 +29,10 @@ export const RELAY_MAX_RESPONSE_BYTES = 2_097_152;
 export const RELAY_MAX_HELD = 4;
 /** A held relay response that gets no data from the listener this long fails (ERR) and frees its turn. */
 export const RELAY_HELD_IDLE_MS = 60_000;
-export const RELAY_TOO_LARGE = '慢速转发时单个响应不能超过 2 MB';
-export const PAIRING_ONLY = '还没配对，只能先配对';
+export const RELAY_TOO_LARGE = tr('慢速转发时单个响应不能超过 2 MB');
+export const PAIRING_ONLY = tr('还没配对，只能先配对');
 /** The 403 body for a request on a device's link that presents a token of someone else (another device, the main one). */
-export const NOT_THIS_DEVICE = '这个令牌不是这台设备的';
+export const NOT_THIS_DEVICE = tr('这个令牌不是这台设备的');
 /** Streams open at once on one link; past it a new one is refused. */
 export const BRIDGE_MAX_STREAMS = 256;
 const MAX_TOKEN_BYTES = 1024;

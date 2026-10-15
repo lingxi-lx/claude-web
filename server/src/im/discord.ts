@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import WebSocket from 'ws';
 import { proxyAgentFor } from '../net/proxy.js';
 import { chunk, jsonFetch, type AdapterState, type ImAdapter, type OutboundOptions } from './types.js';
+import { tr } from '../i18n/index.js';
 
 const API = 'https://discord.com/api/v10';
 const INTENTS = (1 << 0) | (1 << 9) | (1 << 12) | (1 << 15); // GUILDS | GUILD_MESSAGES | DIRECT_MESSAGES | MESSAGE_CONTENT
@@ -65,7 +66,7 @@ export class DiscordAdapter extends EventEmitter implements ImAdapter {
         default: break;
       }
     });
-    ws.on('close', () => { if (ws !== this.ws) return; if (this.hb) clearInterval(this.hb); this.hb = null; if (this.running) { this.running = false; this.setState('error', '连接断开，重连中…'); this.scheduleReconnect(5000); } });
+    ws.on('close', () => { if (ws !== this.ws) return; if (this.hb) clearInterval(this.hb); this.hb = null; if (this.running) { this.running = false; this.setState('error', tr('连接断开，重连中…')); this.scheduleReconnect(5000); } });
     ws.on('error', (e) => this.setState('error', e.message));
   }
 
@@ -90,7 +91,7 @@ export class DiscordAdapter extends EventEmitter implements ImAdapter {
   async stop() { this.running = false; this.wanted = false; if (this.retry) clearTimeout(this.retry); this.retry = null; if (this.hb) clearInterval(this.hb); this.hb = null; try { this.ws?.close(); } catch { /* ignore */ } this.ws = null; this.setState('stopped'); }
 
   async send(chatId: string, text: string, o: OutboundOptions = {}) {
-    const parts = chunk(text || '(空)', this.maxLen);
+    const parts = chunk(text || tr('(空)'), this.maxLen);
     for (let i = 0; i < parts.length; i++) {
       const body: any = { content: parts[i] };
       if (i === parts.length - 1 && o.buttons?.length) body.components = [{ type: 1, components: o.buttons.map((b) => ({ type: 2, style: b.danger ? 4 : 1, label: b.label.slice(0, 80), custom_id: b.id.slice(0, 100) })) }];

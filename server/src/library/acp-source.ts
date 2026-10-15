@@ -6,6 +6,7 @@ import type { AgentKind, SessionSummary, SourceCaps, SourceStatus } from '../pro
 import { JsonRpcProcess } from '../agents/jsonrpc.js';
 import { libraryId } from './ids.js';
 import { isNotInstalled, type SessionSource } from './types.js';
+import { tr } from '../i18n/index.js';
 
 const IDLE_MS = 300_000; // library-only process, never shared with a live chat session
 const INIT_TIMEOUT_MS = 30_000;
@@ -74,7 +75,7 @@ export class AcpListSource implements SessionSource {
         }, INIT_TIMEOUT_MS);
         // close() ran while initialize was in flight: this process belongs to nobody now — kill it
         // and refuse to adopt it, rather than silently leaving it running past close().
-        if (gen !== this.gen) { rpc.kill(); throw new Error('AcpListSource：启动完成前已被 close()'); }
+        if (gen !== this.gen) { rpc.kill(); throw new Error(tr('AcpListSource：启动完成前已被 close()')); }
         const agentCaps = r?.agentCapabilities ?? {};
         this.probed = {
           hasList: !!agentCaps.sessionCapabilities?.list,
@@ -109,7 +110,7 @@ export class AcpListSource implements SessionSource {
     // Cached: a prior status()/list() already probed this agent's capabilities.
     const cached = this.getProbed();
     if (cached) {
-      if (!cached.hasList) return { ...base, installed: true, detected: true, enabled: false, version: cached.version, disabledReason: '这个 Agent 不支持列出对话' };
+      if (!cached.hasList) return { ...base, installed: true, detected: true, enabled: false, version: cached.version, disabledReason: tr('这个 Agent 不支持列出对话') };
       return { ...base, installed: true, detected: true, enabled: true, version: cached.version };
     }
     try {
@@ -118,7 +119,7 @@ export class AcpListSource implements SessionSource {
       if (!probed?.hasList) {
         // Not supported: don't leave the process running just to have checked this once.
         this.killRpc();
-        return { ...base, installed: true, detected: true, enabled: false, version: probed?.version, disabledReason: '这个 Agent 不支持列出对话' };
+        return { ...base, installed: true, detected: true, enabled: false, version: probed?.version, disabledReason: tr('这个 Agent 不支持列出对话') };
       }
       this.armIdle();
       return { ...base, installed: true, detected: true, enabled: true, version: probed.version };

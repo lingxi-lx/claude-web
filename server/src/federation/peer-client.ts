@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import WebSocket from 'ws';
 import type { ClientRequest, ServerEvent, WireDown } from '../protocol.js';
 import { SELF_PEER, SERVER_ID_CONFLICT, type PeerState } from './types.js';
+import { tr } from '../i18n/index.js';
 
 /** Where to reach the peer right now. SSH peers resolve this by (re)opening their tunnel. */
 export interface PeerEndpoint { url: string; token: string }
@@ -65,17 +66,17 @@ export class PeerClient extends EventEmitter {
     this.epoch++;
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.retryTimer = null;
-    this.teardown(new Error('连接已关闭'));
+    this.teardown(new Error(tr('连接已关闭')));
     this.setState(state, state === 'disabled' ? '' : this.error);
   }
 
   /** Send a request; rejects at once when not connected. `via` is the loop guard chain (ours appended by the caller). */
   request<T = unknown>(req: ClientRequest, via: string[], timeoutMs = 60_000): Promise<T> {
     const ws = this.ws;
-    if (!ws || ws.readyState !== WebSocket.OPEN || this.state !== 'online') return Promise.reject(new Error(this.error || '机器离线'));
+    if (!ws || ws.readyState !== WebSocket.OPEN || this.state !== 'online') return Promise.reject(new Error(this.error || tr('机器离线')));
     const id = `f${++this.seq}`;
     return new Promise<T>((res, rej) => {
-      const timer = setTimeout(() => { this.pending.delete(id); rej(new Error(`远端 ${timeoutMs / 1000}s 没有回应（${req.kind}）`)); }, timeoutMs);
+      const timer = setTimeout(() => { this.pending.delete(id); rej(new Error(tr('远端 {timeoutMs}s 没有回应（{kind}）', { timeoutMs: timeoutMs / 1000, kind: req.kind }))); }, timeoutMs);
       this.pending.set(id, { res: res as (v: unknown) => void, rej, timer });
       ws.send(JSON.stringify({ type: 'request', request: { id, req, via } }), (err) => {
         if (!err) return;
@@ -163,7 +164,7 @@ export class PeerClient extends EventEmitter {
         this.pending.delete(m.reply.id);
         clearTimeout(p.timer);
         if (m.reply.ok) p.res(m.reply.data);
-        else p.rej(new Error(m.reply.error ?? '远端出错'));
+        else p.rej(new Error(m.reply.error ?? tr('远端出错')));
         return;
       }
       if (m.type !== 'event') return;
@@ -197,17 +198,17 @@ export class PeerClient extends EventEmitter {
     ws.on('close', () => {
       clearTimeout(helloTimer);
       if (this.ws !== ws) return; // superseded / stopped
-      this.teardown(new Error('与远端的连接断开了'));
+      this.teardown(new Error(tr('与远端的连接断开了')));
       if (this.stopped) return;
       if (opened) {
-        this.setState('offline', '连接断开，正在重连');
+        this.setState('offline', tr('连接断开，正在重连'));
         this.scheduleRetry();
         return;
       }
       void this.diagnose(ep).then((why) => {
         if (epoch !== this.epoch || this.stopped) return;
-        if (why === 'unauthorized') { this.stopped = true; this.setState('unauthorized', '令牌失效，请重新配对'); return; }
-        this.setState('offline', '连不上这台机器');
+        if (why === 'unauthorized') { this.stopped = true; this.setState('unauthorized', tr('令牌失效，请重新配对')); return; }
+        this.setState('offline', tr('连不上这台机器'));
         this.scheduleRetry();
       });
     });

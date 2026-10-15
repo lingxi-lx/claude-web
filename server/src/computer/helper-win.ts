@@ -20,6 +20,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
+import { tr } from '../i18n/index.js';
 
 /** C# 5 (what Windows PowerShell's Add-Type compiles): no interpolation, no `?.`, no `out var`. */
 const CSHARP = [
@@ -770,7 +771,7 @@ export function helperScriptFile(dir: string): string | null {
 export function helperScriptPath(): string {
   const tmpDir = path.join(os.tmpdir(), 'claude-web-runtime', 'computer');
   const f = helperScriptFile(computerDir()) ?? helperScriptFile(tmpDir);
-  if (!f) throw new HelperError(`写不了辅助脚本（试过 ${computerDir()} 和 ${tmpDir}）`);
+  if (!f) throw new HelperError(tr('写不了辅助脚本（试过 {computerDir} 和 {tmpDir}）', { computerDir: computerDir(), tmpDir }));
   return f;
 }
 
@@ -823,7 +824,7 @@ export class WinHelper implements HelperLike {
 
   /** Start the helper if it is not running. The first call pays for PowerShell and the C# compile (about a second). */
   start(): Promise<HelperHello> {
-    if (this.closed) return Promise.reject(new HelperError('已经关闭'));
+    if (this.closed) return Promise.reject(new HelperError(tr('已经关闭')));
     if (this.ready && this.child) return this.ready;
     const t0 = Date.now();
     let script: string;
@@ -835,7 +836,7 @@ export class WinHelper implements HelperLike {
     try {
       child = spawn(powershellExe(), ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env });
     } catch (e) {
-      return Promise.reject(new HelperError(`启动不了 PowerShell：${(e as Error).message}`));
+      return Promise.reject(new HelperError(tr('启动不了 PowerShell：{message}', { message: (e as Error).message })));
     }
     this.child = child;
     this.stderrTail = '';
@@ -859,11 +860,11 @@ export class WinHelper implements HelperLike {
       this.ready = null;
       this.hello = null;
       const said = this.stderrTail.replace(/\s+/g, ' ').trim().slice(-600);
-      const err = new HelperError(`${why}${said ? `（PowerShell 输出：${said}）` : ''}`);
+      const err = new HelperError(`${why}${said ? tr('（PowerShell 输出：{said}）', { said }) : ''}`);
       for (const [id, w] of this.waiters) { clearTimeout(w.timer); w.reject(err); this.waiters.delete(id); }
     };
-    child.on('error', (e) => gone(`启动不了 PowerShell：${e.message}`));
-    child.on('exit', (code) => gone(`辅助进程退出了（${code ?? '被结束'}）`));
+    child.on('error', (e) => gone(tr('启动不了 PowerShell：{message}', { message: e.message })));
+    child.on('exit', (code) => gone(tr('辅助进程退出了（{code}）', { code: code ?? tr('被结束') })));
     // the helper compares the path as Windows reports it: backslashes, no quotes
     const selfExe = (this.opts.selfExe ?? '').trim().replace(/^"|"$/g, '').replace(/\//g, '\\');
     this.ready = this.send('hello', { selfExe, selfTitle: this.opts.selfTitle ?? '' }, START_TIMEOUT_MS).then((r) => {
@@ -891,14 +892,14 @@ export class WinHelper implements HelperLike {
 
   private send(op: string, args: Record<string, unknown>, timeoutMs: number): Promise<Record<string, any>> {
     const child = this.child;
-    if (!child || !child.stdin || child.stdin.destroyed) return Promise.reject(new HelperError('辅助进程没有在运行'));
+    if (!child || !child.stdin || child.stdin.destroyed) return Promise.reject(new HelperError(tr('辅助进程没有在运行')));
     const id = ++this.seq;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.waiters.delete(id);
         // it may be stuck in the middle of something: a fresh one next time
         if (this.child === child) this.kill();
-        reject(new HelperError(`辅助进程 ${Math.round(timeoutMs / 1000)} 秒没有回答（${op}）`));
+        reject(new HelperError(tr('辅助进程 {timeoutMs} 秒没有回答（{op}）', { timeoutMs: Math.round(timeoutMs / 1000), op })));
       }, timeoutMs);
       this.waiters.set(id, { resolve, reject, timer, op, at: Date.now() });
       child.stdin!.write(`${asciiJson({ id, op, ...args })}\n`);

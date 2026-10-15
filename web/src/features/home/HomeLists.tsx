@@ -8,6 +8,7 @@ import { EMPTY } from '@/ui/terms';
 import { sessionDiffStat } from '@/model/diffstat';
 import { openAutomation } from '@/features/automation/state';
 import { homeRows, homeStatus, homeTabs, type HomeRow, type HomeStatus, type HomeTab } from './model';
+import { tr } from '@/i18n';
 
 function StatusEnd({ st }: { st: HomeStatus | null }) {
   if (!st) return null;
@@ -62,7 +63,7 @@ export function HomeLists({ onOpen }: { onOpen: (sessionId: string) => void }) {
   };
   const showAll = tab === 'schedules' || more > 0;
   return (
-    <section className="home-lists" aria-label="最近">
+    <section className="home-lists" aria-label={tr('最近')}>
       <div className="home-tabs" role="tablist">
         {homeTabs({ schedules: schedules.length }).map((t) => (
           <button key={t.id} role="tab" aria-selected={tab === t.id} className={clsx('ht', tab === t.id && 'on')} data-tab={t.id} onClick={() => setTab(t.id)}>
@@ -70,7 +71,7 @@ export function HomeLists({ onOpen }: { onOpen: (sessionId: string) => void }) {
           </button>
         ))}
         <span className="grow" />
-        {showAll && <button className="ht all" onClick={all} title={tab === 'schedules' ? '在「自动化」里管理定时任务' : tab === 'archived' ? '在侧栏里显示已归档的对话' : '搜索全部对话'}>{tab === 'schedules' ? '管理' : `查看全部${more ? ` ${more + rows.length}` : ''}`}</button>}
+        {showAll && <button className="ht all" onClick={all} title={tab === 'schedules' ? tr('在「自动化」里管理定时任务') : tab === 'archived' ? tr('在侧栏里显示已归档的对话') : tr('搜索全部对话')}>{tab === 'schedules' ? tr('管理') : tr('查看全部{v}', { v: more ? ` ${more + rows.length}` : '' })}</button>}
       </div>
       <div className="home-list" role="tabpanel">
         {rows.map((r) => {
@@ -79,7 +80,7 @@ export function HomeLists({ onOpen }: { onOpen: (sessionId: string) => void }) {
         })}
         {!rows.length && (
           tab === 'schedules'
-            ? <EmptyState e={EMPTY.schedules} action={<button className="btn sm" onClick={() => openAutomation('schedules')}><Icon name="tasks" size={13} /> 去「自动化」设一个</button>} />
+            ? <EmptyState e={EMPTY.schedules} action={<button className="btn sm" onClick={() => openAutomation('schedules')}><Icon name="tasks" size={13} /> {tr('去「自动化」设一个')}</button>} />
             : <EmptyState e={tab === 'recent' ? EMPTY.recent : EMPTY.archived} />
         )}
       </div>

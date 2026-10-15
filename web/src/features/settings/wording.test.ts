@@ -100,6 +100,9 @@ describe('settings parts are drawn by the right component (BODIES)', () => {
 
 type N = { type: string; [k: string]: any };
 
+/** `{name}`: where a value goes in a `tr('…')` text; its name is code, not something on screen. */
+const PLACEHOLDER = /\{[A-Za-z_]\w*\}/g;
+
 /** Attributes nobody reads on screen by default: tooltips, accessible names, class names, keys, data-*. */
 const HIDDEN_ATTR = /^(title|aria-label|className|key|data-[\w-]+)$/;
 const attrName = (n: N): string => (n.name?.type === 'JSXNamespacedName' ? `${n.name.namespace.name}:${n.name.name.name}` : n.name?.name ?? '');
@@ -137,10 +140,10 @@ function textsOf(file: string, src: string, opts: { tooltips?: boolean; skipKeys
         if (String(n.value).trim()) out.push(n.value);
         return;
       case 'Literal':
-        if (typeof n.value === 'string') out.push(n.value);
+        if (typeof n.value === 'string') out.push(n.value.replace(PLACEHOLDER, ''));
         return;
       case 'TemplateElement':
-        out.push(n.value?.cooked ?? n.value?.raw ?? '');
+        out.push((n.value?.cooked ?? n.value?.raw ?? '').replace(PLACEHOLDER, ''));
         return;
     }
     for (const k of Object.keys(n)) if (k !== 'type' && k !== 'start' && k !== 'end') walk(n[k]);
@@ -325,7 +328,7 @@ describe('default screens outside settings speak the interface vocabulary (phase
 
   it('the model menu searches 「模型或供应商」, and a picked provider with no default model says 供应商', () => {
     expect(textsOf('features/models/ModelMenu.tsx', read('features/models/ModelMenu.tsx'))).toContain('搜索模型或供应商…');
-    expect(read('features/models/route.ts')).toMatch(/供应商「\$\{/);
+    expect(read('features/models/route.ts')).toMatch(/供应商「\{/);
   });
 });
 
@@ -347,7 +350,8 @@ describe('the whole interface: 对话 not 会话, no implementation words by def
     }
     return out;
   };
-  const ALL = fs.readdirSync(SRC, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walkDir(e.name) : /\.tsx?$/.test(e.name) && !/\.test\./.test(e.name) ? [e.name] : []));
+  // the English catalogs hold the Chinese texts as keys (and English that never meets the Chinese word lists)
+  const ALL = fs.readdirSync(SRC, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walkDir(e.name) : /\.tsx?$/.test(e.name) && !/\.test\./.test(e.name) ? [e.name] : [])).filter((f) => !/^(i18n|shell)\/en\.ts$/.test(f));
   const SKIP_KEYS = new Set(['keywords', 'old', 'was']);
   /** The advanced settings pages' own files, and the ids-only table. */
   const NOT_DEFAULT = [S('DiagnosticsSection.tsx'), S('UpdateSection.tsx'), S('ToolsSection.tsx'), S('EnvEditor.tsx'), 'features/composer/ids.ts'];

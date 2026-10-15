@@ -7,6 +7,7 @@ import readline from 'node:readline';
 import { EventEmitter } from 'node:events';
 import chokidar from 'chokidar';
 import type { FsEntry, FsOpenResult, FsStat } from '../protocol.js';
+import { tr } from '../i18n/index.js';
 
 const execFileAsync = promisify(execFile);
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
@@ -47,7 +48,7 @@ export class FilesService extends EventEmitter {
 
   async open(p: string): Promise<FsOpenResult> {
     const st = await fs.stat(p);
-    if (st.isDirectory()) throw new Error('是目录');
+    if (st.isDirectory()) throw new Error(tr('是目录'));
     const buf = await fs.readFile(p);
     const binary = looksBinary(buf);
     if (binary) return { text: '', mtime: st.mtimeMs, size: st.size, binary: true };
@@ -60,7 +61,7 @@ export class FilesService extends EventEmitter {
     if (expectMtime !== undefined) {
       const st = await fs.stat(p).catch(() => null);
       if (st && Math.abs(st.mtimeMs - expectMtime) > 1) {
-        const e: any = new Error('文件在磁盘上已被修改');
+        const e: any = new Error(tr('文件在磁盘上已被修改'));
         e.code = 'CONFLICT';
         e.mtime = st.mtimeMs;
         throw e;
@@ -75,18 +76,18 @@ export class FilesService extends EventEmitter {
   async mkdir(p: string) { await fs.mkdir(p, { recursive: true }); }
 
   async create(p: string, text = '') {
-    if (await fs.stat(p).catch(() => null)) throw new Error('已存在同名文件');
+    if (await fs.stat(p).catch(() => null)) throw new Error(tr('已存在同名文件'));
     await fs.mkdir(path.dirname(p), { recursive: true });
     await fs.writeFile(p, text, 'utf8');
   }
 
   async rename(from: string, to: string) {
-    if (await fs.stat(to).catch(() => null)) throw new Error('目标已存在');
+    if (await fs.stat(to).catch(() => null)) throw new Error(tr('目标已存在'));
     await fs.rename(from, to);
   }
 
   async copy(from: string, to: string) {
-    if (await fs.stat(to).catch(() => null)) throw new Error('目标已存在');
+    if (await fs.stat(to).catch(() => null)) throw new Error(tr('目标已存在'));
     await fs.cp(from, to, { recursive: true });
   }
 

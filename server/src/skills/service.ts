@@ -5,6 +5,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { claudeDir } from '../sessions/service.js';
 import { dataDir } from '../files/service.js';
+import { tr } from '../i18n/index.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -21,7 +22,7 @@ export interface SkillInfo { name: string; path: string; scope: 'user' | 'projec
 export class SkillsService {
   dir(scope: 'user' | 'project', cwd?: string) {
     if (scope === 'project') {
-      if (!cwd) throw new Error('项目级 skill 需要工作目录');
+      if (!cwd) throw new Error(tr('项目级 skill 需要工作目录'));
       return path.join(cwd, '.claude', 'skills');
     }
     return path.join(claudeDir, 'skills');
@@ -64,12 +65,12 @@ export class SkillsService {
     if (/^(git@|https?:\/\/|ssh:\/\/)/.test(s)) return { kind: 'git', url: s };
     m = /^([\w.-]+)\/([\w.-]+)(?:\/(.+))?$/.exec(s);
     if (m) return { kind: 'git', url: `https://github.com/${m[1]}/${m[2]}.git`, sub: m[3] };
-    throw new Error('无法识别的来源，支持 owner/repo、owner/repo/子目录、GitHub 链接或本地路径');
+    throw new Error(tr('无法识别的来源，支持 owner/repo、owner/repo/子目录、GitHub 链接或本地路径'));
   }
 
   private async copySkill(from: string, targetDir: string, name: string): Promise<string> {
     const dest = path.join(targetDir, name);
-    if (await fs.stat(dest).catch(() => null)) throw new Error(`已存在同名 skill：${name}`);
+    if (await fs.stat(dest).catch(() => null)) throw new Error(tr('已存在同名 skill：{name}', { name }));
     await fs.mkdir(targetDir, { recursive: true });
     await fs.cp(from, dest, { recursive: true, filter: (p) => !p.includes(`${path.sep}.git${path.sep}`) && !p.endsWith(`${path.sep}.git`) });
     return dest;
@@ -80,7 +81,7 @@ export class SkillsService {
     const target = this.dir(spec.scope, spec.cwd);
     const src = this.parseSource(spec.source);
     if (src.kind === 'local') {
-      if (!(await fs.stat(path.join(src.path, 'SKILL.md')).catch(() => null))) throw new Error('目录里没有 SKILL.md');
+      if (!(await fs.stat(path.join(src.path, 'SKILL.md')).catch(() => null))) throw new Error(tr('目录里没有 SKILL.md'));
       return [await this.copySkill(src.path, target, spec.name ?? path.basename(src.path))];
     }
     const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'cw-skill-'));
@@ -103,7 +104,7 @@ export class SkillsService {
         }
       };
       await scan(root, 0);
-      if (!found.length) throw new Error('仓库里没有找到 SKILL.md');
+      if (!found.length) throw new Error(tr('仓库里没有找到 SKILL.md'));
       const out: string[] = [];
       for (const p of found) out.push(await this.copySkill(p, target, path.basename(p)).catch((e) => { throw e; }));
       return out;
@@ -114,11 +115,11 @@ export class SkillsService {
 
   async create(o: { name: string; scope: 'user' | 'project'; cwd?: string; description?: string }): Promise<string> {
     const name = o.name.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-');
-    if (!name) throw new Error('名称无效');
+    if (!name) throw new Error(tr('名称无效'));
     const dest = path.join(this.dir(o.scope, o.cwd), name);
-    if (await fs.stat(dest).catch(() => null)) throw new Error('已存在同名 skill');
+    if (await fs.stat(dest).catch(() => null)) throw new Error(tr('已存在同名 skill'));
     await fs.mkdir(dest, { recursive: true });
-    const md = `---\nname: ${name}\ndescription: ${o.description ?? '（一句话说明什么时候用这个 skill）'}\n---\n\n# ${name}\n\n## 何时使用\n\n- \n\n## 步骤\n\n1. \n`;
+    const md = tr("---\nname: {name}\ndescription: {description}\n---\n\n# {name2}\n\n## 何时使用\n\n- \n\n## 步骤\n\n1. \n", { name, description: o.description ?? tr('（一句话说明什么时候用这个 skill）'), name2: name });
     await fs.writeFile(path.join(dest, 'SKILL.md'), md, 'utf8');
     return dest;
   }
@@ -126,7 +127,7 @@ export class SkillsService {
   async remove(p: string) {
     const norm = path.resolve(p);
     const ok = [this.dir('user')].some((d) => norm.startsWith(path.resolve(d) + path.sep)) || /[\\/]\.claude[\\/]skills[\\/]/.test(norm);
-    if (!ok) throw new Error('只允许删除 skills 目录下的文件夹');
+    if (!ok) throw new Error(tr('只允许删除 skills 目录下的文件夹'));
     await fs.rm(norm, { recursive: true, force: true });
   }
 

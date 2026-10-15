@@ -2,6 +2,7 @@
 // 浅色 / 深色 / 跟随系统, and swatches on 设置 → 外观 instead of a dropdown of theme ids). Pure: no store import (the
 // node unit tests would trip over it), `Theme` is a type only.
 import type { Theme } from '@/store';
+import { tr } from '@/i18n';
 
 export type ThemeChoice = Theme | 'system';
 
@@ -22,10 +23,10 @@ export const THEME_PREVIEW: Record<Theme, ThemeSwatch> = {
 };
 
 export const THEME_LABEL: Record<ThemeChoice, string> = {
-  system: '跟随系统',
-  light: '浅色',
-  dark: '深色',
-  paper: '纸张',
+  system: tr('跟随系统'),
+  light: tr('浅色'),
+  dark: tr('深色'),
+  paper: tr('纸张'),
   dracula: 'Dracula',
   nord: 'Nord',
   'tokyo-night': 'Tokyo Night',

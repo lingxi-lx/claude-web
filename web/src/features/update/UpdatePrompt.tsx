@@ -3,6 +3,7 @@ import { desktop } from '@/desktop';
 import { useStore } from '@/store';
 import { imeComposing } from '@/ui/ime';
 import { promptCopy, promptFor, type UpdateState } from './model';
+import { tr } from '@/i18n';
 
 /** 稍后, per version, for the life of this window (a restart asks again). */
 const snoozed: Record<string, number> = {};
@@ -44,11 +45,11 @@ export function UpdatePrompt() {
   const install = async () => {
     setBusy(true);
     try {
-      if (!(await d.installUpdate?.())) { toast('更新还没准备好，稍后再试'); setBusy(false); }
+      if (!(await d.installUpdate?.())) { toast(tr('更新还没准备好，稍后再试')); setBusy(false); }
     } catch (e: any) { toast(e?.message ?? String(e)); setBusy(false); }
   };
   const download = () => { if (p.url) { void d.openExternal(p.url); setOpened(p.version); } };
-  const copyLink = () => { if (p.url) void navigator.clipboard?.writeText(p.url).then(() => toast('下载链接已复制', true), () => toast(p.url!)); };
+  const copyLink = () => { if (p.url) void navigator.clipboard?.writeText(p.url).then(() => toast(tr('下载链接已复制'), true), () => toast(p.url!)); };
   const afterOpen = opened === p.version && p.kind === 'download';
 
   return (
@@ -56,17 +57,17 @@ export function UpdatePrompt() {
       <div className="modal update-prompt" role="dialog" aria-modal="true" aria-label={c.title} data-kind={p.kind} data-required={p.required || undefined}>
         <h3>{c.title}</h3>
         <p className="sub">{afterOpen ? c.after : c.lead}</p>
-        {p.notes && !afterOpen && <div className="up-notes" tabIndex={0} aria-label="更新内容">{p.notes}</div>}
+        {p.notes && !afterOpen && <div className="up-notes" tabIndex={0} aria-label={tr('更新内容')}>{p.notes}</div>}
         {c.warn && <p className="up-warn">{c.warn}</p>}
         <div className="up-foot">
-          {p.page && <button type="button" className="link" onClick={() => void d.openExternal(p.page!)}>查看完整更新内容</button>}
-          {afterOpen && p.url && <button type="button" className="link" onClick={copyLink} title={p.url}>复制下载链接</button>}
+          {p.page && <button type="button" className="link" onClick={() => void d.openExternal(p.page!)}>{tr('查看完整更新内容')}</button>}
+          {afterOpen && p.url && <button type="button" className="link" onClick={copyLink} title={p.url}>{tr('复制下载链接')}</button>}
           <span className="grow" />
-          {!p.required && <button type="button" className="btn ghost" data-act="later" onClick={later}>{afterOpen ? '好的' : '稍后'}</button>}
+          {!p.required && <button type="button" className="btn ghost" data-act="later" onClick={later}>{afterOpen ? tr('好的') : tr('稍后')}</button>}
           {afterOpen
-            ? <button ref={primary} type="button" className="btn primary" data-act="quit" onClick={() => void d.quit?.()}>退出软件</button>
+            ? <button ref={primary} type="button" className="btn primary" data-act="quit" onClick={() => void d.quit?.()}>{tr('退出软件')}</button>
             : p.kind === 'ready'
-              ? <button ref={primary} type="button" className="btn primary" data-act="install" disabled={busy} onClick={() => void install()}>{busy ? '正在重启…' : c.primary}</button>
+              ? <button ref={primary} type="button" className="btn primary" data-act="install" disabled={busy} onClick={() => void install()}>{busy ? tr('正在重启…') : c.primary}</button>
               : <button ref={primary} type="button" className="btn primary" data-act="download" onClick={download}>{c.primary}</button>}
         </div>
         {c.later && !afterOpen && <p className="up-later">{c.later}</p>}

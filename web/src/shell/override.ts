@@ -7,6 +7,7 @@
 // one only works where the page is served with a CSP that allows it.
 import { DEFAULT_BROKERS, DEFAULT_STUN, brokerEntries, stunEntries, type BrokerDef } from '@anywhere';
 import type { PcLists } from './pair-link';
+import { tr } from './i18n';
 
 export const BROKERS_KEY = 'cw.shell.brokers';
 export const STUN_KEY = 'cw.shell.stun';
@@ -45,6 +46,6 @@ export function stunOverride(raw: string | null): string[] | null {
 
 /** The info line for the console when an override is in use (which keys, how many entries each); null when none is. */
 export function overrideNote(brokers: BrokerDef[] | null, stun: string[] | null): string | null {
-  const used = [brokers && `${BROKERS_KEY}（${brokers.length} 个）`, stun && `${STUN_KEY}（${stun.length} 个）`].filter(Boolean);
-  return used.length ? `[shell] 使用 localStorage 里的自定义列表：${used.join('、')}` : null;
+  const used = [brokers && tr('{BROKERS_KEY}（{brokersCount} 个）', { BROKERS_KEY, brokersCount: brokers.length }), stun && tr('{STUN_KEY}（{stunCount} 个）', { STUN_KEY, stunCount: stun.length })].filter(Boolean);
+  return used.length ? tr('[shell] 使用 localStorage 里的自定义列表：{used}', { used: used.join('、') }) : null;
 }

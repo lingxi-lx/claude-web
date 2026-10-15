@@ -2,6 +2,7 @@
 // Pure functions, no DOM / store imports, so it can be unit tested.
 
 import type { IconName } from '@/ui/icons';
+import { tr } from '@/i18n';
 
 export type PanelId = 'tasks' | 'files' | 'explorer' | 'usage' | 'config' | 'terminal' | 'inspector' | 'mission' | 'goals' | 'android' | 'memory' | 'orchestra' | 'board' | 'browser' | 'cafe';
 /** A chat tile's view: the conversation (`live`) or one of the per-session workbench views. */
@@ -24,23 +25,23 @@ export type PanelTier = 'core' | 'extra' | 'workbench';
  * `rail` marks the panels the workbench icon rail surfaces directly; the rest live in menus.
  */
 export const PANELS: { id: PanelId; title: string; icon: IconName; tier: PanelTier; rail?: boolean; keepAlive?: boolean }[] = [
-  { id: 'mission', title: '总览', icon: 'mission', tier: 'workbench', rail: true },
-  { id: 'goals', title: '目标', icon: 'goals', tier: 'extra', rail: true },
-  { id: 'orchestra', title: '编排', icon: 'orchestra', tier: 'extra', rail: true },
-  { id: 'memory', title: '记忆', icon: 'memory', tier: 'workbench', rail: true },
-  { id: 'tasks', title: '任务', icon: 'tasks', tier: 'core', rail: true },
+  { id: 'mission', title: tr('总览'), icon: 'mission', tier: 'workbench', rail: true },
+  { id: 'goals', title: tr('目标'), icon: 'goals', tier: 'extra', rail: true },
+  { id: 'orchestra', title: tr('编排'), icon: 'orchestra', tier: 'extra', rail: true },
+  { id: 'memory', title: tr('记忆'), icon: 'memory', tier: 'workbench', rail: true },
+  { id: 'tasks', title: tr('任务'), icon: 'tasks', tier: 'core', rail: true },
   // 审阅 grew out of the 文件改动 panel and keeps its id: `panel.files` / Ctrl+Shift+2 and saved layouts still open it
-  { id: 'files', title: '审阅', icon: 'diff', tier: 'core', rail: true },
-  { id: 'explorer', title: '文件', icon: 'folder', tier: 'core' },
-  { id: 'usage', title: '用量', icon: 'usage', tier: 'extra' },
-  { id: 'config', title: '配置中心', icon: 'config', tier: 'workbench' },
+  { id: 'files', title: tr('审阅'), icon: 'diff', tier: 'core', rail: true },
+  { id: 'explorer', title: tr('文件'), icon: 'folder', tier: 'core' },
+  { id: 'usage', title: tr('用量'), icon: 'usage', tier: 'extra' },
+  { id: 'config', title: tr('配置中心'), icon: 'config', tier: 'workbench' },
   // keepAlive: the tab holds a live process (a pty) — toggling it off hides the panel instead of closing the tab
-  { id: 'terminal', title: '终端', icon: 'terminal', tier: 'core', rail: true, keepAlive: true },
+  { id: 'terminal', title: tr('终端'), icon: 'terminal', tier: 'core', rail: true, keepAlive: true },
   // keepAlive: its pages are live (a webview each) — and an Agent may be working in one of them
-  { id: 'browser', title: '浏览器', icon: 'web', tier: 'core', keepAlive: true },
-  { id: 'inspector', title: '详情', icon: 'inspector', tier: 'extra' },
-  { id: 'board', title: 'Issue 与 PR', icon: 'board', tier: 'extra' },
-  { id: 'cafe', title: '网吧', icon: 'cafe', tier: 'extra' },
+  { id: 'browser', title: tr('浏览器'), icon: 'web', tier: 'core', keepAlive: true },
+  { id: 'inspector', title: tr('详情'), icon: 'inspector', tier: 'extra' },
+  { id: 'board', title: tr('Issue 与 PR'), icon: 'board', tier: 'extra' },
+  { id: 'cafe', title: tr('网吧'), icon: 'cafe', tier: 'extra' },
   { id: 'android', title: 'Android', icon: 'android', tier: 'workbench' },
 ];
 /** The fixed tabs of the default right panel, in row order (审阅 · 文件 · 终端 · 浏览器 · 任务). */
@@ -130,7 +131,7 @@ export function newPane(tile?: Tile): Pane {
   return { id: uid('p'), tiles: [t], activeTileId: t.id };
 }
 
-export function newGroup(name = '工作区', tile?: Tile): Group {
+export function newGroup(name = tr('工作区'), tile?: Tile): Group {
   const p = newPane(tile);
   return { id: uid('g'), name, root: { type: 'leaf', paneId: p.id }, panes: { [p.id]: p }, focusedPaneId: p.id, zoomedPaneId: null };
 }
@@ -142,7 +143,7 @@ export function newGroup(name = '工作区', tile?: Tile): Group {
  * from a fresh layout every time.
  */
 export function initialLayout(): LayoutState {
-  const g = newGroup('主工作区');
+  const g = newGroup(tr('主工作区'));
   return { version: 2, groups: [g], activeGroupId: g.id, sidebar: { width: 264, sections: {} }, dock: { open: false, minimized: false, width: 440, tabs: [], active: null } };
 }
 
@@ -424,7 +425,7 @@ export function layoutReducer(s: LayoutState, a: LayoutAction): LayoutState {
 function reduceLayout(s: LayoutState, a: LayoutAction): LayoutState {
   switch (a.t) {
     case 'group.new': {
-      const g = newGroup(a.name ?? `组 ${s.groups.length + 1}`, a.tile);
+      const g = newGroup(a.name ?? tr('组 {groupsCount}', { groupsCount: s.groups.length + 1 }), a.tile);
       return { ...s, groups: [...s.groups, g], activeGroupId: g.id };
     }
     case 'group.add':
@@ -434,13 +435,13 @@ function reduceLayout(s: LayoutState, a: LayoutAction): LayoutState {
     case 'group.remove': {
       if (s.groups.length <= 1 && a.t === 'group.close') {
         // closing the only group resets it to one empty pane
-        const g = newGroup(s.groups[0]?.name ?? '主工作区');
+        const g = newGroup(s.groups[0]?.name ?? tr('主工作区'));
         return { ...s, groups: [g], activeGroupId: g.id };
       }
       const i = s.groups.findIndex((g) => g.id === a.id);
       if (i < 0) return s;
       const groups = s.groups.filter((g) => g.id !== a.id);
-      if (!groups.length) { const g = newGroup('主工作区'); return { ...s, groups: [g], activeGroupId: g.id }; }
+      if (!groups.length) { const g = newGroup(tr('主工作区')); return { ...s, groups: [g], activeGroupId: g.id }; }
       const active = s.activeGroupId === a.id ? groups[Math.min(i, groups.length - 1)].id : s.activeGroupId;
       return { ...s, groups, activeGroupId: active };
     }

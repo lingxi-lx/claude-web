@@ -6,6 +6,7 @@ import https from 'node:https';
 import zlib from 'node:zlib';
 import type { Readable } from 'node:stream';
 import { proxyAgentFor } from '../net/proxy.js';
+import { tr } from '../i18n/index.js';
 
 export interface UpstreamResponse {
   status: number;
@@ -26,9 +27,9 @@ const agents = { http: new http.Agent({ keepAlive: true }), https: new https.Age
 export function sendUpstream(url: string, opts: { method: string; headers: Record<string, string>; body?: Buffer; signal?: AbortSignal; headerTimeoutMs: number }): Promise<UpstreamResponse> {
   return new Promise((resolve, reject) => {
     let u: URL;
-    try { u = new URL(url); } catch { reject(new UpstreamError(`无效的上游地址：${url}`)); return; }
+    try { u = new URL(url); } catch { reject(new UpstreamError(tr('无效的上游地址：{url}', { url }))); return; }
     const mod = u.protocol === 'https:' ? https : u.protocol === 'http:' ? http : null;
-    if (!mod) { reject(new UpstreamError(`不支持的协议：${u.protocol}`)); return; }
+    if (!mod) { reject(new UpstreamError(tr('不支持的协议：{protocol}', { protocol: u.protocol }))); return; }
     const headers = { ...opts.headers };
     if (opts.body) headers['content-length'] = String(opts.body.length);
     // through the user's proxy when there is one (net/proxy.ts): a CONNECT tunnel, so the request bytes stay the client's
@@ -36,8 +37,8 @@ export function sendUpstream(url: string, opts: { method: string; headers: Recor
     const req = mod.request(u, { method: opts.method, headers, agent });
     let settled = false;
     const fail = (e: Error) => { if (settled) return; settled = true; clearTimeout(timer); req.destroy(); reject(e); };
-    const timer = setTimeout(() => fail(new UpstreamError(`上游 ${Math.round(opts.headerTimeoutMs / 1000)}s 内没有响应`, true)), opts.headerTimeoutMs);
-    const onAbort = () => fail(new UpstreamError('请求已取消'));
+    const timer = setTimeout(() => fail(new UpstreamError(tr('上游 {headerTimeoutMs}s 内没有响应', { headerTimeoutMs: Math.round(opts.headerTimeoutMs / 1000) }), true)), opts.headerTimeoutMs);
+    const onAbort = () => fail(new UpstreamError(tr('请求已取消')));
     if (opts.signal?.aborted) { onAbort(); return; }
     opts.signal?.addEventListener('abort', onAbort, { once: true });
     req.on('response', (res) => {
@@ -78,7 +79,7 @@ export async function readText(res: http.IncomingMessage, limit = 64 * 1024 * 10
   let size = 0;
   for await (const c of decoded(res)) {
     size += (c as Buffer).length;
-    if (size > limit) { res.destroy(); throw new UpstreamError('上游响应过大'); }
+    if (size > limit) { res.destroy(); throw new UpstreamError(tr('上游响应过大')); }
     chunks.push(c as Buffer);
   }
   return Buffer.concat(chunks).toString('utf8');

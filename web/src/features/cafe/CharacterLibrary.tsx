@@ -11,18 +11,19 @@ import { runCommand } from '@/features/workbench/commands';
 import { fillComposer } from '@/features/composer/fill';
 import { bakeCharacter } from './bake';
 import { AGENT_NIGHT, closeLibrary, useCafe } from './state';
+import { tr } from '@/i18n';
 
 /** Who has a character, in words. */
 export function holdersText(id: string, a: CafeAssign): string[] {
   const out: string[] = [];
-  if (a.admin === id) out.push('网管');
-  if (a.default === id) out.push('所有客人');
-  for (const [k, v] of Object.entries(a.byType ?? {})) if (v === id) out.push(`${k} 类子代理`);
-  for (const [k, v] of Object.entries(a.byName ?? {})) if (v === id) out.push(`叫 ${k} 的`);
+  if (a.admin === id) out.push(tr('网管'));
+  if (a.default === id) out.push(tr('所有客人'));
+  for (const [k, v] of Object.entries(a.byType ?? {})) if (v === id) out.push(tr('{k} 类子代理', { k }));
+  for (const [k, v] of Object.entries(a.byName ?? {})) if (v === id) out.push(tr('叫 {k} 的', { k }));
   return out;
 }
 
-export const MAKER_PROMPT = '用 cafe-character 帮我做一个网吧角色：';
+export const MAKER_PROMPT = tr('用 cafe-character 帮我做一个网吧角色：');
 
 /** A new conversation, its input holding the ask (the user adds a photo or a description). */
 export function openCharacterMaker() {
@@ -60,22 +61,22 @@ function AssignForm({ id, onDone }: { id: string; onDone: () => void }) {
     try {
       await ws.request({ kind: 'characters.assign', id, target });
       onDone();
-    } catch (e: any) { useStore.getState().toast(`没能指定：${e?.message ?? e}`); }
+    } catch (e: any) { useStore.getState().toast(tr('没能指定：{message}', { message: e?.message ?? e })); }
   };
   const field = (v: string, set: (s: string) => void, ph: string, to: (s: string) => AssignTarget) => (
     <div className="row">
       <input className="field" value={v} placeholder={ph} onChange={(e) => set(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !imeComposing(e.nativeEvent) && v.trim()) void give(to(v.trim())); }} />
-      <button className="btn sm" disabled={!v.trim()} onClick={() => void give(to(v.trim()))}>给</button>
+      <button className="btn sm" disabled={!v.trim()} onClick={() => void give(to(v.trim()))}>{tr('给')}</button>
     </div>
   );
   return (
     <div className="cafe-assign">
       <div className="row">
-        <button className="btn sm" onClick={() => void give('admin')}>网管</button>
-        <button className="btn sm" onClick={() => void give('default')}>所有客人</button>
+        <button className="btn sm" onClick={() => void give('admin')}>{tr('网管')}</button>
+        <button className="btn sm" onClick={() => void give('default')}>{tr('所有客人')}</button>
       </div>
-      {field(type, setType, '子代理类型，比如 Explore', (s) => `type:${s}`)}
-      {field(name, setName, '名字，比如 researcher', (s) => `name:${s}`)}
+      {field(type, setType, tr('子代理类型，比如 Explore'), (s) => `type:${s}`)}
+      {field(name, setName, tr('名字，比如 researcher'), (s) => `name:${s}`)}
     </div>
   );
 }
@@ -87,7 +88,7 @@ export function CharacterLibrary() {
   const [giving, setGiving] = useState<string | null>(null);
   if (!open) return null;
   const remove = async (c: CharacterDef) => {
-    if (!(await dlg.confirm(`删除角色「${c.name}」？`, { message: '用它的人会换回小章鱼。', focusCancel: true }))) return;
+    if (!(await dlg.confirm(tr('删除角色「{name}」？', { name: c.name }), { message: tr('用它的人会换回小章鱼。'), focusCancel: true }))) return;
     await ws.request({ kind: 'characters.delete', id: c.id }).catch(() => {});
   };
   const takeBack = async (id: string) => {
@@ -102,29 +103,29 @@ export function CharacterLibrary() {
   };
   return (
     <div className="modal-bg dialog-bg" onMouseDown={(e) => e.target === e.currentTarget && closeLibrary()} onKeyDown={(e) => { if (e.key === 'Escape' && !imeComposing(e.nativeEvent)) { e.stopPropagation(); closeLibrary(); } }}>
-      <div className="modal cafe-lib" role="dialog" aria-label="角色库">
+      <div className="modal cafe-lib" role="dialog" aria-label={tr('角色库')}>
         <div className="cafe-lib-head">
-          <h3>角色库</h3>
-          <button className="btn sm primary" onClick={openCharacterMaker}><Icon name="plus" size={13} /><span className="l">捏个角色</span></button>
-          <button className="icon-btn" aria-label="关闭" title="关闭" onClick={closeLibrary} autoFocus><Icon name="close" size={16} /></button>
+          <h3>{tr('角色库')}</h3>
+          <button className="btn sm primary" onClick={openCharacterMaker}><Icon name="plus" size={13} /><span className="l">{tr('捏个角色')}</span></button>
+          <button className="icon-btn" aria-label={tr('关闭')} title={tr('关闭')} onClick={closeLibrary} autoFocus><Icon name="close" size={16} /></button>
         </div>
         <div className="cafe-lib-grid">
           {list.map((c) => {
             const who = holdersText(c.id, assign);
             return (
               <div key={c.id} className="cafe-card" data-character={c.id}>
-                {(c.builtin || c.draft) && <span className="tag">{c.builtin ? '内置' : '草稿'}</span>}
+                {(c.builtin || c.draft) && <span className="tag">{c.builtin ? tr('内置') : tr('草稿')}</span>}
                 <Walker def={c} tint={c.id === 'octopus' ? AGENT_NIGHT[6] : undefined} />
                 <div className="n" title={c.id}>{c.name}</div>
-                <div className="who">{c.id === 'octopus' && !assign.default ? '所有客人（默认）' : c.id === 'admin' && !assign.admin ? '网管（默认）' : who.join('、') || (c.draft ? '还没保存，在对话里说「保存」' : '还没给谁')}</div>
+                <div className="who">{c.id === 'octopus' && !assign.default ? tr('所有客人（默认）') : c.id === 'admin' && !assign.admin ? tr('网管（默认）') : who.join('、') || (c.draft ? tr('还没保存，在对话里说「保存」') : tr('还没给谁'))}</div>
                 {!c.builtin && !c.draft && (
                   <div className="acts">
-                    <button className="btn sm" aria-expanded={giving === c.id} onClick={() => setGiving(giving === c.id ? null : c.id)}>给谁用</button>
-                    {who.length > 0 && <button className="btn sm" onClick={() => void takeBack(c.id)}>收回</button>}
-                    <button className="icon-btn sm" aria-label={`删除${c.name}`} title="删除" onClick={() => void remove(c)}><Icon name="trash" size={13} /></button>
+                    <button className="btn sm" aria-expanded={giving === c.id} onClick={() => setGiving(giving === c.id ? null : c.id)}>{tr('给谁用')}</button>
+                    {who.length > 0 && <button className="btn sm" onClick={() => void takeBack(c.id)}>{tr('收回')}</button>}
+                    <button className="icon-btn sm" aria-label={tr('删除{name}', { name: c.name })} title={tr('删除')} onClick={() => void remove(c)}><Icon name="trash" size={13} /></button>
                   </div>
                 )}
-                {c.draft && <div className="acts"><button className="icon-btn sm" aria-label={`删除${c.name}`} title="删除" onClick={() => void remove(c)}><Icon name="trash" size={13} /></button></div>}
+                {c.draft && <div className="acts"><button className="icon-btn sm" aria-label={tr('删除{name}', { name: c.name })} title={tr('删除')} onClick={() => void remove(c)}><Icon name="trash" size={13} /></button></div>}
                 {giving === c.id && <AssignForm id={c.id} onDone={() => setGiving(null)} />}
               </div>
             );

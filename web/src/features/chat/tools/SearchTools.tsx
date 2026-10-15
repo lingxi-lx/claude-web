@@ -3,22 +3,23 @@ import type { ToolUseBlock } from '@/model/conversation';
 import { Expandable } from '../Expandable';
 import { FileLink } from './FileTools';
 import { ErrorPre } from './McpTool';
+import { tr } from '@/i18n';
 
 export function GlobBody({ t }: { t: ToolUseBlock }) {
   const r = t.result;
   const st = r?.structured as any;
-  if (!r) return <div className="tool-meta">搜索中…</div>;
+  if (!r) return <div className="tool-meta">{tr('搜索中…')}</div>;
   if (r.isError) return <ErrorPre text={r.content} />;
   const files: string[] = Array.isArray(st?.filenames) ? st.filenames : r.content.split('\n').filter((l) => l && !/^No files found/.test(l));
   return (
     <>
-      <div className="tool-meta">{st?.numFiles ?? files.length} 个文件{st?.truncated ? `（已截断${st.totalMatches ? `，共 ${st.totalMatches}${st.countIsComplete === false ? '+' : ''}` : ''}）` : ''}{st?.durationMs ? ` · ${st.durationMs}ms` : ''}</div>
+      <div className="tool-meta">{tr('{numFiles} 个文件{v}{v2}', { numFiles: st?.numFiles ?? files.length, v: st?.truncated ? tr('（已截断{v}）', { v: st.totalMatches ? tr('，共 {totalMatches}{v}', { totalMatches: st.totalMatches, v: st.countIsComplete === false ? '+' : '' }) : '' }) : '', v2: st?.durationMs ? ` · ${st.durationMs}ms` : '' })}</div>
       {files.length ? (
         <Expandable text={files.join('\n')} lines={40} chars={20000}>
           {(v) => <div className="file-list">{v.split('\n').map((f, i) => <FileLink key={i} path={f} />)}</div>}
         </Expandable>
       ) : (
-        <div className="tool-meta">没有匹配的文件</div>
+        <div className="tool-meta">{tr('没有匹配的文件')}</div>
       )}
     </>
   );
@@ -43,13 +44,13 @@ export function GrepBody({ t }: { t: ToolUseBlock }) {
   const st = r?.structured as any;
   const inp = t.input as any;
   const rows = useMemo(() => (r && !r.isError && (st?.mode ?? inp.output_mode ?? 'files_with_matches') === 'content' ? parseGrep(st?.content ?? r.content) : []), [r, st, inp.output_mode]);
-  if (!r) return <div className="tool-meta">搜索中…</div>;
+  if (!r) return <div className="tool-meta">{tr('搜索中…')}</div>;
   if (r.isError) return <ErrorPre text={r.content} />;
   const mode = st?.mode ?? inp.output_mode ?? 'files_with_matches';
   const meta = (
     <div className="tool-meta">
-      {mode === 'content' ? `${st?.numMatches ?? st?.numLines ?? rows.length} 处匹配` : `${st?.numFiles ?? 0} 个文件`}
-      {st?.totalFiles && st.totalFiles !== st.numFiles ? ` / 共 ${st.totalFiles} 个文件` : ''}
+      {mode === 'content' ? tr('{numMatches} 处匹配', { numMatches: st?.numMatches ?? st?.numLines ?? rows.length }) : tr('{numFiles} 个文件', { numFiles: st?.numFiles ?? 0 })}
+      {st?.totalFiles && st.totalFiles !== st.numFiles ? tr(' / 共 {totalFiles} 个文件', { totalFiles: st.totalFiles }) : ''}
       {st?.appliedLimit ? ` · limit ${st.appliedLimit}` : ''}
     </div>
   );
@@ -108,7 +109,7 @@ export function GrepBody({ t }: { t: ToolUseBlock }) {
   return (
     <>
       {meta}
-      {files.length ? <Expandable text={files.join('\n')} lines={40} chars={20000}>{(v) => <div className="file-list">{v.split('\n').map((f, i) => <FileLink key={i} path={f} />)}</div>}</Expandable> : <div className="tool-meta">没有匹配</div>}
+      {files.length ? <Expandable text={files.join('\n')} lines={40} chars={20000}>{(v) => <div className="file-list">{v.split('\n').map((f, i) => <FileLink key={i} path={f} />)}</div>}</Expandable> : <div className="tool-meta">{tr('没有匹配')}</div>}
     </>
   );
 }

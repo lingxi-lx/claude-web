@@ -1,4 +1,5 @@
 import type { JsonRpcProcess } from '../agents/jsonrpc.js';
+import { tr } from '../i18n/index.js';
 
 /**
  * A JSON-RPC process that is spawned lazily on first request and killed after `idleMs` of no
@@ -50,7 +51,7 @@ export class LazyRpc {
       }
       if (gen !== this.gen) {
         rpc.kill();
-        throw new Error('LazyRpc：启动完成前已被 close()');
+        throw new Error(tr('LazyRpc：启动完成前已被 close()'));
       }
       this.rpc = rpc;
       return rpc;

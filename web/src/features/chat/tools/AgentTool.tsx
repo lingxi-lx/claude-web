@@ -10,6 +10,7 @@ import { Markdown } from '../Markdown';
 import { ErrorPre, JsonTree } from './McpTool';
 import { ExtLink } from './WebTools';
 import { Icon } from '@/ui/icons';
+import { tr } from '@/i18n';
 
 /** Sub-agent: brief (prompt) → trail (progress) → result (report + totals). Children are rendered by ToolCard. */
 export function AgentBody({ t }: { t: ToolUseBlock }) {
@@ -24,16 +25,16 @@ export function AgentBody({ t }: { t: ToolUseBlock }) {
   return (
     <>
       <div className="agent-brief">
-        <button className="link" onClick={() => setShowPrompt(!showPrompt)}>{showPrompt ? '收起指令' : '查看指令'}</button>
+        <button className="link" onClick={() => setShowPrompt(!showPrompt)}>{showPrompt ? tr('收起指令') : tr('查看指令')}</button>
         {inp.subagent_type && <span className="badge">{inp.subagent_type}</span>}
         {inp.model && <span className="badge">{inp.model}</span>}
-        {inp.run_in_background && <span className="badge">后台</span>}
+        {inp.run_in_background && <span className="badge">{tr('后台')}</span>}
       </div>
       {showPrompt && <Expandable text={String(inp.prompt ?? '')} lines={20} chars={4000}>{(v) => <div className="tool-md"><Markdown text={v} /></div>}</Expandable>}
       {running && (
         <div className="agent-trail">
           <span className="spinner" />
-          <span>{t.progress?.summary ?? task?.summary ?? '子代理工作中…'}</span>
+          <span>{t.progress?.summary ?? task?.summary ?? tr('子代理工作中…')}</span>
           {(t.progress?.lastTool ?? task?.lastTool) && <span className="badge">{t.progress?.lastTool ?? task?.lastTool}</span>}
           {t.progress?.elapsed ? <span className="tool-meta">{Math.round(t.progress.elapsed)}s</span> : null}
         </div>
@@ -43,7 +44,7 @@ export function AgentBody({ t }: { t: ToolUseBlock }) {
           <Expandable text={text} lines={40} chars={8000} openByDefault={text.length < 3000}>{(v) => <div className="tool-md"><Markdown text={v} /></div>}</Expandable>
           {st && (st.totalToolUseCount !== undefined || st.totalDurationMs !== undefined) && (
             <div className="tool-meta">
-              {st.totalToolUseCount !== undefined && <span>{st.totalToolUseCount} 次工具调用</span>}
+              {st.totalToolUseCount !== undefined && <span>{tr('{totalToolUseCount} 次工具调用', { totalToolUseCount: st.totalToolUseCount })}</span>}
               {st.totalDurationMs !== undefined && <span> · {fmtMs(st.totalDurationMs)}</span>}
               {st.totalTokens !== undefined && <span> · {fmtTok(st.totalTokens)} tok</span>}
               {st.resolvedModel && <span> · {st.resolvedModel}</span>}
@@ -72,7 +73,7 @@ export function TodoBody({ t }: { t: ToolUseBlock }) {
           </li>
         ))}
       </ul>
-      <div className="tool-meta">{done}/{todos.length} 完成{st && done > oldDone ? ` · 本次完成 ${done - oldDone}` : ''}</div>
+      <div className="tool-meta">{tr('{done}/{todosCount} 完成{v}', { done, todosCount: todos.length, v: st && done > oldDone ? tr(' · 本次完成 {done}', { done: done - oldDone }) : '' })}</div>
     </>
   );
 }
@@ -91,7 +92,7 @@ export function AskUserBody({ t }: { t: ToolUseBlock }) {
       {qs.map((q, i) => (
         <div key={i} className="ask-q">
           <div><span className="badge">{q.header}</span> {q.question}</div>
-          <div className="ask-a">{answers[q.question] ? `→ ${answers[q.question]}` : t.result ? '（未回答）' : '等待回答…'}</div>
+          <div className="ask-a">{answers[q.question] ? `→ ${answers[q.question]}` : t.result ? tr('（未回答）') : tr('等待回答…')}</div>
         </div>
       ))}
     </div>
@@ -107,12 +108,12 @@ export function ArtifactBody({ t }: { t: ToolUseBlock }) {
       <div className="tool-meta">{inp.title ?? inp.name ?? 'artifact'}{inp.expires || inp.ttl ? ` · ${inp.expires ?? inp.ttl}` : ''}</div>
       {url ? (
         <div className="artifact-link">
-          <ExtLink href={url}><Icon name="external" size={12} /> 打开 Artifact</ExtLink>
+          <ExtLink href={url}><Icon name="external" size={12} /> {tr('打开 Artifact')}</ExtLink>
           <code>{url}</code>
-          <button className="btn sm ghost" onClick={() => navigator.clipboard.writeText(url)}>复制链接</button>
+          <button className="btn sm ghost" onClick={() => navigator.clipboard.writeText(url)}>{tr('复制链接')}</button>
         </div>
-      ) : r?.isError ? <ErrorPre text={r.content} /> : <div className="tool-meta">{r?.content ?? '上传中…'}</div>}
-      {inp.content && <details className="structured"><summary>HTML 源码（{String(inp.content).length} 字符）</summary><CodeBlock code={String(inp.content)} lang="xml" maxLines={200} /></details>}
+      ) : r?.isError ? <ErrorPre text={r.content} /> : <div className="tool-meta">{r?.content ?? tr('上传中…')}</div>}
+      {inp.content && <details className="structured"><summary>{tr('HTML 源码（{contentCount} 字符）', { contentCount: String(inp.content).length })}</summary><CodeBlock code={String(inp.content)} lang="xml" maxLines={200} /></details>}
     </>
   );
 }
@@ -137,9 +138,9 @@ export function WorkflowBody({ t }: { t: ToolUseBlock }) {
       {/* 后台: its agents as it runs, and the way to the office */}
       <WorkflowLive toolUseId={t.id} />
       {inp.script
-        ? <details className="bg-wf-script"><summary>脚本</summary><CodeBlock code={String(inp.script)} lang="javascript" title={inp.name ? `workflow · ${inp.name}` : 'workflow'} maxLines={80} /></details>
+        ? <details className="bg-wf-script"><summary>{tr('脚本')}</summary><CodeBlock code={String(inp.script)} lang="javascript" title={inp.name ? `workflow · ${inp.name}` : 'workflow'} maxLines={80} /></details>
         : <div className="jt"><JsonTree value={inp} /></div>}
-      {r && (r.isError ? <ErrorPre text={r.content} /> : <Expandable text={r.content} lines={30}>{(v) => <CodeBlock code={v} lang="plaintext" title="结果" wrap />}</Expandable>)}
+      {r && (r.isError ? <ErrorPre text={r.content} /> : <Expandable text={r.content} lines={30}>{(v) => <CodeBlock code={v} lang="plaintext" title={tr('结果')} wrap />}</Expandable>)}
     </>
   );
 }

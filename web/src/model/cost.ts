@@ -1,4 +1,5 @@
 import { fmtUsd } from '@/util';
+import { tr } from '@/i18n';
 
 /**
  * Cost of a turn / a bucket. Only Claude models on Claude-type profiles have a real price (server: usage/pricing.ts);
@@ -8,7 +9,7 @@ import { fmtUsd } from '@/util';
 export function fmtCost(usd: number | undefined, unknown?: boolean | number): string {
   const n = typeof unknown === 'number' ? unknown : unknown ? 1 : 0;
   if (!n) return fmtUsd(usd);
-  return usd ? `≥ ${fmtUsd(usd)}` : '费用未知';
+  return usd ? `≥ ${fmtUsd(usd)}` : tr('费用未知');
 }
 
 /** Sum of the result items' cost; results with an unknown price are counted, not added as zeros. */

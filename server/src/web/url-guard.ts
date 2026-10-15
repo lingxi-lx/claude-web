@@ -1,4 +1,5 @@
 import net from 'node:net';
+import { tr } from '../i18n/index.js';
 
 /**
  * Where the browser tools may go. Two callers with different reach:
@@ -57,9 +58,9 @@ export function hostClass(hostname: string): HostClass {
 }
 
 const REFUSED: Record<Exclude<HostClass, 'public' | 'loopback'>, string> = {
-  metadata: '这个地址是云平台的实例元数据服务，不能打开',
-  linklocal: '这个地址在链路本地网段（169.254.* / fe80::），不能打开',
-  private: '这个地址在内网（10.* / 172.16–31.* / 192.168.* / 100.64–127.*）。没有桌面版的内置浏览器时只能打开公网网页和本机（localhost）的开发服务',
+  metadata: tr('这个地址是云平台的实例元数据服务，不能打开'),
+  linklocal: tr('这个地址在链路本地网段（169.254.* / fe80::），不能打开'),
+  private: tr('这个地址在内网（10.* / 172.16–31.* / 192.168.* / 100.64–127.*）。没有桌面版的内置浏览器时只能打开公网网页和本机（localhost）的开发服务'),
 };
 
 export interface GuardOptions { reach: Reach; ownPorts?: number[] }
@@ -67,9 +68,9 @@ export interface GuardOptions { reach: Reach; ownPorts?: number[] }
 /** Why `raw` may not be opened, or null. Looks at the address as written: `resolvedRefusal` checks what a name resolves to. */
 export function urlRefusal(raw: string, o: GuardOptions): string | null {
   let u: URL;
-  try { u = new URL(raw); } catch { return `「${String(raw).slice(0, 200)}」不是一个完整的网址（要以 http:// 或 https:// 开头）`; }
-  if (u.protocol !== 'http:' && u.protocol !== 'https:') return `只能打开 http / https 网址，不能打开 ${u.protocol}`;
-  if (u.username || u.password) return '网址里带了用户名 / 密码，不能打开';
+  try { u = new URL(raw); } catch { return tr('「{raw}」不是一个完整的网址（要以 http:// 或 https:// 开头）', { raw: String(raw).slice(0, 200) }); }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return tr('只能打开 http / https 网址，不能打开 {protocol}', { protocol: u.protocol });
+  if (u.username || u.password) return tr('网址里带了用户名 / 密码，不能打开');
   return classRefusal(hostClass(u.hostname), u, o);
 }
 
@@ -79,7 +80,7 @@ function classRefusal(c: HostClass, u: URL, o: GuardOptions): string | null {
   if (c === 'private') return REFUSED.private;
   if (c === 'loopback') {
     const port = Number(u.port || (u.protocol === 'https:' ? 443 : 80));
-    if (o.ownPorts?.includes(port)) return '这个地址是 Claude Web 自己，不能打开';
+    if (o.ownPorts?.includes(port)) return tr('这个地址是 Claude Web 自己，不能打开');
   }
   return null;
 }

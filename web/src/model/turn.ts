@@ -3,6 +3,7 @@
 // the files it changed. Pure (no React, no tool registry) so it can be replayed against captured streams.
 import type { AssistantItem, Item, ResultItem, UserItem } from './conversation';
 import { fileChanges, pathKey, type FileChange } from './diffstat';
+import { tr } from '@/i18n';
 
 /**
  * A user message and everything up to the next one (meta messages — reminders, command output — stay inside), or a
@@ -126,10 +127,10 @@ export function turnSummary(t: Turn): TurnSummary {
 /** `1 秒` · `42 秒` · `1 分 42 秒` · `2 分钟` · `1 小时 5 分` */
 export function fmtDuration(ms: number): string {
   const s = Math.max(1, Math.round(ms / 1000));
-  if (s < 60) return `${s} 秒`;
+  if (s < 60) return tr('{s} 秒', { s });
   const m = Math.floor(s / 60), r = s % 60;
-  if (m < 60) return r ? `${m} 分 ${r} 秒` : `${m} 分钟`;
-  return `${Math.floor(m / 60)} 小时 ${m % 60} 分`;
+  if (m < 60) return r ? tr('{m} 分 {r} 秒', { m, r }) : tr('{m} 分钟', { m });
+  return tr('{m} 小时 {m2} 分', { m: Math.floor(m / 60), m2: m % 60 });
 }
 
 /**
@@ -137,13 +138,13 @@ export function fmtDuration(ms: number): string {
  * shown in red). A failure comes first after the time, where it is seen (review M-7), not at the end of a long line.
  */
 export function turnSummaryParts(s: TurnSummary): { text: string; err?: boolean }[] {
-  const parts: { text: string; err?: boolean }[] = [{ text: s.durationMs !== undefined ? `已处理 ${fmtDuration(s.durationMs)}` : '已处理' }];
-  if (s.failed) parts.push({ text: `失败 ${s.failed} 个`, err: true });
-  if (s.reads) parts.push({ text: `读了 ${s.reads} 个文件` });
-  if (s.edits) parts.push({ text: `改了 ${s.edits} 个${s.reads ? '' : '文件'}` });
-  if (s.searches) parts.push({ text: `搜索 ${s.searches} 次` });
-  if (s.commands) parts.push({ text: `运行 ${s.commands} 条命令` });
-  if (s.others) parts.push({ text: `其它 ${s.others} 步` });
+  const parts: { text: string; err?: boolean }[] = [{ text: s.durationMs !== undefined ? tr('已处理 {fmtDuration}', { fmtDuration: fmtDuration(s.durationMs) }) : tr('已处理') }];
+  if (s.failed) parts.push({ text: tr('失败 {failed} 个', { failed: s.failed }), err: true });
+  if (s.reads) parts.push({ text: tr('读了 {reads} 个文件', { reads: s.reads }) });
+  if (s.edits) parts.push({ text: tr('改了 {edits} 个{v}', { edits: s.edits, v: s.reads ? '' : tr('文件') }) });
+  if (s.searches) parts.push({ text: tr('搜索 {searches} 次', { searches: s.searches }) });
+  if (s.commands) parts.push({ text: tr('运行 {commands} 条命令', { commands: s.commands }) });
+  if (s.others) parts.push({ text: tr('其它 {others} 步', { others: s.others }) });
   return parts;
 }
 

@@ -1,3 +1,4 @@
+import './i18n/init.js'; // first: the interface language is fixed before the modules that read it at load
 import './runtime/spawn-guard-install.js'; // first: child_process defaults to windowsHide before anything else loads
 import http from 'node:http';
 import fs from 'node:fs';
@@ -5,6 +6,8 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { Hub } from './ws/hub.js';
+import { withLanguage } from './i18n/boot.js';
+import { LANGUAGE_KEY } from './i18n/core.js';
 import { RunnerPool } from './runtime/pool.js';
 import { SessionService } from './sessions/service.js';
 import { ConfigService } from './config/service.js';
@@ -258,6 +261,12 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     if (!fs.existsSync(file)) {
       res.writeHead(200, { 'content-type': 'text/html' });
       res.end('<h3>web/dist not built. Run <code>npm run build</code> or use <code>npm run dev</code> (Vite on :5173).</h3>');
+      return;
+    }
+    // the page carries the language the user chose (a page without it follows the browser's)
+    if (path.basename(file) === 'index.html') {
+      res.writeHead(200, { 'content-type': MIME['.html'] });
+      res.end(withLanguage(fs.readFileSync(file, 'utf8'), meta.settings()[LANGUAGE_KEY]));
       return;
     }
     res.writeHead(200, { 'content-type': MIME[path.extname(file)] ?? 'application/octet-stream' });

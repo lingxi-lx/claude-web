@@ -19,6 +19,7 @@ import { computerAllowedTools, computerClaudeMcpServer } from '../computer/launc
 import { ENGINE_SEARCH_TOOL, engineSearchOff, userPickedSearchAdapter } from '../web/engine-search.js';
 import { markUnknownCost } from '../usage/pricing.js';
 import type { AttachmentRef, EffortLevel, ModelInfo, OpenSessionParams, PermissionMode, PermissionRequestEvent, PermissionResponse, Provider, RunnerState, SessionFeatures, SessionInfoSnapshot } from '../protocol.js';
+import { tr } from '../i18n/index.js';
 
 /** A conversation above this share of the next model's window is compacted before the switch. */
 const FIT_SHARE = 0.8;
@@ -38,6 +39,9 @@ export function cliSaid(stderr: string): string {
  */
 export { hasClaudeTranscript };
 
+/** What missingCwd's two messages call the folder, in each language (sendRefused tells them from other reasons by it). */
+const CWD_WORDS = [tr('项目文件夹'), 'project folder'];
+
 /**
  * A conversation whose folder is gone (moved, renamed, deleted, a drive not mounted): Windows reports the spawn as
  * ENOENT on the executable and the SDK words it "Claude Code executable at … exists but failed to launch" — say what it is.
@@ -46,19 +50,19 @@ export function missingCwd(cwd: string | undefined): string | undefined {
   if (!cwd) return undefined;
   try {
     if (statSync(cwd).isDirectory()) return undefined;
-    return `对话的项目文件夹不是一个文件夹：${cwd}。在输入框左下角换一个项目文件夹，新开对话。`;
+    return tr('对话的项目文件夹不是一个文件夹：{cwd}。在输入框左下角换一个项目文件夹，新开对话。', { cwd });
   } catch {
-    return `找不到这个对话的项目文件夹：${cwd}（可能被移动、改名或删除了）。在输入框左下角换一个存在的项目文件夹，新开对话；或者把文件夹放回原处。`;
+    return tr('找不到这个对话的项目文件夹：{cwd}（可能被移动、改名或删除了）。在输入框左下角换一个存在的项目文件夹，新开对话；或者把文件夹放回原处。', { cwd });
   }
 }
 
 /** Why a message was not taken (shown as the window's toast and on the conversation): the reason the process died, and what to do. */
 export function sendRefused(failed: boolean, reason?: string): string {
-  if (!failed) return '这个对话的进程已经关闭。再发一次会重新打开它。';
+  if (!failed) return tr('这个对话的进程已经关闭。再发一次会重新打开它。');
   // the folder is gone: the provider is fine, and resending fails the same way (missingCwd says what to do)
-  if (reason?.includes('项目文件夹')) return `这个对话的进程没能启动：${reason}`;
+  if (reason && CWD_WORDS.some((w) => reason.includes(w))) return tr('这个对话的进程没能启动：{reason}', { reason });
   // the reason is explained already (withExplanation: a Chinese line, then the original), so the advice goes after it
-  return `这个对话的进程出错退出了${reason ? `：${reason}` : '。'}\n再发一次会重新打开它；还是不行的话，到 设置 → 供应商 点「测试连接」看看。`;
+  return tr("这个对话的进程出错退出了{v}\n再发一次会重新打开它；还是不行的话，到 设置 → 供应商 点「测试连接」看看。", { v: reason ? `：${reason}` : '。' });
 }
 
 /** Unbounded async queue used as the SDK's streaming-input prompt. */
@@ -493,9 +497,9 @@ export class SessionRunner extends EventEmitter {
       if (!this.closed && this.q === q) {
         // the CLI's own words ("error: unknown option '--session-mirror'") say more than the SDK's "exited with code 1"
         const said = cliSaid(this.stderrTail);
-        const raw = String(e?.message ?? e) + (said && !String(e?.message ?? e).includes(said) ? `（CLI 输出：${said}）` : '');
+        const raw = String(e?.message ?? e) + (said && !String(e?.message ?? e).includes(said) ? tr('（CLI 输出：{said}）', { said }) : '');
         const gone = missingCwd(this.cwd);
-        this.setState('error', gone ? `${gone}\n原文：${raw}` : withExplanation(raw));
+        this.setState('error', gone ? tr("{gone}\n原文：{raw}", { gone, raw }) : withExplanation(raw));
       }
     }
   }
@@ -748,7 +752,7 @@ export class SessionRunner extends EventEmitter {
   /** End the turn with a result of our own (the reducer, the ledger and the UI finish it like any other), then restart. */
   private async forceStop(q: Query) {
     if (this.closed || this.q !== q) return;
-    const reason = '已强制停止：运行内核没有响应中断，已结束它的进程并重新接上这个对话';
+    const reason = tr('已强制停止：运行内核没有响应中断，已结束它的进程并重新接上这个对话');
     this.ingest({
       type: 'result', subtype: 'error_during_execution', is_error: true, result: reason, errors: [reason], terminal_reason: 'aborted_forced',
       duration_ms: 0, duration_api_ms: 0, num_turns: 0, total_cost_usd: 0,
@@ -810,7 +814,7 @@ export class SessionRunner extends EventEmitter {
     try { const u = await this.contextUsage('summary'); used = Number(u?.totalTokens ?? u?.total_tokens ?? 0); } catch { return false; }
     if (!(used > window * FIT_SHARE)) return false;
     const k = (n: number) => `${Math.round(n / 1000)}K`;
-    this.notice(used >= window ? `对话已经用了 ${k(used)}，${model} 最多只能装 ${k(window)}：先用现在的模型把对话压缩一下，再换过去` : `对话已经用了 ${k(used)}，快到 ${model} 的上限 ${k(window)} 了：先用现在的模型把对话压缩一下，再换过去`);
+    this.notice(used >= window ? tr('对话已经用了 {k}，{model} 最多只能装 {k2}：先用现在的模型把对话压缩一下，再换过去', { k: k(used), model, k2: k(window) }) : tr('对话已经用了 {k}，快到 {model} 的上限 {k2} 了：先用现在的模型把对话压缩一下，再换过去', { k: k(used), model, k2: k(window) }));
     const done = new Promise<void>((resolve) => {
       const t = setTimeout(() => { this.off('message', on); resolve(); }, 15 * 60_000);
       t.unref?.();

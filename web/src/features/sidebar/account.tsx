@@ -12,6 +12,7 @@ import { accountName, planLabel, todayCost } from './status';
 import { ACCOUNT_PANELS, type AccountId } from './entries';
 import { showPanel } from '@/features/workbench/right-panel';
 import { ThemeQuick } from '@/features/settings/ThemePicker';
+import { tr } from '@/i18n';
 
 /**
  * Today's spend for the account popover: `ledger.list` parses the whole ledger file on the server, so one answer is
@@ -50,16 +51,16 @@ export function AccountRow({ open, setOpen }: { open: boolean; setOpen(v: boolea
   return (
     <div className="sb-foot sb-account">
       <button className={clsx('acct', open && 'on')} data-id={id('account')} aria-haspopup="menu" aria-expanded={open} title={auth?.email ?? who.name} onClick={(e) => { e.stopPropagation(); setOpen(!open); }}>
-        <span className={clsx('avatar', !who.signedIn && 'anon')} data-id={id('connection')} data-state={connected ? 'on' : 'off'} title={connected ? '已连接' : '连接断开，正在重连…'}>
+        <span className={clsx('avatar', !who.signedIn && 'anon')} data-id={id('connection')} data-state={connected ? 'on' : 'off'} title={connected ? tr('已连接') : tr('连接断开，正在重连…')}>
           {who.initial || <Icon name="user" size={15} />}
           {!connected && <span className="off-dot" />}
         </span>
         <span className="who">
           <span className="nm">{who.name}</span>
-          <span className="sub">{connected ? <UsageRing tip={false} fallbackPlan={auth?.subscriptionType} /> : <span className="conn-off">连接断开，正在重连…</span>}</span>
+          <span className="sub">{connected ? <UsageRing tip={false} fallbackPlan={auth?.subscriptionType} /> : <span className="conn-off">{tr('连接断开，正在重连…')}</span>}</span>
         </span>
       </button>
-      <button className="icon-btn" data-id={id('settings')} title={`设置 (${modKey}+,) · 右键：在右侧面板打开配置中心`} aria-label="设置" onClick={settings} onContextMenu={(e) => { e.preventDefault(); if (showPanel(ACCOUNT_PANELS.config)) closeDrawer(); }}>
+      <button className="icon-btn" data-id={id('settings')} title={tr('设置 ({modKey}+,) · 右键：在右侧面板打开配置中心', { modKey })} aria-label={tr('设置')} onClick={settings} onContextMenu={(e) => { e.preventDefault(); if (showPanel(ACCOUNT_PANELS.config)) closeDrawer(); }}>
         <Icon name="settings" size={16} />
       </button>
       {open && <AccountMenu auth={auth} name={who.name} onClose={() => setOpen(false)} />}
@@ -81,10 +82,10 @@ export function AccountMenu({ auth, name, onClose, side }: { auth: AccountAuth |
   const st = useStore.getState;
   const plan = planLabel(limits?.subscriptionType ?? auth?.subscriptionType);
   return (
-    <Menu onClose={onClose} className="sb-acct-menu" align="left" prefer="up" side={side} label="账户">
+    <Menu onClose={onClose} className="sb-acct-menu" align="left" prefer="up" side={side} label={tr('账户')}>
       <div className="acct-head">
         <div className="nm">{name}</div>
-        <div className="sub">{[auth?.email, plan].filter(Boolean).join(' · ') || (auth?.loggedIn === false ? '没有登录 Claude 账号' : '')}</div>
+        <div className="sub">{[auth?.email, plan].filter(Boolean).join(' · ') || (auth?.loggedIn === false ? tr('没有登录 Claude 账号') : '')}</div>
       </div>
       {limits?.ok && limits.windows.length > 0 && (
         <div className="acct-quota" data-id={id('quota')}>
@@ -93,18 +94,18 @@ export function AccountMenu({ auth, name, onClose, side }: { auth: AccountAuth |
       )}
       {/* not signed in to a Claude account: there is no quota to read (the raw error is a missing credentials path);
           otherwise one plain line, the raw error only in the tooltip */}
-      {limits && !limits.ok && auth?.loggedIn !== false && <div className="menu-note" title={limits.error ?? undefined}>暂时读不到账号额度，稍后会自动重试</div>}
-      <div className="acct-today" data-id={id('today')} title="今天（本地时间）各对话的费用合计，来自账本">
-        <span>今日费用</span>
+      {limits && !limits.ok && auth?.loggedIn !== false && <div className="menu-note" title={limits.error ?? undefined}>{tr('暂时读不到账号额度，稍后会自动重试')}</div>}
+      <div className="acct-today" data-id={id('today')} title={tr('今天（本地时间）各对话的费用合计，来自账本')}>
+        <span>{tr('今日费用')}</span>
         <span className="v">{today ? fmtCost(today.cost, today.unknown) : '…'}</span>
       </div>
       <div className="menu-sep" />
       <ThemeQuick dataId={id('theme')} />
-      <button data-id={id('usage')} onClick={act(() => showPanel(ACCOUNT_PANELS.usage))}><Icon name="usage" size={14} /> 用量与账本</button>
-      <button data-id={id('config')} onClick={act(() => showPanel(ACCOUNT_PANELS.config))}><Icon name="config" size={14} /> 配置中心（右侧面板）</button>
-      <button data-id={id('appearance')} onClick={act(() => st().openSettings({ section: 'appearance' }))}><Icon name="sun" size={14} /> 外观与主题…</button>
-      <button data-id={id('shortcuts')} onClick={act(() => useStore.setState({ shortcutsOpen: true }))}><Icon name="keyboard" size={14} /> 键盘快捷键<span className="k">?</span></button>
-      <button data-id={id('palette')} onClick={act(() => useStore.setState({ paletteOpen: true }))}><Icon name="command" size={14} /> 命令面板<span className="k">{modKey} K</span></button>
+      <button data-id={id('usage')} onClick={act(() => showPanel(ACCOUNT_PANELS.usage))}><Icon name="usage" size={14} /> {tr('用量与账本')}</button>
+      <button data-id={id('config')} onClick={act(() => showPanel(ACCOUNT_PANELS.config))}><Icon name="config" size={14} /> {tr('配置中心（右侧面板）')}</button>
+      <button data-id={id('appearance')} onClick={act(() => st().openSettings({ section: 'appearance' }))}><Icon name="sun" size={14} /> {tr('外观与主题…')}</button>
+      <button data-id={id('shortcuts')} onClick={act(() => useStore.setState({ shortcutsOpen: true }))}><Icon name="keyboard" size={14} /> {tr('键盘快捷键')}<span className="k">?</span></button>
+      <button data-id={id('palette')} onClick={act(() => useStore.setState({ paletteOpen: true }))}><Icon name="command" size={14} /> {tr('命令面板')}<span className="k">{modKey} K</span></button>
     </Menu>
   );
 }

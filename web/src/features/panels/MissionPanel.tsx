@@ -6,6 +6,7 @@ import { Icon } from '@/ui/icons';
 import { sessionPeer } from '@/features/peers';
 import { orchAct, useOrch, useOrchBusy, waitingOf } from '@/features/orchestra/state';
 import { accessAsk, isAccessRequest } from '@/features/computer/computer-tools';
+import { tr } from '@/i18n';
 
 type Lane = 'attention' | 'running' | 'idle' | 'error';
 
@@ -42,10 +43,10 @@ export function MissionPanel() {
     });
   }, [open, sessions, schedules]);
   const lanes: { id: Lane; l: string; hint: string }[] = [
-    { id: 'attention', l: '需要你', hint: '等待权限或提问' },
-    { id: 'running', l: '运行中', hint: '模型或工具正在执行' },
-    { id: 'error', l: '出错', hint: '进程异常退出' },
-    { id: 'idle', l: '空闲', hint: '已连接，等待输入' },
+    { id: 'attention', l: tr('需要你'), hint: tr('等待权限或提问') },
+    { id: 'running', l: tr('运行中'), hint: tr('模型或工具正在执行') },
+    { id: 'error', l: tr('出错'), hint: tr('进程异常退出') },
+    { id: 'idle', l: tr('空闲'), hint: tr('已连接，等待输入') },
   ];
   // federation: sessions running on other machines that this window has not opened (opened ones are cards above)
   const remote = useMemo(() => sessions.filter((s) => s.peer && !s.peer.offline && !open[s.sessionId] && (s.live === 'running' || s.live === 'waiting' || s.live === 'starting')), [sessions, open]);
@@ -53,20 +54,20 @@ export function MissionPanel() {
   return (
     <div className="mission">
       <div className="mission-head">
-        <span>{total} 个活动对话 · {cards.filter((c) => c.lane === 'attention').length + orchWait.length + remote.filter((s) => s.live === 'waiting').length} 需要你 · {cards.filter((c) => c.lane === 'running').length + remote.filter((s) => s.live !== 'waiting').length} 运行中</span>
+        <span>{tr('{total} 个活动对话 · {filterCount} 需要你 · {filterCount2} 运行中', { total, filterCount: cards.filter((c) => c.lane === 'attention').length + orchWait.length + remote.filter((s) => s.live === 'waiting').length, filterCount2: cards.filter((c) => c.lane === 'running').length + remote.filter((s) => s.live !== 'waiting').length })}</span>
         <span className="grow" />
-        <label className="muted" style={{ fontSize: 13, display: 'flex', gap: 4, alignItems: 'center' }}><input type="checkbox" checked={showIdle} onChange={(e) => setShowIdle(e.target.checked)} /> 显示空闲</label>
+        <label className="muted" style={{ fontSize: 13, display: 'flex', gap: 4, alignItems: 'center' }}><input type="checkbox" checked={showIdle} onChange={(e) => setShowIdle(e.target.checked)} /> {tr('显示空闲')}</label>
       </div>
-      {!total && !remote.length && !orchWait.length && <div className="empty">没有活动的对话。侧栏点开一个，或用「恢复」继续。</div>}
+      {!total && !remote.length && !orchWait.length && <div className="empty">{tr('没有活动的对话。侧栏点开一个，或用「恢复」继续。')}</div>}
       <div className="mission-lanes">
         {remote.length > 0 && (
           <div className="lane running remote">
-            <div className="lane-h"><b>其它机器上运行中</b><span className="badge">{remote.length}</span><span className="muted">点开即可接管：续聊、审批、中断</span></div>
+            <div className="lane-h"><b>{tr('其它机器上运行中')}</b><span className="badge">{remote.length}</span><span className="muted">{tr('点开即可接管：续聊、审批、中断')}</span></div>
             {remote.map((s) => (
               <div key={s.sessionId} className="mcard" onClick={() => void loadHistory(s.sessionId)}>
                 <div className="t"><span className={clsx('dot', s.live)} />{s.title}</div>
                 <div className="sub"><Icon name="machine" size={11} /> {s.peer!.name} · {basename(s.cwd)}{s.gitBranch ? ` · ${s.gitBranch}` : ''}</div>
-                <div className="foot"><span className="muted">{s.live === 'waiting' ? '等待审批' : '运行中'} · {ago(s.lastModified)}</span></div>
+                <div className="foot"><span className="muted">{s.live === 'waiting' ? tr('等待审批') : tr('运行中')} · {ago(s.lastModified)}</span></div>
               </div>
             ))}
           </div>
@@ -85,32 +86,32 @@ export function MissionPanel() {
                   {c.lane === 'attention' && c.o.pending.map((p) => (
                     // 操控电脑 asking for applications: which ones and why is on the conversation's own card, and that is
                     // where it is answered (a click on this card opens it) — no 允许 here, where neither can be read
-                    isAccessRequest(p.toolName) ? <div key={p.requestId} className="perm" data-kind="access" title="打开对话，看它要操控哪些应用再决定">想操控这台电脑上的应用：{accessAsk(p.input as Record<string, unknown>).apps.join('、')}（打开对话再决定）</div> :
+                    isAccessRequest(p.toolName) ? <div key={p.requestId} className="perm" data-kind="access" title={tr('打开对话，看它要操控哪些应用再决定')}>{tr('想操控这台电脑上的应用：{apps}（打开对话再决定）', { apps: accessAsk(p.input as Record<string, unknown>).apps.join('、') })}</div> :
                     <div key={p.requestId} className="perm">
                       <span className="mono">{p.toolName}</span> {String((p.input as any).command ?? (p.input as any).file_path ?? (p.input as any).question ?? '').slice(0, 60)}
                       {p.toolName !== 'AskUserQuestion' && p.toolName !== 'ExitPlanMode' && (
-                        <span className="acts"><button className="btn sm primary" onClick={(e) => { e.stopPropagation(); void respond(p.requestId, { behavior: 'allow' }); }}>允许</button><button className="btn sm" onClick={(e) => { e.stopPropagation(); void respond(p.requestId, { behavior: 'deny', message: '用户拒绝' }); }}>拒绝</button></span>
+                        <span className="acts"><button className="btn sm primary" onClick={(e) => { e.stopPropagation(); void respond(p.requestId, { behavior: 'allow' }); }}>{tr('允许')}</button><button className="btn sm" onClick={(e) => { e.stopPropagation(); void respond(p.requestId, { behavior: 'deny', message: tr('用户拒绝') }); }}>{tr('拒绝')}</button></span>
                       )}
                     </div>
                   ))}
-                  {c.lane === 'running' && <div className="sub">{c.running ? `${c.running.name} · ${fmtMs(Date.now() - c.running.since)}` : c.o.state === 'starting' ? '启动中…' : '模型思考中'}{c.quietMs > 15000 ? ` · 安静 ${fmtMs(c.quietMs)}` : ''}</div>}
-                  {c.lane === 'error' && <div className="sub" style={{ color: 'var(--red)' }}>{c.o.error ?? '进程退出'}</div>}
+                  {c.lane === 'running' && <div className="sub">{c.running ? `${c.running.name} · ${fmtMs(Date.now() - c.running.since)}` : c.o.state === 'starting' ? tr('启动中…') : tr('模型思考中')}{c.quietMs > 15000 ? tr(' · 安静 {fmtMs}', { fmtMs: fmtMs(c.quietMs) }) : ''}</div>}
+                  {c.lane === 'error' && <div className="sub" style={{ color: 'var(--red)' }}>{c.o.error ?? tr('进程退出')}</div>}
                   <div className="foot">
-                    <span className="muted">{c.turns} 轮{c.cost ? ` · $${c.cost.toFixed(3)}` : ''}{c.lastTool ? ` · 最近 ${c.lastTool.name}` : ''}{c.o.conv.lastEventAt ? ` · ${ago(c.o.conv.lastEventAt)}` : ''}</span>
+                    <span className="muted">{tr('{turns} 轮{v}{v2}{v3}', { turns: c.turns, v: c.cost ? ` · $${c.cost.toFixed(3)}` : '', v2: c.lastTool ? tr(' · 最近 {name}', { name: c.lastTool.name }) : '', v3: c.o.conv.lastEventAt ? ` · ${ago(c.o.conv.lastEventAt)}` : '' })}</span>
                     <span className="grow" />
-                    {c.lane === 'running' && <button className="icon-btn" title="中断" onClick={(e) => { e.stopPropagation(); void interrupt(c.o.sessionId); }} aria-label="中断"><Icon name="stop" size={12} /></button>}
-                    {c.lane === 'error' && <button className="icon-btn" title="重新打开" onClick={(e) => { e.stopPropagation(); void loadHistory(c.o.sessionId); }} aria-label="重新打开"><Icon name="refresh" size={13} /></button>}
+                    {c.lane === 'running' && <button className="icon-btn" title={tr('中断')} onClick={(e) => { e.stopPropagation(); void interrupt(c.o.sessionId); }} aria-label={tr('中断')}><Icon name="stop" size={12} /></button>}
+                    {c.lane === 'error' && <button className="icon-btn" title={tr('重新打开')} onClick={(e) => { e.stopPropagation(); void loadHistory(c.o.sessionId); }} aria-label={tr('重新打开')}><Icon name="refresh" size={13} /></button>}
                   </div>
                 </div>
               ))}
               {orch.map((w) => (
                 <div key={`${w.runId}:${w.nodeId}`} className="mcard orch-wait" onClick={() => useOrch.getState().ask('open', w.runId)}>
                   <div className="t"><Icon name={w.kind === 'approval' ? 'approval' : 'compare'} size={13} />{w.title}</div>
-                  <div className="sub">编排「{w.runName}」· {w.kind === 'approval' ? '等你审批' : '候选跑完了，等你选一个合并'}{w.since ? ` · ${ago(w.since)}` : ''}</div>
+                  <div className="sub">{tr('编排「{runName}」· {v}{v2}', { runName: w.runName, v: w.kind === 'approval' ? tr('等你审批') : tr('候选跑完了，等你选一个合并'), v2: w.since ? ` · ${ago(w.since)}` : '' })}</div>
                   {w.kind === 'approval' && (
                     <div className="orch-wait-acts">
-                      <button className="btn sm primary" disabled={!!orchBusy[`${w.runId}:${w.nodeId}`]} onClick={(e) => { e.stopPropagation(); void orchAct(`${w.runId}:${w.nodeId}`, { kind: 'orchestra.node.approve', runId: w.runId, nodeId: w.nodeId, decision: 'approve' }, '已通过'); }}>通过</button>
-                      <button className="btn sm" onClick={(e) => { e.stopPropagation(); useOrch.getState().ask('open', w.runId); }}>去看看</button>
+                      <button className="btn sm primary" disabled={!!orchBusy[`${w.runId}:${w.nodeId}`]} onClick={(e) => { e.stopPropagation(); void orchAct(`${w.runId}:${w.nodeId}`, { kind: 'orchestra.node.approve', runId: w.runId, nodeId: w.nodeId, decision: 'approve' }, tr('已通过')); }}>{tr('通过')}</button>
+                      <button className="btn sm" onClick={(e) => { e.stopPropagation(); useOrch.getState().ask('open', w.runId); }}>{tr('去看看')}</button>
                     </div>
                   )}
                 </div>

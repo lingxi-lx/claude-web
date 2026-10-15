@@ -5,6 +5,7 @@ import { EventEmitter } from 'node:events';
 import { applyBg, createBgState, endRunning, snapshotBg, type BgState } from './registry.js';
 import { listRuns, readAgentTranscript, readRun, sessionDirOf } from './disk.js';
 import type { BackgroundRequest, BgRunSummary, BgSession, BgTask } from './types.js';
+import { tr } from '../i18n/index.js';
 
 /** A conversation whose background has all ended is kept this long (the page's 「结束了」). */
 export const KEEP_ENDED_MS = 24 * 3600_000;
@@ -31,7 +32,7 @@ export class BackgroundService extends EventEmitter {
     o.pool.on('state', (sid, state) => {
       if (state !== 'closed' && state !== 'error' && state !== 'starting') return;
       const s = this.states.get(sid);
-      if (s && endRunning(s, '进程结束了', this.now())) this.schedule(sid);
+      if (s && endRunning(s, tr('进程结束了'), this.now())) this.schedule(sid);
     });
   }
 

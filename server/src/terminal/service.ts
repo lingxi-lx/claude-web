@@ -7,6 +7,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { resolveClaudeExe } from '../claude-exe.js';
+import { tr } from '../i18n/index.js';
 
 type Pty = { write(d: string): void; resize(c: number, r: number): void; kill(): void; onData(cb: (d: string) => void): void; onExit(cb: (e: { exitCode: number }) => void): void };
 
@@ -104,10 +105,10 @@ export class TerminalService extends EventEmitter {
   pickDir(): Promise<string | null> {
     const done = (res: (v: string | null) => void) => (_e: unknown, out: string) => res(String(out ?? '').trim().replace(/(.)\/$/, '$1') || null);
     if (process.platform === 'darwin') {
-      return new Promise((res) => execFile('osascript', ['-e', 'POSIX path of (choose folder with prompt "选择工作目录")'], { windowsHide: true }, done(res)));
+      return new Promise((res) => execFile('osascript', ['-e', tr('POSIX path of (choose folder with prompt "选择工作目录")')], { windowsHide: true }, done(res)));
     }
     if (process.platform !== 'win32') {
-      return new Promise((res) => execFile('zenity', ['--file-selection', '--directory', '--title=选择工作目录'], { windowsHide: true }, done(res)));
+      return new Promise((res) => execFile('zenity', ['--file-selection', '--directory', tr('--title=选择工作目录')], { windowsHide: true }, done(res)));
     }
     const script = 'Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; $d.ShowNewFolderButton = $true; if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $d.SelectedPath }';
     return new Promise((res) => execFile('powershell', ['-NoProfile', '-STA', '-Command', script], { windowsHide: true }, (_e, out) => res(out.trim() || null)));

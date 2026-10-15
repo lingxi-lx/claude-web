@@ -7,6 +7,7 @@ import { useStore } from '@/store';
 import { showPanel } from '@/features/workbench/right-panel';
 import { openAutomation } from '@/features/automation/state';
 import type { ClientRequest, OrchRun, OrchRunSummary, ServerEvent, Workflow, WorkflowTemplate } from '@shared';
+import { tr } from '@/i18n';
 
 export interface OrchWaiting { runId: string; runName: string; nodeId: string; title: string; kind: 'approval' | 'compare'; since?: number }
 /** What the command palette asked the panel to show. */
@@ -115,9 +116,9 @@ export function installOrchestra() {
     });
     for (const w of waitingOf({ [e.run.id]: e.run })) {
       if (prev?.nodes[w.nodeId]?.state === 'waiting') continue;
-      const body = w.kind === 'approval' ? `等你审批：${w.title}` : `候选都跑完了，选一个合并：${w.title}`;
-      useStore.getState().toast(`编排「${w.runName}」${body}`, true);
-      if (desktop && !document.hasFocus()) desktop.notify(`编排「${w.runName}」`, body);
+      const body = w.kind === 'approval' ? tr('等你审批：{title}', { title: w.title }) : tr('候选都跑完了，选一个合并：{title}', { title: w.title });
+      useStore.getState().toast(tr('编排「{runName}」{body}', { runName: w.runName, body }), true);
+      if (desktop && !document.hasFocus()) desktop.notify(tr('编排「{runName}」', { runName: w.runName }), body);
     }
   });
   refresh();

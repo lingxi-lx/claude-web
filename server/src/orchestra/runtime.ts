@@ -15,6 +15,7 @@ import { expandSessionRefs } from '../library/briefing.js';
 import { gitAdapter } from './git.js';
 import { DEFAULT_MAX_PARALLEL, type OrchDeps, type SessionHandlers } from './service.js';
 import { defaultFeaturesOf } from '../computer/launcher.js';
+import { tr } from '../i18n/index.js';
 
 /** How long a 'closed' may be followed by a replacement runner (provider / agent hot swap) before it counts. */
 const SWAP_GRACE_MS = 3000;
@@ -95,7 +96,7 @@ export function orchestraDeps(s: RuntimeServices, dirs: { runs: string; worktree
       }
       if (isCancelled?.()) return false;
       const r = runner();
-      if (!r || r.state === 'closed' || r.state === 'error') throw new Error('对话没能启动');
+      if (!r || r.state === 'closed' || r.state === 'error') throw new Error(tr('对话没能启动'));
       const outgoing = await expand(text);
       if (isCancelled?.()) return false;
       const uuid = randomUUID();
@@ -105,7 +106,7 @@ export function orchestraDeps(s: RuntimeServices, dirs: { runs: string; worktree
       const title = titles.get(sessionId);
       titles.delete(sessionId);
       const head = await s.transcripts.head(sessionId).catch(() => null);
-      if (head && !head.title && title) await s.transcripts.patchHead(sessionId, { title: `编排 · ${title}`.slice(0, 80) }).catch(() => {});
+      if (head && !head.title && title) await s.transcripts.patchHead(sessionId, { title: tr('编排 · {title}', { title }).slice(0, 80) }).catch(() => {});
       return true;
     },
     watch: (sessionId, on) => poolWatch(s.pool, sessionId, on),

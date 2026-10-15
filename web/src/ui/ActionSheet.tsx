@@ -25,6 +25,7 @@ import { pushBackLayer } from './back-layer';
 import { useLeaveGhost, type GhostOpts } from './ghost';
 import { imeComposing } from './ime';
 import { byPointer } from './input-intent';
+import { tr } from '@/i18n';
 
 /** phone-menus.css: `.as-leaving` slides the sheet away for this long (--dur-slow). */
 export const SHEET_OUT_MS = 240;
@@ -164,7 +165,7 @@ export function ActionSheet({ onClose, tall, children }: { onClose: (refocus: bo
       <div ref={sheet} className={clsx('as-sheet', tall && 'tall')} onAnimationEnd={(e) => { if (e.target === e.currentTarget) setEntering(false); }}>
         <div className="as-grab" aria-hidden onPointerDown={grabDown} onPointerMove={grabMove} onPointerUp={(e) => grabEnd(e, false)} onPointerCancel={(e) => grabEnd(e, true)}><i /></div>
         <div ref={body} className="as-body">{children}</div>
-        <div className="as-foot"><button type="button" className="as-cancel" onClick={() => shut(true)}>取消</button></div>
+        <div className="as-foot"><button type="button" className="as-cancel" onClick={() => shut(true)}>{tr('取消')}</button></div>
       </div>
     </div>,
     document.body,

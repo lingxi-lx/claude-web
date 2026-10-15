@@ -8,6 +8,7 @@ import type { AgentConfigBackup, AgentConfigFile, AgentConfigKind, AgentSettingF
 import type { BackupStore } from './backup.js';
 import type { CliSpec } from './cli.js';
 import { parseConfig, type ConfigFormat } from './edit.js';
+import { tr } from '../i18n/index.js';
 
 export interface AdapterCtx {
   /** the agent's CLI as configured (settings → CLI Agents command + env) */
@@ -60,9 +61,9 @@ export async function fileList(entries: Omit<AgentConfigFile, 'exists'>[]): Prom
 /** Global instructions, project instructions (when a cwd is given), then the config file. */
 export function standardFiles(globalDir: string, instr: string, config: string, cwd?: string): Omit<AgentConfigFile, 'exists'>[] {
   return [
-    { label: `全局说明 ${instr}`, path: path.join(globalDir, instr), kind: 'instructions', scope: 'global' },
-    ...(cwd ? [{ label: `项目说明 ${instr}`, path: path.join(cwd, instr), kind: 'instructions' as const, scope: 'project' as const }] : []),
-    { label: `配置 ${path.basename(config)}`, path: config, kind: 'config', scope: 'global' },
+    { label: tr('全局说明 {instr}', { instr }), path: path.join(globalDir, instr), kind: 'instructions', scope: 'global' },
+    ...(cwd ? [{ label: tr('项目说明 {instr}', { instr }), path: path.join(cwd, instr), kind: 'instructions' as const, scope: 'project' as const }] : []),
+    { label: tr('配置 {basename}', { basename: path.basename(config) }), path: config, kind: 'config', scope: 'global' },
   ];
 }
 
@@ -75,7 +76,7 @@ export function fieldValue(doc: Record<string, unknown>, key: string): string | 
 /** Validate a settings write against the adapter's own field table (no arbitrary keys from the wire). */
 export function checkField(fields: AgentSettingField[], key: string, value: string | null): void {
   const f = fields.find((x) => x.key === key);
-  if (!f) throw new Error(`不支持的设置项：${key}`);
-  if (value !== null && f.type === 'enum' && f.options && !f.options.includes(value)) throw new Error(`${f.label} 只能是 ${f.options.join(' / ')}`);
-  if (value !== null && /[\r\n]/.test(value)) throw new Error('值不能包含换行');
+  if (!f) throw new Error(tr('不支持的设置项：{key}', { key }));
+  if (value !== null && f.type === 'enum' && f.options && !f.options.includes(value)) throw new Error(tr('{label} 只能是 {options}', { label: f.label, options: f.options.join(' / ') }));
+  if (value !== null && /[\r\n]/.test(value)) throw new Error(tr('值不能包含换行'));
 }

@@ -6,6 +6,7 @@ import type { AgentKind, Provider } from '@shared';
 import { compatibleTypes, profileUnavailable } from '@/features/models/menu';
 import { useGatewayStatus } from '@/features/models/data';
 import { connectModel } from './ConnectModel';
+import { tr } from '@/i18n';
 
 const ADD = '__add';
 
@@ -37,16 +38,16 @@ export function ProviderSelect({ agent, value, onChange, first, own, className =
     if (v !== ADD) return onChange(v);
     const p = await connectModel({ reason: 'settings', makeDefault: false });
     if (!p) return;
-    if (!compatibleTypes(agent).includes(p.type)) { toast(`「${p.name}」已添加，但这个 Agent 用不了这种格式的供应商`); return; }
+    if (!compatibleTypes(agent).includes(p.type)) { toast(tr('「{name}」已添加，但这个 Agent 用不了这种格式的供应商', { name: p.name })); return; }
     onChange(p.id);
   };
   return (
     <select className={className} value={missing ? '__missing' : value} onChange={(e) => void pick(e.target.value)} data-provider-select>
       <option value="" title={first.title}>{first.label}</option>
       {own && <option value="claude">{own}</option>}
-      {missing && <option value="__missing" disabled>（已删除的供应商）</option>}
+      {missing && <option value="__missing" disabled>{tr('（已删除的供应商）')}</option>}
       {list.map(({ p, why }) => <option key={p.id} value={p.id} disabled={!!why} title={why ?? p.baseUrl ?? ''}>{p.name}{p.defaultModel ? ` · ${p.defaultModel}` : ''}{why ? `（${why}）` : ''}</option>)}
-      <option value={ADD}>添加供应商…</option>
+      <option value={ADD}>{tr('添加供应商…')}</option>
     </select>
   );
 }

@@ -3,17 +3,13 @@ import { randomBytes } from 'node:crypto';
 import type { MetaStore } from '../meta/store.js';
 import type { RunnerPool } from '../runtime/pool.js';
 import type { Goal, GoalEvidence, GoalStep } from '../protocol.js';
+import { tr } from '../i18n/index.js';
 
 const CONTINUE_DELAY_MS = 1500;
 const TEST_CMD = /\b(vitest|jest|pytest|mocha|go test|cargo test|npm test|pnpm test|yarn test|dotnet test|mvn test|gradle test|phpunit|rspec|ctest|make test)\b/i;
 const NO_PROGRESS_LIMIT = 3;
 
-export const GOAL_PROTOCOL = `你在执行一个「目标」。规则：
-- 持续推进，直到目标完整达成。每轮结束时我会让你继续。
-- 目标**完全达成并验证**后，最后一行写：GOAL_STATUS: complete
-- 如果没有人类输入就无法继续（缺权限、缺信息、需要决策），最后一行写：GOAL_STATUS: blocked — <原因>
-- 其它情况最后一行写：GOAL_STATUS: continue，并简述下一步。
-- 每次改动都要留下证据：跑测试 / 构建 / 命令验证，把结果说清楚。`;
+export const GOAL_PROTOCOL = tr("你在执行一个「目标」。规则：\n- 持续推进，直到目标完整达成。每轮结束时我会让你继续。\n- 目标**完全达成并验证**后，最后一行写：GOAL_STATUS: complete\n- 如果没有人类输入就无法继续（缺权限、缺信息、需要决策），最后一行写：GOAL_STATUS: blocked — <原因>\n- 其它情况最后一行写：GOAL_STATUS: continue，并简述下一步。\n- 每次改动都要留下证据：跑测试 / 构建 / 命令验证，把结果说清楚。");
 
 /**
  * Web-level goals: an objective + living spec bound to a session, auto-continued until the model reports
@@ -44,7 +40,7 @@ export class GoalService extends EventEmitter {
 
   async update(id: string, patch: Partial<Pick<Goal, 'objective' | 'spec' | 'maxTurns' | 'tokenBudget' | 'cwd' | 'agent' | 'permissionMode' | 'model'>>) {
     const g = this.get(id);
-    if (!g) throw new Error('目标不存在');
+    if (!g) throw new Error(tr('目标不存在'));
     Object.assign(g, patch);
     await this.save(g);
     return g;
@@ -56,12 +52,12 @@ export class GoalService extends EventEmitter {
     this.emit('changed');
   }
 
-  async note(id: string, text: string) { const g = this.get(id); if (!g) throw new Error('目标不存在'); this.addEvidence(g, { kind: 'note', summary: text }); await this.save(g); }
+  async note(id: string, text: string) { const g = this.get(id); if (!g) throw new Error(tr('目标不存在')); this.addEvidence(g, { kind: 'note', summary: text }); await this.save(g); }
 
   /** Start (or resume) the goal: open its session if needed and send the objective. */
   async start(id: string): Promise<Goal> {
     const g = this.get(id);
-    if (!g) throw new Error('目标不存在');
+    if (!g) throw new Error(tr('目标不存在'));
     let r = g.sessionId ? this.pool.get(g.sessionId) : undefined;
     if (!r) {
       r = this.pool.open({ sessionId: g.sessionId, cwd: g.cwd, agent: (g.agent as any) || undefined, permissionMode: (g.permissionMode as any) ?? 'default', model: g.model || undefined });
@@ -72,19 +68,19 @@ export class GoalService extends EventEmitter {
     g.startedAt = g.startedAt ?? Date.now();
     if (g.status === 'active' && (g as any)._wasMax) delete (g as any)._wasMax;
     this.lastTexts.set(g.id, []);
-    const prompt = fresh ? `${GOAL_PROTOCOL}\n\n# 目标\n${g.objective}${g.spec ? `\n\n# 规格 / 验收标准\n${g.spec}` : ''}` : this.continuePrompt(g);
-    this.addEvidence(g, { kind: 'note', summary: fresh ? '目标已启动' : '继续推进' });
+    const prompt = fresh ? tr("{GOAL_PROTOCOL}\n\n# 目标\n{objective}{v}", { GOAL_PROTOCOL, objective: g.objective, v: g.spec ? tr("\n\n# 规格 / 验收标准\n{spec}", { spec: g.spec }) : '' }) : this.continuePrompt(g);
+    this.addEvidence(g, { kind: 'note', summary: fresh ? tr('目标已启动') : tr('继续推进') });
     await this.save(g);
     this.sendWhenReady(r, prompt, g.id);
     return g;
   }
 
-  async pause(id: string) { const g = this.get(id); if (!g) throw new Error('目标不存在'); this.clearTimer(id); if (g.status === 'active') { g.status = 'paused'; this.addEvidence(g, { kind: 'note', summary: '已暂停' }); await this.save(g); } return g; }
-  async resume(id: string) { const g = this.get(id); if (!g) throw new Error('目标不存在'); if (g.status === 'max_turns') g.turnsExecuted = 0; return this.start(id); }
-  async complete(id: string) { const g = this.get(id); if (!g) throw new Error('目标不存在'); this.clearTimer(id); g.status = 'complete'; g.completedAt = Date.now(); this.addEvidence(g, { kind: 'note', summary: '手动标记完成' }); await this.save(g); return g; }
+  async pause(id: string) { const g = this.get(id); if (!g) throw new Error(tr('目标不存在')); this.clearTimer(id); if (g.status === 'active') { g.status = 'paused'; this.addEvidence(g, { kind: 'note', summary: tr('已暂停') }); await this.save(g); } return g; }
+  async resume(id: string) { const g = this.get(id); if (!g) throw new Error(tr('目标不存在')); if (g.status === 'max_turns') g.turnsExecuted = 0; return this.start(id); }
+  async complete(id: string) { const g = this.get(id); if (!g) throw new Error(tr('目标不存在')); this.clearTimer(id); g.status = 'complete'; g.completedAt = Date.now(); this.addEvidence(g, { kind: 'note', summary: tr('手动标记完成') }); await this.save(g); return g; }
 
   private continuePrompt(g: Goal) {
-    return `目标继续（第 ${g.turnsExecuted + 1}/${g.maxTurns} 轮）：继续推进「${g.objective.slice(0, 200)}」。检查还缺什么、验证已做的部分，然后干活。完成时最后一行写 GOAL_STATUS: complete；卡住写 GOAL_STATUS: blocked — 原因；否则 GOAL_STATUS: continue。`;
+    return tr('目标继续（第 {turnsExecuted}/{maxTurns} 轮）：继续推进「{objective}」。检查还缺什么、验证已做的部分，然后干活。完成时最后一行写 GOAL_STATUS: complete；卡住写 GOAL_STATUS: blocked — 原因；否则 GOAL_STATUS: continue。', { turnsExecuted: g.turnsExecuted + 1, maxTurns: g.maxTurns, objective: g.objective.slice(0, 200) });
   }
 
   private sendWhenReady(r: any, text: string, goalId: string) {
@@ -140,8 +136,8 @@ export class GoalService extends EventEmitter {
       const st = /GOAL_STATUS:\s*(complete|blocked|continue)\s*(?:[—-]+\s*(.*))?/i.exec(text);
       const status = st?.[1]?.toLowerCase();
       if (m.is_error) { g.status = 'blocked'; this.addEvidence(g, { kind: 'error', summary: text.slice(0, 300) }); }
-      else if (status === 'complete') { g.status = 'complete'; g.completedAt = Date.now(); this.addEvidence(g, { kind: 'note', summary: '模型报告：目标完成', ok: true }); }
-      else if (status === 'blocked') { g.status = 'blocked'; this.addEvidence(g, { kind: 'blocked', summary: st?.[2]?.trim() || '模型报告：需要人工介入' }); }
+      else if (status === 'complete') { g.status = 'complete'; g.completedAt = Date.now(); this.addEvidence(g, { kind: 'note', summary: tr('模型报告：目标完成'), ok: true }); }
+      else if (status === 'blocked') { g.status = 'blocked'; this.addEvidence(g, { kind: 'blocked', summary: st?.[2]?.trim() || tr('模型报告：需要人工介入') }); }
       else {
         // progress guard: identical replies with no tool use → stuck
         const arr = this.lastTexts.get(g.id) ?? [];
@@ -150,9 +146,9 @@ export class GoalService extends EventEmitter {
         if (arr.length > NO_PROGRESS_LIMIT) arr.shift();
         this.lastTexts.set(g.id, arr);
         const stuck = arr.length >= NO_PROGRESS_LIMIT && arr.every((t) => t && t === arr[0]);
-        if (stuck) { g.status = 'blocked'; this.addEvidence(g, { kind: 'blocked', summary: '连续几轮没有工具调用且回复相同，判定卡住' }); }
-        else if (g.turnsExecuted >= g.maxTurns) { g.status = 'max_turns'; this.addEvidence(g, { kind: 'note', summary: `达到最大轮数 ${g.maxTurns}` }); }
-        else if (g.tokenBudget && g.tokensUsed >= g.tokenBudget) { g.status = 'max_turns'; this.addEvidence(g, { kind: 'note', summary: `达到 token 预算 ${g.tokenBudget}` }); }
+        if (stuck) { g.status = 'blocked'; this.addEvidence(g, { kind: 'blocked', summary: tr('连续几轮没有工具调用且回复相同，判定卡住') }); }
+        else if (g.turnsExecuted >= g.maxTurns) { g.status = 'max_turns'; this.addEvidence(g, { kind: 'note', summary: tr('达到最大轮数 {maxTurns}', { maxTurns: g.maxTurns }) }); }
+        else if (g.tokenBudget && g.tokensUsed >= g.tokenBudget) { g.status = 'max_turns'; this.addEvidence(g, { kind: 'note', summary: tr('达到 token 预算 {tokenBudget}', { tokenBudget: g.tokenBudget }) }); }
         else {
           this.clearTimer(g.id);
           this.timers.set(g.id, setTimeout(() => { const cur = this.get(g.id); const r = cur?.sessionId ? this.pool.get(cur.sessionId) : undefined; if (cur?.status === 'active' && r && r.state === 'idle') { this.sendWhenReady(r, this.continuePrompt(cur), cur.id); } }, CONTINUE_DELAY_MS));
@@ -166,6 +162,6 @@ export class GoalService extends EventEmitter {
   private onState(sid: string, state: string, err?: string) {
     const g = this.goalOfSession(sid);
     if (!g) return;
-    if (state === 'error') { g.status = 'blocked'; this.addEvidence(g, { kind: 'error', summary: (err ?? '对话出错').split('\n')[0] }); void this.save(g); }
+    if (state === 'error') { g.status = 'blocked'; this.addEvidence(g, { kind: 'error', summary: (err ?? tr('对话出错')).split('\n')[0] }); void this.save(g); }
   }
 }

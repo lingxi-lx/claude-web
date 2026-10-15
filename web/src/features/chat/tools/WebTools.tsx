@@ -3,6 +3,7 @@ import { desktop } from '@/desktop';
 import { Markdown } from '../Markdown';
 import { Expandable } from '../Expandable';
 import { ErrorPre } from './McpTool';
+import { tr } from '@/i18n';
 
 export function ExtLink({ href, children }: { href: string; children?: React.ReactNode }) {
   return (
@@ -24,8 +25,8 @@ export function WebFetchBody({ t }: { t: ToolUseBlock }) {
         {st?.bytes !== undefined && <span> · {(st.bytes / 1024).toFixed(1)} KB</span>}
         {st?.durationMs !== undefined && <span> · {(st.durationMs / 1000).toFixed(1)}s</span>}
       </div>
-      {inp.prompt && <div className="tool-meta">提示：{String(inp.prompt)}</div>}
-      {!r ? <div className="tool-meta">抓取中…</div> : r.isError ? <ErrorPre text={r.content} /> : (
+      {inp.prompt && <div className="tool-meta">{tr('提示：{prompt}', { prompt: String(inp.prompt) })}</div>}
+      {!r ? <div className="tool-meta">{tr('抓取中…')}</div> : r.isError ? <ErrorPre text={r.content} /> : (
         <Expandable text={String(st?.result ?? r.content)} lines={30} chars={6000}>
           {(v) => <div className="tool-md"><Markdown text={v} /></div>}
         </Expandable>
@@ -38,7 +39,7 @@ export function WebSearchBody({ t }: { t: ToolUseBlock }) {
   const inp = t.input as any;
   const r = t.result;
   const st = r?.structured as any;
-  if (!r) return <div className="tool-meta">搜索「{String(inp.query ?? '')}」…</div>;
+  if (!r) return <div className="tool-meta">{tr('搜索「{query}」…', { query: String(inp.query ?? '') })}</div>;
   if (r.isError) return <ErrorPre text={r.content} />;
   const hits: { title: string; url: string }[] = [];
   const notes: string[] = [];
@@ -54,7 +55,7 @@ export function WebSearchBody({ t }: { t: ToolUseBlock }) {
   }
   return (
     <>
-      <div className="tool-meta">{hits.length} 条结果{st?.searchCount ? ` · ${st.searchCount} 次搜索` : ''}{st?.durationSeconds ? ` · ${st.durationSeconds.toFixed(1)}s` : ''}</div>
+      <div className="tool-meta">{tr('{hitsCount} 条结果{v}{v2}', { hitsCount: hits.length, v: st?.searchCount ? tr(' · {searchCount} 次搜索', { searchCount: st.searchCount }) : '', v2: st?.durationSeconds ? ` · ${st.durationSeconds.toFixed(1)}s` : '' })}</div>
       <ol className="hits">
         {hits.slice(0, 20).map((h, i) => (
           <li key={i}><ExtLink href={h.url}>{h.title}</ExtLink><div className="hit-url">{h.url}</div></li>
@@ -71,7 +72,7 @@ export function WebSearchBody({ t }: { t: ToolUseBlock }) {
 
 export function SkillBody({ t }: { t: ToolUseBlock }) {
   const r = t.result;
-  if (!r) return <div className="tool-meta">加载 skill…</div>;
+  if (!r) return <div className="tool-meta">{tr('加载 skill…')}</div>;
   if (r.isError) return <ErrorPre text={r.content} />;
   return (
     <Expandable text={r.content} lines={30} chars={6000}>

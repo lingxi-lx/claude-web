@@ -10,6 +10,7 @@ import { blockRemoteOpen } from '@/features/remote-guard';
 import { viewTarget, type ExplorerMode, type ReviewIntent } from './panel-entries';
 import type { WbView } from './wb-views';
 import { openUrl } from '@/features/browser/state';
+import { tr } from '@/i18n';
 
 interface RightPanelState {
   /** the last request for the review; `n` grows so asking for the same thing twice still applies */
@@ -86,7 +87,7 @@ export function openSessionView(view: WbView, at?: { paneId: string; tileId: str
     openAutomation(target.tab);
     return;
   }
-  if (!cur || tile?.kind !== 'chat' || !tile.sessionId) { s.toast('先打开一个对话'); return; }
+  if (!cur || tile?.kind !== 'chat' || !tile.sessionId) { s.toast(tr('先打开一个对话')); return; }
   s.dispatchLayout({ t: 'tile.activate', paneId: cur.paneId, tileId: cur.tileId });
   if (target.to === 'tile') {
     s.dispatchLayout({ t: 'tile.patch', paneId: cur.paneId, tileId: cur.tileId, patch: { wb: view } });

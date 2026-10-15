@@ -1,4 +1,5 @@
 import { isImportedSessionId } from '@/util';
+import { tr } from '@/i18n';
 
 const ACTIVE = new Set(['running', 'waiting', 'starting']);
 
@@ -13,10 +14,10 @@ export function turnRunning(openState: string | undefined, live: string | undefi
 
 /** Body of the hand-over confirm: in place for claude-web / Claude conversations, a new one for imported ones. */
 export function handOverMessage(sessionId: string): string {
-  const tail = '新 agent 会收到一份结构化交接说明（已决定什么、改过哪些文件、试过什么失败了）。思考/推理内容带签名或加密，跨厂商无法携带，不会带过去。';
+  const tail = tr('新 agent 会收到一份结构化交接说明（已决定什么、改过哪些文件、试过什么失败了）。思考/推理内容带签名或加密，跨厂商无法携带，不会带过去。');
   return isImportedSessionId(sessionId)
-    ? `这是从其它 agent 导入的对话：交接会新建一个对话（同一工作目录），原对话保持不变。${tail}`
-    : `对话 id、标题和历史都保留。${tail}`;
+    ? tr('这是从其它 agent 导入的对话：交接会新建一个对话（同一工作目录），原对话保持不变。{tail}', { tail })
+    : tr('对话 id、标题和历史都保留。{tail}', { tail });
 }
 
 /**
@@ -25,7 +26,7 @@ export function handOverMessage(sessionId: string): string {
  */
 export function handOverConfirmText(o: { sessionId: string; agentName: string; modelLabel?: string; running: boolean }): { title: string; message: string } {
   return {
-    title: `把这个对话交给 ${o.agentName}${o.modelLabel ? `（${o.modelLabel}）` : ''}？`,
-    message: `${o.running ? '对话正在运行，当前这一轮会被中断。' : ''}${handOverMessage(o.sessionId)}`,
+    title: tr('把这个对话交给 {agentName}{v}？', { agentName: o.agentName, v: o.modelLabel ? `（${o.modelLabel}）` : '' }),
+    message: `${o.running ? tr('对话正在运行，当前这一轮会被中断。') : ''}${handOverMessage(o.sessionId)}`,
   };
 }

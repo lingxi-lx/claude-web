@@ -2,11 +2,12 @@
 // Pure: the queue itself — who is in it, in what order, when one is sent — is the store's (`send`, `recall`,
 // `stopAndRun`), untouched by this.
 import { decodeAttachments } from '@/model/conversation';
+import { tr } from '@/i18n';
 
 /** The card's first line for the message that goes next. */
-export const QUEUED_LABEL = '已排队，这一轮结束后发送';
+export const QUEUED_LABEL = tr('已排队，这一轮结束后发送');
 /** The label's tooltip: what queueing means, and the other way to say something to a running turn. */
-export const QUEUED_HINT = '排队的消息在当前轮结束后按顺序发送；用「插话」可以不中断地传递指令';
+export const QUEUED_HINT = tr('排队的消息在当前轮结束后按顺序发送；用「插话」可以不中断地传递指令');
 /** More than this many queued: only the first QUEUE_FOLD_SHOWN have a card until 「还有 N 条排队…」 is opened. */
 export const QUEUE_FOLD_OVER = 3;
 export const QUEUE_FOLD_SHOWN = 2;
@@ -15,13 +16,13 @@ export const QUEUE_PREVIEW_MAX = 280;
 
 /** The buttons on a card: their words, and what they say on hover (they are icons only when the card is narrow). */
 export const QUEUE_ACTIONS = {
-  edit: { label: '编辑', title: '从排队里取出来，放回输入框修改' },
-  now: { label: '立即发送', title: '中断当前轮，立刻发送这条' },
-  remove: { label: '删除', title: '不发了，从排队里删除' },
+  edit: { label: tr('编辑'), title: tr('从排队里取出来，放回输入框修改') },
+  now: { label: tr('立即发送'), title: tr('中断当前轮，立刻发送这条') },
+  remove: { label: tr('删除'), title: tr('不发了，从排队里删除') },
 } as const;
-export const QUEUE_FOLD_LABEL = '收起';
+export const QUEUE_FOLD_LABEL = tr('收起');
 /** What the list of cards is called when it is read out. */
-export const QUEUE_LIST_LABEL = '排队的消息';
+export const QUEUE_LIST_LABEL = tr('排队的消息');
 
 /** What of a queued message the cards read (the store's QueuedMessage has it). */
 export interface QueuedLike { id: string; text: string; images?: readonly unknown[]; attachments?: readonly unknown[] }
@@ -53,7 +54,7 @@ export interface QueueView {
 
 /** Only the next message goes when this turn ends; the ones behind it say where they stand. */
 export function queueLabel(pos: number): string {
-  return pos <= 1 ? QUEUED_LABEL : `已排队，排在第 ${pos} 条`;
+  return pos <= 1 ? QUEUED_LABEL : tr('已排队，排在第 {pos} 条', { pos });
 }
 
 function cut(s: string, max: number): string {
@@ -67,7 +68,7 @@ function card(q: QueuedLike, pos: number): QueueCard {
   const refs = d.attachments.filter((a) => a.kind === 'session').length;
   const files = (q.attachments?.length ?? 0) + d.attachments.length - refs;
   const images = q.images?.length ?? 0;
-  const extras = [files ? `${files} 个附件` : '', images ? `${images} 张图` : '', refs ? `引用 ${refs} 个对话` : ''].filter(Boolean).join(' · ');
+  const extras = [files ? tr('{files} 个附件', { files }) : '', images ? tr('{images} 张图', { images }) : '', refs ? tr('引用 {refs} 个对话', { refs }) : ''].filter(Boolean).join(' · ');
   return { id: q.id, pos, label: queueLabel(pos), preview: cut(d.text.replace(/\s+/g, ' ').trim(), QUEUE_PREVIEW_MAX), full: d.text, extras, restore: q.text };
 }
 
@@ -75,7 +76,7 @@ export function queueView(queue: readonly QueuedLike[], expanded: boolean): Queu
   const foldable = queue.length > QUEUE_FOLD_OVER;
   const shown = foldable && !expanded ? QUEUE_FOLD_SHOWN : queue.length;
   const hidden = queue.length - shown;
-  return { cards: queue.slice(0, shown).map((q, i) => card(q, i + 1)), hidden, more: hidden ? `还有 ${hidden} 条排队…` : '', foldable };
+  return { cards: queue.slice(0, shown).map((q, i) => card(q, i + 1)), hidden, more: hidden ? tr('还有 {hidden} 条排队…', { hidden }) : '', foldable };
 }
 
 /** Changes exactly when the cards would: a queued message is never edited in place, so its id stands for it. */

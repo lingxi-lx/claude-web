@@ -31,6 +31,7 @@ import { modKey } from '../shortcuts';
 import { TERMS } from '@/ui/terms';
 import { imeComposing } from '@/ui/ime';
 import { showUsageCard } from '@/features/composer/ContextMeter';
+import { tr } from '@/i18n';
 
 type ChatTileModel = Extract<Tile, { kind: 'chat' }>;
 
@@ -50,14 +51,14 @@ function HeaderMenu({ tile, paneId, s, live, remote, gone, onClose }: { tile: Ch
   const patch = (p: Partial<ChatTileModel>) => st().dispatchLayout({ t: 'tile.patch', paneId, tileId: tile.id, patch: p });
   return (
     <>
-      <button onClick={act(() => shareConversation(s.sessionId))}><Icon name="share" size={14} /> 导出为 HTML</button>
-      <button onClick={act(() => patch({ wb: 'live', view: tile.view === 'trajectory' && tile.wb === 'live' ? 'chat' : 'trajectory' }))} title={`对话 ⇄ ${TERMS.trajectory}（Alt+J）`}>
+      <button onClick={act(() => shareConversation(s.sessionId))}><Icon name="share" size={14} /> {tr('导出为 HTML')}</button>
+      <button onClick={act(() => patch({ wb: 'live', view: tile.view === 'trajectory' && tile.wb === 'live' ? 'chat' : 'trajectory' }))} title={tr('对话 ⇄ {trajectory}（Alt+J）', { trajectory: TERMS.trajectory })}>
         <Icon name="workflow" size={14} /> <span style={{ flex: 1 }}>{TERMS.trajectory}</span>{tile.wb === 'live' && tile.view === 'trajectory' && <Icon name="check" size={13} />}
       </button>
       {/* the old stats bar: the composer's card (the ring in its corner shows up only from 60 %; final review I3) */}
-      <button data-act="usage" onClick={act(() => { if (tile.wb !== 'live') patch({ wb: 'live' }); requestAnimationFrame(() => showUsageCard(tile.id)); })}><Icon name="usage" size={14} /> 本对话用量</button>
-      <div className="menu-label">查看这个对话的</div>
-      <div className="menu-grid" role="group" aria-label="查看这个对话的">
+      <button data-act="usage" onClick={act(() => { if (tile.wb !== 'live') patch({ wb: 'live' }); requestAnimationFrame(() => showUsageCard(tile.id)); })}><Icon name="usage" size={14} /> {tr('本对话用量')}</button>
+      <div className="menu-label">{tr('查看这个对话的')}</div>
+      <div className="menu-grid" role="group" aria-label={tr('查看这个对话的')}>
         {viewsFor(remote).map((v) => (
           // the right panel opens them (审阅 / 文件 / a temporary tab; a phone's bottom drawer); a remote conversation in place
           <button key={v.id} className={clsx(tile.wb === v.id && 'on')} onClick={act(() => (tile.wb === v.id ? patch({ wb: 'live' }) : openSessionView(v.id, { paneId, tileId: tile.id })))} data-view={v.id}>
@@ -65,16 +66,16 @@ function HeaderMenu({ tile, paneId, s, live, remote, gone, onClose }: { tile: Ch
           </button>
         ))}
         {/* phone: the header has no terminal button; the drawer's 终端 / 任务 from here too */}
-        {mobile && !remote && <button onClick={act(() => st().dispatchLayout({ t: 'dock.show', panel: 'terminal' }))} data-view="terminal"><Icon name="terminal" size={13} /> 终端</button>}
-        {mobile && <button onClick={act(() => st().dispatchLayout({ t: 'dock.show', panel: 'tasks' }))} data-view="tasks"><Icon name="tasks" size={13} /> 任务</button>}
+        {mobile && !remote && <button onClick={act(() => st().dispatchLayout({ t: 'dock.show', panel: 'terminal' }))} data-view="terminal"><Icon name="terminal" size={13} /> {tr('终端')}</button>}
+        {mobile && <button onClick={act(() => st().dispatchLayout({ t: 'dock.show', panel: 'tasks' }))} data-view="tasks"><Icon name="tasks" size={13} /> {tr('任务')}</button>}
       </div>
       <div className="menu-sep" />
-      {!gone && <button onClick={act(() => st().setSessionMeta(s.sessionId, { pinned: !pinned }))}><Icon name="pin" size={14} /> {pinned ? '取消置顶' : '置顶'}</button>}
-      {!remote && <button onClick={act(() => ws.request({ kind: 'shell.open', path: s.cwd }))}><Icon name="folder" size={14} /> 在资源管理器打开</button>}
-      {!remote && <button onClick={act(() => ws.request({ kind: 'shell.open', path: s.cwd, app: 'code' }))}><Icon name="keyboard" size={14} /> 在 VS Code 打开</button>}
+      {!gone && <button onClick={act(() => st().setSessionMeta(s.sessionId, { pinned: !pinned }))}><Icon name="pin" size={14} /> {pinned ? tr('取消置顶') : tr('置顶')}</button>}
+      {!remote && <button onClick={act(() => ws.request({ kind: 'shell.open', path: s.cwd }))}><Icon name="folder" size={14} /> {tr('在资源管理器打开')}</button>}
+      {!remote && <button onClick={act(() => ws.request({ kind: 'shell.open', path: s.cwd, app: 'code' }))}><Icon name="keyboard" size={14} /> {tr('在 VS Code 打开')}</button>}
       {!gone && (live
-        ? <button onClick={act(() => st().closeSession(s.sessionId))} title="进程会退出，对话留着，发消息即可继续"><Icon name="stop" size={14} /> 结束进程</button>
-        : caps.resume && <button onClick={act(() => st().openSession({ sessionId: s.sessionId, cwd: s.cwd }, 'none').catch((e) => st().toast(e.message)))}><Icon name="play" size={14} /> 恢复运行</button>)}
+        ? <button onClick={act(() => st().closeSession(s.sessionId))} title={tr('进程会退出，对话留着，发消息即可继续')}><Icon name="stop" size={14} /> {tr('结束进程')}</button>
+        : caps.resume && <button onClick={act(() => st().openSession({ sessionId: s.sessionId, cwd: s.cwd }, 'none').catch((e) => st().toast(e.message)))}><Icon name="play" size={14} /> {tr('恢复运行')}</button>)}
       <div className="menu-sep" />
     </>
   );
@@ -133,44 +134,44 @@ function SessionHeader({ tile, paneId }: { tile: ChatTileModel; paneId: string }
       {((edge.lead && !edge.strip) || mobile) && <SidebarReveal />}
       <div className="sh-main">
         {editing !== null ? (
-          <input className="sh-rename" autoFocus value={editing} onChange={(e) => setEditing(e.target.value)} onBlur={rename} onKeyDown={(e) => (imeComposing(e.nativeEvent) ? null : e.key === 'Enter' ? rename() : e.key === 'Escape' ? setEditing(null) : null)} aria-label="对话标题" />
+          <input className="sh-rename" autoFocus value={editing} onChange={(e) => setEditing(e.target.value)} onBlur={rename} onKeyDown={(e) => (imeComposing(e.nativeEvent) ? null : e.key === 'Enter' ? rename() : e.key === 'Escape' ? setEditing(null) : null)} aria-label={tr('对话标题')} />
         ) : (
-          <span className="sh-title" onDoubleClick={() => { if (caps.rename) setEditing(title); }} title={caps.rename ? `${title}\n双击重命名` : title}>{title}</span>
+          <span className="sh-title" onDoubleClick={() => { if (caps.rename) setEditing(title); }} title={caps.rename ? tr("{title}\n双击重命名", { title }) : title}>{title}</span>
         )}
         <span className="sh-meta">
           {peer
-            ? <span className="it" title={`${cwd}（在机器「${peer.name}」上）`}><Icon name="machine" size={12} /><span className="nm">{peer.name} · {basename(cwd)}</span></span>
-            : cwd && <span className="it" title={`${cwd}\n（在资源管理器打开：··· 菜单）`}><Icon name="folder" size={12} /><span className="nm">{wsOf?.name ?? basename(cwd)}</span></span>}
+            ? <span className="it" title={tr('{cwd}（在机器「{name}」上）', { cwd, name: peer.name })}><Icon name="machine" size={12} /><span className="nm">{peer.name} · {basename(cwd)}</span></span>
+            : cwd && <span className="it" title={tr("{cwd}\n（在资源管理器打开：··· 菜单）", { cwd })}><Icon name="folder" size={12} /><span className="nm">{wsOf?.name ?? basename(cwd)}</span></span>}
           {/* grey words, not buttons (spec §5.2; final review I3): the folder opens from ···, the uncommitted changes
               from +N −M / the right panel's 审阅 / ··· 改动 */}
           {branch && !peer && (
-            <span className={clsx('it branch', git && git.state !== 'clean' && 'dirty')} title={`${branch}${git?.upstream ? ` → ${git.upstream}` : git ? ' · 无上游' : ''}${git ? (dirty ? ` · ${dirty} 处未提交的改动` : ' · 干净') : ''}${git?.ahead ? ` · 领先 ${git.ahead}` : ''}${git?.behind ? ` · 落后 ${git.behind}` : ''}`}>
+            <span className={clsx('it branch', git && git.state !== 'clean' && 'dirty')} title={`${branch}${git?.upstream ? ` → ${git.upstream}` : git ? tr(' · 无上游') : ''}${git ? (dirty ? tr(' · {dirty} 处未提交的改动', { dirty }) : tr(' · 干净')) : ''}${git?.ahead ? tr(' · 领先 {ahead}', { ahead: git.ahead }) : ''}${git?.behind ? tr(' · 落后 {behind}', { behind: git.behind }) : ''}`}>
               <Icon name="branch" size={12} /><span className="nm bn">{branch}</span>
             </span>
           )}
-          {worktree && <span className="tag" title="这个对话在仓库的一个独立副本（git worktree）里运行，不是主检出">独立副本</span>}
-          {agentKind && agentKind !== 'claude' && <span className="tag" title={`这个对话由 ${agentName} 运行`}>{agentName}</span>}
-          {!live && !gone && !caps.resume && <span className="tag" title="这个来源没有官方的续聊接口，只能查看">只读</span>}
+          {worktree && <span className="tag" title={tr('这个对话在仓库的一个独立副本（git worktree）里运行，不是主检出')}>{tr('独立副本')}</span>}
+          {agentKind && agentKind !== 'claude' && <span className="tag" title={tr('这个对话由 {agentName} 运行', { agentName })}>{agentName}</span>}
+          {!live && !gone && !caps.resume && <span className="tag" title={tr('这个来源没有官方的续聊接口，只能查看')}>{tr('只读')}</span>}
         </span>
         {viewDef && (
-          <button className="sh-view" onClick={() => patch({ wb: 'live' })} title="回到对话"><Icon name={viewDef.icon} size={13} /> {viewDef.label}<Icon name="close" size={11} /></button>
+          <button className="sh-view" onClick={() => patch({ wb: 'live' })} title={tr('回到对话')}><Icon name={viewDef.icon} size={13} /> {viewDef.label}<Icon name="close" size={11} /></button>
         )}
         {!viewDef && tile.view === 'trajectory' && (
-          <button className="sh-view" onClick={() => patch({ view: 'chat' })} title="回到对话（Alt+J）"><Icon name="workflow" size={13} /> {TERMS.trajectory}<Icon name="close" size={11} /></button>
+          <button className="sh-view" onClick={() => patch({ view: 'chat' })} title={tr('回到对话（Alt+J）')}><Icon name="workflow" size={13} /> {TERMS.trajectory}<Icon name="close" size={11} /></button>
         )}
       </div>
       <span className="sh-actions">
         {/* phone (UI refresh §8): ☰ · title · +N −M (when there are changes) · ··· — 终端 / 任务 and the other views
             are in ··· and open the bottom drawer (whose own tabs switch between 审阅 · 文件 · 终端 · 任务) */}
         {stat && stat.files > 0 && (
-          <button className="sh-diff" title={`这个对话改了 ${stat.files} 个文件：+${stat.added} 行 −${stat.removed} 行\n点击${mobile ? '' : '在右侧'}审阅这些改动`} onClick={() => openReview({ scope: 'session' })}>
+          <button className="sh-diff" title={tr("这个对话改了 {files} 个文件：+{added} 行 −{removed} 行\n点击{v}审阅这些改动", { files: stat.files, added: stat.added, removed: stat.removed, v: mobile ? '' : tr('在右侧') })} onClick={() => openReview({ scope: 'session' })}>
             <span className="add">+{stat.added}</span><span className="del">−{stat.removed}</span>
           </button>
         )}
-        {!peer && !mobile && <button className={clsx('icon-btn', terminalOn && 'active')} title={`终端 (${modKey}+\`)`} aria-label="终端" onClick={() => (terminalOn ? dispatch({ t: 'dock.set', patch: { open: false } }) : dispatch({ t: 'dock.show', panel: 'terminal' }))}><Icon name="terminal" size={16} /></button>}
-        {!mobile && <button className={clsx('icon-btn', dockShown && !dockMin && 'active')} title={dockMin ? `展开${TERMS.dock} (${modKey}+J)` : `${TERMS.dock} (${modKey}+J)`} aria-label={dockMin ? `展开${TERMS.dock}` : TERMS.dock} aria-pressed={dockShown && !dockMin} onClick={toggleDock}><Icon name="inspector" size={16} /></button>}
+        {!peer && !mobile && <button className={clsx('icon-btn', terminalOn && 'active')} title={tr('终端 ({modKey}+`)', { modKey })} aria-label={tr('终端')} onClick={() => (terminalOn ? dispatch({ t: 'dock.set', patch: { open: false } }) : dispatch({ t: 'dock.show', panel: 'terminal' }))}><Icon name="terminal" size={16} /></button>}
+        {!mobile && <button className={clsx('icon-btn', dockShown && !dockMin && 'active')} title={dockMin ? tr('展开{dock} ({modKey}+J)', { dock: TERMS.dock, modKey }) : `${TERMS.dock} (${modKey}+J)`} aria-label={dockMin ? tr('展开{dock}', { dock: TERMS.dock }) : TERMS.dock} aria-pressed={dockShown && !dockMin} onClick={toggleDock}><Icon name="inspector" size={16} /></button>}
         <span className="sh-more">
-          <button className={clsx('icon-btn', menu && 'active')} title="这个对话的更多操作：导出、步骤视图、改动 / Git / 文件…、重命名、分叉、归档、交给其它 Agent、删除" aria-label="更多操作" aria-expanded={menu} aria-haspopup="menu" onClick={(e) => { e.stopPropagation(); setMenu(!menu); }}><Icon name="more" size={16} /></button>
+          <button className={clsx('icon-btn', menu && 'active')} title={tr('这个对话的更多操作：导出、步骤视图、改动 / Git / 文件…、重命名、分叉、归档、交给其它 Agent、删除')} aria-label={tr('更多操作')} aria-expanded={menu} aria-haspopup="menu" onClick={(e) => { e.stopPropagation(); setMenu(!menu); }}><Icon name="more" size={16} /></button>
           {menu && <SessionMenu s={summary} deleted={gone} handoffInline onClose={() => setMenu(false)} style={{ right: 0, top: 34 }} extra={<HeaderMenu tile={tile} paneId={paneId} s={summary} live={live} remote={!!peer} gone={gone} onClose={() => setMenu(false)} />} />}
         </span>
       </span>
@@ -199,11 +200,11 @@ export function ChatTile({ tile, paneId, visible }: { tile: ChatTileModel; paneI
     if (sid && stale && visible) void useStore.getState().refreshExternal(sid);
   }, [sid, stale, visible]);
   if (!sid) return <Welcome paneId={paneId} tileId={tile.id} />;
-  if (!active) return <div className="empty">加载对话…</div>;
+  if (!active) return <div className="empty">{tr('加载对话…')}</div>;
   return (
     <div className="chat-tile">
       <SessionHeader tile={tile} paneId={paneId} />
-      {deleted && <div className="deleted-banner" role="status"><Icon name="trash" size={13} /> 这个对话已被删除（备份在 ~/.claude-web/library-trash），这里只剩最后看到的内容。</div>}
+      {deleted && <div className="deleted-banner" role="status"><Icon name="trash" size={13} /> {tr('这个对话已被删除（备份在 ~/.claude-web/library-trash），这里只剩最后看到的内容。')}</div>}
       {tile.wb === 'live' && (
         <>
           <GoalBar sessionId={sid} />
@@ -211,7 +212,7 @@ export function ChatTile({ tile, paneId, visible }: { tile: ChatTileModel; paneI
           <Composer key={`c-${sid}`} disabled={deleted} visible={visible} />
         </>
       )}
-      {remoteView && <div className="wb-body"><div className="remote-only"><Icon name="machine" size={22} /><div>这个对话在机器「{peer!.name}」上，它的文件 / Git / 搜索 / 定时任务都在那台机器上。</div><div className="sub">请在该机器上查看；这里可以继续对话、审批、中断。</div></div></div>}
+      {remoteView && <div className="wb-body"><div className="remote-only"><Icon name="machine" size={22} /><div>{tr('这个对话在机器「{name}」上，它的文件 / Git / 搜索 / 定时任务都在那台机器上。', { name: peer!.name })}</div><div className="sub">{tr('请在该机器上查看；这里可以继续对话、审批、中断。')}</div></div></div>}
       {remoteView ? null : <>
       {tile.wb === 'changes' && <div className="wb-body"><ReviewView inPlace visible={visible} /></div>}
       {tile.wb === 'git' && <div className="wb-body"><GitView cwd={active.cwd} visible={visible} /></div>}

@@ -1,6 +1,7 @@
 import type { SessionSummary, SourceCaps } from '@shared';
 import { isImportedSessionId, nativeSessionId } from '@/util';
 import { agentOf } from './filter';
+import { tr } from '@/i18n';
 
 /**
  * What the session menus and the multi-select toolbar may offer for a session. Pure (no store), so it
@@ -43,7 +44,7 @@ export function deleteSummary(list: SessionSummary[], nameOf: (kind: string) => 
   const by = new Map<string, number>();
   for (const s of list) by.set(agentOf(s), (by.get(agentOf(s)) ?? 0) + 1);
   const parts = [...by.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${nameOf(k)} ${n}`);
-  return `将删除 ${list.length} 个对话（${parts.join('、')}）`;
+  return tr('将删除 {listCount} 个对话（{parts}）', { listCount: list.length, parts: parts.join('、') });
 }
 
 /**
@@ -57,7 +58,7 @@ export function deleteTargets(list: SessionSummary[], nameOf: (kind: string) => 
   const also = new Set<string>();
   for (const s of list) {
     const kind = agentOf(s);
-    if (s.peer) from.add(`机器「${s.peer.name}」`);
+    if (s.peer) from.add(tr('机器「{name}」', { name: s.peer.name }));
     else if (isImportedSessionId(s.sessionId)) from.add(nameOf(kind));
     else if (kind === 'claude') from.add(nameOf('claude'));
     else {
@@ -65,6 +66,6 @@ export function deleteTargets(list: SessionSummary[], nameOf: (kind: string) => 
       if (s.mergedFrom && s.caps?.delete) also.add(nameOf(kind));
     }
   }
-  const head = `从 ${[...from].join('、')} 删除`;
-  return also.size ? `${head}，并同时从 ${[...also].join('、')} 删除它的原始记录` : head;
+  const head = tr('从 {v} 删除', { v: [...from].join('、') });
+  return also.size ? tr('{head}，并同时从 {v} 删除它的原始记录', { head, v: [...also].join('、') }) : head;
 }

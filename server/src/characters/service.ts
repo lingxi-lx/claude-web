@@ -5,6 +5,7 @@ import {
   BUILTIN, BUILTIN_IDS, parseAssignTarget, validateCharacter, withoutCharacter,
   type AssignTarget, type CafeAssign, type CharacterDef, type CharacterSaveResult, type CharactersList, type CharactersRequest,
 } from './core/index.js';
+import { tr } from '../i18n/index.js';
 
 /**
  * 网吧's character library (spec §4): the built-ins plus `<dataDir>/characters/<id>.json` (drafts and saved ones), and
@@ -40,7 +41,7 @@ export class CharacterService extends EventEmitter {
       const j = JSON.parse(await fs.readFile(path.join(this.dir, n), 'utf8'));
       const r = validateCharacter(j);
       if (r.ok && !BUILTIN_IDS.has(r.def.id) && `${r.def.id}.json` === n) return r.def;
-      throw new Error(r.ok ? 'id 和文件名不一致' : r.errors[0]);
+      throw new Error(r.ok ? tr('id 和文件名不一致') : r.errors[0]);
     } catch (e: any) {
       if (!this.warned.has(n)) { this.warned.add(n); console.warn(`[characters] skipped ${n}: ${e?.message ?? e}`); }
       return null;
@@ -51,7 +52,7 @@ export class CharacterService extends EventEmitter {
   async save(x: unknown, draft: boolean): Promise<CharacterSaveResult> {
     const r = validateCharacter(x);
     if (!r.ok) return r;
-    if (BUILTIN_IDS.has(r.def.id)) return { ok: false, errors: [`id ${r.def.id} 是内置角色的，换一个`] };
+    if (BUILTIN_IDS.has(r.def.id)) return { ok: false, errors: [tr('id {id} 是内置角色的，换一个', { id: r.def.id })] };
     const def: CharacterDef = { ...r.def };
     if (draft) def.draft = true; else delete def.draft;
     await this.write(def);
@@ -61,8 +62,8 @@ export class CharacterService extends EventEmitter {
   /** A draft becomes a saved character. */
   async publish(id: string): Promise<CharacterSaveResult> {
     const c = await this.get(id);
-    if (!c) return { ok: false, errors: [`没有 id 为 ${id} 的角色`] };
-    if (c.builtin) return { ok: false, errors: [`${id} 是内置角色`] };
+    if (!c) return { ok: false, errors: [tr('没有 id 为 {id} 的角色', { id })] };
+    if (c.builtin) return { ok: false, errors: [tr('{id} 是内置角色', { id })] };
     if (!c.draft) return { ok: true, def: c };
     const def = { ...c };
     delete def.draft;
@@ -91,11 +92,11 @@ export class CharacterService extends EventEmitter {
   /** Give a character to someone (`id` null: take it back). The id must exist and not be a draft. */
   async assign(id: string | null, target: AssignTarget): Promise<CafeAssign> {
     const t = parseAssignTarget(target);
-    if (!t) throw new Error('给谁：admin、default、type:<子代理类型>、name:<名字>');
+    if (!t) throw new Error(tr('给谁：admin、default、type:<子代理类型>、name:<名字>'));
     if (id !== null) {
       const c = await this.get(id);
-      if (!c) throw new Error(`没有 id 为 ${id} 的角色`);
-      if (c.draft) throw new Error(`${id} 还是草稿，先保存再指定`);
+      if (!c) throw new Error(tr('没有 id 为 {id} 的角色', { id }));
+      if (c.draft) throw new Error(tr('{id} 还是草稿，先保存再指定', { id }));
     }
     const a: CafeAssign = JSON.parse(JSON.stringify(this.assignStore.get() ?? {}));
     const set = (m: Record<string, string> | undefined, k: string) => {
@@ -117,7 +118,7 @@ export function isCharactersRequest(req: { kind: string }): req is CharactersReq
 
 /** `readOnly`: a remote-access / paired-device / other-machine connection — it may look, not change. */
 export async function handleCharacters(s: CharacterService, req: CharactersRequest, readOnly: boolean): Promise<unknown> {
-  if (req.kind !== 'characters.list' && readOnly) throw new Error('只有本机的窗口才能改角色');
+  if (req.kind !== 'characters.list' && readOnly) throw new Error(tr('只有本机的窗口才能改角色'));
   switch (req.kind) {
     case 'characters.list': return s.listWithAssign();
     case 'characters.save': return s.save(req.character, req.draft === true);

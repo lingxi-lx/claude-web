@@ -30,6 +30,7 @@ import {
   type RtcCtor,
 } from './core/index.js';
 import { loadRtc } from './rtc.js';
+import { tr } from '../../i18n/index.js';
 
 /**
  * The phone page the QR opens while `remote.anywhere.shellUrl` is not set (the settings page shows it from status()):
@@ -70,7 +71,7 @@ export function shellUrlOf(v: unknown): string {
 /** What `recent` says about a link that ended on a protocol error: the phone's page and this app speak different versions. */
 export function linkError(why: string): string | undefined {
   if (!why.startsWith('protocol:')) return undefined;
-  return `手机上的页面和电脑上的 Claude Web 版本不一致，请刷新手机上的页面或更新电脑上的 Claude Web（${why}）`;
+  return tr('手机上的页面和电脑上的 Claude Web 版本不一致，请刷新手机上的页面或更新电脑上的 Claude Web（{why}）', { why });
 }
 
 /**
@@ -78,13 +79,13 @@ export function linkError(why: string): string | undefined {
  * 「没连上：」; a reason from the relay link itself stays, in parentheses.
  */
 export function failureText(why: string): string {
-  if (why === ACCEPT_FAILURE.halfOpen) return '手机打了招呼，但通道没有建立起来';
-  if (why === ACCEPT_FAILURE.evicted) return '同时连进来的太多，较早的一次被放弃了';
+  if (why === ACCEPT_FAILURE.halfOpen) return tr('手机打了招呼，但通道没有建立起来');
+  if (why === ACCEPT_FAILURE.evicted) return tr('同时连进来的太多，较早的一次被放弃了');
   if (why.startsWith(ACCEPT_FAILURE.relay)) {
     const raw = why.slice(ACCEPT_FAILURE.relay.length).replace(/^:\s*/, '');
-    return raw ? `慢速转发没能建立（${raw}）` : '慢速转发没能建立';
+    return raw ? tr('慢速转发没能建立（{raw}）', { raw }) : tr('慢速转发没能建立');
   }
-  return `没有建立起通道（${why}）`;
+  return tr('没有建立起通道（{why}）', { why });
 }
 
 /**

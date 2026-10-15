@@ -49,11 +49,12 @@ import { applyStarter, initialCwd } from '@/features/home/model';
 import { usePageOpen } from '@/features/sections';
 import { composerCovered } from './covered';
 import { glowing, sendFace } from './send-state';
+import { dateLocale, tr } from '@/i18n';
 
 // sessions on another machine: uploads land on this machine's disk, out of the remote agent's reach
-const REMOTE_ATTACH = '附件在本机，远端读不到，请粘贴内容（图片可以直接发）';
+const REMOTE_ATTACH = tr('附件在本机，远端读不到，请粘贴内容（图片可以直接发）');
 // goals run on THIS machine (GoalService drives a local runner): it cannot drive a conversation over there
-const REMOTE_GOAL = '其它机器上的对话不能在这里设定目标（目标由本机驱动）。可以到那台机器上设定，或先「交给本机的 Agent 继续」';
+const REMOTE_GOAL = tr('其它机器上的对话不能在这里设定目标（目标由本机驱动）。可以到那台机器上设定，或先「交给本机的 Agent 继续」');
 const NO_FEATURES: SessionFeatures = {};
 const isFeatures = (v: unknown): v is SessionFeatures => !!v && typeof v === 'object' && !Array.isArray(v);
 
@@ -210,7 +211,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     if (listening) { recRef.current?.stop(); return; }
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     const rec = new SR();
-    rec.lang = navigator.language.startsWith('zh') ? 'zh-CN' : navigator.language;
+    rec.lang = dateLocale();
     rec.interimResults = true;
     rec.continuous = true;
     let base = text;
@@ -346,7 +347,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
       const g = activeGroup(useStore.getState().layout);
       const p = g.panes[pane.paneId];
       if (g.focusedPaneId !== pane.paneId || !p || (p.activeTileId ?? p.tiles[0]?.id) !== pane.tileId) return;
-      if (!welcome && active?.sessionId === d.id) { d.reason = '不能引用这个对话自己'; return; }
+      if (!welcome && active?.sessionId === d.id) { d.reason = tr('不能引用这个对话自己'); return; }
       d.handled = true;
       addRef({ id: d.id, title: d.title });
     };
@@ -395,7 +396,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     if (!docked || !active || !s?.queued) return;
     setSeen({ queued: undefined });
     const q = useStore.getState().recall(active.sessionId, s.queued.id);
-    if (!q) { toast('那段话已经发出去了'); return; }
+    if (!q) { toast(tr('那段话已经发出去了')); return; }
     void useStore.getState().respondPermission(docked.requestId, denyResponse(docked, q.text));
   };
 
@@ -416,7 +417,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
       if (remote) { toast(REMOTE_GOAL); return; }
       const objective = t.trim().replace(/^\/goal\s+/, '');
       const cwdFor = welcome ? cwd.trim() : active?.cwd ?? '';
-      if (!cwdFor) { toast('先选一个项目文件夹'); return; }
+      if (!cwdFor) { toast(tr('先选一个项目文件夹')); return; }
       try {
         const g = await ws.request<{ id: string }>({ kind: 'goals.create', objective, cwd: cwdFor, permissionMode: welcome ? wMode : (active?.info?.permissionMode ?? 'acceptEdits'), agent: welcome ? (foreign ? wAgent : undefined) : (active?.info?.agent && active.info.agent !== 'claude' ? active.info.agent : undefined) });
         const started = await ws.request<{ sessionId?: string }>({ kind: 'goals.start', id: g.id });
@@ -430,13 +431,13 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
         // (showGoals, review 7 M11); with no conversation to show, the page opens right away
         const phone = useStore.getState().mobile;
         if (!phone || !started?.sessionId) showGoals();
-        toast(started?.sessionId ? '目标已创建，在新对话里运行' : '目标已创建并启动，进度在「目标」里', true);
+        toast(started?.sessionId ? tr('目标已创建，在新对话里运行') : tr('目标已创建并启动，进度在「目标」里'), true);
       } catch (e: any) { toast(e.message); }
       return;
     }
     const im = imgs.map(({ mediaType, data }) => ({ mediaType, data }));
     if (welcome) {
-      if (!cwd.trim()) return toast('请先选择项目文件夹');
+      if (!cwd.trim()) return toast(tr('请先选择项目文件夹'));
       let providerId = provider ? provider.id : 'claude';
       let model = wModel || undefined;
       let effort = wEffortOk;
@@ -460,7 +461,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
         localStorage.setItem('cw.lastMode', wMode);
         localStorage.setItem('cw.lastProvider', providerId);
         localStorage.setItem('cw.lastAgent', wAgent);
-        if (wAgent !== 'claude' && !agent) throw new Error('选中的 agent 已不可用');
+        if (wAgent !== 'claude' && !agent) throw new Error(tr('选中的 agent 已不可用'));
         const id = await openSession({ cwd: cwd.trim(), model, permissionMode: wMode, effort, ultracode: wUltracode && wUltra ? true : undefined, subagentModel: foreign ? undefined : wSubModel, worktree: wWorktree || undefined, providerId, features: foreign ? {} : featDefaults, agent: foreign ? wAgent : undefined }, target);
         // what is asked for anew for every conversation (操控电脑) is off again for the next one
         if (!foreign && isFeatures(storedFeatures) && afterStart(storedFeatures) !== storedFeatures) setFeatures(afterStart(storedFeatures));
@@ -562,7 +563,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     if (t && isLongPaste(t)) {
       e.preventDefault();
       setAtts((s) => [...s, pasteAsAttachment(t)]);
-      toast(`长文本已作为附件（${t.length} 字符）`, true);
+      toast(tr('长文本已作为附件（{tCount} 字符）', { tCount: t.length }), true);
     }
   };
 
@@ -575,7 +576,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     if (imgOnly.length) void addImages(imgOnly.map((d) => d.file), imgOnly.map((d) => d.file.name));
     if (rest.length && remote) { toast(REMOTE_ATTACH); return; }
     if (rest.length) setFiles((s) => [...s, ...rest].slice(0, 500));
-    if (folders.length) toast(`已附加文件夹 ${folders.join(', ')}（${rest.length} 个文件${truncated ? '，已截断到 500' : ''}）`, true);
+    if (folders.length) toast(tr('已附加文件夹 {folders}（{restCount} 个文件{v}）', { folders: folders.join(', '), restCount: rest.length, v: truncated ? tr('，已截断到 500') : '' }), true);
   };
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
@@ -586,9 +587,9 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     if (remote) { toast(REMOTE_ATTACH); return; }
     // node_modules / .git / dist… are dropped before the 500 cap, same rule as a dropped folder
     const { files: picked, top, truncated, skipped } = pickFolderFiles(fl);
-    if (!picked.length) { toast(`文件夹 ${top} 里只有依赖 / 构建产物 / .git，没有可附加的文件`); return; }
+    if (!picked.length) { toast(tr('文件夹 {top} 里只有依赖 / 构建产物 / .git，没有可附加的文件', { top })); return; }
     setFiles((s) => [...s, ...picked].slice(0, 500));
-    toast(`已附加文件夹 ${top}（${picked.length} 个文件${truncated ? '，已截断到 500' : ''}${skipped ? `，跳过 node_modules / .git 等 ${skipped} 个` : ''}）`, true);
+    toast(tr('已附加文件夹 {top}（{pickedCount} 个文件{v}{v2}）', { top, pickedCount: picked.length, v: truncated ? tr('，已截断到 500') : '', v2: skipped ? tr('，跳过 node_modules / .git 等 {skipped} 个', { skipped }) : '' }), true);
   };
 
   const pickDir = async () => {
@@ -632,7 +633,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
       setSwapping(true);
       try { return await handOver(summary, act.agent, act.model, it.display); } finally { setSwapping(false); }
     }
-    if (act.confirm && !(await dlg.confirm('切换供应商？', { message: '对话正在运行，当前这一轮会被中断。换供应商会重启对话进程，历史保留。', okLabel: '切换' }))) return false;
+    if (act.confirm && !(await dlg.confirm(tr('切换供应商？'), { message: tr('对话正在运行，当前这一轮会被中断。换供应商会重启对话进程，历史保留。'), okLabel: tr('切换') }))) return false;
     setSwapping(true);
     try {
       await ws.request({ kind: 'session.setProvider', sessionId: active.sessionId, providerId: act.providerId, model: act.model });
@@ -680,7 +681,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     try {
       await setSubagentModel(active.sessionId, model, providerId);
       const name = model ? subagentLabel({ providers, providerId, model, builtin }) : '';
-      toast(model ? `子代理改用 ${name}${live && busy ? '（这一轮结束后生效）' : ''}` : `子代理改回跟主模型一样${live && busy ? '（这一轮结束后生效）' : ''}`, true);
+      toast(model ? tr('子代理改用 {name}{v}', { name, v: live && busy ? tr('（这一轮结束后生效）') : '' }) : tr('子代理改回跟主模型一样{v}', { v: live && busy ? tr('（这一轮结束后生效）') : '' }), true);
     } catch (e: any) { toast(e.message); }
   };
   const setEffort = (effort: EffortLevel) => active && ws.request({ kind: 'session.setEffort', sessionId: active.sessionId, effort }).catch((e) => toast(e.message));
@@ -721,19 +722,19 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   const face = sendFace({ busy, canSend, working: starting || !!upload });
   const send_ = (
     <button type="button" className={clsx('send', busy && 'stop')} data-id={BAR_ID.send} data-state={face} disabled={!busy && !canSend}
-      onClick={busy ? () => { if (active) void interrupt(active.sessionId); } : () => void doSend()} title={busy ? '中断 (Esc)' : '发送 (Enter)'} aria-label={busy ? '中断' : '发送'}>
+      onClick={busy ? () => { if (active) void interrupt(active.sessionId); } : () => void doSend()} title={busy ? tr('中断 (Esc)') : tr('发送 (Enter)')} aria-label={busy ? tr('中断') : tr('发送')}>
       <span className="send-ic up" aria-hidden><Icon name="send" size={18} /></span>
       <span className="send-ic sq" aria-hidden />
       {face === 'working' && <span className="spinner" />}
     </button>
   );
   const steer = docked && (dockClick === 'deny' || dockClick === 'blocked') ? (
-    <button className="steer deny" data-id={BAR_ID.steer} disabled={dockClick === 'blocked'} title={dockClick === 'blocked' ? DOCK_BLOCKED : `拒绝这次请求，并把这段话告诉 ${dockAgent}（Enter）`} onClick={denyDocked}>{DOCK_SEND[dockKind(docked)]} <Icon name="send" size={12} /></button>
+    <button className="steer deny" data-id={BAR_ID.steer} disabled={dockClick === 'blocked'} title={dockClick === 'blocked' ? DOCK_BLOCKED : tr('拒绝这次请求，并把这段话告诉 {dockAgent}（Enter）', { dockAgent })} onClick={denyDocked}>{DOCK_SEND[dockKind(docked)]} <Icon name="send" size={12} /></button>
   ) : busy && canSend && active ? (
-    <button className="steer" data-id={BAR_ID.steer} title={`${TERMS.steer}：不等这一轮结束，马上把这句话告诉 Claude`} aria-label={TERMS.steer} onClick={async () => { const t = text; setText(''); setDraft(active.sessionId, ''); await send(active.sessionId, t, undefined, true).catch((e) => toast(e.message)); }}>插话 <Icon name="send" size={12} /></button>
+    <button className="steer" data-id={BAR_ID.steer} title={tr('{steer}：不等这一轮结束，马上把这句话告诉 Claude', { steer: TERMS.steer })} aria-label={TERMS.steer} onClick={async () => { const t = text; setText(''); setDraft(active.sessionId, ''); await send(active.sessionId, t, undefined, true).catch((e) => toast(e.message)); }}>{tr('插话')} <Icon name="send" size={12} /></button>
   ) : null;
   const mic = speechOk && !mobile ? (
-    <button data-id={BAR_ID.mic} className={clsx('icon-btn', listening && 'active')} title={listening ? '停止语音输入' : '语音输入（浏览器识别）'} onClick={toggleVoice} aria-label="语音输入"><Icon name="mic" size={15} /></button>
+    <button data-id={BAR_ID.mic} className={clsx('icon-btn', listening && 'active')} title={listening ? tr('停止语音输入') : tr('语音输入（浏览器识别）')} onClick={toggleVoice} aria-label={tr('语音输入')}><Icon name="mic" size={15} /></button>
   ) : null;
 
   let model: React.ReactNode = null, subagent: React.ReactNode = null, effort: React.ReactNode = null, permission: React.ReactNode = null, meter: React.ReactNode = null, status: React.ReactNode = null;
@@ -746,9 +747,9 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
         agent={wKind}
         current={{ providerId: provider ? provider.id : 'claude', model: wModel }}
         label={t.main}
-        title={`${t.main}${t.isDefault ? '（默认）' : ''}\n用哪个模型：Agent、供应商、模型都在这里`}
+        title={tr("{main}{v}\n用哪个模型：Agent、供应商、模型都在这里", { main: t.main, v: t.isDefault ? tr('（默认）') : '' })}
         builtin={wBuiltin}
-        builtinTitle={agent ? `${agent.name} 账号` : 'Claude 账号'}
+        builtinTitle={agent ? tr('{name} 账号', { name: agent.name }) : tr('Claude 账号')}
         agentDefault={agent?.model || undefined}
         otherAgents={otherAgents}
         onPick={pickWelcome}
@@ -769,18 +770,18 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     const liveView = claudeEffortView({ agent: liveAgent, providers, providerId: remote ? 'claude' : liveProvider, model: info.model, runtime: info.runtime });
     const defaultEffort = liveView.defaultLevel;
     const t = modelChipText({ agent: liveAgent, agentName: info.agentName, providers, providerId: remote ? 'claude' : liveProvider, providerName: info.providerName, model: info.model, builtin: liveProvider === 'claude' && info.models?.length ? info.models : undefined, agentDefault: liveAgentDefault, efforts: liveEfforts, effort: info.effort, defaultEffort, ultracode: ultraOk && !!info.ultracode, accountDefault });
-    const remoteLabel = `${info.providerName ? `${info.providerName} / ` : ''}${info.models?.find((m) => m.value === info.model)?.displayName ?? (shortModel(info.model) || '模型')}`;
+    const remoteLabel = `${info.providerName ? `${info.providerName} / ` : ''}${info.models?.find((m) => m.value === info.model)?.displayName ?? (shortModel(info.model) || tr('模型'))}`;
     model = (
       <ModelChip
         agent={liveAgent}
         current={{ providerId: remote ? 'claude' : liveProvider, model: info.model }}
         label={remote ? remoteLabel : t.main}
-        title={remote ? '模型（其它机器上的对话：换供应商请在那台机器上操作）' : `${t.main}${t.isDefault ? '（默认）' : ''}\n同一供应商直接换模型；换供应商会无感重启对话；选其它 Agent 的模型 = 交给它继续`}
+        title={remote ? tr('模型（其它机器上的对话：换供应商请在那台机器上操作）') : tr("{main}{v}\n同一供应商直接换模型；换供应商会无感重启对话；选其它 Agent 的模型 = 交给它继续", { main: t.main, v: t.isDefault ? tr('（默认）') : '' })}
         builtin={(remote || liveProvider === 'claude') && info.models?.length ? info.models : undefined}
-        builtinTitle={remote ? info.providerName ?? info.agentName ?? '模型' : liveAgent === 'claude' ? 'Claude 账号' : `${info.agentName ?? liveAgent} 账号`}
+        builtinTitle={remote ? info.providerName ?? info.agentName ?? tr('模型') : liveAgent === 'claude' ? tr('Claude 账号') : tr('{agentName} 账号', { agentName: info.agentName ?? liveAgent })}
         agentDefault={liveAgentDefault}
         lockProvider={remote ? 'claude' : undefined}
-        lockNote="其它机器上的对话：只能换模型，换供应商请在那台机器上操作"
+        lockNote={tr('其它机器上的对话：只能换模型，换供应商请在那台机器上操作')}
         otherAgents={remote ? undefined : otherAgents}
         busy={swapping}
         disabled={swapping}
@@ -814,17 +815,17 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     const t = modelChipText({ agent: rAgent, agentName: agents.find((a) => a.kind === rAgent)?.name, providers, providerId: rProvider, model: v.model, agentDefault: resumeAgentDefault, efforts: rEfforts, effort: v.effort, defaultEffort: rView.defaultLevel, ultracode: rUltraOk && v.ultracode, accountDefault });
     const sid = active.sessionId;
     // nothing picked: the chip names the default the resume will really get; the transcript's last model is a hint
-    const lastHint = !v.model && v.lastModel ? `\n上次回答用的是 ${modelsFor(rAgent, [{ id: v.lastModel }])[0]?.displayName ?? v.lastModel}` : '';
+    const lastHint = !v.model && v.lastModel ? tr("\n上次回答用的是 {displayName}", { displayName: modelsFor(rAgent, [{ id: v.lastModel }])[0]?.displayName ?? v.lastModel }) : '';
     model = (
       <ModelChip
         agent={rAgent}
         current={{ providerId: rProvider, model: v.model }}
         label={t.main}
-        title={`${t.main}${t.isDefault ? '（默认）' : ''}${lastHint}\n对话没在运行：发送后用这里选的模型继续${remote ? '' : '；选其它 Agent 的模型 = 交给它继续'}`}
-        builtinTitle={rAgent === 'claude' ? 'Claude 账号' : `${agents.find((a) => a.kind === rAgent)?.name ?? rAgent} 账号`}
+        title={tr("{main}{v}{lastHint}\n对话没在运行：发送后用这里选的模型继续{v2}", { main: t.main, v: t.isDefault ? tr('（默认）') : '', lastHint, v2: remote ? '' : tr('；选其它 Agent 的模型 = 交给它继续') })}
+        builtinTitle={rAgent === 'claude' ? tr('Claude 账号') : tr('{name} 账号', { name: agents.find((a) => a.kind === rAgent)?.name ?? rAgent })}
         agentDefault={resumeAgentDefault}
         lockProvider={remote ? 'claude' : undefined}
-        lockNote="其它机器上的对话：只能换模型，换供应商请在那台机器上操作"
+        lockNote={tr('其它机器上的对话：只能换模型，换供应商请在那台机器上操作')}
         otherAgents={remote ? undefined : otherAgents}
         busy={swapping}
         disabled={swapping}
@@ -842,9 +843,9 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
       />
     );
     permission = <PermissionChip mode={v.permissionMode} compact={mobile} onPick={(m) => setResume(sid, { permissionMode: m })} />;
-    status = <span className="cb-status opt" title="对话没在运行，发送后按这里选的模型和权限继续">发送后继续</span>;
+    status = <span className="cb-status opt" title={tr('对话没在运行，发送后按这里选的模型和权限继续')}>{tr('发送后继续')}</span>;
   } else if (active) {
-    status = <span className="cb-status">{disabled ? '对话已删除' : '启动中…'}</span>;
+    status = <span className="cb-status">{disabled ? tr('对话已删除') : tr('启动中…')}</span>;
   }
   if (!welcome && active) meter = <ContextMeter sessionId={active.sessionId} />;
 
@@ -880,33 +881,33 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
           {hasChips && (
             <div className="attach">
               {tags.map((t) => (
-                <span key={`t${t.key}`} className={clsx('cap-tag', !welcome && 'fixed')} data-cap={t.key} title={welcome ? t.title : `${t.title}\n这个对话开始时就开着`}>
+                <span key={`t${t.key}`} className={clsx('cap-tag', !welcome && 'fixed')} data-cap={t.key} title={welcome ? t.title : tr("{title}\n这个对话开始时就开着", { title: t.title })}>
                   <Icon name={t.icon} size={12} /> {t.label}
-                  {welcome && <button aria-label={`关闭${t.label}`} onClick={() => setFeatures(withoutTag(featDefaults, t.key))}><Icon name="close" size={10} /></button>}
+                  {welcome && <button aria-label={tr('关闭{label}', { label: t.label })} onClick={() => setFeatures(withoutTag(featDefaults, t.key))}><Icon name="close" size={10} /></button>}
                 </span>
               ))}
               {welcome && wWorktree && (
-                <span className="cap-tag" data-cap="worktree" title={`新对话在项目的独立副本（git worktree「${wWorktree}」）里运行`}>
-                  <Icon name="branch" size={12} /> 独立副本 · {wWorktree}
-                  <button aria-label="不用独立副本" onClick={() => setWWorktree('')}><Icon name="close" size={10} /></button>
+                <span className="cap-tag" data-cap="worktree" title={tr('新对话在项目的独立副本（git worktree「{wWorktree}」）里运行', { wWorktree })}>
+                  <Icon name="branch" size={12} /> {tr('独立副本 · {wWorktree}', { wWorktree })}
+                  <button aria-label={tr('不用独立副本')} onClick={() => setWWorktree('')}><Icon name="close" size={10} /></button>
                 </span>
               )}
               {refs.map((r) => (
                 <SessionRefChip key={`r${r.id}`} a={{ kind: 'session', name: r.title, sessionId: r.id }} onRemove={() => setRefs((s) => s.filter((x) => x.id !== r.id))} />
               ))}
               {imgs.map((im, i) => (
-                <img key={i} src={im.url} alt="" onClick={() => setImgs((s) => s.filter((_, j) => j !== i))} title={`${im.name ?? '图片'} · 点击移除`} />
+                <img key={i} src={im.url} alt="" onClick={() => setImgs((s) => s.filter((_, j) => j !== i))} title={tr('{name} · 点击移除', { name: im.name ?? tr('图片') })} />
               ))}
               {atts.map((a, i) => (
-                <span key={`a${i}`} className="att-chip" title={a.text?.slice(0, 300)}><Icon name="read" size={12} /> {a.name} <span className="sz">{fmtSize(a.size)}</span><button aria-label="移除" onClick={() => setAtts((s) => s.filter((_, j) => j !== i))}><Icon name="close" size={10} /></button></span>
+                <span key={`a${i}`} className="att-chip" title={a.text?.slice(0, 300)}><Icon name="read" size={12} /> {a.name} <span className="sz">{fmtSize(a.size)}</span><button aria-label={tr('移除')} onClick={() => setAtts((s) => s.filter((_, j) => j !== i))}><Icon name="close" size={10} /></button></span>
               ))}
               {[...folderChips].map(([name, n]) => (
-                <span key={`d${name}`} className="att-chip" title={`${n} 个文件`}><Icon name="folder" size={12} /> {name} <span className="sz">{n} 文件</span><button aria-label="移除" onClick={() => setFiles((s) => s.filter((f) => !f.rel.startsWith(name + '/')))}><Icon name="close" size={10} /></button></span>
+                <span key={`d${name}`} className="att-chip" title={tr('{n} 个文件', { n })}><Icon name="folder" size={12} /> {name} <span className="sz">{tr('{n} 文件', { n })}</span><button aria-label={tr('移除')} onClick={() => setFiles((s) => s.filter((f) => !f.rel.startsWith(name + '/')))}><Icon name="close" size={10} /></button></span>
               ))}
               {files.filter((f) => !f.rel.includes('/')).map((f, i) => (
-                <span key={`f${i}`} className="att-chip" title={f.file.name}><Icon name="attach" size={12} /> {f.file.name} <span className="sz">{fmtSize(f.file.size)}</span><button aria-label="移除" onClick={() => setFiles((s) => s.filter((x) => x !== f))}><Icon name="close" size={10} /></button></span>
+                <span key={`f${i}`} className="att-chip" title={f.file.name}><Icon name="attach" size={12} /> {f.file.name} <span className="sz">{fmtSize(f.file.size)}</span><button aria-label={tr('移除')} onClick={() => setFiles((s) => s.filter((x) => x !== f))}><Icon name="close" size={10} /></button></span>
               ))}
-              {upload && <span className="att-chip"><span className="spinner" /> 上传 {upload.done + 1}/{upload.total} · {upload.name}</span>}
+              {upload && <span className="att-chip"><span className="spinner" /> {tr('上传 {done}/{total} · {name}', { done: upload.done + 1, total: upload.total, name: upload.name })}</span>}
             </div>
           )}
           <textarea
@@ -914,7 +915,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
             rows={1}
             value={text}
             disabled={disabled}
-            placeholder={disabled ? '对话已被删除，不能继续' : docked ? DOCK_PLACEHOLDER[dockKind(docked)](dockAgent) : welcome && !ultraOn ? '描述一个任务，或者问个问题。输入 / 查看命令，拖入文件作为附件' : busy ? '运行中，输入会排队 · Esc 中断' : ultraOn ? ULTRACODE.placeholder : active?.state === 'history' ? '发送即可继续这个对话…' : `回复 ${info?.agentName && info.agent !== 'claude' ? info.agentName : 'Claude'}… 输入 / 查看命令，拖入文件作为附件`}
+            placeholder={disabled ? tr('对话已被删除，不能继续') : docked ? DOCK_PLACEHOLDER[dockKind(docked)](dockAgent) : welcome && !ultraOn ? tr('描述一个任务，或者问个问题。输入 / 查看命令，拖入文件作为附件') : busy ? tr('运行中，输入会排队 · Esc 中断') : ultraOn ? ULTRACODE.placeholder : active?.state === 'history' ? tr('发送即可继续这个对话…') : tr('回复 {agentName}… 输入 / 查看命令，拖入文件作为附件', { agentName: info?.agentName && info.agent !== 'claude' ? info.agentName : 'Claude' })}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={onKey}
             onPaste={onPaste}

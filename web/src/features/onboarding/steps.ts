@@ -2,6 +2,7 @@
 // connect, or the Claude login; skipped when logged in or when there is a provider already) ② pick a project folder. Appearance follows the system (no theme step); the shortcuts of
 // the old 就绪 page live in the 入门清单 on the start page. Pure.
 import type { SessionSummary } from '@shared';
+import { tr } from '@/i18n';
 
 export type ObStep = 'login' | 'project';
 
@@ -10,9 +11,9 @@ export type ObStep = 'login' | 'project';
  * are set in the heading face, so ui/heading-text.ts lists them.
  */
 export const STEP_TITLE: Record<ObStep | 'checking', string> = {
-  checking: '欢迎使用 Claude Web',
-  login: '欢迎使用 Claude Web',
-  project: '选一个项目文件夹',
+  checking: tr('欢迎使用 Claude Web'),
+  login: tr('欢迎使用 Claude Web'),
+  project: tr('选一个项目文件夹'),
 };
 
 export function onboardingSteps(o: { auth: { loggedIn?: boolean } | null; providers: number }): ObStep[] {
@@ -29,9 +30,9 @@ export function currentStep(steps: ObStep[], skippedLogin: boolean): ObStep {
  * the wizard and the start page's composer is already on that folder, focused. ui-smoke walks it on a fresh HOME.
  */
 export const FIRST_RUN: { id: 'login' | 'project' | 'send'; what: string }[] = [
-  { id: 'login', what: '接一个模型（填 API Key），或用 Claude 账号登录（已登录 / 有供应商时没有这一步）' },
-  { id: 'project', what: '选一个项目文件夹（最近用过的一点即选）' },
-  { id: 'send', what: '在输入框里写下要做的事，回车' },
+  { id: 'login', what: tr('接一个模型（填 API Key），或用 Claude 账号登录（已登录 / 有供应商时没有这一步）') },
+  { id: 'project', what: tr('选一个项目文件夹（最近用过的一点即选）') },
+  { id: 'send', what: tr('在输入框里写下要做的事，回车') },
 ];
 export function firstRunSteps(o: { loggedIn: boolean }) {
   return FIRST_RUN.filter((s) => s.id !== 'login' || !o.loggedIn);

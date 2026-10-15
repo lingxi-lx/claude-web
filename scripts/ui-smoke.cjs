@@ -44,7 +44,7 @@ function uiInventory() {
   for (const m of cat.matchAll(/const (\w+): EntryMeta\[\] = \[([\s\S]*?)\n\];/g)) {
     tables[m[1]] = [...m[2].matchAll(/\{ id: '([\w.]+)', (more: true)?/g)].map((e) => ({ id: e[1], more: !!e[2] }));
   }
-  const sections = [...list.matchAll(/id: '([\w.-]+)', l: '([^']+)', ic: '\w+', group: '(\w+)'(, advanced: true)?/g)].map((m) => ({ id: m[1], label: m[2], group: m[3], advanced: !!m[4], at: m.index, tabs: [], pages: [] }));
+  const sections = [...list.matchAll(/id: '([\w.-]+)', l: (?:tr\()?'([^']+)'\)?, ic: '\w+', group: '(\w+)'(, advanced: true)?/g)].map((m) => ({ id: m[1], label: m[2], group: m[3], advanced: !!m[4], at: m.index, tabs: [], pages: [] }));
   for (const [i, s] of sections.entries()) {
     const text = list.slice(s.at, i + 1 < sections.length ? sections[i + 1].at : list.length);
     const entries = tables[(/entries: (\w+)/.exec(text) || [])[1]] || [];
@@ -61,7 +61,7 @@ function uiInventory() {
   const aliases = [...legacy.matchAll(/(\w+): \{ section: '(\w+)'(?:, tab: '(\w+)')?(, more: true)?(?:, body: '(\w+)')? \}/g)].map((m) => ({ old: m[1], section: m[2], tab: m[3] || '', more: !!m[4], body: m[5] || '' }));
   const layout = fs.readFileSync(path.join(ROOT, 'web/src/model/layout.ts'), 'utf8');
   const block = layout.slice(layout.indexOf('export const PANELS'), layout.indexOf('];', layout.indexOf('export const PANELS')));
-  const panels = [...block.matchAll(/\{ id: '(\w+)', title: '([^']+)'/g)].map((m) => ({ id: m[1], title: m[2] }));
+  const panels = [...block.matchAll(/\{ id: '(\w+)', title: (?:tr\()?'([^']+)'/g)].map((m) => ({ id: m[1], title: m[2] }));
   const withMore = sections.flatMap((s) => s.pages.filter((p) => p.more.length || p.moreEntries.length));
   if (sections.length < 15 || aliases.length < 5 || !panels.length || !sections.some((s) => s.tabs.length) || withMore.length < 5 || !aliases.some((a) => a.more)) throw new Error('could not read the settings pages / 更多选项 / aliases / panels from the sources');
   // the sidebar's entry ids by place (web/src/features/sidebar/entries.ts PLACES): the sidebar phase must find each in the DOM
@@ -82,6 +82,9 @@ function arg(name, def) {
 
 function seedHome(home) {
   const { execFileSync } = require('node:child_process');
+  // the smoke asserts Chinese texts: the interface language is pinned (scripts/i18n-smoke.cjs looks at the English one)
+  fs.mkdirSync(path.join(home, '.claude-web'), { recursive: true });
+  fs.writeFileSync(path.join(home, '.claude-web', 'meta.json'), JSON.stringify({ version: 1, settings: { 'ui.language': 'zh' } }));
   const repo = path.join(home, 'repo');
   fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
   fs.writeFileSync(path.join(repo, 'README.md'), '# smoke repo\n');

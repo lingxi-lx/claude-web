@@ -10,6 +10,7 @@ import { OverPage, type OverTab } from '@/features/sections/OverPage';
 import { AUTOMATION_TABS, AUTOMATION_TAB_INFO, AUTOMATION_TITLE, type AutomationTab } from './page';
 import { closeAutomation, newInAutomation, showAutomationTab, useAutomation } from './state';
 import { SchedulesView } from './SchedulesView';
+import { tr } from '@/i18n';
 
 function Body({ tab }: { tab: AutomationTab }) {
   const n = useAutomation((s) => s.newAt[tab]);
@@ -33,12 +34,12 @@ export function useAutomationTabs(): OverTab[] {
     const count: Record<AutomationTab, React.ReactNode> = {
       schedules: schedules.length ? <span className="n">{schedules.length}</span> : null,
       goals: null,
-      orchestra: orchWaiting ? <span className="n need">{orchWaiting} 等你</span> : null,
+      orchestra: orchWaiting ? <span className="n need">{tr('{orchWaiting} 等你', { orchWaiting })}</span> : null,
     };
     const title: Record<AutomationTab, string | undefined> = {
-      schedules: schedules.length ? `${schedules.length} 个定时任务，${schedules.filter((s) => s.enabled).length} 个启用` : undefined,
+      schedules: schedules.length ? tr('{schedulesCount} 个定时任务，{filterCount} 个启用', { schedulesCount: schedules.length, filterCount: schedules.filter((s) => s.enabled).length }) : undefined,
       goals: undefined,
-      orchestra: orchWaiting ? `${orchWaiting} 个审批 / 比选在等你` : undefined,
+      orchestra: orchWaiting ? tr('{orchWaiting} 个审批 / 比选在等你', { orchWaiting }) : undefined,
     };
     return AUTOMATION_TABS.map((t) => ({ id: t, label: AUTOMATION_TAB_INFO[t].label, icon: AUTOMATION_TAB_INFO[t].icon, count: count[t], title: title[t] }));
   }, [schedules, orchWaiting]);
@@ -75,7 +76,7 @@ export function AutomationPage() {
     >
       {seen.map((t) => (
         <div key={t} className={clsx('over-body auto-body', t !== 'orchestra' && 'narrow')} data-body={t} hidden={t !== tab}>
-          <ErrorBoundary area={`自动化 · ${AUTOMATION_TAB_INFO[t].label}`}><Body tab={t} /></ErrorBoundary>
+          <ErrorBoundary area={tr('自动化 · {label}', { label: AUTOMATION_TAB_INFO[t].label })}><Body tab={t} /></ErrorBoundary>
         </div>
       ))}
     </OverPage>

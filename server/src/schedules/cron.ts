@@ -1,3 +1,4 @@
+import { tr } from '../i18n/index.js';
 // Minimal 5-field cron (minute hour day-of-month month day-of-week) with lists, ranges, steps and names.
 // Local time. Good enough for "every weekday at 9", "*/30 * * * *", "0 18 * * 1-5".
 
@@ -8,14 +9,14 @@ function parseField(f: string, min: number, max: number, names: string[] = []): 
   const out = new Set<number>();
   for (const part of f.split(',')) {
     const m = /^(\*|[\w]+)(?:-([\w]+))?(?:\/(\d+))?$/.exec(part.trim());
-    if (!m) throw new Error(`cron 字段无效：${part}`);
-    const val = (s: string) => { const i = names.indexOf(s.toLowerCase()); if (i >= 0) return i + (names === DAYS ? 0 : 1); const n = Number(s); if (!Number.isInteger(n)) throw new Error(`cron 值无效：${s}`); return n; };
+    if (!m) throw new Error(tr('cron 字段无效：{part}', { part }));
+    const val = (s: string) => { const i = names.indexOf(s.toLowerCase()); if (i >= 0) return i + (names === DAYS ? 0 : 1); const n = Number(s); if (!Number.isInteger(n)) throw new Error(tr('cron 值无效：{s}', { s })); return n; };
     let lo = m[1] === '*' ? min : val(m[1]);
     let hi = m[1] === '*' ? max : m[2] ? val(m[2]) : lo;
     const step = m[3] ? Number(m[3]) : 1;
-    if (step < 1) throw new Error(`cron 步长无效：${part}`); // "*/0" would loop forever below and hang the server
+    if (step < 1) throw new Error(tr('cron 步长无效：{part}', { part })); // "*/0" would loop forever below and hang the server
     if (m[1] !== '*' && !m[2] && m[3]) hi = max; // "5/10" → from 5 step 10
-    if (lo < min || hi > max || lo > hi) throw new Error(`cron 范围越界：${part}`);
+    if (lo < min || hi > max || lo > hi) throw new Error(tr('cron 范围越界：{part}', { part }));
     for (let v = lo; v <= hi; v += step) out.add(v);
   }
   // day-of-week 7 is Sunday too; normalising after expansion keeps ranges like "5-7" / "sat-7" valid
@@ -30,7 +31,7 @@ const ALIASES: Record<string, string> = { '@hourly': '0 * * * *', '@daily': '0 0
 export function parseCron(expr: string): CronSpec {
   const e = ALIASES[expr.trim().toLowerCase()] ?? expr.trim();
   const f = e.split(/\s+/);
-  if (f.length !== 5) throw new Error('cron 需要 5 个字段：分 时 日 月 周');
+  if (f.length !== 5) throw new Error(tr('cron 需要 5 个字段：分 时 日 月 周'));
   return {
     minute: parseField(f[0], 0, 59),
     hour: parseField(f[1], 0, 23),
@@ -59,7 +60,7 @@ export function nextCron(expr: string | CronSpec, from: Date = new Date()): Date
     if (!c.minute.has(t.getMinutes())) { t.setMinutes(t.getMinutes() + 1, 0, 0); continue; }
     return t;
   }
-  throw new Error('cron 表达式在两年内没有匹配的时间');
+  throw new Error(tr('cron 表达式在两年内没有匹配的时间'));
 }
 
 /** Human description for the UI (rough, Chinese). */
@@ -68,9 +69,9 @@ export function describeCron(expr: string): string {
     const e = ALIASES[expr.trim().toLowerCase()] ?? expr.trim();
     const [mi, h, dom, mon, dow] = e.split(/\s+/);
     const pad = (s: string) => s.padStart(2, '0');
-    const when = h === '*' ? (mi.startsWith('*/') ? `每 ${mi.slice(2)} 分钟` : `每小时第 ${mi} 分`) : h.startsWith('*/') ? `每 ${h.slice(2)} 小时` : `${h.split(',').map((x) => `${pad(x)}:${pad(mi)}`).join('、')}`;
-    const days = dow === '*' ? (dom === '*' ? '每天' : `每月 ${dom} 日`) : dow === '1-5' ? '工作日' : dow === '0,6' || dow === '6,0' ? '周末' : `周${dow.replace(/0/g, '日').replace(/[1-6]/g, (d) => '一二三四五六'[Number(d) - 1])}`;
-    const months = mon === '*' ? '' : `${mon} 月 `;
+    const when = h === '*' ? (mi.startsWith('*/') ? tr('每 {mi} 分钟', { mi: mi.slice(2) }) : tr('每小时第 {mi} 分', { mi })) : h.startsWith('*/') ? tr('每 {h} 小时', { h: h.slice(2) }) : `${h.split(',').map((x) => `${pad(x)}:${pad(mi)}`).join('、')}`;
+    const days = dow === '*' ? (dom === '*' ? tr('每天') : tr('每月 {dom} 日', { dom })) : dow === '1-5' ? tr('工作日') : dow === '0,6' || dow === '6,0' ? tr('周末') : dow.replace(/[0-6]/g, (d) => [tr('周日'), tr('周一'), tr('周二'), tr('周三'), tr('周四'), tr('周五'), tr('周六')][Number(d)]);
+    const months = mon === '*' ? '' : tr('{mon} 月 ', { mon });
     return `${months}${days} ${when}`.trim();
   } catch {
     return expr;

@@ -39,6 +39,7 @@ import { SseParser } from './sse.js';
 import type { IrEvent, IrUsage } from './ir.js';
 import { CACHE_KEY_MAX, SseLines, addMissing, affinityHeaders, dropEmptyReasoning, fixChatUsage, forcesTool, insertTopLevelField, isParamRejection, mentionsCacheKey, refusesForcedTool, thinkingOff } from './cache.js';
 import { UpstreamError, decoded, errorHeaders, passthroughHeaders, readText, responseHeaders, sendUpstream, waitDrain, withTimeout, type UpstreamResponse } from './upstream.js';
+import { tr } from '../i18n/index.js';
 
 export const SHIM_PREFIX = '/gateway/~p/';
 const TIMEOUT_MS = 10 * 60_000; // one upstream, no failover to hurry for: the client's own timeout decides
@@ -127,24 +128,24 @@ export class CacheShim {
 
   async serve(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
     const m = /^\/gateway\/~p\/([^/]+)(?:\/k\/([^/]*))?(?:\/s\/([^/]*))?(\/.*)?$/.exec(url.pathname);
-    if (!m) return this.fail(res, 404, '缓存垫片地址不对');
+    if (!m) return this.fail(res, 404, tr('缓存垫片地址不对'));
     let providerId: string, cacheKey: string, sessionId: string;
-    try { providerId = decodeURIComponent(m[1]); cacheKey = decodeURIComponent(m[2] ?? ''); sessionId = decodeURIComponent(m[3] ?? '') || cacheKey; } catch { return this.fail(res, 400, '地址编码错误'); }
-    if (!this.keyOk(req, providerId)) return this.fail(res, 401, '缓存垫片密钥无效（只接受本进程发给这个供应商的对话的内部密钥）');
+    try { providerId = decodeURIComponent(m[1]); cacheKey = decodeURIComponent(m[2] ?? ''); sessionId = decodeURIComponent(m[3] ?? '') || cacheKey; } catch { return this.fail(res, 400, tr('地址编码错误')); }
+    if (!this.keyOk(req, providerId)) return this.fail(res, 401, tr('缓存垫片密钥无效（只接受本进程发给这个供应商的对话的内部密钥）'));
     const p = this.deps.member(providerId);
-    if (!p || (p.type !== 'openai' && p.type !== 'grok')) return this.fail(res, 404, `没有这个 OpenAI / Grok 型档案：${providerId}`);
+    if (!p || (p.type !== 'openai' && p.type !== 'grok')) return this.fail(res, 404, tr('没有这个 OpenAI / Grok 型档案：{providerId}', { providerId }));
     let rest = m[4] ?? '/';
     if (!/^\/v\d/.test(rest)) rest = `/v1${rest === '/' ? '' : rest}`;
     const method = (req.method ?? 'GET').toUpperCase();
     const isChat = method === 'POST' && rest === '/v1/chat/completions';
     // Codex on an openai profile speaks the Responses API (wire_api "responses")
     const isResponses = method === 'POST' && rest === '/v1/responses' && p.type === 'openai';
-    if (!isChat && !isResponses && !(method === 'GET' && /^\/v1\/models(\/[^/]+)?$/.test(rest))) return this.fail(res, 404, `缓存垫片不转发这个接口：${method} ${rest}`);
+    if (!isChat && !isResponses && !(method === 'GET' && /^\/v1\/models(\/[^/]+)?$/.test(rest))) return this.fail(res, 404, tr('缓存垫片不转发这个接口：{method} {rest}', { method, rest }));
     const chunks: Buffer[] = [];
     let size = 0;
     for await (const c of req) {
       size += (c as Buffer).length;
-      if (size > BODY_LIMIT) return this.fail(res, 413, '请求体过大');
+      if (size > BODY_LIMIT) return this.fail(res, 413, tr('请求体过大'));
       chunks.push(c as Buffer);
     }
     const key = cacheKey ? `cw:${cacheKey}`.slice(0, CACHE_KEY_MAX) : undefined;
@@ -257,7 +258,7 @@ export class CacheShim {
     if ((up.status < 200 || up.status >= 300) && original) {
       up.body.resume();
       sendError(ctx, original.status, original.headers, original.text);
-      return this.record(ctx, { ok: false, status: original.status, model, error: `HTTP ${original.status} ${upstreamErrorMessage(original.text)}（chat/completions 退回也失败：HTTP ${up.status}）`.slice(0, 240), outbound: 'responses', stream });
+      return this.record(ctx, { ok: false, status: original.status, model, error: tr('HTTP {status} {upstreamErrorMessage}（chat/completions 退回也失败：HTTP {status2}）', { status: original.status, upstreamErrorMessage: upstreamErrorMessage(original.text), status2: up.status }).slice(0, 240), outbound: 'responses', stream });
     }
     if (up.status < 200 || up.status >= 300) return this.passError(ctx, up, model, 'openai', stream, read);
     await onOk?.();
@@ -292,14 +293,14 @@ export class CacheShim {
     for (;;) {
       if (ctx.signal.aborted) break;
       let r: IteratorResult<Buffer>;
-      try { r = await withTimeout(it.next(), IDLE_MS); } catch (e: any) { broken = e?.message === 'timeout' ? '上游超过 5 分钟没有数据' : e?.message ?? String(e); up.body.destroy(); break; }
+      try { r = await withTimeout(it.next(), IDLE_MS); } catch (e: any) { broken = e?.message === 'timeout' ? tr('上游超过 5 分钟没有数据') : e?.message ?? String(e); up.body.destroy(); break; }
       if (r.done) break;
       const out = lines.push(dec.write(r.value));
       if (!out) continue;
       take(out);
       if (!res.write(out)) await waitDrain(res, ctx.signal);
     }
-    if (ctx.signal.aborted) { up.body.destroy(); res.destroy(); return this.record(ctx, { ok: false, status: 499, model, usage, error: '客户端已断开', outbound: 'openai', stream, firstByteMs }); }
+    if (ctx.signal.aborted) { up.body.destroy(); res.destroy(); return this.record(ctx, { ok: false, status: 499, model, usage, error: tr('客户端已断开'), outbound: 'openai', stream, firstByteMs }); }
     const tail = lines.push(dec.end()) + lines.end();
     take(tail);
     for (const e of sniff.end()) if (e.data.includes('"usage"')) { try { usage = C.usageIn(JSON.parse(e.data).usage); } catch { /* skip */ } }
@@ -341,7 +342,7 @@ export class CacheShim {
       let text = '';
       try { text = await readText(up.body); } catch (e: any) { return this.brokenBeforeStart(ctx, model, e?.message ?? String(e), stream, firstByteMs); }
       let resp;
-      try { resp = R.parseResponse(JSON.parse(text)); } catch { return this.brokenBeforeStart(ctx, model, `上游返回的不是 JSON：${text.slice(0, 120)}`, stream, firstByteMs); }
+      try { resp = R.parseResponse(JSON.parse(text)); } catch { return this.brokenBeforeStart(ctx, model, tr('上游返回的不是 JSON：{text}', { text: text.slice(0, 120) }), stream, firstByteMs); }
       if (!stream) {
         res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(C.renderResponse(resp, model)));
       } else {
@@ -371,11 +372,11 @@ export class CacheShim {
     for (;;) {
       if (ctx.signal.aborted) break;
       let r: IteratorResult<Buffer>;
-      try { r = await withTimeout(it.next(), IDLE_MS); } catch (e: any) { broken = e?.message === 'timeout' ? '上游超过 5 分钟没有数据' : e?.message ?? String(e); up.body.destroy(); break; }
+      try { r = await withTimeout(it.next(), IDLE_MS); } catch (e: any) { broken = e?.message === 'timeout' ? tr('上游超过 5 分钟没有数据') : e?.message ?? String(e); up.body.destroy(); break; }
       if (r.done) break;
       for (const ev of sse.feed(dec.write(r.value))) await emit(parser.feed(ev));
     }
-    if (ctx.signal.aborted) { up.body.destroy(); res.destroy(); return this.record(ctx, { ok: false, status: 499, model, usage, error: '客户端已断开', outbound: 'responses', stream, firstByteMs }); }
+    if (ctx.signal.aborted) { up.body.destroy(); res.destroy(); return this.record(ctx, { ok: false, status: 499, model, usage, error: tr('客户端已断开'), outbound: 'responses', stream, firstByteMs }); }
     if (broken) await emit([{ t: 'error', message: broken }]);
     else { for (const ev of sse.feed(dec.end())) await emit(parser.feed(ev)); for (const ev of sse.end()) await emit(parser.feed(ev)); await emit(parser.end()); }
     res.end(renderer.end() || undefined);
@@ -428,7 +429,7 @@ export class CacheShim {
     for (;;) {
       if (ctx.signal.aborted) break;
       let r: IteratorResult<Buffer>;
-      try { r = await withTimeout(it.next(), IDLE_MS); } catch (e: any) { broken = e?.message === 'timeout' ? '上游超过 5 分钟没有数据' : e?.message ?? String(e); up.body.destroy(); break; }
+      try { r = await withTimeout(it.next(), IDLE_MS); } catch (e: any) { broken = e?.message === 'timeout' ? tr('上游超过 5 分钟没有数据') : e?.message ?? String(e); up.body.destroy(); break; }
       if (r.done) break;
       if (stream) {
         for (const e of sniff.feed(dec.write(r.value))) {
@@ -440,7 +441,7 @@ export class CacheShim {
     }
     if (ctx.signal.aborted) {
       up.body.destroy(); res.destroy();
-      return this.record(ctx, answered ? { ok: true, status: up.status, model, usage, outbound: 'responses', stream, firstByteMs } : { ok: false, status: 499, model, usage, error: '客户端已断开', outbound: 'responses', stream, firstByteMs });
+      return this.record(ctx, answered ? { ok: true, status: up.status, model, usage, outbound: 'responses', stream, firstByteMs } : { ok: false, status: 499, model, usage, error: tr('客户端已断开'), outbound: 'responses', stream, firstByteMs });
     }
     if (!stream) { try { usageOf(JSON.parse(whole + dec.end())); } catch { /* not JSON */ } }
     if (broken) { res.destroy(); return this.record(ctx, { ok: false, status: 502, model, usage, error: broken, outbound: 'responses', stream, firstByteMs }); }
@@ -475,7 +476,7 @@ export class CacheShim {
       if (original) {
         up.body.resume();
         sendError(ctx, original.status, original.headers, original.text);
-        return this.record(ctx, { ok: false, status: original.status, model, error: `HTTP ${original.status} ${upstreamErrorMessage(original.text)}（chat/completions 退回也失败：HTTP ${up.status}）`.slice(0, 240), outbound: 'openai', stream });
+        return this.record(ctx, { ok: false, status: original.status, model, error: tr('HTTP {status} {upstreamErrorMessage}（chat/completions 退回也失败：HTTP {status2}）', { status: original.status, upstreamErrorMessage: upstreamErrorMessage(original.text), status2: up.status }).slice(0, 240), outbound: 'openai', stream });
       }
       return this.passError(ctx, up, model, 'openai', stream);
     }
@@ -488,7 +489,7 @@ export class CacheShim {
       let text = '';
       try { text = await readText(up.body); } catch (e: any) { return this.brokenBeforeStart(ctx, model, e?.message ?? String(e), stream, firstByteMs, 'openai'); }
       let resp;
-      try { resp = C.parseResponse(JSON.parse(text)); } catch { return this.brokenBeforeStart(ctx, model, `上游返回的不是 JSON：${text.slice(0, 120)}`, stream, firstByteMs, 'openai'); }
+      try { resp = C.parseResponse(JSON.parse(text)); } catch { return this.brokenBeforeStart(ctx, model, tr('上游返回的不是 JSON：{text}', { text: text.slice(0, 120) }), stream, firstByteMs, 'openai'); }
       if (!stream) res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(R.renderResponse(resp, model, customTools)));
       else {
         res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache' });
@@ -520,13 +521,13 @@ export class CacheShim {
     for (;;) {
       if (ctx.signal.aborted) break;
       let r: IteratorResult<Buffer>;
-      try { r = await withTimeout(it.next(), IDLE_MS); } catch (e: any) { broken = e?.message === 'timeout' ? '上游超过 5 分钟没有数据' : e?.message ?? String(e); up.body.destroy(); break; }
+      try { r = await withTimeout(it.next(), IDLE_MS); } catch (e: any) { broken = e?.message === 'timeout' ? tr('上游超过 5 分钟没有数据') : e?.message ?? String(e); up.body.destroy(); break; }
       if (r.done) break;
       for (const ev of sse.feed(dec.write(r.value))) await emit(parser.feed(ev));
     }
     if (ctx.signal.aborted) {
       up.body.destroy(); res.destroy();
-      return this.record(ctx, answered && !failed ? { ok: true, status: up.status, model, usage, outbound: 'openai', stream, firstByteMs } : { ok: false, status: 499, model, usage, error: '客户端已断开', outbound: 'openai', stream, firstByteMs });
+      return this.record(ctx, answered && !failed ? { ok: true, status: up.status, model, usage, outbound: 'openai', stream, firstByteMs } : { ok: false, status: 499, model, usage, error: tr('客户端已断开'), outbound: 'openai', stream, firstByteMs });
     }
     if (broken) await emit([{ t: 'error', message: broken }]);
     else { for (const ev of sse.feed(dec.end())) await emit(parser.feed(ev)); for (const ev of sse.end()) await emit(parser.feed(ev)); await emit(parser.end()); }
@@ -562,7 +563,7 @@ export class CacheShim {
       error: o.error,
       providerId: ctx.p.id,
       kind: 'gateway',
-      gateway: { group: '缓存垫片', via: 'shim', inbound: ctx.rest === '/v1/responses' ? 'responses' : 'openai', member: ctx.p.name, memberId: ctx.p.id, outbound: o.outbound, upstreamStatus: o.status, switches: 0, firstByteMs: o.firstByteMs, stream: o.stream },
+      gateway: { group: tr('缓存垫片'), via: 'shim', inbound: ctx.rest === '/v1/responses' ? 'responses' : 'openai', member: ctx.p.name, memberId: ctx.p.id, outbound: o.outbound, upstreamStatus: o.status, switches: 0, firstByteMs: o.firstByteMs, stream: o.stream },
     });
   }
 }

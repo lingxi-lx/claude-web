@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { agentColor, pillText } from './model';
 import { openBackground, useBgSession } from './state';
+import { tr } from '@/i18n';
 
 /**
  * Over the composer while the conversation has something running besides its turn — a workflow, a sub-agent, a
@@ -18,7 +19,7 @@ export function BackgroundPill({ sessionId }: { sessionId: string }) {
   if (!text) return null;
   return (
     <div className="bg-pill-row">
-      <button className="bg-pill" data-id="bg-pill" title="在「后台」里看它们在做什么" onClick={() => openBackground(sessionId)}>
+      <button className="bg-pill" data-id="bg-pill" title={tr('在「后台」里看它们在做什么')} onClick={() => openBackground(sessionId)}>
         <span className="bg-pill-dots" aria-hidden>
           {dots.slice(0, 6).map((c, i) => <i key={i} style={{ background: agentColor(c) }} />)}
           {!dots.length && <i className="idle" />}

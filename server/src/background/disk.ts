@@ -7,6 +7,7 @@ import path from 'node:path';
 import { findClaudeTranscript } from '../runtime/transcript-file.js';
 import { createBgState, mergeWorkflowProgress } from './registry.js';
 import type { BgRunSummary, BgStatus, BgTask } from './types.js';
+import { tr } from '../i18n/index.js';
 
 /** The official binary names a run `wf_xxxxxxxx-xxx`; our engine uses its task id, `w` + 8 characters. */
 const RUN_ID = /^w[\w-]{1,80}$/;
@@ -68,7 +69,7 @@ export function taskFromRun(j: any, runId: string): BgTask {
     agents: [],
     runId,
   };
-  if (Array.isArray(j.phases)) t.phases = j.phases.map((p: any, i: number) => ({ index: i + 1, title: String(p?.title ?? `阶段 ${i + 1}`) }));
+  if (Array.isArray(j.phases)) t.phases = j.phases.map((p: any, i: number) => ({ index: i + 1, title: String(p?.title ?? tr('阶段 {i}', { i: i + 1 })) }));
   mergeWorkflowProgress(s, t, Array.isArray(j.workflowProgress) ? j.workflowProgress : [], t.endedAt ?? startedAt, true);
   // a run that ended with agents still marked running / queued: they ended with it (a killed run's are stopped)
   for (const a of t.agents) if (a.state === 'running' || a.state === 'queued') a.state = t.status === 'completed' ? 'done' : t.status === 'stopped' ? 'stopped' : 'failed';

@@ -7,6 +7,7 @@ import { newId, safeJson, type IrEvent, type IrMessage, type IrPart, type IrRequ
 import { dataUrlImage, usageIn, wantsCompletionTokens } from './openai-chat.js';
 import { sse } from './sse.js';
 import { CACHE_KEY_MAX } from './cache.js';
+import { tr } from '../i18n/index.js';
 
 function inputParts(c: unknown): IrPart[] {
   if (typeof c === 'string') return c ? [{ type: 'text', text: c }] : [];
@@ -223,7 +224,7 @@ export class ResponsesStreamParser implements StreamParser {
   end(): IrEvent[] {
     if (this.done) return [];
     this.done = true;
-    return [{ t: 'error', message: '上游流意外结束' }];
+    return [{ t: 'error', message: tr('上游流意外结束') }];
   }
 }
 
@@ -354,6 +355,6 @@ export class ResponsesStreamRenderer implements StreamRenderer {
     return '';
   }
   end(): string {
-    return this.finished ? '' : this.push({ t: 'error', message: '上游流意外结束' });
+    return this.finished ? '' : this.push({ t: 'error', message: tr('上游流意外结束') });
   }
 }

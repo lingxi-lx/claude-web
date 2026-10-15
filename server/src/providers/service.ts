@@ -9,6 +9,7 @@ import { claudeFamilyMap, isChatModel, pickChatModel, preferredRuntime, profileF
 import { wantsResponses } from '../gateway/shim.js';
 import { settingsOverride } from '../runtime/user-env.js';
 import { writeFlagSettings, type FlagSettings } from '../runtime/flag-settings.js';
+import { tr } from '../i18n/index.js';
 
 /** Mask an API key for the wire: keep prefix + last 4 chars. */
 export function maskKey(k: string | undefined): string {
@@ -229,7 +230,7 @@ const PROBE_TIMEOUT_MS = 120_000;
  */
 export function worthOfficialRetry(error: string | undefined): boolean {
   const e = error ?? '';
-  return !/超时|API Error: (?:5\d\d|429)\b|\b(?:5\d\d|429) (?:status code|Too Many|Service|Bad Gateway|Gateway|Internal)|insufficient(?:[_ ]\w+)?[_ ](?:balance|quota|funds|credit)|no available accounts|余额|额度/i.test(e);
+  return !/超时|timed out|API Error: (?:5\d\d|429)\b|\b(?:5\d\d|429) (?:status code|Too Many|Service|Bad Gateway|Gateway|Internal)|insufficient(?:[_ ]\w+)?[_ ](?:balance|quota|funds|credit)|no available accounts|余额|额度/i.test(e);
 }
 
 export function chatProbeArgs(model: string): string[] {
@@ -256,7 +257,7 @@ export async function chatProbe(p: Provider, runtime: RuntimeKind | undefined, m
   let out: any = null;
   try { out = JSON.parse(r.stdout.trim().split('\n').filter((l) => l.startsWith('{')).pop() ?? ''); } catch { /* not json */ }
   if (out && out.type === 'result' && !out.is_error) return { ok: true, runtime: kind, model, ms };
-  if (r.timedOut && !out) return { ok: false, runtime: kind, model, error: `超时：${PROBE_TIMEOUT_MS / 1000} 秒内没有收到回答（中转没有回应，或一直在报错重试）`, ms };
+  if (r.timedOut && !out) return { ok: false, runtime: kind, model, error: tr('超时：{PROBE_TIMEOUT_MS} 秒内没有收到回答（中转没有回应，或一直在报错重试）', { PROBE_TIMEOUT_MS: PROBE_TIMEOUT_MS / 1000 }), ms };
   // an error result carries `errors` / `subtype` rather than `result`; stderr is often just a warning line
   const stderr = r.stderr.split('\n').filter((l) => l.trim() && !/^Warning: no stdin data/.test(l)).join(' ');
   const err = (out?.result ?? (Array.isArray(out?.errors) && out.errors.length ? out.errors.join('; ') : undefined) ?? out?.error ?? (out?.is_error ? out.subtype : undefined) ?? (stderr || r.stdout)).toString().replace(/\s+/g, ' ').trim().slice(0, 300) || `exit ${r.code}`;
@@ -322,7 +323,7 @@ export async function probeProvider(p: Pick<Provider, 'type' | 'baseUrl' | 'apiK
   return { ...again, ms: (again.ms ?? 0) + (r.ms ?? 0) + retryMs };
 }
 
-const LIST_TIMEOUT = '连接超时（20s）';
+const LIST_TIMEOUT = tr('连接超时（20s）');
 
 async function listModels(p: Pick<Provider, 'type' | 'baseUrl' | 'apiKey'>): Promise<ProbeResult> {
   const t0 = Date.now();
@@ -345,7 +346,7 @@ async function listModels(p: Pick<Provider, 'type' | 'baseUrl' | 'apiKey'>): Pro
     if (!r.ok) return { ok: false, status: r.status, models: [], error: j?.error?.message || j?.message || text.slice(0, 300) || `HTTP ${r.status}`, ms: Date.now() - t0 };
     const raw: any[] = Array.isArray(j?.data) ? j.data : Array.isArray(j?.models) ? j.models : Array.isArray(j) ? j : [];
     const { models, modelNames, modelEfforts, modelContext } = parseModelList(raw);
-    if (!models.length && !j) return { ok: false, status: r.status, models: [], error: '返回不是 JSON 模型列表', ms: Date.now() - t0 };
+    if (!models.length && !j) return { ok: false, status: r.status, models: [], error: tr('返回不是 JSON 模型列表'), ms: Date.now() - t0 };
     return { ok: true, status: r.status, models, ...(modelNames ? { modelNames } : {}), ...(modelEfforts ? { modelEfforts } : {}), ...(modelContext ? { modelContext } : {}), ms: Date.now() - t0 };
   } catch (e: any) {
     return { ok: false, models: [], error: e?.name === 'AbortError' ? LIST_TIMEOUT : e?.cause?.message ?? e?.message ?? String(e), ms: Date.now() - t0 };
@@ -384,7 +385,7 @@ export class ProviderService {
     const hit = this.revealed.get(p.apiKey);
     if (hit !== undefined) return hit;
     if (!p.apiKey.startsWith('enc:')) return p.apiKey;
-    throw new Error(`供应商「${p.name}」的密钥无法解密（换了用户或机器？请重新输入）`);
+    throw new Error(tr('供应商「{name}」的密钥无法解密（换了用户或机器？请重新输入）', { name: p.name }));
   }
   secretsStatus() {
     const all = this.meta.providers();
@@ -403,15 +404,15 @@ export class ProviderService {
   forSession(id: string | undefined): SessionProvider | undefined {
     if (!id || id === CLAUDE_PROVIDER_ID) return undefined;
     const p = this.meta.provider(id);
-    if (!p) throw new Error(`供应商不存在：${id}`);
+    if (!p) throw new Error(tr('供应商不存在：{id}', { id }));
     if (p.type === 'gateway') {
       const ep = this.gatewayEndpoint?.(p.gatewayGroupId ?? '');
-      if (!ep) throw new Error(`供应商「${p.name}」走模型网关，但网关没有启用或组不存在（设置 → 模型网关）`);
+      if (!ep) throw new Error(tr('供应商「{name}」走模型网关，但网关没有启用或组不存在（设置 → 模型网关）', { name: p.name }));
       // runtime: the profile's explicit choice, else what the group's relays need (GatewayService.needsOfficialClient)
       return { ...p, baseUrl: ep.baseUrl, apiKey: ep.key, runtime: p.runtime ?? ep.runtime };
     }
-    if (!p.baseUrl && (p.type === 'anthropic' || p.type === 'openai')) throw new Error(`供应商「${p.name}」没有 Base URL`);
-    if (!p.apiKey) throw new Error(`供应商「${p.name}」没有 API Key`);
+    if (!p.baseUrl && (p.type === 'anthropic' || p.type === 'openai')) throw new Error(tr('供应商「{name}」没有 Base URL', { name: p.name }));
+    if (!p.apiKey) throw new Error(tr('供应商「{name}」没有 API Key', { name: p.name }));
     const out: SessionProvider = { ...p, apiKey: this.plainKey(p) };
     // OpenAI-compatible profiles: through the local cache shim (profile switch cacheShim, default on)
     if ((p.type === 'openai' || p.type === 'grok') && p.cacheShim !== false) {
@@ -475,15 +476,15 @@ export class ProviderService {
     const targets: (Provider | string)[] = ids ? ids.map((id) => all.find((p) => p.id === id) ?? id) : all.filter((p) => p.type !== 'gateway');
     const out: ModelRefreshResult[] = new Array(targets.length);
     const one = async (t: Provider | string): Promise<ModelRefreshResult> => {
-      if (typeof t === 'string') return { id: t, name: t, ok: false, count: 0, error: '没有这个供应商档案', ms: 0 };
+      if (typeof t === 'string') return { id: t, name: t, ok: false, count: 0, error: tr('没有这个供应商档案'), ms: 0 };
       const base = { id: t.id, name: t.name };
-      if (t.type === 'gateway') return { ...base, ok: false, count: 0, error: '模型网关档案的模型来自组成员', ms: 0 };
+      if (t.type === 'gateway') return { ...base, ok: false, count: 0, error: tr('模型网关档案的模型来自组成员'), ms: 0 };
       let key = '';
       try { key = this.plainKey(t); } catch (e) { return { ...base, ok: false, count: 0, error: (e as Error).message, ms: 0 }; }
-      if (!key) return { ...base, ok: false, count: 0, error: '没有 API Key', ms: 0 };
+      if (!key) return { ...base, ok: false, count: 0, error: tr('没有 API Key'), ms: 0 };
       const r = await probeProvider({ type: t.type, baseUrl: t.baseUrl, apiKey: key });
       // the profile may have been deleted while the request was out: write back only onto one that still exists
-      const gone = { ...base, ok: false, count: 0, error: '档案已删除', ms: r.ms };
+      const gone = { ...base, ok: false, count: 0, error: tr('档案已删除'), ms: r.ms };
       if (!r.ok) {
         const error = r.error || `HTTP ${r.status ?? '?'}`;
         if (!(await this.meta.upsertProvider({ id: t.id, modelsError: error }, { mustExist: true }))) return gone;
@@ -491,7 +492,7 @@ export class ProviderService {
       }
       // a relay answering 200 with nothing (maintenance, a broken proxy) must not empty a list that worked yesterday
       if (!r.models.length && this.meta.provider(t.id)?.models?.length) {
-        const error = '返回空列表（保留原列表）';
+        const error = tr('返回空列表（保留原列表）');
         if (!(await this.meta.upsertProvider({ id: t.id, modelsError: error }, { mustExist: true }))) return gone;
         return { ...base, ok: false, count: 0, error, ms: r.ms };
       }
@@ -528,7 +529,7 @@ export class ProviderService {
   fitError(id: string | undefined, agent: AgentKind): string | null {
     if (!id || id === CLAUDE_PROVIDER_ID) return null;
     const p = this.meta.provider(id);
-    if (!p) return `供应商不存在：${id}`;
+    if (!p) return tr('供应商不存在：{id}', { id });
     return profileFitError(agent, p.type, agent === 'claude' && p.type !== 'gateway' ? resolveEngine(preferredRuntime(p)).kind : undefined);
   }
   async upsert(p: Partial<Provider> & { id?: string }) {
@@ -544,10 +545,10 @@ export class ProviderService {
    */
   async probe(id?: string, draft?: Partial<Provider>, opts: { listOnly?: boolean } = {}): Promise<ProbeResult> {
     const saved = id ? this.meta.provider(id) : undefined;
-    if ((draft?.type ?? saved?.type) === 'gateway') return { ok: false, models: [], error: '走模型网关的供应商请在「设置 → 模型网关」里用组的「测试」按钮', ms: 0 };
+    if ((draft?.type ?? saved?.type) === 'gateway') return { ok: false, models: [], error: tr('走模型网关的供应商请在「设置 → 模型网关」里用组的「测试」按钮'), ms: 0 };
     const key = draft?.apiKey && !draft.apiKey.includes('…') ? draft.apiKey : saved ? this.plainKey(saved) : '';
     const p = { type: draft?.type ?? saved?.type ?? 'anthropic', baseUrl: (draft?.baseUrl ?? saved?.baseUrl ?? '').trim(), apiKey: key.trim() } as Pick<Provider, 'type' | 'baseUrl' | 'apiKey'>;
-    if (!p.apiKey) return { ok: false, models: [], error: '没有 API Key', ms: 0 };
+    if (!p.apiKey) return { ok: false, models: [], error: tr('没有 API Key'), ms: 0 };
     const r = await probeProvider(p);
     if (r.ok && saved && r.models.length) await this.meta.upsertProvider({ id: saved.id, models: r.models, modelNames: (r.modelNames ?? null) as unknown as undefined, modelEfforts: (r.modelEfforts ?? null) as unknown as undefined, modelContext: (r.modelContext ?? null) as unknown as undefined, modelsAt: Date.now(), modelsError: null as unknown as undefined }, { mustExist: true });
     if (opts.listOnly || !r.ok || (p.type !== 'anthropic' && p.type !== 'openai')) return r;
@@ -556,7 +557,7 @@ export class ProviderService {
     // Anthropic endpoints: a haiku (the check runs a whole CLI turn); OpenAI-compatible ones: a real chat model — the
     // list is sorted by name, and its first entry is as often an embedding or image model as anything
     // a key whose list has nothing to talk to (an image-only key: gpt-image-2 …) says so, instead of a chat check on an image model
-    if (!full.defaultModel && r.models.length && !r.models.some(isChatModel)) return { ...r, ok: false, error: `列表里没有聊天模型（只有 ${r.models.slice(0, 3).join('、')}${r.models.length > 3 ? ' 等' : ''}）：这个 Key 不能用来对话` };
+    if (!full.defaultModel && r.models.length && !r.models.some(isChatModel)) return { ...r, ok: false, error: tr('列表里没有聊天模型（只有 {models}{v}）：这个 Key 不能用来对话', { models: r.models.slice(0, 3).join('、'), v: r.models.length > 3 ? tr(' 等') : '' }) };
     const model = full.defaultModel || (p.type === 'anthropic' ? claudeFamilyMap(r.models).haiku ?? r.models.find(isChatModel) : pickChatModel(r.models)) || r.models[0] || 'haiku';
     // OpenAI-compatible relays don't fingerprint the client, so one tiny chat request proves the key; a CLI
     // round would cost a whole Claude Code system prompt (~50k tokens) per click.
@@ -580,7 +581,7 @@ export class ProviderService {
       if (again.ok) {
         chat = { ...again, switched: true };
         if (saved) await this.meta.upsertProvider({ id: saved.id, runtime: 'claude' }, { mustExist: true });
-      } else chat = { ...again, error: `ccb: ${chat.error} · 官方: ${again.error}` };
+      } else chat = { ...again, error: tr('ccb: {error} · 官方: {error2}', { error: chat.error, error2: again.error }) };
     }
     return { ...r, ok: chat.ok, chat, error: chat.ok ? undefined : chat.error };
   }

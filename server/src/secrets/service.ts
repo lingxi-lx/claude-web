@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import crypto from 'node:crypto';
+import { tr } from '../i18n/index.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -59,7 +60,7 @@ export class SecretService {
     try {
       if (scheme === 'dpapi') {
         // spliced into a PowerShell string literal: a tampered meta.json must not be able to break out of it
-        if (!/^[A-Za-z0-9+/=]*$/.test(rest)) throw new Error('密文格式无效');
+        if (!/^[A-Za-z0-9+/=]*$/.test(rest)) throw new Error(tr('密文格式无效'));
         const script = `$b=[Convert]::FromBase64String('${rest}');Add-Type -AssemblyName System.Security;$p=[System.Security.Cryptography.ProtectedData]::Unprotect($b,$null,'CurrentUser');[Convert]::ToBase64String($p)`;
         const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true, timeout: 20_000 });
         plain = Buffer.from(stdout.trim(), 'base64').toString('utf8');
@@ -70,7 +71,7 @@ export class SecretService {
         plain = Buffer.from(payload ?? rest, 'base64').toString('utf8');
       }
     } catch (e) {
-      throw new Error(`无法解密密钥（${scheme}）：${(e as Error).message}`);
+      throw new Error(tr('无法解密密钥（{scheme}）：{message}', { scheme, message: (e as Error).message }));
     }
     this.cache.set(v, plain);
     return plain;

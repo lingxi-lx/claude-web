@@ -8,6 +8,7 @@ import { PROJECT_MENU_ID } from './ids';
 import { useMenuClaim } from '@/ui/menus';
 import { useMenuMotion } from '@/ui/menu-motion';
 import { ActionSheet, useSheetMenu } from '@/ui/ActionSheet';
+import { tr } from '@/i18n';
 
 /**
  * Working-directory chip of the welcome composer. The list of recent directories opens only from this chip,
@@ -37,13 +38,13 @@ export function DirPicker({ cwd, recent, onPick, onBrowse, footer, label, title 
   };
   return (
     <>
-      <button ref={chip} type="button" className={clsx('dirpick', open && 'active')} onClick={click} title={title ?? (cwd || '选择项目文件夹')} aria-label={`项目：${cwd ? basename(cwd) : '未选择'}`} aria-haspopup="menu" aria-expanded={open}>
+      <button ref={chip} type="button" className={clsx('dirpick', open && 'active')} onClick={click} title={title ?? (cwd || tr('选择项目文件夹'))} aria-label={tr('项目：{basename}', { basename: cwd ? basename(cwd) : tr('未选择') })} aria-haspopup="menu" aria-expanded={open}>
         <span className="dirpick-ic"><Icon name="folder" size={14} /></span>
-        <span className="dirpick-name opt">{label ?? (cwd ? basename(cwd) : '选择项目')}</span>
+        <span className="dirpick-name opt">{label ?? (cwd ? basename(cwd) : tr('选择项目'))}</span>
         {(dirs.length > 0 || footer) && <span className="caret opt"><Icon name="chevronDown" size={10} /></span>}
       </button>
       {open && (
-        <ErrorBoundary area="目录菜单" compact onReset={() => setOpen(false)}>
+        <ErrorBoundary area={tr('目录菜单')} compact onReset={() => setOpen(false)}>
           <DirMenu
             anchor={chip}
             cwd={cwd}
@@ -110,9 +111,9 @@ function DirMenu({ anchor, cwd, dirs, onPick, onBrowse, onClose, footer }: { anc
   };
   if (!pos && !sheet) return null;
   const menu = (
-    <div ref={box} className="menu dirmenu" style={pos ?? undefined} role="menu" aria-label="项目" onKeyDown={onKey} {...motion}>
+    <div ref={box} className="menu dirmenu" style={pos ?? undefined} role="menu" aria-label={tr('项目')} onKeyDown={onKey} {...motion}>
       {dirs.length > 0 && <>
-        <div className="dirmenu-head">最近的项目</div>
+        <div className="dirmenu-head">{tr('最近的项目')}</div>
         <div className="dirmenu-list">
           {dirs.map((d) => (
             <button key={d} type="button" role="menuitemradio" aria-checked={d === cwd} data-dir={d} className={clsx(d === cwd && 'cur')} onClick={() => onPick(d)} title={d}>
@@ -123,7 +124,7 @@ function DirMenu({ anchor, cwd, dirs, onPick, onBrowse, onClose, footer }: { anc
         </div>
         <div className="menu-sep" />
       </>}
-      <button type="button" role="menuitem" data-id={PROJECT_MENU_ID.browse} onClick={onBrowse}><Icon name="folder" size={13} /> 打开文件夹…</button>
+      <button type="button" role="menuitem" data-id={PROJECT_MENU_ID.browse} onClick={onBrowse}><Icon name="folder" size={13} /> {tr('打开文件夹…')}</button>
       {footer}
     </div>
   );

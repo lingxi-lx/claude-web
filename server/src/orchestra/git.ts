@@ -4,6 +4,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { GitService } from '../git/service.js';
+import { tr } from '../i18n/index.js';
 
 export type MergeResult = { ok: true } | { ok: false; kind: 'busy' | 'dirty' | 'conflict' | 'failed'; error: string };
 /** `linked`: git still knows the directory as a worktree of this repo (after prune + repair). */
@@ -93,8 +94,8 @@ export function gitAdapter(git: GitService): OrchGit {
       return !(await exists(dir)) && !(await branchExists(root, branch)) && !(await registered(root, dir));
     },
     async worktreeAdd(root, dir, branch, from) {
-      if (await exists(dir)) throw new Error(`目录已存在，不会覆盖：${dir}`);
-      if (await branchExists(root, branch)) throw new Error(`分支已存在，不会覆盖：${branch}`);
+      if (await exists(dir)) throw new Error(tr('目录已存在，不会覆盖：{dir}', { dir }));
+      if (await branchExists(root, branch)) throw new Error(tr('分支已存在，不会覆盖：{branch}', { branch }));
       const base = (await git.run(root, ['rev-parse', '--verify', `${from}^{commit}`])).stdout.trim();
       await fs.mkdir(path.dirname(dir), { recursive: true });
       try {
@@ -128,9 +129,9 @@ export function gitAdapter(git: GitService): OrchGit {
     async diff(root, base, branch) { return (await git.run(root, ['diff', `${base}...${branch}`])).stdout; },
     async merge(cwd, branch, message) {
       const busy = await inProgress(cwd);
-      if (busy) return { ok: false, kind: 'busy', error: `工作目录里有你自己进行中的 ${busy}：先完成（或放弃）它，再回来合并` };
+      if (busy) return { ok: false, kind: 'busy', error: tr('工作目录里有你自己进行中的 {busy}：先完成（或放弃）它，再回来合并', { busy }) };
       const staged = (await git.run(cwd, ['diff', '--cached', '--name-only'])).stdout.trim();
-      if (staged) return { ok: false, kind: 'dirty', error: `暂存区里有未提交的改动（${staged.split('\n').slice(0, 3).join('、')}…）：先提交或取消暂存，再回来合并` };
+      if (staged) return { ok: false, kind: 'dirty', error: tr('暂存区里有未提交的改动（{split}…）：先提交或取消暂存，再回来合并', { split: staged.split('\n').slice(0, 3).join('、') }) };
       try {
         await identityRetry((pre) => git.run(cwd, [...pre, 'merge', '--no-ff', '-q', '-m', message, branch]));
         git.emit('changed', cwd);
@@ -140,7 +141,7 @@ export function gitAdapter(git: GitService): OrchGit {
         if (await exists(await gitPath(cwd, 'MERGE_HEAD'))) {
           await git.run(cwd, ['merge', '--abort']).catch(() => {});
           git.emit('changed', cwd);
-          return { ok: false, kind: 'conflict', error: `合并冲突，已撤销这次合并：${errText(e)}` };
+          return { ok: false, kind: 'conflict', error: tr('合并冲突，已撤销这次合并：{errText}', { errText: errText(e) }) };
         }
         return { ok: false, kind: 'failed', error: errText(e) };
       }

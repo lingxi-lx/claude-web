@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { CanonicalEvent } from './canonical.js';
 import type { AgentKind } from '../protocol.js';
+import { tr } from '../i18n/index.js';
 
 /**
  * Handing a session to a different agent.
@@ -20,7 +21,7 @@ import type { AgentKind } from '../protocol.js';
  */
 
 /** The briefing's first line. A conversation list that titles a conversation by a prompt skips a prompt that starts with it. */
-export const BRIEFING_HEAD = '# 会话交接';
+export const BRIEFING_HEAD = tr('# 会话交接');
 
 const AGENT_LABEL: Record<string, string> = { claude: 'Claude Code', codex: 'Codex', gemini: 'Gemini CLI', qwen: 'Qwen Code', kimi: 'Kimi CLI' };
 
@@ -53,43 +54,42 @@ export function renderBriefing(events: CanonicalEvent[], opts: { objective?: str
     if (/^(Edit|MultiEdit|Write|NotebookEdit)$/.test(t.name) && p) edited.set(p, (edited.get(p) ?? 0) + 1);
     if (/^(Read|Glob|Grep)$/.test(t.name) && p) read.add(p);
     if (/^(Bash|PowerShell)$/.test(t.name) && typeof t.input.command === 'string') commands.push(t.input.command);
-    if (t.ok === false) failures.push(`${t.name}${p ? ` ${shortPath(p)}` : typeof t.input.command === 'string' ? ` \`${oneLine(t.input.command, 70)}\`` : ''} — ${oneLine(t.result ?? '失败', 110)}`);
+    if (t.ok === false) failures.push(`${t.name}${p ? ` ${shortPath(p)}` : typeof t.input.command === 'string' ? ` \`${oneLine(t.input.command, 70)}\`` : ''} — ${oneLine(t.result ?? tr('失败'), 110)}`);
   }
 
   const lines: string[] = [];
   lines.push(BRIEFING_HEAD);
   lines.push('');
   lines.push(
-    `这个会话之前由 **${AGENT_LABEL[opts.fromAgent ?? ''] ?? opts.fromAgent ?? '另一个 agent'}** 在跑，现在交给你（${AGENT_LABEL[opts.toAgent ?? ''] ?? opts.toAgent ?? '你'}）继续。` +
-      '下面是它的完整交接说明——原始对话不会带过来（各家的推理内容带签名/加密，跨厂商无法携带），但磁盘上的改动都在，需要细节请直接读文件。',
+    tr('{v}下面是它的完整交接说明——原始对话不会带过来（各家的推理内容带签名/加密，跨厂商无法携带），但磁盘上的改动都在，需要细节请直接读文件。', { v: tr('这个会话之前由 **{fromAgent}** 在跑，现在交给你（{toAgent}）继续。', { fromAgent: AGENT_LABEL[opts.fromAgent ?? ''] ?? opts.fromAgent ?? tr('另一个 agent'), toAgent: AGENT_LABEL[opts.toAgent ?? ''] ?? opts.toAgent ?? tr('你') }) }),
   );
   lines.push('');
 
   if (opts.objective) {
-    lines.push('## 当前目标');
+    lines.push(tr('## 当前目标'));
     lines.push(opts.objective);
     lines.push('');
   } else if (users.length) {
-    lines.push('## 最初的要求');
+    lines.push(tr('## 最初的要求'));
     lines.push(oneLine(users[0].text, 600));
     lines.push('');
   }
 
   if (users.length > 1) {
-    lines.push('## 期间用户还说过');
+    lines.push(tr('## 期间用户还说过'));
     for (const u of users.slice(1).slice(-6)) lines.push(`- ${oneLine(u.text, 220)}`);
     lines.push('');
   }
 
   if (edited.size) {
-    lines.push('## 磁盘现状（已改动的文件）');
-    for (const [p, n] of [...edited].slice(0, 30)) lines.push(`- \`${p}\`${n > 1 ? ` · 改了 ${n} 次` : ''}`);
-    if (edited.size > 30) lines.push(`- …另有 ${edited.size - 30} 个文件`);
+    lines.push(tr('## 磁盘现状（已改动的文件）'));
+    for (const [p, n] of [...edited].slice(0, 30)) lines.push(`- \`${p}\`${n > 1 ? tr(' · 改了 {n} 次', { n }) : ''}`);
+    if (edited.size > 30) lines.push(tr('- …另有 {editedCount} 个文件', { editedCount: edited.size - 30 }));
     lines.push('');
   }
 
   if (commands.length) {
-    lines.push('## 跑过的命令');
+    lines.push(tr('## 跑过的命令'));
     const seen = new Set<string>();
     for (const c of commands.slice(-14)) {
       const k = oneLine(c, 120);
@@ -101,29 +101,29 @@ export function renderBriefing(events: CanonicalEvent[], opts: { objective?: str
   }
 
   if (failures.length) {
-    lines.push('## 试过但失败的（别重复踩）');
+    lines.push(tr('## 试过但失败的（别重复踩）'));
     for (const f of failures.slice(-10)) lines.push(`- ${f}`);
     lines.push('');
   }
 
   const lastReply = assistants[assistants.length - 1]?.text;
   if (lastReply) {
-    lines.push('## 上一个 agent 最后说的');
+    lines.push(tr('## 上一个 agent 最后说的'));
     lines.push(oneLine(lastReply, 1200));
     lines.push('');
   }
 
   const err = results.filter((r) => r.error).slice(-1)[0];
   if (err) {
-    lines.push('## 上一轮以错误结束');
+    lines.push(tr('## 上一轮以错误结束'));
     lines.push(err.error!);
     lines.push('');
   }
 
-  if (read.size) lines.push(`读过但没改的文件：${[...read].slice(0, 12).map((p) => `\`${shortPath(p)}\``).join('、')}${read.size > 12 ? ' 等' : ''}`);
-  if (opts.cwd) lines.push(`工作目录：\`${opts.cwd}\``);
+  if (read.size) lines.push(tr('读过但没改的文件：{map}{v}', { map: [...read].slice(0, 12).map((p) => `\`${shortPath(p)}\``).join('、'), v: read.size > 12 ? tr(' 等') : '' }));
+  if (opts.cwd) lines.push(tr('工作目录：`{cwd}`', { cwd: opts.cwd }));
   lines.push('');
-  lines.push('先确认你理解了上面的状态（必要时读几个关键文件核对），然后继续推进，不要从头再来。');
+  lines.push(tr('先确认你理解了上面的状态（必要时读几个关键文件核对），然后继续推进，不要从头再来。'));
 
   return { text: lines.join('\n'), turns: results.length, filesTouched: [...edited.keys()] };
 }
@@ -153,7 +153,7 @@ export function toClaudeEntries(events: CanonicalEvent[], opts: { cwd: string; s
 
   if (opts.briefing) {
     user(opts.briefing);
-    assistant('已接手，我读到了上面的交接说明，会在这个基础上继续。');
+    assistant(tr('已接手，我读到了上面的交接说明，会在这个基础上继续。'));
     return out;
   }
 
@@ -169,7 +169,7 @@ export function toClaudeEntries(events: CanonicalEvent[], opts: { cwd: string; s
     else if (e.kind === 'tool') {
       const p = (e.input.file_path ?? e.input.path) as string | undefined;
       const arg = p ?? (typeof e.input.command === 'string' ? e.input.command : '');
-      pending.push(`（${e.name}${arg ? ` ${oneLine(String(arg), 90)}` : ''}${e.ok === false ? ' — 失败' : ''}）`);
+      pending.push(`（${e.name}${arg ? ` ${oneLine(String(arg), 90)}` : ''}${e.ok === false ? tr(' — 失败') : ''}）`);
     } else if (e.kind === 'switch' && e.note) pending.push(`（${e.note}）`);
   }
   flush();

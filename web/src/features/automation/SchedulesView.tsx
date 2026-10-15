@@ -12,15 +12,16 @@ import { desktop } from '@/desktop';
 import { Icon } from '@/ui/icons';
 import { cronText, nextRunText, scheduleText } from './schedule-text';
 import { SCHEDULES_HERO, templateLook } from './templates';
+import { tr } from '@/i18n';
 
 interface Template { id: string; name: string; cron: string; prompt: string; permissionMode: PermissionMode; freshSession?: boolean }
 
 const PRESET_CRONS = [
-  { l: '每 30 分钟', v: '*/30 * * * *' },
-  { l: '每小时', v: '0 * * * *' },
-  { l: '工作日 9:00', v: '0 9 * * 1-5' },
-  { l: '每天 18:00', v: '0 18 * * *' },
-  { l: '每周一 9:00', v: '0 9 * * 1' },
+  { l: tr('每 30 分钟'), v: '*/30 * * * *' },
+  { l: tr('每小时'), v: '0 * * * *' },
+  { l: tr('工作日 9:00'), v: '0 9 * * 1-5' },
+  { l: tr('每天 18:00'), v: '0 18 * * *' },
+  { l: tr('每周一 9:00'), v: '0 9 * * 1' },
 ];
 
 /** The 「其它文件夹…」 entry of the project list (not a path). */
@@ -57,15 +58,15 @@ export function SchedulesView({ compact = false, page = false, newSignal = 0 }: 
   };
   const save = async () => {
     const e = editing!;
-    if (!e.prompt?.trim()) return toast('需要提示词');
+    if (!e.prompt?.trim()) return toast(tr('需要提示词'));
     const cwd = e.cwd?.trim() || defaultCwd();
-    if (!cwd) return toast('先选一个项目文件夹');
+    if (!cwd) return toast(tr('先选一个项目文件夹'));
     const patch: Partial<Schedule> = { ...e, cwd, name: e.name?.trim() || e.prompt!.slice(0, 30), enabled: e.enabled ?? true };
-    if (mode === 'cron') { if (!e.cron?.trim()) return toast('需要 cron 表达式'); patch.cron = e.cron.trim(); }
+    if (mode === 'cron') { if (!e.cron?.trim()) return toast(tr('需要 cron 表达式')); patch.cron = e.cron.trim(); }
     // '' not undefined: undefined is dropped by JSON and the server merges the patch, so a cron schedule
     // switched to an interval kept its cron (which wins over everyMinutes)
     else { patch.cron = ''; patch.everyMinutes = Number(e.everyMinutes) || 60; }
-    try { await ws.request({ kind: 'schedules.upsert', schedule: patch }); setEditing(null); toast('已保存', true); } catch (x: any) { toast(x.message); }
+    try { await ws.request({ kind: 'schedules.upsert', schedule: patch }); setEditing(null); toast(tr('已保存'), true); } catch (x: any) { toast(x.message); }
   };
   const fromTemplate = (t: Template) => { setMode('cron'); setEditing({ name: t.name, prompt: t.prompt, cron: t.cron, permissionMode: t.permissionMode, freshSession: t.freshSession, cwd: defaultCwd() }); setTab('list'); };
   const byId = useMemo(() => new Map(schedules.map((s) => [s.id, s])), [schedules]);
@@ -86,33 +87,33 @@ export function SchedulesView({ compact = false, page = false, newSignal = 0 }: 
 
   const form = editing && (
     <div className="sched-form">
-      <input className="field sf-full" placeholder="名称（可选）" value={editing.name ?? ''} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
-      <textarea className="field sf-full" rows={3} placeholder="每次运行发送给 Claude 的提示词" value={editing.prompt ?? ''} onChange={(e) => setEditing({ ...editing, prompt: e.target.value })} />
+      <input className="field sf-full" placeholder={tr('名称（可选）')} value={editing.name ?? ''} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
+      <textarea className="field sf-full" rows={3} placeholder={tr('每次运行发送给 Claude 的提示词')} value={editing.prompt ?? ''} onChange={(e) => setEditing({ ...editing, prompt: e.target.value })} />
       <div className="sf-row">
-        <span className="sf-l">时间</span>
-        <span className="seg mini"><button className={mode === 'cron' ? 'active' : ''} onClick={() => setMode('cron')} title="cron 表达式：分 时 日 月 周">按时间</button><button className={mode === 'interval' ? 'active' : ''} onClick={() => setMode('interval')}>间隔</button></span>
+        <span className="sf-l">{tr('时间')}</span>
+        <span className="seg mini"><button className={mode === 'cron' ? 'active' : ''} onClick={() => setMode('cron')} title={tr('cron 表达式：分 时 日 月 周')}>{tr('按时间')}</button><button className={mode === 'interval' ? 'active' : ''} onClick={() => setMode('interval')}>{tr('间隔')}</button></span>
         {mode === 'cron' ? (
           <>
-            <input className="field mono sf-cron" placeholder="分 时 日 月 周" value={editing.cron ?? ''} onChange={(e) => setEditing({ ...editing, cron: e.target.value })} />
-            <select className="field sf-pick" value="" onChange={(e) => e.target.value && setEditing({ ...editing, cron: e.target.value })}><option value="">常用…</option>{PRESET_CRONS.map((p) => <option key={p.v} value={p.v}>{p.l}</option>)}</select>
+            <input className="field mono sf-cron" placeholder={tr('分 时 日 月 周')} value={editing.cron ?? ''} onChange={(e) => setEditing({ ...editing, cron: e.target.value })} />
+            <select className="field sf-pick" value="" onChange={(e) => e.target.value && setEditing({ ...editing, cron: e.target.value })}><option value="">{tr('常用…')}</option>{PRESET_CRONS.map((p) => <option key={p.v} value={p.v}>{p.l}</option>)}</select>
             {period && <span className="sf-hint">{period}</span>}
           </>
         ) : (
-          <>每 <input className="field sf-num" type="number" min={1} value={editing.everyMinutes ?? 60} onChange={(e) => setEditing({ ...editing, everyMinutes: Number(e.target.value) })} /> 分钟</>
+          <>{tr('每')} <input className="field sf-num" type="number" min={1} value={editing.everyMinutes ?? 60} onChange={(e) => setEditing({ ...editing, everyMinutes: Number(e.target.value) })} /> {tr('分钟')}</>
         )}
       </div>
       <div className="sf-row">
-        <span className="sf-l">项目</span>
+        <span className="sf-l">{tr('项目')}</span>
         <select className="field sf-proj" data-id="sched-project" value={cwdNow} title={cwdNow} onChange={(e) => (e.target.value === OTHER ? void browse() : setEditing({ ...editing, cwd: e.target.value }))}>
-          {!cwdNow && <option value="">选一个项目…</option>}
+          {!cwdNow && <option value="">{tr('选一个项目…')}</option>}
           {projectOptions.map((o) => <option key={o.path} value={o.path}>{o.label}</option>)}
-          <option value={OTHER}>其它文件夹…</option>
+          <option value={OTHER}>{tr('其它文件夹…')}</option>
         </select>
-        <span className="sf-l">权限</span>
+        <span className="sf-l">{tr('权限')}</span>
         <select className="field sf-pick" value={editing.permissionMode ?? 'acceptEdits'} onChange={(e) => setEditing({ ...editing, permissionMode: e.target.value })}>{Object.entries(MODE_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
       </div>
-      <label className="sf-check"><input type="checkbox" checked={!!editing.freshSession} onChange={(e) => setEditing({ ...editing, freshSession: e.target.checked })} /> 每次新开对话（不累积上下文）</label>
-      <div className="sf-row"><button className="btn sm primary" onClick={save}>保存</button><button className="btn sm" onClick={() => setEditing(null)}>取消</button></div>
+      <label className="sf-check"><input type="checkbox" checked={!!editing.freshSession} onChange={(e) => setEditing({ ...editing, freshSession: e.target.checked })} /> {tr('每次新开对话（不累积上下文）')}</label>
+      <div className="sf-row"><button className="btn sm primary" onClick={save}>{tr('保存')}</button><button className="btn sm" onClick={() => setEditing(null)}>{tr('取消')}</button></div>
     </div>
   );
 
@@ -120,14 +121,14 @@ export function SchedulesView({ compact = false, page = false, newSignal = 0 }: 
     <div key={t.id} className="row">
       <span><Icon name="tasks" size={13} /></span>
       <div className="grow"><div>{t.name} <span className="muted sched-period" title={`cron：${t.cron}`}>{cronText(t.cron) ?? t.cron}</span></div><div className="sub">{t.prompt.slice(0, 120)}…</div></div>
-      <button className="btn sm" onClick={() => fromTemplate(t)}>使用</button>
+      <button className="btn sm" onClick={() => fromTemplate(t)}>{tr('使用')}</button>
     </div>
   ));
 
   const templateCards = templates.map((t) => {
     const look = templateLook(t);
     return (
-      <button key={t.id} type="button" className="tpl-card" data-tpl={t.id} title={`用这个模板新建：${t.prompt}`} onClick={() => fromTemplate(t)}>
+      <button key={t.id} type="button" className="tpl-card" data-tpl={t.id} title={tr('用这个模板新建：{prompt}', { prompt: t.prompt })} onClick={() => fromTemplate(t)}>
         <span className={clsx('tile-ic', `tint-${look.tint}`)}><Icon name={look.icon} size={18} /></span>
         <span className="tpl-tx">
           <span className="tpl-n">{t.name}</span>
@@ -140,7 +141,7 @@ export function SchedulesView({ compact = false, page = false, newSignal = 0 }: 
   // nothing scheduled yet (and no form open): the page says what this is, then the templates
   const blank = page && tab === 'list' && !schedules.length && !editing;
   // the records of past runs: always one click away (a deleted task's runs are still there)
-  const runsLink = <button className="link" data-id="sched-runs" title="每次运行的结果和它的对话" onClick={() => { setShowRuns(null); setTab('history'); }}><Icon name="refresh" size={13} />运行记录</button>;
+  const runsLink = <button className="link" data-id="sched-runs" title={tr('每次运行的结果和它的对话')} onClick={() => { setShowRuns(null); setTab('history'); }}><Icon name="refresh" size={13} />{tr('运行记录')}</button>;
 
   return (
     <div className={clsx('sched-view', compact && 'compact', page && 'page', blank && 'blank')} data-view={tab}>
@@ -150,10 +151,10 @@ export function SchedulesView({ compact = false, page = false, newSignal = 0 }: 
         <div className="sv-bar">
           {tab === 'history' ? (
             <>
-              <button className="link sv-back" data-id="sched-back" onClick={() => { setShowRuns(null); setTab('list'); }}><Icon name="chevronLeft" size={13} />定时任务</button>
+              <button className="link sv-back" data-id="sched-back" onClick={() => { setShowRuns(null); setTab('list'); }}><Icon name="chevronLeft" size={13} />{tr('定时任务')}</button>
               <span className="sv-sep">/</span>
-              <span className="sv-cur">运行记录{showRuns ? `：${byId.get(showRuns)?.name ?? showRuns}` : ''}</span>
-              {showRuns && <button className="link" onClick={() => setShowRuns(null)}>看全部</button>}
+              <span className="sv-cur">{tr('运行记录{v}', { v: showRuns ? `：${byId.get(showRuns)?.name ?? showRuns}` : '' })}</span>
+              {showRuns && <button className="link" onClick={() => setShowRuns(null)}>{tr('看全部')}</button>}
             </>
           ) : (
             <>
@@ -164,11 +165,11 @@ export function SchedulesView({ compact = false, page = false, newSignal = 0 }: 
         </div>
       ) : (
         <div className="subtabs">
-          <button className={tab === 'list' ? 'active' : ''} onClick={() => setTab('list')} title={schedules.length ? `${schedules.filter((x) => x.enabled).length} 个启用` : undefined}>定时任务{schedules.length ? <> <span className="badge">{schedules.length}</span></> : null}</button>
-          <button className={tab === 'templates' ? 'active' : ''} onClick={() => setTab('templates')}>模板</button>
-          <button className={tab === 'history' ? 'active' : ''} onClick={() => { setShowRuns(null); setTab('history'); }}>历史</button>
+          <button className={tab === 'list' ? 'active' : ''} onClick={() => setTab('list')} title={schedules.length ? tr('{filterCount} 个启用', { filterCount: schedules.filter((x) => x.enabled).length }) : undefined}>{tr('定时任务')}{schedules.length ? <> <span className="badge">{schedules.length}</span></> : null}</button>
+          <button className={tab === 'templates' ? 'active' : ''} onClick={() => setTab('templates')}>{tr('模板')}</button>
+          <button className={tab === 'history' ? 'active' : ''} onClick={() => { setShowRuns(null); setTab('history'); }}>{tr('历史')}</button>
           <span className="grow" />
-          <button className="icon-btn" title="新建定时任务" aria-label="新建定时任务" onClick={startNew}><Icon name="plus" size={15} /></button>
+          <button className="icon-btn" title={tr('新建定时任务')} aria-label={tr('新建定时任务')} onClick={startNew}><Icon name="plus" size={15} /></button>
         </div>
       )}
       {blank && (
@@ -176,7 +177,7 @@ export function SchedulesView({ compact = false, page = false, newSignal = 0 }: 
           <span className="hero-ic tint-accent"><Icon name="calendar" size={26} /></span>
           <h3>{SCHEDULES_HERO.title}</h3>
           <p>{SCHEDULES_HERO.text}</p>
-          <button className="btn primary" onClick={startNew}><Icon name="plus" size={14} />新建定时任务</button>
+          <button className="btn primary" onClick={startNew}><Icon name="plus" size={14} />{tr('新建定时任务')}</button>
           {!templates.length && runsLink}
         </div>
       )}
@@ -187,30 +188,30 @@ export function SchedulesView({ compact = false, page = false, newSignal = 0 }: 
             <div key={sc.id} className={clsx('row sched', sc.lastError && 'err')}>
               <button className={clsx('toggle', sc.enabled && 'on')} onClick={() => ws.request({ kind: 'schedules.upsert', schedule: { id: sc.id, enabled: !sc.enabled } })} />
               <div className="grow" style={{ minWidth: 0 }}>
-                <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sc.name} <span className="muted sched-period" title={scheduleText(sc).title}>{scheduleText(sc).text}</span>{sc.freshSession && <span className="badge">每次新对话</span>}</div>
-                <div className="sub">{sc.lastRunAt ? `上次 ${agoText(sc.lastRunAt)}` : '未运行'}{sc.runs ? ` · ${sc.runs} 次` : ''}{sc.enabled && sc.nextRunAt ? ` · 下次 ${nextRunText(sc.nextRunAt)}` : ''}{sc.lastError ? ` · ${sc.lastError}` : ''}</div>
+                <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sc.name} <span className="muted sched-period" title={scheduleText(sc).title}>{scheduleText(sc).text}</span>{sc.freshSession && <span className="badge">{tr('每次新对话')}</span>}</div>
+                <div className="sub">{sc.lastRunAt ? tr('上次 {agoText}', { agoText: agoText(sc.lastRunAt) }) : tr('未运行')}{sc.runs ? tr(' · {runs} 次', { runs: sc.runs }) : ''}{sc.enabled && sc.nextRunAt ? tr(' · 下次 {nextRunText}', { nextRunText: nextRunText(sc.nextRunAt) }) : ''}{sc.lastError ? ` · ${sc.lastError}` : ''}</div>
               </div>
-              {sc.sessionId && <button className="btn sm ghost" title="打开它的对话" onClick={() => loadHistory(sc.sessionId!)}>对话</button>}
-              <button className="btn sm ghost" title="历史" onClick={() => { setShowRuns(sc.id); setTab('history'); }}>历史</button>
-              <button className="btn sm ghost" title="编辑" onClick={() => { setMode(sc.cron ? 'cron' : 'interval'); setEditing({ ...sc }); }}><Icon name="edit" size={13} /></button>
-              <button className="btn sm ghost" title="立即运行" onClick={() => ws.request({ kind: 'schedules.runNow', id: sc.id }).catch((e) => toast(e.message))}><Icon name="play" size={12} /></button>
-              <button className="btn sm ghost danger" title="删除" onClick={async () => { if (await dlg.confirm(`删除定时任务「${sc.name}」？`, { danger: true })) void ws.request({ kind: 'schedules.remove', id: sc.id }); }}><Icon name="trash" size={13} /></button>
+              {sc.sessionId && <button className="btn sm ghost" title={tr('打开它的对话')} onClick={() => loadHistory(sc.sessionId!)}>{tr('对话')}</button>}
+              <button className="btn sm ghost" title={tr('历史')} onClick={() => { setShowRuns(sc.id); setTab('history'); }}>{tr('历史')}</button>
+              <button className="btn sm ghost" title={tr('编辑')} onClick={() => { setMode(sc.cron ? 'cron' : 'interval'); setEditing({ ...sc }); }}><Icon name="edit" size={13} /></button>
+              <button className="btn sm ghost" title={tr('立即运行')} onClick={() => ws.request({ kind: 'schedules.runNow', id: sc.id }).catch((e) => toast(e.message))}><Icon name="play" size={12} /></button>
+              <button className="btn sm ghost danger" title={tr('删除')} onClick={async () => { if (await dlg.confirm(tr('删除定时任务「{name}」？', { name: sc.name }), { danger: true })) void ws.request({ kind: 'schedules.remove', id: sc.id }); }}><Icon name="trash" size={13} /></button>
             </div>
           ))}
           {/* on the page the templates are right below: no button needed to reach them */}
-          {!schedules.length && !editing && <EmptyState e={EMPTY.schedules} action={<button className="btn sm" onClick={() => setTab('templates')}>从模板开始</button>} />}
+          {!schedules.length && !editing && <EmptyState e={EMPTY.schedules} action={<button className="btn sm" onClick={() => setTab('templates')}>{tr('从模板开始')}</button>} />}
         </div>
       )}
       {page && tab === 'list' && templates.length > 0 && (
         <div className="sv-templates" data-id="sched-templates">
-          <div className="sv-h"><span>从模板开始</span><span className="grow" />{blank && runsLink}</div>
+          <div className="sv-h"><span>{tr('从模板开始')}</span><span className="grow" />{blank && runsLink}</div>
           <div className="tpl-grid">{templateCards}</div>
         </div>
       )}
       {!page && tab === 'templates' && <div className="list">{templateRows}</div>}
       {tab === 'history' && (
         <div className="list">
-          {!page && showRuns && <div className="row muted" style={{ fontSize: 13 }}>只看「{byId.get(showRuns)?.name ?? showRuns}」 <button className="link" onClick={() => setShowRuns(null)}>全部</button></div>}
+          {!page && showRuns && <div className="row muted" style={{ fontSize: 13 }}>{tr('只看「{name}」', { name: byId.get(showRuns)?.name ?? showRuns })} <button className="link" onClick={() => setShowRuns(null)}>{tr('全部')}</button></div>}
           {runs.map((r) => (
             <div key={r.id} className="row">
               <span className={clsx('dot', r.ok ? 'idle' : 'error')} />
@@ -218,7 +219,7 @@ export function SchedulesView({ compact = false, page = false, newSignal = 0 }: 
                 <div>{byId.get(r.scheduleId)?.name ?? r.scheduleId} <span className="muted" style={{ fontSize: 12 }}>{agoText(r.at)}{r.durationMs ? ` · ${fmtMs(r.durationMs)}` : ''}</span></div>
                 <div className="sub" style={{ whiteSpace: 'pre-wrap' }}>{r.error ?? r.summary ?? ''}</div>
               </div>
-              {r.sessionId && <button className="btn sm ghost" title="打开这次运行的对话" onClick={() => loadHistory(r.sessionId!)}>对话</button>}
+              {r.sessionId && <button className="btn sm ghost" title={tr('打开这次运行的对话')} onClick={() => loadHistory(r.sessionId!)}>{tr('对话')}</button>}
             </div>
           ))}
           {!runs.length && <EmptyState e={EMPTY.scheduleRuns} />}

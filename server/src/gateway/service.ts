@@ -19,6 +19,7 @@ import {
 import { CACHE_KEY_MAX, addMissing, affinityHeaders, cacheKeyOf, forcesTool, isParamRejection, mentionsCacheKey, refusesForcedTool, thinkingOff } from './cache.js';
 import { CacheShim, SHIM_PREFIX } from './shim.js';
 import { UpstreamError, decoded, decoder, errorHeaders, passthroughHeaders, readText, replaceTopLevelString, responseHeaders, sendUpstream, translatedHeaders, waitDrain, withTimeout, type UpstreamResponse } from './upstream.js';
+import { tr } from '../i18n/index.js';
 
 /** Streaming: time from sending a request to the first body byte before the member counts as failed. */
 export const FIRST_BYTE_MS = 60_000;
@@ -144,7 +145,7 @@ export class GatewayService extends EventEmitter {
         const p = this.deps.meta.provider(m.providerId);
         const s = this.states.peek(g.id, m.providerId);
         const health = !p ? 'disabled' : s?.disabled ? 'disabled' : s && s.cooldownUntil > now ? 'cooling' : s?.lastOkAt ? 'ok' : 'unknown';
-        return { providerId: m.providerId, name: p?.name ?? '(已删除的供应商)', type: p?.type ?? '', health, cooldownUntil: s && s.cooldownUntil > now ? s.cooldownUntil : undefined, strikes: s?.strikes ?? 0, lastError: !p ? '供应商不存在' : s?.lastError, lastStatus: s?.lastStatus, lastOkAt: s?.lastOkAt, lastUsedAt: s?.lastUsedAt };
+        return { providerId: m.providerId, name: p?.name ?? tr('(已删除的供应商)'), type: p?.type ?? '', health, cooldownUntil: s && s.cooldownUntil > now ? s.cooldownUntil : undefined, strikes: s?.strikes ?? 0, lastError: !p ? tr('供应商不存在') : s?.lastError, lastStatus: s?.lastStatus, lastOkAt: s?.lastOkAt, lastUsedAt: s?.lastUsedAt };
       });
     }
     return { enabled: this.enabled(), baseUrl: this.baseUrl(), keyMasked: maskGatewayKey(this.key), groups: this.groups(), states };
@@ -172,7 +173,7 @@ export class GatewayService extends EventEmitter {
     const list = this.groups();
     let g = patch.id ? list.find((x) => x.id === patch.id) : undefined;
     if (!g) {
-      g = { id: patch.id && /^[A-Za-z0-9_-]{1,40}$/.test(patch.id) ? patch.id : crypto.randomBytes(4).toString('hex'), name: '新组', members: [], strategy: 'failover' };
+      g = { id: patch.id && /^[A-Za-z0-9_-]{1,40}$/.test(patch.id) ? patch.id : crypto.randomBytes(4).toString('hex'), name: tr('新组'), members: [], strategy: 'failover' };
       list.push(g);
     }
     if (patch.name !== undefined) g.name = String(patch.name).trim() || g.name;
@@ -246,16 +247,16 @@ export class GatewayService extends EventEmitter {
     if (!/^\/v1(beta)?\//.test(rest)) rest = `/v1${rest === '/' ? '' : rest}`; // base URL given without the version
     const route = routeOf(req.method ?? 'GET', rest, req.headers);
     const inbound = route?.inbound ?? (rest.startsWith('/v1beta') ? 'gemini' : req.headers['anthropic-version'] ? 'anthropic' : 'openai');
-    if (!this.enabled()) return this.sendError(res, inbound, 503, '模型网关未启用（设置 → 模型网关）');
+    if (!this.enabled()) return this.sendError(res, inbound, 503, tr('模型网关未启用（设置 → 模型网关）'));
     const presented = this.presentedKeys(req, url);
     if (!presented.some((k) => this.keyOk(k))) {
       // an agent logged in with its own account (ChatGPT / Google / claude.ai) sends that token, not ours
       const foreign = presented.length > 0 && !presented.some((k) => k.startsWith('cwg-'));
-      return this.sendError(res, inbound, 401, foreign ? '网关密钥无效：agent 没有用网关密钥（发来的不是 cwg- 开头的密钥），检查它的登录方式是否被账号登录覆盖了' : '网关密钥无效');
+      return this.sendError(res, inbound, 401, foreign ? tr('网关密钥无效：agent 没有用网关密钥（发来的不是 cwg- 开头的密钥），检查它的登录方式是否被账号登录覆盖了') : tr('网关密钥无效'));
     }
     const group = m ? this.group(decodeURIComponent(m[1])) : undefined;
-    if (!group) return this.sendError(res, inbound, 404, `没有这个网关组：${m?.[1] ?? ''}`);
-    if (!route) return this.sendError(res, inbound, 404, `网关不支持这个接口：${req.method} ${rest}`);
+    if (!group) return this.sendError(res, inbound, 404, tr('没有这个网关组：{v}', { v: m?.[1] ?? '' }));
+    if (!route) return this.sendError(res, inbound, 404, tr('网关不支持这个接口：{method} {rest}', { method: req.method, rest }));
 
     const params = new URLSearchParams(url.search);
     params.delete('key');
@@ -266,12 +267,12 @@ export class GatewayService extends EventEmitter {
     let size = 0;
     for await (const c of req) {
       size += (c as Buffer).length;
-      if (size > BODY_LIMIT) return this.sendError(res, inbound, 413, '请求体过大');
+      if (size > BODY_LIMIT) return this.sendError(res, inbound, 413, tr('请求体过大'));
       chunks.push(c as Buffer);
     }
     const raw = Buffer.concat(chunks);
     let json: any;
-    try { json = JSON.parse(raw.toString('utf8') || '{}'); } catch { return this.sendError(res, inbound, 400, '请求体不是合法 JSON'); }
+    try { json = JSON.parse(raw.toString('utf8') || '{}'); } catch { return this.sendError(res, inbound, 400, tr('请求体不是合法 JSON')); }
     const stream = route.inbound === 'gemini' ? route.stream : !!json?.stream;
     const ac = new AbortController();
     res.on('close', () => { if (!res.writableFinished) ac.abort(); });
@@ -343,17 +344,17 @@ export class GatewayService extends EventEmitter {
     // gets an estimate rather than an error (and never changes any member's state)
     if (counting) return estimate();
     if (!tried) {
-      if (unsupported.length) return this.sendError(res, inbound, 400, `组「${group.name}」里没有能接 ${PROTOCOL_LABEL[inbound]} 入口的成员：${unsupported.join('、')} 需要的转换方向暂不支持`);
+      if (unsupported.length) return this.sendError(res, inbound, 400, tr('组「{name}」里没有能接 {v} 入口的成员：{unsupported} 需要的转换方向暂不支持', { name: group.name, v: PROTOCOL_LABEL[inbound], unsupported: unsupported.join('、') }));
       const next = this.states.nextAvailable(group);
       const wait = next ? Math.max(1, Math.ceil((next.at - Date.now()) / 1000)) : 0;
-      if (next && next.at > Date.now()) return this.sendError(res, inbound, next.rate ? 429 : 503, `组「${group.name}」的成员都在冷却中，约 ${wait}s 后恢复`, { 'retry-after': String(wait) });
-      return this.sendError(res, inbound, 503, `组「${group.name}」没有可用成员（都已停用或档案缺失）`);
+      if (next && next.at > Date.now()) return this.sendError(res, inbound, next.rate ? 429 : 503, tr('组「{name}」的成员都在冷却中，约 {wait}s 后恢复', { name: group.name, wait }), { 'retry-after': String(wait) });
+      return this.sendError(res, inbound, 503, tr('组「{name}」没有可用成员（都已停用或档案缺失）', { name: group.name }));
     }
     // every member failed with a switchable error: report the last one as is
     if (last?.kind === 'switch') {
       if (lastMember) this.record(ctx, lastMember.p, lastMember.outbound, last, tried - 1);
       if (last.text !== undefined && last.passthrough) res.writeHead(last.status, { ...errorHeaders(last.headers), 'content-type': String(last.headers?.['content-type'] ?? 'application/json') }).end(last.text);
-      else this.sendError(res, inbound, last.status, `${tried > 1 ? `组内 ${tried} 个成员都失败了，最后一个：` : ''}${last.message}`, errorHeaders(last.headers));
+      else this.sendError(res, inbound, last.status, `${tried > 1 ? tr('组内 {tried} 个成员都失败了，最后一个：', { tried }) : ''}${last.message}`, errorHeaders(last.headers));
     }
   }
 
@@ -424,14 +425,14 @@ export class GatewayService extends EventEmitter {
         }
       }
     } catch (e: any) {
-      return { kind: 'final', status: 400, text: JSON.stringify(renderInboundError(route.inbound, 400, `请求转换失败：${e?.message ?? e}`)), headers: {}, passthrough: true, model };
+      return { kind: 'final', status: 400, text: JSON.stringify(renderInboundError(route.inbound, 400, tr('请求转换失败：{message}', { message: e?.message ?? e }))), headers: {}, passthrough: true, model };
     }
     const url = joinUrl(base, path);
     const sent = Date.now();
     // streaming: the first byte must come quickly; non-streaming: nothing arrives until the whole answer is done
     const waitMs = route.stream ? this.firstByteMs : this.nonStreamMs;
     const deadline = sent + waitMs;
-    const aborted = (firstByteMs?: number): Attempt => ({ kind: 'aborted', status: 499, message: '客户端已断开', firstByteMs, model });
+    const aborted = (firstByteMs?: number): Attempt => ({ kind: 'aborted', status: 499, message: tr('客户端已断开'), firstByteMs, model });
     const switchOn = (status: number, message: string): Attempt => {
       if (track) { this.states.fail(group.id, p.id, { action: 'switch', kind: 'transient' }, status, message, Date.now(), sent); this.emit('changed'); }
       return { kind: 'switch', status, message: `${p.name}：${message}`, passthrough: pass, model };
@@ -465,7 +466,7 @@ export class GatewayService extends EventEmitter {
       const v = classify(up.status, up.headers, text, st.strikes);
       const msg = `HTTP ${up.status} ${upstreamErrorMessage(text)}`.trim();
       if (track) {
-        this.states.fail(group.id, p.id, v, up.status, v.action === 'switch' && v.kind === 'auth' ? `${msg}（鉴权失败，已停用，检查密钥后点「恢复」）` : msg, Date.now(), sent);
+        this.states.fail(group.id, p.id, v, up.status, v.action === 'switch' && v.kind === 'auth' ? tr('{msg}（鉴权失败，已停用，检查密钥后点「恢复」）', { msg }) : msg, Date.now(), sent);
         this.emit('changed');
       }
       if (v.action === 'final') return { kind: 'final', status: up.status, text, headers: up.headers, passthrough: pass, model };
@@ -481,7 +482,7 @@ export class GatewayService extends EventEmitter {
     } catch (e: any) {
       up.body.destroy();
       if (ctx.signal.aborted) return aborted();
-      return switchOn(504, e?.message === 'timeout' ? `${Math.round(waitMs / 1000)}s 内没有返回内容` : e?.message ?? String(e));
+      return switchOn(504, e?.message === 'timeout' ? tr('{waitMs}s 内没有返回内容', { waitMs: Math.round(waitMs / 1000) }) : e?.message ?? String(e));
     }
     const firstByteMs = Date.now() - sent;
     if (track && this.states.ok(group.id, p.id, Date.now(), sent)) this.emit('changed'); // recovered / first success — not on every request
@@ -512,9 +513,9 @@ export class GatewayService extends EventEmitter {
       sniff.push(r.value);
       if (!res.write(r.value)) await waitDrain(res, ctx.signal);
       if (ctx.signal.aborted) break;
-      try { r = await withTimeout(it.next(), IDLE_MS); } catch (e: any) { broken = e?.message === 'timeout' ? '上游超过 5 分钟没有数据' : e?.message ?? String(e); up.body.destroy(); break; }
+      try { r = await withTimeout(it.next(), IDLE_MS); } catch (e: any) { broken = e?.message === 'timeout' ? tr('上游超过 5 分钟没有数据') : e?.message ?? String(e); up.body.destroy(); break; }
     }
-    if (ctx.signal.aborted) { up.body.destroy(); res.destroy(); sniff.abort(); return { kind: 'aborted', status: 499, message: '客户端已断开', firstByteMs, model }; }
+    if (ctx.signal.aborted) { up.body.destroy(); res.destroy(); sniff.abort(); return { kind: 'aborted', status: 499, message: tr('客户端已断开'), firstByteMs, model }; }
     res.end();
     const usage = await sniff.end();
     if (broken) return { kind: 'broken', status: 502, message: broken, firstByteMs, model };
@@ -531,9 +532,9 @@ export class GatewayService extends EventEmitter {
       while (!r.done) { bufs.push(r.value); r = await withTimeout(it.next(), IDLE_MS); }
       const text = Buffer.concat(bufs).toString('utf8');
       let j: any;
-      try { j = JSON.parse(text); } catch { throw new Error(`上游返回的不是 JSON：${text.slice(0, 120)}`); }
+      try { j = JSON.parse(text); } catch { throw new Error(tr('上游返回的不是 JSON：{text}', { text: text.slice(0, 120) })); }
       const ir = parseOutboundResponse(outbound, j, model);
-      if (ctx.signal.aborted) return { kind: 'aborted', status: 499, message: '客户端已断开', firstByteMs, model };
+      if (ctx.signal.aborted) return { kind: 'aborted', status: 499, message: tr('客户端已断开'), firstByteMs, model };
       res.writeHead(200, { 'content-type': 'application/json', ...extra }).end(JSON.stringify(renderInboundResponse(route.inbound, ir, clientModel, ctx.customTools)));
       return { kind: 'done', status: up.status, usage: ir.usage, firstByteMs, model };
     }
@@ -554,9 +555,9 @@ export class GatewayService extends EventEmitter {
     while (!r.done && !ctx.signal.aborted) {
       for (const ev of sse.feed(dec.write(r.value))) await emit(parser.feed(ev));
       if (ctx.signal.aborted) break;
-      try { r = await withTimeout(it.next(), IDLE_MS); } catch (e: any) { broken = e?.message === 'timeout' ? '上游超过 5 分钟没有数据' : e?.message ?? String(e); up.body.destroy(); break; }
+      try { r = await withTimeout(it.next(), IDLE_MS); } catch (e: any) { broken = e?.message === 'timeout' ? tr('上游超过 5 分钟没有数据') : e?.message ?? String(e); up.body.destroy(); break; }
     }
-    if (ctx.signal.aborted) { up.body.destroy(); res.destroy(); return { kind: 'aborted', status: 499, message: '客户端已断开', firstByteMs, model }; }
+    if (ctx.signal.aborted) { up.body.destroy(); res.destroy(); return { kind: 'aborted', status: 499, message: tr('客户端已断开'), firstByteMs, model }; }
     if (broken) await emit([{ t: 'error', message: broken }]);
     else { for (const ev of sse.feed(dec.end())) await emit(parser.feed(ev)); for (const ev of sse.end()) await emit(parser.feed(ev)); await emit(parser.end()); }
     const tail = renderer.end();
@@ -568,8 +569,8 @@ export class GatewayService extends EventEmitter {
   /** Minimal request through our own endpoint, the way an agent would send it. */
   async test(groupId: string, protocol: GatewayProtocol = 'anthropic'): Promise<GatewayTestResult> {
     const g = this.group(groupId);
-    if (!g) return { ok: false, status: 0, ms: 0, error: '组不存在' };
-    if (!this.enabled()) return { ok: false, status: 0, ms: 0, error: '网关未启用' };
+    if (!g) return { ok: false, status: 0, ms: 0, error: tr('组不存在') };
+    if (!this.enabled()) return { ok: false, status: 0, ms: 0, error: tr('网关未启用') };
     const m0 = g.members[0];
     const p0 = m0 ? this.deps.meta.provider(m0.providerId) : undefined;
     const model = m0?.model || p0?.defaultModel || p0?.models?.find((x) => /haiku|mini|flash/i.test(x)) || p0?.models?.[0] || 'claude-haiku-4-5';
@@ -588,7 +589,7 @@ export class GatewayService extends EventEmitter {
       const text = await r.text();
       const member = r.headers.get('x-cw-gateway-member');
       const out: GatewayTestResult = { ok: r.ok, status: r.status, ms: Date.now() - t0, member: member ? decodeURIComponent(member) : undefined, switches: Number(r.headers.get('x-cw-gateway-switches') ?? 0) };
-      if (g.members.some((m) => this.deps.meta.provider(m.providerId)?.type === 'anthropic')) out.note = '测试请求不带 Claude Code 指纹（系统提示 / UA），只认官方客户端的中转可能拒绝这条测试，但真实的 Claude 对话经网关透传能通过。';
+      if (g.members.some((m) => this.deps.meta.provider(m.providerId)?.type === 'anthropic')) out.note = tr('测试请求不带 Claude Code 指纹（系统提示 / UA），只认官方客户端的中转可能拒绝这条测试，但真实的 Claude 对话经网关透传能通过。');
       let j: any = null;
       try { j = JSON.parse(text); } catch { /* not json */ }
       if (r.ok) out.text = (j?.content?.[0]?.text ?? j?.choices?.[0]?.message?.content ?? j?.output?.[0]?.content?.[0]?.text ?? j?.candidates?.[0]?.content?.parts?.[0]?.text ?? text).toString().slice(0, 200);

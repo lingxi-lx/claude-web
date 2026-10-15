@@ -2,6 +2,7 @@
 import { newId, safeJson, mergeAlternating, type IrEvent, type IrMessage, type IrPart, type IrRequest, type IrResponse, type IrStop, type IrTool, type IrUsage, type StreamParser, type StreamRenderer } from './ir.js';
 import { sse } from './sse.js';
 import { stripBillingHeader } from './cache.js';
+import { tr } from '../i18n/index.js';
 
 const textOf = (c: unknown): string => typeof c === 'string' ? c : Array.isArray(c) ? c.map((b: any) => (b?.type === 'text' ? b.text ?? '' : '')).filter(Boolean).join('\n\n') : '';
 /**
@@ -189,7 +190,7 @@ export class AnthropicStreamParser implements StreamParser {
   end(): IrEvent[] {
     if (this.done) return [];
     this.done = true;
-    return this.stop ? [{ t: 'end', stop: this.stop }] : [{ t: 'error', message: '上游流意外结束' }];
+    return this.stop ? [{ t: 'end', stop: this.stop }] : [{ t: 'error', message: tr('上游流意外结束') }];
   }
 }
 
@@ -251,6 +252,6 @@ export class AnthropicStreamRenderer implements StreamRenderer {
     return '';
   }
   end(): string {
-    return this.finished ? '' : this.push({ t: 'error', message: '上游流意外结束' });
+    return this.finished ? '' : this.push({ t: 'error', message: tr('上游流意外结束') });
   }
 }

@@ -42,6 +42,7 @@ import { installSettingsClose } from '@/features/settings/close-on-nav';
 import { pushBackLayer } from '@/ui/back-layer';
 import { installPhoneSheet, sheetEnter, sheetTakesEscape, toggleSheetDetent, useSheetLeaving } from '@/ui/phone-sheet';
 import { drawerEnter, installPhoneDrawer, usePhoneDrawer } from '@/ui/phone-drawer';
+import { tr } from '@/i18n';
 
 /** Width of the right panel minimized to its icon rail. */
 const MIN_RAIL = 36;
@@ -66,10 +67,10 @@ function SidebarColumn() {
   // regardless of specificity, which would leave the drawer in the grid flow and squash the workbench to 0px.
   return (
     <div className="sidebar has-resizer" ref={el}>
-      <div className="sb-sect" data-section="chat" hidden={section !== 'chat'}><ErrorBoundary area="侧栏"><Sidebar onNew={() => runCommand('new')} /></ErrorBoundary></div>
-      {seen.includes('background') && <div className="sb-sect" data-section="background" hidden={section !== 'background'}><ErrorBoundary area="侧栏 · 后台"><BackgroundSide /></ErrorBoundary></div>}
-      {seen.includes('automation') && <div className="sb-sect" data-section="automation" hidden={section !== 'automation'}><ErrorBoundary area="侧栏 · 自动化"><AutomationSide /></ErrorBoundary></div>}
-      {seen.includes('extensions') && <div className="sb-sect" data-section="extensions" hidden={section !== 'extensions'}><ErrorBoundary area="侧栏 · 扩展"><ExtensionsSide /></ErrorBoundary></div>}
+      <div className="sb-sect" data-section="chat" hidden={section !== 'chat'}><ErrorBoundary area={tr('侧栏')}><Sidebar onNew={() => runCommand('new')} /></ErrorBoundary></div>
+      {seen.includes('background') && <div className="sb-sect" data-section="background" hidden={section !== 'background'}><ErrorBoundary area={tr('侧栏 · 后台')}><BackgroundSide /></ErrorBoundary></div>}
+      {seen.includes('automation') && <div className="sb-sect" data-section="automation" hidden={section !== 'automation'}><ErrorBoundary area={tr('侧栏 · 自动化')}><AutomationSide /></ErrorBoundary></div>}
+      {seen.includes('extensions') && <div className="sb-sect" data-section="extensions" hidden={section !== 'extensions'}><ErrorBoundary area={tr('侧栏 · 扩展')}><ExtensionsSide /></ErrorBoundary></div>}
       <div
         className="resizer right"
         onPointerDown={(e) => { drag.current = { x0: e.clientX, w0: width }; (e.target as HTMLElement).setPointerCapture(e.pointerId); }}
@@ -253,7 +254,7 @@ export function App() {
     // Not when it is minimized to its 36px icon rail: the buttons then cover the workbench's top-right row as well.
     <div ref={app} className={clsx('app', !sidebarOpen && 'no-sidebar', mobile && 'mobile', !mobile && 'has-rail', mobile && sidebarOpen && 'drawer-open', rpWidth > MIN_RAIL && !mobile && 'dock-open', sheetOn && 'sheet-open', sheetOn && covered && 'sheet-covered')} style={{ ['--rp' as any]: `${mobile ? 0 : rpWidth}px`, ['--sb' as any]: `${sbWidth}px`, ['--rail' as any]: `${mobile ? 0 : RAIL_WIDTH}px` }}>
       {/* desktop width: the icon rail, the window's first column (fixed to the left edge; the grid starts after it) */}
-      {!mobile && <ErrorBoundary area="图标栏"><Rail /></ErrorBoundary>}
+      {!mobile && <ErrorBoundary area={tr('图标栏')}><Rail /></ErrorBoundary>}
       {/* phone: both scrims are in the document the whole time — transparent and taking no taps until their surface
           is up (the style sheet) — so they fade with it and follow a drag. A tap on one puts its surface away */}
       {mobile && <div className="drawer-backdrop" onClick={() => useStore.setState({ sidebarOpen: false })} />}
@@ -261,22 +262,22 @@ export function App() {
           closed is not written */}
       {mobile && <div className="sheet-backdrop" ref={sheetBackdrop} onClick={hideSheet} />}
       {sidebarOpen || (mobile && drawerHeld) ? <SidebarColumn /> : <div className="sidebar" style={{ display: 'none' }} />}
-      <ErrorBoundary area="工作台"><Workbench /></ErrorBoundary>
+      <ErrorBoundary area={tr('工作台')}><Workbench /></ErrorBoundary>
       <div className="rpanel" ref={rpanel} data-detent={mobile ? shownDetent : undefined} style={{ display: rpWidth || (mobile && sheetLeaving) ? 'flex' : 'none' }}>
         {/* phone: the sheet's handle — drag it (or the tab row under it) to move the sheet, tap it for 半 ⇄ 全 */}
-        {mobile && <button type="button" className="sheet-grip" title="拖动调整高度；点一下在半高和全高之间切换" aria-label={shownDetent === 'full' ? '缩到半高' : '展开到全高'} onClick={() => { if (rpanel.current) toggleSheetDetent(rpanel.current); }} />}
-        <ErrorBoundary area="右侧面板"><Dock /></ErrorBoundary>
+        {mobile && <button type="button" className="sheet-grip" title={tr('拖动调整高度；点一下在半高和全高之间切换')} aria-label={shownDetent === 'full' ? tr('缩到半高') : tr('展开到全高')} onClick={() => { if (rpanel.current) toggleSheetDetent(rpanel.current); }} />}
+        <ErrorBoundary area={tr('右侧面板')}><Dock /></ErrorBoundary>
       </div>
-      <ErrorBoundary area="通知" floating><Toasts /></ErrorBoundary>
-      <ErrorBoundary area="命令面板" floating><CommandPalette /></ErrorBoundary>
-      <ErrorBoundary area="快捷键" floating><ShortcutsModal /></ErrorBoundary>
-      <ErrorBoundary area="设置" floating onReset={() => useStore.setState({ settingsOpen: null })}><SettingsModal /></ErrorBoundary>
-      <ErrorBoundary area="首次引导" floating><Onboarding /></ErrorBoundary>
-      <ErrorBoundary area="图片查看" floating><ImageViewer /></ErrorBoundary>
-      <ErrorBoundary area="接一个模型" floating><ConnectModelHost /></ErrorBoundary>
-      <ErrorBoundary area="应用更新" floating><UpdatePrompt /></ErrorBoundary>
-      <ErrorBoundary area="角色库" floating><CharacterLibrary /></ErrorBoundary>
-      <ErrorBoundary area="对话框" floating><DialogHost /></ErrorBoundary>
+      <ErrorBoundary area={tr('通知')} floating><Toasts /></ErrorBoundary>
+      <ErrorBoundary area={tr('命令面板')} floating><CommandPalette /></ErrorBoundary>
+      <ErrorBoundary area={tr('快捷键')} floating><ShortcutsModal /></ErrorBoundary>
+      <ErrorBoundary area={tr('设置')} floating onReset={() => useStore.setState({ settingsOpen: null })}><SettingsModal /></ErrorBoundary>
+      <ErrorBoundary area={tr('首次引导')} floating><Onboarding /></ErrorBoundary>
+      <ErrorBoundary area={tr('图片查看')} floating><ImageViewer /></ErrorBoundary>
+      <ErrorBoundary area={tr('接一个模型')} floating><ConnectModelHost /></ErrorBoundary>
+      <ErrorBoundary area={tr('应用更新')} floating><UpdatePrompt /></ErrorBoundary>
+      <ErrorBoundary area={tr('角色库')} floating><CharacterLibrary /></ErrorBoundary>
+      <ErrorBoundary area={tr('对话框')} floating><DialogHost /></ErrorBoundary>
     </div>
   );
 }

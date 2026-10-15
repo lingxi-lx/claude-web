@@ -6,6 +6,7 @@ import { walkTools, type Item, type ToolUseBlock } from '@/model/conversation';
 import { basename } from '@/util';
 import { webToolAsk, webToolOf } from '@/features/browser/web-tools';
 import { accessTitle, computerToolLabel, computerToolOf, isAccessRequest } from '@/features/computer/computer-tools';
+import { tr } from '@/i18n';
 
 /** `access`: 操控电脑 asking which applications it may control — answered by a click on the card, never by a key. */
 export type DockKind = 'tool' | 'ask' | 'plan' | 'access';
@@ -72,7 +73,7 @@ export const isSlashCommand = (words: string): boolean => /^\/[A-Za-z][\w:-]*(\s
 /** The main-button registry's key: the composer's pane and tile + the request (one conversation can be open in two panes: review M3). */
 export const primaryKey = (scope: string, requestId: string): string => `${scope}\u0000${requestId}`;
 
-const DENY_DEFAULT: Record<DockKind, string> = { tool: '用户拒绝了这次操作', plan: '用户要求修改计划', ask: '用户取消了提问', access: '' };
+const DENY_DEFAULT: Record<DockKind, string> = { tool: tr('用户拒绝了这次操作'), plan: tr('用户要求修改计划'), ask: tr('用户取消了提问'), access: '' };
 
 /** The deny sent from the composer or the card's 拒绝 / 要求修改 / 跳过: the typed words, else each card's old default. */
 export function denyResponse(p: PermissionRequestEvent, text: string): PermissionResponse {
@@ -84,28 +85,28 @@ export function permissionTitle(p: Pick<PermissionRequestEvent, 'toolName' | 'in
   const inp = (p.input ?? {}) as Record<string, unknown>;
   const file = basename(String(inp.file_path ?? inp.notebook_path ?? inp.path ?? '').replace(/[\\/]+$/, ''));
   switch (p.toolName) {
-    case 'AskUserQuestion': return `${agent} 有问题要问你`;
-    case 'ExitPlanMode': return `${agent} 想按这个计划开始动手`;
-    case 'Bash': case 'PowerShell': return `${agent} 想运行一条命令`;
-    case 'Edit': case 'MultiEdit': case 'NotebookEdit': return file ? `${agent} 想修改 ${file}` : `${agent} 想修改文件`;
-    case 'Write': return file ? `${agent} 想写入 ${file}` : `${agent} 想写入文件`;
-    case 'Read': return file ? `${agent} 想读取 ${file}` : `${agent} 想读取文件`;
+    case 'AskUserQuestion': return tr('{agent} 有问题要问你', { agent });
+    case 'ExitPlanMode': return tr('{agent} 想按这个计划开始动手', { agent });
+    case 'Bash': case 'PowerShell': return tr('{agent} 想运行一条命令', { agent });
+    case 'Edit': case 'MultiEdit': case 'NotebookEdit': return file ? tr('{agent} 想修改 {file}', { agent, file }) : tr('{agent} 想修改文件', { agent });
+    case 'Write': return file ? tr('{agent} 想写入 {file}', { agent, file }) : tr('{agent} 想写入文件', { agent });
+    case 'Read': return file ? tr('{agent} 想读取 {file}', { agent, file }) : tr('{agent} 想读取文件', { agent });
     case 'WebFetch': {
       let host = '';
       try { host = new URL(String(inp.url ?? '')).host; } catch { /* not a URL */ }
-      return host ? `${agent} 想访问 ${host}` : `${agent} 想访问网页`;
+      return host ? tr('{agent} 想访问 {host}', { agent, host }) : tr('{agent} 想访问网页', { agent });
     }
-    case 'WebSearch': return `${agent} 想搜索网页`;
+    case 'WebSearch': return tr('{agent} 想搜索网页', { agent });
   }
   const web = webToolOf(p.toolName);
   if (web) return webToolAsk(web, inp, agent);
   const computer = computerToolOf(p.toolName);
   if (computer === 'request_access') return accessTitle(inp, agent);
   // (its other tools are not asked about one by one; another host's prompt for one reads as what it does)
-  if (computer) return `${agent} 想${computerToolLabel(computer, inp).verb.replace(/[:：]$/, '')}`;
+  if (computer) return tr('{agent} 想{replace}', { agent, replace: computerToolLabel(computer, inp).verb.replace(/[:：]$/, '') });
   const mcp = /^mcp__(.+?)__(.+)$/.exec(p.toolName);
-  if (mcp) return `${agent} 想使用 ${mcp[1]} 的 ${mcp[2]}`;
-  return `${agent} 想使用 ${p.toolName}`;
+  if (mcp) return tr('{agent} 想使用 {v} 的 {v2}', { agent, v: mcp[1], v2: mcp[2] });
+  return tr('{agent} 想使用 {toolName}', { agent, toolName: p.toolName });
 }
 
 const MAX_RULE = 25;
@@ -113,13 +114,13 @@ const MAX_RULE = 25;
 /** One suggestion in words (the first half of the 总是允许 label), or null when it has no short name. */
 function suggestionLabel(s: Record<string, any>): string | null {
   if (s?.type === 'addRules' && Array.isArray(s.rules)) {
-    if (s.rules.length !== 1) return s.rules.length > 1 ? `总是允许 ${s.rules.length} 条规则` : null;
+    if (s.rules.length !== 1) return s.rules.length > 1 ? tr('总是允许 {rulesCount} 条规则', { rulesCount: s.rules.length }) : null;
     const r = s.rules[0] ?? {};
     const what = String(r.ruleContent ?? '').replace(/:\*$/, '').trim() || String(r.toolName ?? '');
-    return what ? `总是允许 ${what.length > MAX_RULE ? `${what.slice(0, MAX_RULE)}…` : what}` : null;
+    return what ? tr('总是允许 {what}', { what: what.length > MAX_RULE ? `${what.slice(0, MAX_RULE)}…` : what }) : null;
   }
-  if (s?.type === 'setMode' && s.mode === 'acceptEdits') return '这个对话里都允许改文件';
-  if (s?.type === 'addDirectories') return '总是允许这个目录';
+  if (s?.type === 'setMode' && s.mode === 'acceptEdits') return tr('这个对话里都允许改文件');
+  if (s?.type === 'addDirectories') return tr('总是允许这个目录');
   return null;
 }
 
@@ -131,12 +132,12 @@ function suggestionLabel(s: Record<string, any>): string | null {
 export function alwaysLabel(suggestions: unknown[] | undefined): string | null {
   if (!suggestions?.length) return null;
   const list = suggestions as Record<string, any>[];
-  const first = list.map(suggestionLabel).find((x) => x) ?? '总是允许';
-  return list.length > 1 ? `${first} 等 ${list.length} 项` : first;
+  const first = list.map(suggestionLabel).find((x) => x) ?? tr('总是允许');
+  return list.length > 1 ? tr('{first} 等 {listCount} 项', { first, listCount: list.length }) : first;
 }
 
-const WHERE: Record<string, string> = { session: '只在这个对话里', localSettings: '写入本项目的本地设置', projectSettings: '写入项目设置（会进版本库）', userSettings: '写入你的用户设置', cliArg: '只在这次运行里' };
-const MODE: Record<string, string> = { acceptEdits: '自动接受改动', bypassPermissions: '完全放开', plan: '只规划', default: '每步询问' };
+const WHERE: Record<string, string> = { session: tr('只在这个对话里'), localSettings: tr('写入本项目的本地设置'), projectSettings: tr('写入项目设置（会进版本库）'), userSettings: tr('写入你的用户设置'), cliArg: tr('只在这次运行里') };
+const MODE: Record<string, string> = { acceptEdits: tr('自动接受改动'), bypassPermissions: tr('完全放开'), plan: tr('只规划'), default: tr('每步询问') };
 
 /** Each suggestion 总是允许 would write, with where it goes (the button's tooltip). */
 export function alwaysDetails(suggestions: unknown[] | undefined): string[] {
@@ -144,10 +145,10 @@ export function alwaysDetails(suggestions: unknown[] | undefined): string[] {
   for (const s of (suggestions ?? []) as Record<string, any>[]) {
     const where = WHERE[String(s?.destination)] ?? String(s?.destination ?? '');
     const tail = where ? ` · ${where}` : '';
-    if (s?.type === 'addRules' || s?.type === 'replaceRules') for (const r of (s.rules ?? []) as Record<string, any>[]) out.push(`${s.behavior === 'deny' ? '拒绝' : s.behavior === 'ask' ? '询问' : '允许'}规则 ${r.toolName ?? ''}${r.ruleContent ? `(${r.ruleContent})` : ''}${tail}`);
-    else if (s?.type === 'addDirectories') for (const d of (s.directories ?? []) as string[]) out.push(`允许访问目录 ${d}${tail}`);
-    else if (s?.type === 'setMode') out.push(`切换到「${MODE[String(s.mode)] ?? s.mode}」模式${tail}`);
-    else out.push(`${String(s?.type ?? '规则')}${tail}`);
+    if (s?.type === 'addRules' || s?.type === 'replaceRules') for (const r of (s.rules ?? []) as Record<string, any>[]) out.push(tr('{v}规则 {toolName}{v2}{tail}', { v: s.behavior === 'deny' ? tr('拒绝') : s.behavior === 'ask' ? tr('询问') : tr('允许'), toolName: r.toolName ?? '', v2: r.ruleContent ? `(${r.ruleContent})` : '', tail }));
+    else if (s?.type === 'addDirectories') for (const d of (s.directories ?? []) as string[]) out.push(tr('允许访问目录 {d}{tail}', { d, tail }));
+    else if (s?.type === 'setMode') out.push(tr('切换到「{mode}」模式{tail}', { mode: MODE[String(s.mode)] ?? s.mode, tail }));
+    else out.push(`${String(s?.type ?? tr('规则'))}${tail}`);
   }
   return out;
 }

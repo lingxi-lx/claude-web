@@ -1,4 +1,5 @@
 // Self-contained HTML export of a conversation (or one turn): clone the rendered DOM, inline our CSS, embed nothing external.
+import { dateLocale, getLocale, tr } from '@/i18n';
 import tokensText from '../tokens.css?raw';
 import stylesText from '../styles.css?raw';
 import chatText from '../styles/chat.css?raw';
@@ -40,7 +41,7 @@ export function buildHtml(o: ExportOptions): string {
   const theme = o.theme ?? document.documentElement.dataset.theme ?? 'dark';
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
   return `<!doctype html>
-<html lang="zh-CN" data-theme="${esc(theme)}">
+<html lang="${getLocale() === 'zh' ? 'zh-CN' : 'en'}" data-theme="${esc(theme)}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -49,7 +50,7 @@ export function buildHtml(o: ExportOptions): string {
 </head>
 <body>
 <div class="export-wrap">
-  <div class="export-head"><h1>${esc(o.title)}</h1><div class="meta">${esc(o.meta ?? '')} · 由 Claude Web 导出 ${new Date().toLocaleString()}</div></div>
+  <div class="export-head"><h1>${esc(o.title)}</h1><div class="meta">${esc(o.meta ?? '')} · ${esc(tr('由 Claude Web 导出 {time}', { time: new Date().toLocaleString(dateLocale()) }))}</div></div>
   <div class="chat-inner">${clone.innerHTML}</div>
 </div>
 </body>

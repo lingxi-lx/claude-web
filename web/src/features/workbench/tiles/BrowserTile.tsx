@@ -7,6 +7,7 @@ import { clsx } from '@/util';
 import { Icon } from '@/ui/icons';
 import { imeComposing } from '@/ui/ime';
 import { frameSandbox } from '@/features/browser/url';
+import { tr } from '@/i18n';
 
 /**
  * In-app browser.
@@ -45,7 +46,7 @@ export function BrowserTile({ tile }: { tile: Extract<Tile, { kind: 'browser' }>
       } catch { /* not attached yet */ }
     };
     const onTitle = (e: any) => { if (ctx) dispatch({ t: 'tile.rename', paneId: ctx.paneId, tileId: tile.id, title: String(e.title).slice(0, 40) }); };
-    const onFail = (e: any) => { setLoading(false); if (e.errorCode !== -3) setErr(`${e.errorDescription || '加载失败'} (${e.errorCode})`); };
+    const onFail = (e: any) => { setLoading(false); if (e.errorCode !== -3) setErr(`${e.errorDescription || tr('加载失败')} (${e.errorCode})`); };
     el.addEventListener('did-start-loading', onStart);
     el.addEventListener('did-stop-loading', onStop);
     el.addEventListener('page-title-updated', onTitle);
@@ -80,38 +81,38 @@ export function BrowserTile({ tile }: { tile: Extract<Tile, { kind: 'browser' }>
   /** Hand the page back to the agent: URL plus whatever the console complained about. */
   const toComposer = async () => {
     const sid = ctx?.sessionId ?? useStore.getState().activeId;
-    if (!sid) return toast('先在这里打开一个对话');
+    if (!sid) return toast(tr('先在这里打开一个对话'));
     let extra = '';
     if (desktop && ref.current) {
       try {
         const logs: string[] = await ref.current.executeJavaScript('window.__cwErrors || []');
-        if (logs?.length) extra = `\n控制台错误：\n${logs.slice(0, 10).map((l) => `- ${l}`).join('\n')}`;
+        if (logs?.length) extra = tr("\n控制台错误：\n{map}", { map: logs.slice(0, 10).map((l) => `- ${l}`).join('\n') });
       } catch { /* page may block eval */ }
     }
     const cur = useStore.getState().open[sid]?.draft ?? '';
-    setDraft(sid, `${cur}${cur ? '\n' : ''}页面：${url}${extra}\n`);
-    toast('已放进输入框', true);
+    setDraft(sid, tr("{cur}{v}页面：{url}{extra}\n", { cur, v: cur ? '\n' : '', url, extra }));
+    toast(tr('已放进输入框'), true);
   };
 
   return (
     <div className="browser-tile">
       <div className="browser-bar">
-        <button className="icon-btn xs" disabled={!nav.back} title="后退" aria-label="后退" onClick={() => act('goBack')}><Icon name="restore" size={14} /></button>
-        <button className="icon-btn xs" disabled={!nav.fwd} title="前进" aria-label="前进" onClick={() => act('goForward')}><Icon name="minimize" size={14} /></button>
-        <button className={clsx('icon-btn xs', loading && 'active')} title="刷新" aria-label="刷新" onClick={() => act('reload')}><Icon name="refresh" size={14} /></button>
+        <button className="icon-btn xs" disabled={!nav.back} title={tr('后退')} aria-label={tr('后退')} onClick={() => act('goBack')}><Icon name="restore" size={14} /></button>
+        <button className="icon-btn xs" disabled={!nav.fwd} title={tr('前进')} aria-label={tr('前进')} onClick={() => act('goForward')}><Icon name="minimize" size={14} /></button>
+        <button className={clsx('icon-btn xs', loading && 'active')} title={tr('刷新')} aria-label={tr('刷新')} onClick={() => act('reload')}><Icon name="refresh" size={14} /></button>
         <input
           className="field"
           value={addr}
           spellCheck={false}
-          placeholder="输入网址或 localhost:3000"
+          placeholder={tr('输入网址或 localhost:3000')}
           onChange={(e) => setAddr(e.target.value)}
           onKeyDown={(e) => { if (imeComposing(e.nativeEvent)) return; if (e.key === 'Enter') go(addr); if (e.key === 'Escape') setAddr(url); }}
         />
-        <button className="icon-btn xs" title="把页面地址和控制台错误放进输入框" aria-label="发给对话" onClick={toComposer}><Icon name="send" size={14} /></button>
-        <button className="icon-btn xs" title="在系统浏览器打开" aria-label="外部打开" onClick={() => (desktop ? desktop.openExternal(url) : window.open(url, '_blank', 'noopener,noreferrer'))}><Icon name="external" size={14} /></button>
-        {desktop && <button className="icon-btn xs" title="开发者工具" aria-label="开发者工具" onClick={() => { try { ref.current?.openDevTools(); } catch { /* ignore */ } }}><Icon name="bash" size={14} /></button>}
+        <button className="icon-btn xs" title={tr('把页面地址和控制台错误放进输入框')} aria-label={tr('发给对话')} onClick={toComposer}><Icon name="send" size={14} /></button>
+        <button className="icon-btn xs" title={tr('在系统浏览器打开')} aria-label={tr('外部打开')} onClick={() => (desktop ? desktop.openExternal(url) : window.open(url, '_blank', 'noopener,noreferrer'))}><Icon name="external" size={14} /></button>
+        {desktop && <button className="icon-btn xs" title={tr('开发者工具')} aria-label={tr('开发者工具')} onClick={() => { try { ref.current?.openDevTools(); } catch { /* ignore */ } }}><Icon name="bash" size={14} /></button>}
       </div>
-      {err && <div className="board-err">{err} · <button className="btn sm ghost" onClick={() => act('reload')}>重试</button></div>}
+      {err && <div className="board-err">{err} · <button className="btn sm ghost" onClick={() => act('reload')}>{tr('重试')}</button></div>}
       <div className="browser-body">
         {desktop ? (
           // No `allowpopups`: the tag reads the attribute's PRESENCE, so `allowpopups="false"` — what
@@ -120,7 +121,7 @@ export function BrowserTile({ tile }: { tile: Extract<Tile, { kind: 'browser' }>
         ) : (
           <>
             <iframe ref={ref} src={url} title="in-app browser" sandbox={frameSandbox(url, location.origin)} />
-            <div className="browser-hint">浏览器里只能用受限 iframe：拒绝被嵌入的站点会是空白，用右上角「在系统浏览器打开」。桌面版是完整的内嵌浏览器。</div>
+            <div className="browser-hint">{tr('浏览器里只能用受限 iframe：拒绝被嵌入的站点会是空白，用右上角「在系统浏览器打开」。桌面版是完整的内嵌浏览器。')}</div>
           </>
         )}
       </div>

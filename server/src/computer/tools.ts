@@ -1,3 +1,4 @@
+import { tr } from '../i18n/index.js';
 /**
  * The tools of 操控电脑, the `computer` MCP server: the same tool names and parameter names as Claude Code's built-in
  * computer-use server, described in our own words for what this one does: the whole Windows desktop, primary
@@ -83,7 +84,7 @@ export const TOOLS: ToolDef[] = [
         apps: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Application names as the user knows them ("Notepad", "记事本", "Google Chrome", "File Explorer") or process names ("msedge", "WINWORD"). Ask only for what the task needs.',
+          description: tr('Application names as the user knows them ("Notepad", "记事本", "Google Chrome", "File Explorer") or process names ("msedge", "WINWORD"). Ask only for what the task needs.'),
         },
         reason: { type: 'string', description: 'One sentence the user reads in the approval prompt: what you are going to do, in plain words.' },
         clipboardRead: { type: 'boolean', description: 'Set it when the task will read the clipboard: the request then says so, and read_clipboard only works once a request that said so was approved.' },
@@ -101,7 +102,7 @@ export const TOOLS: ToolDef[] = [
     description:
       'Bring a granted application to the front, starting it if it is not running. The application must have been granted with request_access. ' +
       'Windows sometimes refuses to let a background program raise a window; the result says whether the application really is in front. Take a screenshot afterwards.',
-    inputSchema: { type: 'object', properties: { app: { type: 'string', description: 'The application, by a name it was granted under ("Notepad", "记事本", "msedge").' } }, required: ['app'] },
+    inputSchema: { type: 'object', properties: { app: { type: 'string', description: tr('The application, by a name it was granted under ("Notepad", "记事本", "msedge").') } }, required: ['app'] },
   }),
   def('screenshot', 'Take a screenshot', true, {
     description:

@@ -2,6 +2,7 @@ import { createContext, useContext } from 'react';
 import { useStore } from '@/store';
 import { Icon } from '@/ui/icons';
 import { modKey } from './shortcuts';
+import { tr } from '@/i18n';
 
 /**
  * Where a pane sits in the window, so its first row can act as the title bar: `lead` = it is the window's top-left
@@ -21,7 +22,7 @@ export function SidebarReveal() {
   const mobile = useStore((s) => s.mobile);
   if (open || !mobile) return null;
   return (
-    <button className="icon-btn sb-reveal" title={`展开侧栏 (${modKey}+B)`} aria-label="展开侧栏" onClick={() => useStore.setState({ sidebarOpen: true })}>
+    <button className="icon-btn sb-reveal" title={tr('展开侧栏 ({modKey}+B)', { modKey })} aria-label={tr('展开侧栏')} onClick={() => useStore.setState({ sidebarOpen: true })}>
       <Icon name="sidebar" size={16} />
     </button>
   );

@@ -11,6 +11,7 @@ import { deleteSummary, deleteTargets, effectiveCaps, nativeCliCommand } from '.
 import { MenuHost, closeDrawer, useAnchoredMenu } from './menus';
 import type { RowMenuId } from './entries';
 import { TERMS } from '@/ui/terms';
+import { tr } from '@/i18n';
 
 export { effectiveCaps, capsIntersection, nativeCliCommand, type EffectiveCaps } from './caps';
 
@@ -23,7 +24,7 @@ const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export async function renameSession(s: SessionSummary): Promise<void> {
   const st = useStore.getState();
-  const t = (await dlg.prompt('重命名对话', s.title))?.trim();
+  const t = (await dlg.prompt(tr('重命名对话'), s.title))?.trim();
   if (!t || t === s.title) return;
   await st.libraryOp('rename', { sessionId: s.sessionId, title: t }).catch((e) => st.toast(errText(e)));
 }
@@ -36,7 +37,7 @@ export async function setArchived(list: SessionSummary[], archived: boolean): Pr
   if (viaLib.length) {
     try {
       const r = await st.libraryOp('archive', { sessionIds: viaLib.map((s) => s.sessionId), archived });
-      if (r?.failed?.length) st.toast(`${r.failed.length} 个对话${archived ? '归档' : '取消归档'}失败：${r.failed[0].error}`);
+      if (r?.failed?.length) st.toast(tr('{failedCount} 个对话{v}失败：{error}', { failedCount: r.failed.length, v: archived ? tr('归档') : tr('取消归档'), error: r.failed[0].error }));
     } catch (e) { st.toast(errText(e)); }
   }
 }
@@ -45,16 +46,16 @@ export async function setArchived(list: SessionSummary[], archived: boolean): Pr
 export async function deleteSessions(list: SessionSummary[]): Promise<boolean> {
   const st = useStore.getState();
   if (!list.length) return false;
-  const first = list.length === 1 ? `删除对话「${list[0].title}」？` : `删除选中的 ${list.length} 个对话？`;
-  if (!(await dlg.confirm(first, { message: `${deleteSummary(list, (k) => sourceName(k as AgentKind))}。对话记录会从它所属的 agent 里移除；只是不想看到的话，用「归档」。`, danger: true, okLabel: '继续' }))) return false;
+  const first = list.length === 1 ? tr('删除对话「{title}」？', { title: list[0].title }) : tr('删除选中的 {listCount} 个对话？', { listCount: list.length });
+  if (!(await dlg.confirm(first, { message: tr('{deleteSummary}。对话记录会从它所属的 agent 里移除；只是不想看到的话，用「归档」。', { deleteSummary: deleteSummary(list, (k) => sourceName(k as AgentKind)) }), danger: true, okLabel: tr('继续') }))) return false;
   const where = deleteTargets(list, (k) => sourceName(k as AgentKind));
-  if (!(await dlg.confirm('再确认一次：删除后不能在这里恢复', { message: `将先备份到 ~/.claude-web/library-trash，再${where}`, danger: true, okLabel: '删除' }))) return false;
+  if (!(await dlg.confirm(tr('再确认一次：删除后不能在这里恢复'), { message: tr('将先备份到 ~/.claude-web/library-trash，再{where}', { where }), danger: true, okLabel: tr('删除') }))) return false;
   try {
     const r = await st.libraryOp('delete', { sessionIds: list.map((s) => s.sessionId) });
     const failed: { id: string; error: string }[] = r?.failed ?? [];
     st.markDeleted(Array.isArray(r?.removed) ? r.removed : list.map((s) => s.sessionId).filter((id) => !failed.some((f) => f.id === id)));
-    if (failed.length) st.toast(`${failed.length} 个对话没有删除：${failed[0].error}`);
-    else st.toast(list.length === 1 ? '已删除（备份在 library-trash）' : `已删除 ${list.length} 个对话（备份在 library-trash）`, true);
+    if (failed.length) st.toast(tr('{failedCount} 个对话没有删除：{error}', { failedCount: failed.length, error: failed[0].error }));
+    else st.toast(list.length === 1 ? tr('已删除（备份在 library-trash）') : tr('已删除 {listCount} 个对话（备份在 library-trash）', { listCount: list.length }), true);
     await st.refreshSessions().catch(() => {});
     return !failed.length;
   } catch (e) {
@@ -83,11 +84,11 @@ export async function handOver(s: SessionSummary, agent: AgentKind, model?: stri
   const name = agent === 'claude' ? 'Claude Code' : st.agents.find((a) => a.kind === agent)?.name ?? agent;
   const running = turnRunning(st.open[s.sessionId]?.state, s.live);
   const text = handOverConfirmText({ sessionId: s.sessionId, agentName: name, modelLabel: model ? modelLabel || model : undefined, running });
-  const ok = await dlg.confirm(text.title, { message: text.message, okLabel: '交接' });
+  const ok = await dlg.confirm(text.title, { message: text.message, okLabel: tr('交接') });
   if (!ok) return false;
   try {
     const r = await ws.request<{ sessionId: string }>({ kind: 'session.switchAgent', sessionId: s.sessionId, agent, model });
-    st.toast(`已交接给 ${name}`, true);
+    st.toast(tr('已交接给 {name}', { name }), true);
     await st.refreshSessions().catch(() => {});
     // an imported session is never swapped in place: the hand-over is a new session — open that one
     if (r?.sessionId && r.sessionId !== s.sessionId) await st.loadHistory(r.sessionId, { mode: 'tab' });
@@ -105,14 +106,14 @@ export async function handOverToLocal(s: SessionSummary, agent: AgentKind): Prom
   const st = useStore.getState();
   const name = st.agents.find((a) => a.kind === agent)?.name ?? agent;
   const def = st.workspaces[0]?.path ?? '';
-  const cwd = (await dlg.prompt(`交给本机的 ${name}：在哪个目录继续？`, def, {
-    message: `这个对话在机器「${s.peer?.name ?? '?'}」上（目录 ${s.cwd}），那里的路径在本机多半不存在。会新建一个本机对话，带上一份交接说明；原对话保持不变。`,
-    okLabel: '交接',
+  const cwd = (await dlg.prompt(tr('交给本机的 {name}：在哪个目录继续？', { name }), def, {
+    message: tr('这个对话在机器「{name}」上（目录 {cwd}），那里的路径在本机多半不存在。会新建一个本机对话，带上一份交接说明；原对话保持不变。', { name: s.peer?.name ?? '?', cwd: s.cwd }),
+    okLabel: tr('交接'),
   }))?.trim();
   if (!cwd) return;
   try {
     const r = await ws.request<{ sessionId: string }>({ kind: 'peers.handover', sessionId: s.sessionId, agent, cwd });
-    st.toast(`已交给本机的 ${name}`, true);
+    st.toast(tr('已交给本机的 {name}', { name }), true);
     await st.refreshSessions().catch(() => {});
     if (r?.sessionId) await st.loadHistory(r.sessionId, { mode: 'tab' });
   } catch (e) { st.toast(errText(e)); }
@@ -131,7 +132,7 @@ export const REFERENCE_EVENT = 'cw:reference';
 export function referenceSession(s: SessionSummary): void {
   const detail: ReferenceDetail = { id: s.sessionId, title: s.title, handled: false };
   window.dispatchEvent(new CustomEvent(REFERENCE_EVENT, { detail }));
-  if (!detail.handled) useStore.getState().toast(detail.reason ?? '先打开一个对话（或新对话），再引用');
+  if (!detail.handled) useStore.getState().toast(detail.reason ?? tr('先打开一个对话（或新对话），再引用'));
 }
 
 /**
@@ -158,7 +159,7 @@ export function SessionMenu({ s, onClose, style, extra, handoffInline, deleted }
   // an offline machine can't be read, so there is nothing to hand over
   const remote = !!s.peer;
   const targets = remote && s.peer?.offline ? [] : agents.filter((a) => a.installed !== false && a.enabled !== false && (remote || a.kind !== cur));
-  const handoffLabel = remote ? '交给本机的 Agent 继续' : TERMS.handoff;
+  const handoffLabel = remote ? tr('交给本机的 Agent 继续') : TERMS.handoff;
   const agentButtons = targets.map((a) => (
     <button key={a.kind} data-agent={a.kind} onClick={act(() => (remote ? handOverToLocal(s, a.kind) : handOver(s, a.kind)))}><Icon name={AGENT_ICONS[a.kind] ?? 'agent'} size={13} /> {a.name}</button>
   ));
@@ -169,15 +170,15 @@ export function SessionMenu({ s, onClose, style, extra, handoffInline, deleted }
     <div ref={ref} className="menu sess-menu" role="menu" title="" style={style ?? { right: 8, top: 28 }} onClick={(e) => e.stopPropagation()} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}>
       {extra}
       {!deleted && <>
-      <button data-id={id('reference')} onClick={act(() => referenceSession(s))}><Icon name="quote" size={14} /> 引用到输入框</button>
-      {caps.rename && <button data-id={id('rename')} onClick={act(() => renameSession(s))}><Icon name="edit" size={14} /> 重命名</button>}
-      {caps.fork && <button data-id={id('fork')} onClick={act(() => forkSession(s))}><Icon name="branch" size={14} /> 分叉</button>}
-      {caps.archive && <button data-id={id('archive')} onClick={act(() => setArchived([s], !archived))}><Icon name="archive" size={14} /> {archived ? '取消归档' : '归档'}</button>}
+      <button data-id={id('reference')} onClick={act(() => referenceSession(s))}><Icon name="quote" size={14} /> {tr('引用到输入框')}</button>
+      {caps.rename && <button data-id={id('rename')} onClick={act(() => renameSession(s))}><Icon name="edit" size={14} /> {tr('重命名')}</button>}
+      {caps.fork && <button data-id={id('fork')} onClick={act(() => forkSession(s))}><Icon name="branch" size={14} /> {tr('分叉')}</button>}
+      {caps.archive && <button data-id={id('archive')} onClick={act(() => setArchived([s], !archived))}><Icon name="archive" size={14} /> {archived ? tr('取消归档') : tr('归档')}</button>}
       {handoffInline ? (
         <>
           <div className="menu-label" data-id={id('handoff')}>{handoffLabel}</div>
           {agentButtons}
-          {!targets.length && <div className="menu-note">没有其它可用的 agent</div>}
+          {!targets.length && <div className="menu-note">{tr('没有其它可用的 agent')}</div>}
         </>
       ) : (
         <>
@@ -185,15 +186,15 @@ export function SessionMenu({ s, onClose, style, extra, handoffInline, deleted }
           {handoff && (
             <div className="sub-menu">
               {agentButtons}
-              {!targets.length && <div className="menu-note">没有其它可用的 agent</div>}
+              {!targets.length && <div className="menu-note">{tr('没有其它可用的 agent')}</div>}
             </div>
           )}
         </>
       )}
-      {cli && <button data-id={id('native-cli')} onClick={act(() => openNativeCli(s))} title={cli}><Icon name="terminal" size={14} /> 在原生 CLI 打开</button>}
+      {cli && <button data-id={id('native-cli')} onClick={act(() => openNativeCli(s))} title={cli}><Icon name="terminal" size={14} /> {tr('在原生 CLI 打开')}</button>}
       </>}
-      <button data-id={id('copy-id')} onClick={act(() => { void navigator.clipboard.writeText(s.sessionId); useStore.getState().toast('已复制 session id', true); })}><Icon name="copy" size={14} /> 复制 ID</button>
-      {!deleted && caps.delete && <button data-id={id('delete')} className="danger" onClick={act(() => deleteSessions([s]))}><Icon name="trash" size={14} /> 删除…</button>}
+      <button data-id={id('copy-id')} onClick={act(() => { void navigator.clipboard.writeText(s.sessionId); useStore.getState().toast(tr('已复制 session id'), true); })}><Icon name="copy" size={14} /> {tr('复制 ID')}</button>
+      {!deleted && caps.delete && <button data-id={id('delete')} className="danger" onClick={act(() => deleteSessions([s]))}><Icon name="trash" size={14} /> {tr('删除…')}</button>}
     </div>
     </MenuHost>
   );

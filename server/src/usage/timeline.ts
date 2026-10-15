@@ -1,12 +1,13 @@
 import type { ProviderType } from '../protocol.js';
+import { tr } from '../i18n/index.js';
 
 /** A provider switch recorded in the canonical log (`session/swap.ts`). `fromProviderId`: 'claude' = the account; absent = not recorded (older logs). */
 export interface ProviderMark { t: number; providerId?: string; providerName?: string; fromProviderId?: string }
 export interface TurnProvider { type?: ProviderType; name: string }
 export interface ProviderTimeline { at(ts: number): TurnProvider; /** changes whenever `at` could answer differently (cache key) */ key: string }
 
-const ACCOUNT: TurnProvider = { name: 'Claude 账号' };
-const UNKNOWN: TurnProvider = { name: '未知供应商' };
+const ACCOUNT: TurnProvider = { name: tr('Claude 账号') };
+const UNKNOWN: TurnProvider = { name: tr('未知供应商') };
 const norm = (id: string | undefined) => (id && id !== 'claude' ? id : undefined);
 
 /**
@@ -19,7 +20,7 @@ export function providerTimeline(marks: ProviderMark[], currentId: string | unde
     const pid = norm(id);
     if (!pid) return ACCOUNT;
     const p = resolve(pid);
-    return p ? { type: p.type, name: p.name } : { name: recordedName ? `${recordedName}（已删除）` : '已删除的供应商' };
+    return p ? { type: p.type, name: p.name } : { name: recordedName ? tr('{recordedName}（已删除）', { recordedName }) : tr('已删除的供应商') };
   };
   const sorted = [...marks].sort((a, b) => a.t - b.t);
   if (!sorted.length) {

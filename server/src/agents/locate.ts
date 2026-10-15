@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
+import { tr } from '../i18n/index.js';
 
 /**
  * Where agent CLIs live when the app's own PATH does not say. A GUI-started app (Start menu, Finder, a desktop
@@ -141,14 +142,14 @@ export function bundledCandidates(kind: string, platform: NodeJS.Platform, arch:
   if (platform === 'win32') {
     // the Codex desktop app (Microsoft Store) copies its CLI out of WindowsApps: bin\codex.exe, newer ones in bin\<hash>\
     const local = env.LOCALAPPDATA || path.join(home, 'AppData', 'Local');
-    out.push({ from: 'Codex 桌面版', pattern: [local, 'OpenAI', 'Codex', 'bin', exe] });
-    out.push({ from: 'Codex 桌面版', pattern: [local, 'OpenAI', 'Codex', 'bin', '*', exe] });
+    out.push({ from: tr('Codex 桌面版'), pattern: [local, 'OpenAI', 'Codex', 'bin', exe] });
+    out.push({ from: tr('Codex 桌面版'), pattern: [local, 'OpenAI', 'Codex', 'bin', '*', exe] });
   }
   if (platform === 'darwin') {
-    for (const apps of ['/Applications', path.join(home, 'Applications')]) out.push({ from: 'Codex 桌面版', pattern: [apps, 'Codex.app', 'Contents', 'Resources', exe] });
+    for (const apps of ['/Applications', path.join(home, 'Applications')]) out.push({ from: tr('Codex 桌面版'), pattern: [apps, 'Codex.app', 'Contents', 'Resources', exe] });
   }
   // the Codex IDE extension (VS Code and its forks) bundles the same CLI; it runs `codex app-server` itself
-  for (const ide of ['.vscode', '.vscode-insiders', '.cursor', '.windsurf']) out.push({ from: 'Codex IDE 扩展', pattern: [home, ide, 'extensions', 'openai.chatgpt-*', 'bin', extPlat, exe] });
+  for (const ide of ['.vscode', '.vscode-insiders', '.cursor', '.windsurf']) out.push({ from: tr('Codex IDE 扩展'), pattern: [home, ide, 'extensions', 'openai.chatgpt-*', 'bin', extPlat, exe] });
   return out;
 }
 

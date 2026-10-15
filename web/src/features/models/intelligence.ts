@@ -2,6 +2,7 @@ import type { AgentKind, EffortLevel, Provider, RuntimeKind } from '@shared';
 import { CATALOG, effortLevels, modelCaps, modelsFor, nearestLevel, providerModelId, type ClaudeEffort } from '@catalog';
 import { EFFORT_DESC, EFFORT_LABEL, EFFORT_MODE_NOTE, EFFORT_PROMPT_TITLE, ULTRACODE, effortTitle } from '@/ui/terms';
 import { OWN_PROVIDER, chipLabel } from './menu';
+import { tr } from '@/i18n';
 
 /**
  * 「用哪个脑子、想多深」 (spec §5.5): the words for the effort ladder at the top of the model menu, and what the
@@ -23,7 +24,7 @@ export function effortSegments(levels: EffortLevel[], value?: EffortLevel | null
 export function effortCaption(value?: EffortLevel | null, defaultLevel?: EffortLevel, mode?: 'native' | 'prompt'): string {
   const cur = value ?? defaultLevel;
   if (!cur) return '';
-  return `${EFFORT_LABEL[cur]}${cur === defaultLevel ? '（默认）' : ''}：${EFFORT_DESC[cur]}${mode ? EFFORT_MODE_NOTE[mode] : ''}`;
+  return `${EFFORT_LABEL[cur]}${cur === defaultLevel ? tr('（默认）') : ''}：${EFFORT_DESC[cur]}${mode ? EFFORT_MODE_NOTE[mode] : ''}`;
 }
 
 export { EFFORT_PROMPT_TITLE };

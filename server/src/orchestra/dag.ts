@@ -1,6 +1,7 @@
 // Pure workflow logic: validation, layering, prompt templates, judge verdicts. No I/O — unit tested.
 import type { AgentKind } from '../protocol.js';
 import type { NodeRun, OrchNode } from './types.js';
+import { tr } from '../i18n/index.js';
 
 /** Upstream outputs longer than this are cut and followed by a `<session-ref>` (expanded into a briefing). */
 export const OUTPUT_LIMIT = 8000;
@@ -18,30 +19,30 @@ export function nodeAgents(n: OrchNode): AgentKind[] {
  */
 export function validateWorkflow(w: { nodes: OrchNode[] }, o: { isGitRepo: boolean; available?: AgentKind[] }): string[] {
   const errs: string[] = [];
-  if (!w.nodes.length) return ['工作流至少要有一个节点'];
+  if (!w.nodes.length) return [tr('工作流至少要有一个节点')];
   const ids = new Set<string>();
   for (const n of w.nodes) {
-    if (!n.id || !/^[A-Za-z0-9_-]+$/.test(n.id)) errs.push(`节点 id「${n.id}」只能用字母、数字、_ 和 -`);
-    if (ids.has(n.id)) errs.push(`节点 id 重复：${n.id}`);
+    if (!n.id || !/^[A-Za-z0-9_-]+$/.test(n.id)) errs.push(tr('节点 id「{id}」只能用字母、数字、_ 和 -', { id: n.id }));
+    if (ids.has(n.id)) errs.push(tr('节点 id 重复：{id}', { id: n.id }));
     ids.add(n.id);
   }
   for (const n of w.nodes) {
     const label = n.title || n.id;
-    if (!['task', 'compare', 'approval'].includes((n as { kind: string }).kind)) { errs.push(`「${label}」的类型 ${(n as { kind: string }).kind} 不认识（只能是 task / compare / approval）`); continue; }
-    for (const d of n.dependsOn ?? []) if (!ids.has(d)) errs.push(`「${label}」依赖的节点 ${d} 不存在`);
+    if (!['task', 'compare', 'approval'].includes((n as { kind: string }).kind)) { errs.push(tr('「{label}」的类型 {kind} 不认识（只能是 task / compare / approval）', { label, kind: (n as { kind: string }).kind })); continue; }
+    for (const d of n.dependsOn ?? []) if (!ids.has(d)) errs.push(tr('「{label}」依赖的节点 {d} 不存在', { label, d }));
     if (n.kind === 'task') {
-      if (!n.prompt?.trim()) errs.push(`「${label}」没有提示词`);
-      if (!n.agent) errs.push(`「${label}」没有选 agent`);
-      if (n.workspace === 'worktree' && !o.isGitRepo) errs.push(`「${label}」要用独立 worktree，但工作目录不是 git 仓库`);
+      if (!n.prompt?.trim()) errs.push(tr('「{label}」没有提示词', { label }));
+      if (!n.agent) errs.push(tr('「{label}」没有选 agent', { label }));
+      if (n.workspace === 'worktree' && !o.isGitRepo) errs.push(tr('「{label}」要用独立 worktree，但工作目录不是 git 仓库', { label }));
     } else if (n.kind === 'compare') {
-      if (!n.prompt?.trim()) errs.push(`「${label}」没有提示词`);
-      if (new Set(n.agents ?? []).size < 2 || new Set(n.agents).size !== n.agents.length) errs.push(`「${label}」比选至少要 2 个不同的 agent`);
-      if (!o.isGitRepo) errs.push(`「${label}」比选要在各自的 worktree 里做，但工作目录不是 git 仓库`);
+      if (!n.prompt?.trim()) errs.push(tr('「{label}」没有提示词', { label }));
+      if (new Set(n.agents ?? []).size < 2 || new Set(n.agents).size !== n.agents.length) errs.push(tr('「{label}」比选至少要 2 个不同的 agent', { label }));
+      if (!o.isGitRepo) errs.push(tr('「{label}」比选要在各自的 worktree 里做，但工作目录不是 git 仓库', { label }));
     }
-    if (o.available) for (const a of nodeAgents(n)) if (!o.available.includes(a)) errs.push(`「${label}」用到的 agent ${a} 没有安装或没有启用`);
+    if (o.available) for (const a of nodeAgents(n)) if (!o.available.includes(a)) errs.push(tr('「{label}」用到的 agent {a} 没有安装或没有启用', { label, a }));
   }
   const cyc = findCycle(w.nodes);
-  if (cyc) errs.push(`依赖有环：${cyc.join(' → ')}`);
+  if (cyc) errs.push(tr('依赖有环：{cyc}', { cyc: cyc.join(' → ') }));
   return errs;
 }
 
@@ -119,13 +120,13 @@ export function renderPrompt(tpl: string, ctx: PromptContext): string {
     if (!n) return '';
     if (field === 'approval') {
       if (!n.approval) return '';
-      const verdict = n.approval.decision === 'approve' ? '通过' : '驳回';
+      const verdict = n.approval.decision === 'approve' ? tr('通过') : tr('驳回');
       return n.approval.comment ? `${verdict}：${defuseRefs(n.approval.comment)}` : verdict;
     }
     const out = defuseRefs(n.output ?? '');
     if (out.length <= OUTPUT_LIMIT) return out;
     const sid = n.sessionIds?.[n.sessionIds.length - 1];
-    return `${out.slice(0, OUTPUT_LIMIT)}\n…（上游输出过长，已截断${sid ? '，完整内容见下面引用的对话' : ''}）${sid ? `\n<session-ref id="${sid}" title="上游节点 ${id}" />` : ''}`;
+    return tr("{out}\n…（上游输出过长，已截断{v}）{v2}", { out: out.slice(0, OUTPUT_LIMIT), v: sid ? tr('，完整内容见下面引用的对话') : '', v2: sid ? tr("\n<session-ref id=\"{sid}\" title=\"上游节点 {id}\" />", { sid, id }) : '' });
   });
 }
 

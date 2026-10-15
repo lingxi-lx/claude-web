@@ -15,8 +15,9 @@ import { Grants, NO_GRANT_TEXT, TOOL_NEEDS, gate, isSelf, namesSelf, type GrantF
 import { HelperError, type HelperLike } from './helper-win.js';
 import { isModifierKey, isSystemCombo, parseKeys, parseModifiers, type Chord, type KeyStroke } from './keys.js';
 import { BATCH_ACTIONS } from './tools.js';
+import { tr } from '../i18n/index.js';
 
-export const UNSUPPORTED_TEXT = '操控电脑目前只支持 Windows。';
+export const UNSUPPORTED_TEXT = tr('操控电脑目前只支持 Windows。');
 
 export type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string };
 export interface ToolAnswer { content: Content[]; isError?: boolean }
@@ -98,7 +99,7 @@ export class ComputerService {
       const content: Content[] = s.image ? [{ type: 'image', ...s.image }, { type: 'text', text: s.text }] : [{ type: 'text', text: s.text }];
       return s.ok ? { content } : { content, isError: true };
     } catch (e) {
-      const text = e instanceof HelperError ? `操控电脑的辅助进程出了问题：${e.message}` : `操控电脑时出错：${(e as Error)?.message ?? String(e)}`;
+      const text = e instanceof HelperError ? tr('操控电脑的辅助进程出了问题：{message}', { message: e.message }) : tr('操控电脑时出错：{message}', { message: (e as Error)?.message ?? String(e) });
       return { content: [{ type: 'text', text }], isError: true };
     }
   }

@@ -4,6 +4,7 @@ import readline from 'node:readline';
 import path from 'node:path';
 import { dataDir } from '../files/service.js';
 import type { AgentKind } from '../protocol.js';
+import { tr } from '../i18n/index.js';
 
 /**
  * The canonical timeline: one provider-neutral record of what happened in a session, kept
@@ -32,7 +33,7 @@ interface Head { type: 'cw.canonical'; sessionId: string; createdAt: number; cwd
 const MAX_RESULT_CHARS = 600;
 const MAX_TEXT_CHARS = 8000;
 
-const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}\n…（截断 ${s.length - n} 字）` : s);
+const clip = (s: string, n: number) => (s.length > n ? tr("{s}\n…（截断 {sCount} 字）", { s: s.slice(0, n), sCount: s.length - n }) : s);
 
 /** Text of an SDK content block list, ignoring thinking. */
 function blockText(content: unknown): string {
@@ -62,7 +63,7 @@ function applyMessage(m: any, t: number, open: Map<string, CanonicalEvent & { ki
           const ev = open.get(b.tool_use_id);
           if (!ev) continue;
           ev.ok = !b.is_error;
-          ev.result = clip(blockText(b.content) || (b.is_error ? '失败' : '完成'), MAX_RESULT_CHARS);
+          ev.result = clip(blockText(b.content) || (b.is_error ? tr('失败') : tr('完成')), MAX_RESULT_CHARS);
           open.delete(b.tool_use_id);
           out.push(ev);
         }
@@ -103,7 +104,7 @@ function applyMessage(m: any, t: number, open: Map<string, CanonicalEvent & { ki
       });
       // any tool that never got a result is stranded — record it so the timeline isn't silently short
       if (open.size) {
-        for (const ev of open.values()) out.push({ ...ev, ok: false, result: '（没有返回结果）' });
+        for (const ev of open.values()) out.push({ ...ev, ok: false, result: tr('（没有返回结果）') });
         open.clear();
       }
       return out;

@@ -3,6 +3,7 @@ import os from 'node:os';
 import WebSocket from 'ws';
 import { proxyAgentFor } from '../net/proxy.js';
 import { chunk, jsonFetch, type AdapterState, type ImAdapter, type OutboundOptions } from './types.js';
+import { tr } from '../i18n/index.js';
 
 /** The open-platform API; `CW_DINGTALK_API` points it at a stand-in for end-to-end checks (server/ws-phase19.mjs). */
 const api = () => (process.env.CW_DINGTALK_API || 'https://api.dingtalk.com').replace(/\/+$/, '');
@@ -64,7 +65,7 @@ export class DingTalkAdapter extends EventEmitter implements ImAdapter {
         this.emit('message', { chatId, userId: d.senderStaffId ?? d.senderId ?? '', userName: d.senderNick ?? '', text, messageId: d.msgId, raw: d });
       }
     });
-    ws.on('close', () => { if (ws === this.ws && this.running) { this.running = false; this.setState('error', '连接断开，重连中…'); this.scheduleReconnect(5000); } });
+    ws.on('close', () => { if (ws === this.ws && this.running) { this.running = false; this.setState('error', tr('连接断开，重连中…')); this.scheduleReconnect(5000); } });
     ws.on('error', (e) => this.setState('error', e.message));
   }
 
@@ -78,9 +79,9 @@ export class DingTalkAdapter extends EventEmitter implements ImAdapter {
   }
 
   async send(chatId: string, text: string, o: OutboundOptions = {}) {
-    const body = o.buttons?.length ? `${text}\n\n${o.buttons.map((b, i) => `${i + 1}. ${b.label}`).join('  ')}\n（回复序号或 /allow /deny）` : text;
+    const body = o.buttons?.length ? tr("{text}\n\n{map}\n（回复序号或 /allow /deny）", { text, map: o.buttons.map((b, i) => `${i + 1}. ${b.label}`).join('  ') }) : text;
     const wh = this.webhooks.get(chatId);
-    for (const part of chunk(body || '(空)', this.maxLen)) {
+    for (const part of chunk(body || tr('(空)'), this.maxLen)) {
       if (wh && wh.expiresAt > Date.now()) {
         await jsonFetch(wh.url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ msgtype: 'text', text: { content: part } }) });
       } else {

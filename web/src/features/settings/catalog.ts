@@ -5,22 +5,23 @@
 // contents as the contract: nothing it had may go missing.
 import type { IconName } from '@/ui/icons';
 import { INLINE_DIFFS_LABEL, TERMS } from '@/ui/terms';
+import { tr } from '@/i18n';
 
 export type SettingsGroupId = 'common' | 'model' | 'ext' | 'connect' | 'data' | 'advanced';
 export const SETTINGS_GROUPS: { id: SettingsGroupId; l: string }[] = [
-  { id: 'common', l: '常用' },
-  { id: 'model', l: '模型' },
-  { id: 'ext', l: '扩展' },
-  { id: 'connect', l: '连接' },
-  { id: 'data', l: '数据' },
-  { id: 'advanced', l: '高级' },
+  { id: 'common', l: tr('常用') },
+  { id: 'model', l: tr('模型') },
+  { id: 'ext', l: tr('扩展') },
+  { id: 'connect', l: tr('连接') },
+  { id: 'data', l: tr('数据') },
+  { id: 'advanced', l: tr('高级') },
 ];
 
 /** One setting row (a meta.json key). */
 export type EntryId =
   | 'ui.defaultMode' | 'autoContinueOnReset' | 'ui.showThinking' | 'ui.diffMode' | 'ui.inlineDiffs' | 'ui.workbench' | 'ui.autoSave'
   | 'ui.notifications' | 'ui.closeToTray' | 'ui.confirmExit' | 'ui.softwareRender' | 'orchestra.maxParallel' | 'cafe.rate' | 'cafe.sound'
-  | 'ui.theme' | 'ui.zoom' | 'ui.fontSize' | 'ui.density' | 'ui.cjkFont' | 'ui.reduceMotion' | 'ui.haptics';
+  | 'ui.language' | 'ui.theme' | 'ui.zoom' | 'ui.fontSize' | 'ui.density' | 'ui.cjkFont' | 'ui.reduceMotion' | 'ui.haptics';
 
 /** One part of a page: a component with its own requests (a list, a form, a status block). */
 export type BodyId =
@@ -64,105 +65,106 @@ export interface SectionMeta {
 
 /** Name + search words of every page part. */
 export const BODY_INFO: Record<BodyId, { l: string; keywords: string }> = {
-  account: { l: '登录状态', keywords: 'login 登录 claude.ai 账号 auth 订阅 api 提供方' },
-  engine: { l: '运行内核', keywords: 'engine ccb claude-web-engine claude-code-best 官方 二进制 版本 更新 doctor 配置目录 引擎 插件数' },
-  models: { l: '模型列表', keywords: 'model 模型 启用 隐藏 收藏 星标 opus sonnet haiku effort 智能程度 刷新 按档案' },
-  providers: { l: '供应商列表', keywords: 'provider api key base url 中转 openai gemini grok anthropic 缓存 cache 默认 档案 测试连接' },
-  proxy: { l: '网络代理', keywords: 'proxy 代理 梯子 vpn clash v2ray http_proxy https_proxy 系统代理 pac 地区 region 403 连不上 超时' },
-  gateway: { l: '网关与分组', keywords: 'gateway 网关 故障转移 failover 转换 多账号 额度 轮询 round robin 成员' },
-  mcp: { l: '已配置的 MCP', keywords: 'mcp server 当前会话 已配置 移除 连接状态' },
-  mcpCatalog: { l: 'MCP 目录', keywords: 'mcp 目录 catalog registry 注册表 健康检查 health 安装' },
-  mcpJson: { l: '手动添加（JSON）', keywords: 'mcp json add-json 手动 添加 stdio' },
-  plugins: { l: '插件列表', keywords: 'plugin marketplace 插件 市场 安装 卸载 启用' },
-  skills: { l: 'Skills 列表与安装', keywords: 'skill 技能 安装 github 新建 编辑 删除' },
-  skillsBackup: { l: 'Skills 备份', keywords: 'skill 备份 backup tar 恢复 restore' },
-  agents: { l: '其它 Agent 列表', keywords: 'agent codex gemini qwen kimi opencode acp 安装 登录 启动参数 配置中心 自定义' },
-  subagents: { l: 'Claude 子代理列表', keywords: 'subagent 子代理 agents md' },
-  memory: { l: '记忆开关与注入', keywords: 'memory 记忆 跨 agent mcp sqlite 遗忘 清空 注入' },
-  web: { l: '搜索与内置浏览器', keywords: 'web search browser 搜索 浏览器 联网 上网 网页 bing duckduckgo google yahoo baidu 百度 brave 密钥 截图 登录状态' },
-  remote: { l: '手机访问', keywords: 'remote lan phone mobile 手机 局域网 配对 配对码 二维码 qr 设备 吊销 端口 在外面也能用 外网 anywhere 在哪都能用 配对链接 不让电脑睡眠 睡眠 休眠 keep awake 直连 慢速转发' },
-  anywhere: { l: '牵线服务器与最近连接', keywords: 'anywhere 在外面也能用 牵线 broker mqtt stun ice webrtc 打洞 转发 relay 手机页面 壳 shell github pages 最近连接 连接记录' },
-  peers: { l: '其它电脑', keywords: '其它机器 其它电脑 跨机器 联邦 peer federation 加入 重新配对' },
-  hosts: { l: 'SSH 隧道', keywords: 'ssh 隧道 tunnel 远程主机 端口转发 免密' },
-  im: { l: '机器人列表', keywords: 'telegram discord slack 飞书 feishu lark 钉钉 dingtalk 企业微信 wecom 微信 机器人 bot im 网关 配对' },
-  library: { l: '来源与索引', keywords: 'session library codex opencode 导入 索引 加入 移出 重建' },
-  secrets: { l: 'API Key 存储', keywords: 'secret keychain credential dpapi 钥匙串 加密 密钥' },
-  hooks: { l: 'Hooks 列表', keywords: 'hook 钩子 事件 matcher' },
-  env: { l: '其它环境变量', keywords: 'env 环境变量 brave web search artifacts langfuse sentry voice 语音 settings.json' },
-  tools: { l: '命令行工具检测', keywords: 'git gh node python uv docker ripgrep 工具 检测 cli' },
-  diagnostics: { l: '诊断包', keywords: 'diagnostic log bundle 日志 诊断包 导出' },
-  update: { l: '应用更新', keywords: 'update version release 更新 版本 检查更新' },
-  raw: { l: 'settings.json 原文', keywords: 'settings json raw 原文 user project local 编辑' },
+  account: { l: tr('登录状态'), keywords: tr('login 登录 claude.ai 账号 auth 订阅 api 提供方') },
+  engine: { l: tr('运行内核'), keywords: tr('engine ccb claude-web-engine claude-code-best 官方 二进制 版本 更新 doctor 配置目录 引擎 插件数') },
+  models: { l: tr('模型列表'), keywords: tr('model 模型 启用 隐藏 收藏 星标 opus sonnet haiku effort 智能程度 刷新 按档案') },
+  providers: { l: tr('供应商列表'), keywords: tr('provider api key base url 中转 openai gemini grok anthropic 缓存 cache 默认 档案 测试连接') },
+  proxy: { l: tr('网络代理'), keywords: tr('proxy 代理 梯子 vpn clash v2ray http_proxy https_proxy 系统代理 pac 地区 region 403 连不上 超时') },
+  gateway: { l: tr('网关与分组'), keywords: tr('gateway 网关 故障转移 failover 转换 多账号 额度 轮询 round robin 成员') },
+  mcp: { l: tr('已配置的 MCP'), keywords: tr('mcp server 当前会话 已配置 移除 连接状态') },
+  mcpCatalog: { l: tr('MCP 目录'), keywords: tr('mcp 目录 catalog registry 注册表 健康检查 health 安装') },
+  mcpJson: { l: tr('手动添加（JSON）'), keywords: tr('mcp json add-json 手动 添加 stdio') },
+  plugins: { l: tr('插件列表'), keywords: tr('plugin marketplace 插件 市场 安装 卸载 启用') },
+  skills: { l: tr('Skills 列表与安装'), keywords: tr('skill 技能 安装 github 新建 编辑 删除') },
+  skillsBackup: { l: tr('Skills 备份'), keywords: tr('skill 备份 backup tar 恢复 restore') },
+  agents: { l: tr('其它 Agent 列表'), keywords: tr('agent codex gemini qwen kimi opencode acp 安装 登录 启动参数 配置中心 自定义') },
+  subagents: { l: tr('Claude 子代理列表'), keywords: tr('subagent 子代理 agents md') },
+  memory: { l: tr('记忆开关与注入'), keywords: tr('memory 记忆 跨 agent mcp sqlite 遗忘 清空 注入') },
+  web: { l: tr('搜索与内置浏览器'), keywords: tr('web search browser 搜索 浏览器 联网 上网 网页 bing duckduckgo google yahoo baidu 百度 brave 密钥 截图 登录状态') },
+  remote: { l: tr('手机访问'), keywords: tr('remote lan phone mobile 手机 局域网 配对 配对码 二维码 qr 设备 吊销 端口 在外面也能用 外网 anywhere 在哪都能用 配对链接 不让电脑睡眠 睡眠 休眠 keep awake 直连 慢速转发') },
+  anywhere: { l: tr('牵线服务器与最近连接'), keywords: tr('anywhere 在外面也能用 牵线 broker mqtt stun ice webrtc 打洞 转发 relay 手机页面 壳 shell github pages 最近连接 连接记录') },
+  peers: { l: tr('其它电脑'), keywords: tr('其它机器 其它电脑 跨机器 联邦 peer federation 加入 重新配对') },
+  hosts: { l: tr('SSH 隧道'), keywords: tr('ssh 隧道 tunnel 远程主机 端口转发 免密') },
+  im: { l: tr('机器人列表'), keywords: tr('telegram discord slack 飞书 feishu lark 钉钉 dingtalk 企业微信 wecom 微信 机器人 bot im 网关 配对') },
+  library: { l: tr('来源与索引'), keywords: tr('session library codex opencode 导入 索引 加入 移出 重建') },
+  secrets: { l: tr('API Key 存储'), keywords: tr('secret keychain credential dpapi 钥匙串 加密 密钥') },
+  hooks: { l: tr('Hooks 列表'), keywords: tr('hook 钩子 事件 matcher') },
+  env: { l: tr('其它环境变量'), keywords: tr('env 环境变量 brave web search artifacts langfuse sentry voice 语音 settings.json') },
+  tools: { l: tr('命令行工具检测'), keywords: tr('git gh node python uv docker ripgrep 工具 检测 cli') },
+  diagnostics: { l: tr('诊断包'), keywords: tr('diagnostic log bundle 日志 诊断包 导出') },
+  update: { l: tr('应用更新'), keywords: tr('update version release 更新 版本 检查更新') },
+  raw: { l: tr('settings.json 原文'), keywords: tr('settings json raw 原文 user project local 编辑') },
 };
 
 const GENERAL: EntryMeta[] = [
-  { id: 'ui.defaultMode', block: '新对话', label: '默认权限', hint: 'Claude 改文件、运行命令之前要不要先问你。每个对话里也能随时改。', keywords: 'permission mode 权限 新会话默认权限模式 每步询问 自动' },
-  { id: 'autoContinueOnReset', block: '新对话', label: '额度用完后自动继续', hint: '被限流时，等到额度重置再自动发出上一条消息。', keywords: 'rate limit quota 限流 额度 额度恢复后自动继续' },
-  { id: 'ui.showThinking', block: '对话显示', label: '显示思考过程', hint: '展开模型回答之前的推理内容。关掉更清爽。', keywords: 'thinking reasoning 思考' },
-  { id: 'ui.diffMode', block: '对话显示', label: '改动的显示方式', hint: '审阅改动时 diff 的默认样式。', keywords: 'diff split unified 并排 内联 默认 diff 视图 上下对照 左右并排' },
-  { id: 'ui.inlineDiffs', block: '对话显示', label: INLINE_DIFFS_LABEL, hint: '每一步改了什么直接在对话里展开。关着时（默认）点那一步，或回合末尾的「改动了 N 个文件」查看。', keywords: 'diff inline expand edit 展开 改动 大 diff 内联 默认展开' },
-  { id: 'ui.workbench', block: '工作台', label: TERMS.workbench, tag: '进阶', hint: '一直显示分屏标签条、分组栏和右侧面板图标栏。关着时它们只在用到时出现（Ctrl+D 分屏、开第二个标签页），快捷键和 Ctrl K 照常可用。添加供应商、在模型菜单里换模型都不需要打开它。', keywords: 'workbench 工作台 分屏 分组 标签 停靠 图标栏 single pane layout 单窗格模式 界面' },
-  { id: 'ui.autoSave', block: '工作台', label: '编辑器自动保存', hint: '停止输入 0.8 秒后写回磁盘；关掉后用 Ctrl+S 保存。', keywords: 'editor autosave monaco 保存' },
-  { id: 'ui.notifications', block: '提醒与窗口', label: '桌面通知', hint: '对话需要你确认，或者任务完成时提醒你。', keywords: 'notification 通知' },
-  { id: 'ui.closeToTray', block: '提醒与窗口', label: '关闭窗口时留在托盘', hint: '桌面版：关掉最后一个窗口不退出，任务在后台继续跑，从托盘图标回来。', keywords: 'tray minimize close 托盘 最小化' },
-  { id: 'ui.confirmExit', block: '提醒与窗口', label: '退出前确认', hint: '有运行中的对话或没保存的文件时先问一句。', keywords: 'quit exit close 退出 关闭 确认' },
-  { id: 'cafe.rate', block: '后台网吧', label: '网费（每小时）', hint: '网吧里座位牌上的网费，纯属好玩；真正的 token 用量和估算费用在悬停和小票里。', keywords: 'cafe 网吧 网费 价格 后台 background' },
-  { id: 'cafe.sound', block: '后台网吧', label: '结账的声音', hint: '客人结账时收银机「叮」一声。', keywords: 'cafe 网吧 声音 sound 结账' },
-  { id: 'ui.softwareRender', more: true, label: '软件渲染（桌面版）', hint: '显卡驱动异常导致黑屏 / 闪烁时打开，重启后生效。', keywords: 'gpu render 黑屏 闪烁 disable-gpu 显卡' },
-  { id: 'orchestra.maxParallel', more: true, label: '编排并发上限', hint: '一次编排里同时执行的任务 / 比选数（等你审批的不占名额）。', keywords: 'orchestra workflow parallel 编排 并发 多 agent' },
+  { id: 'ui.defaultMode', block: tr('新对话'), label: tr('默认权限'), hint: tr('Claude 改文件、运行命令之前要不要先问你。每个对话里也能随时改。'), keywords: tr('permission mode 权限 新会话默认权限模式 每步询问 自动') },
+  { id: 'autoContinueOnReset', block: tr('新对话'), label: tr('额度用完后自动继续'), hint: tr('被限流时，等到额度重置再自动发出上一条消息。'), keywords: tr('rate limit quota 限流 额度 额度恢复后自动继续') },
+  { id: 'ui.showThinking', block: tr('对话显示'), label: tr('显示思考过程'), hint: tr('展开模型回答之前的推理内容。关掉更清爽。'), keywords: tr('thinking reasoning 思考') },
+  { id: 'ui.diffMode', block: tr('对话显示'), label: tr('改动的显示方式'), hint: tr('审阅改动时 diff 的默认样式。'), keywords: tr('diff split unified 并排 内联 默认 diff 视图 上下对照 左右并排') },
+  { id: 'ui.inlineDiffs', block: tr('对话显示'), label: INLINE_DIFFS_LABEL, hint: tr('每一步改了什么直接在对话里展开。关着时（默认）点那一步，或回合末尾的「改动了 N 个文件」查看。'), keywords: tr('diff inline expand edit 展开 改动 大 diff 内联 默认展开') },
+  { id: 'ui.workbench', block: tr('工作台'), label: TERMS.workbench, tag: tr('进阶'), hint: tr('一直显示分屏标签条、分组栏和右侧面板图标栏。关着时它们只在用到时出现（Ctrl+D 分屏、开第二个标签页），快捷键和 Ctrl K 照常可用。添加供应商、在模型菜单里换模型都不需要打开它。'), keywords: tr('workbench 工作台 分屏 分组 标签 停靠 图标栏 single pane layout 单窗格模式 界面') },
+  { id: 'ui.autoSave', block: tr('工作台'), label: tr('编辑器自动保存'), hint: tr('停止输入 0.8 秒后写回磁盘；关掉后用 Ctrl+S 保存。'), keywords: tr('editor autosave monaco 保存') },
+  { id: 'ui.notifications', block: tr('提醒与窗口'), label: tr('桌面通知'), hint: tr('对话需要你确认，或者任务完成时提醒你。'), keywords: tr('notification 通知') },
+  { id: 'ui.closeToTray', block: tr('提醒与窗口'), label: tr('关闭窗口时留在托盘'), hint: tr('桌面版：关掉最后一个窗口不退出，任务在后台继续跑，从托盘图标回来。'), keywords: tr('tray minimize close 托盘 最小化') },
+  { id: 'ui.confirmExit', block: tr('提醒与窗口'), label: tr('退出前确认'), hint: tr('有运行中的对话或没保存的文件时先问一句。'), keywords: tr('quit exit close 退出 关闭 确认') },
+  { id: 'cafe.rate', block: tr('后台网吧'), label: tr('网费（每小时）'), hint: tr('网吧里座位牌上的网费，纯属好玩；真正的 token 用量和估算费用在悬停和小票里。'), keywords: tr('cafe 网吧 网费 价格 后台 background') },
+  { id: 'cafe.sound', block: tr('后台网吧'), label: tr('结账的声音'), hint: tr('客人结账时收银机「叮」一声。'), keywords: tr('cafe 网吧 声音 sound 结账') },
+  { id: 'ui.softwareRender', more: true, label: tr('软件渲染（桌面版）'), hint: tr('显卡驱动异常导致黑屏 / 闪烁时打开，重启后生效。'), keywords: tr('gpu render 黑屏 闪烁 disable-gpu 显卡') },
+  { id: 'orchestra.maxParallel', more: true, label: tr('编排并发上限'), hint: tr('一次编排里同时执行的任务 / 比选数（等你审批的不占名额）。'), keywords: tr('orchestra workflow parallel 编排 并发 多 agent') },
 ];
 
 const APPEARANCE: EntryMeta[] = [
-  { id: 'ui.theme', block: '显示', label: '主题', hint: '跟随系统会按操作系统的深浅色切换。', keywords: 'theme dark light 深色 浅色 暗色 亮色 system 跟随系统' },
+  { id: 'ui.language', block: tr('显示'), label: tr('语言'), hint: tr('界面用中文还是英文。默认跟随这台电脑的语言；改了会重新加载界面。'), keywords: tr('language locale english chinese 语言 中文 英文 English') },
+  { id: 'ui.theme', block: tr('显示'), label: tr('主题'), hint: tr('跟随系统会按操作系统的深浅色切换。'), keywords: tr('theme dark light 深色 浅色 暗色 亮色 system 跟随系统') },
   // not a meta.json key: the desktop shell keeps it (flags.json) — it has to be known before a window's first paint
-  { id: 'ui.zoom', block: '显示', label: '界面缩放', hint: '把整个界面一起放大或缩小：屏幕分辨率高、东西看着小的时候调大。桌面版会记住；网页版请用浏览器自己的缩放。', keywords: 'zoom scale dpi 4k hidpi 缩放 放大 缩小 分辨率 高分屏 太小 看不清 大小 比例' },
-  { id: 'ui.fontSize', block: '显示', label: '字号', hint: '整个界面的字号（像素）。', keywords: 'font size 字体大小' },
-  { id: 'ui.density', block: '显示', label: '密度', hint: '紧凑模式减少行高与内边距。', keywords: 'density compact 紧凑 宽松' },
-  { id: 'ui.cjkFont', more: true, label: '中文字体', hint: '优先用于中日韩文字的字体。', keywords: 'cjk font 中文 字体 雅黑 苹方' },
-  { id: 'ui.reduceMotion', block: '显示', label: '减少动画', hint: '关掉界面里的过渡与动画。', keywords: 'motion animation 动画 过渡' },
-  { id: 'ui.haptics', block: '显示', label: '触感反馈', hint: '在支持的手机上，发送、批准、长按出菜单时轻震一下。打开「减少动画」时不震。', keywords: 'haptic vibrate 震动 振动 触感 手机' },
+  { id: 'ui.zoom', block: tr('显示'), label: tr('界面缩放'), hint: tr('把整个界面一起放大或缩小：屏幕分辨率高、东西看着小的时候调大。桌面版会记住；网页版请用浏览器自己的缩放。'), keywords: tr('zoom scale dpi 4k hidpi 缩放 放大 缩小 分辨率 高分屏 太小 看不清 大小 比例') },
+  { id: 'ui.fontSize', block: tr('显示'), label: tr('字号'), hint: tr('整个界面的字号（像素）。'), keywords: tr('font size 字体大小') },
+  { id: 'ui.density', block: tr('显示'), label: tr('密度'), hint: tr('紧凑模式减少行高与内边距。'), keywords: tr('density compact 紧凑 宽松') },
+  { id: 'ui.cjkFont', more: true, label: tr('中文字体'), hint: tr('优先用于中日韩文字的字体。'), keywords: tr('cjk font 中文 字体 雅黑 苹方') },
+  { id: 'ui.reduceMotion', block: tr('显示'), label: tr('减少动画'), hint: tr('关掉界面里的过渡与动画。'), keywords: tr('motion animation 动画 过渡') },
+  { id: 'ui.haptics', block: tr('显示'), label: tr('触感反馈'), hint: tr('在支持的手机上，发送、批准、长按出菜单时轻震一下。打开「减少动画」时不震。'), keywords: tr('haptic vibrate 震动 振动 触感 手机') },
 ];
 
 export const SETTINGS_SECTIONS: SectionMeta[] = [
   // 常用
-  { id: 'general', l: '通用', ic: 'settings', group: 'common', desc: '新对话的默认行为、提醒方式，以及界面要显示多少工具。', keywords: '界面 会话 interface session', entries: GENERAL },
-  { id: 'appearance', l: '外观', ic: 'sun', group: 'common', desc: '主题、字号和界面密度。', keywords: 'appearance theme 主题', entries: APPEARANCE },
-  { id: 'account', l: '账号与登录', ic: 'user', group: 'common', desc: 'Claude 账号的登录状态。用第三方接口或中转站请去「供应商」。', keywords: '引擎与账号 engine account login 登录 账号', bodies: ['account'], more: ['engine'] },
+  { id: 'general', l: tr('通用'), ic: 'settings', group: 'common', desc: tr('新对话的默认行为、提醒方式，以及界面要显示多少工具。'), keywords: tr('界面 会话 interface session'), entries: GENERAL },
+  { id: 'appearance', l: tr('外观'), ic: 'sun', group: 'common', desc: tr('主题、字号和界面密度。'), keywords: tr('appearance theme 主题'), entries: APPEARANCE },
+  { id: 'account', l: tr('账号与登录'), ic: 'user', group: 'common', desc: tr('Claude 账号的登录状态。用第三方接口或中转站请去「供应商」。'), keywords: tr('引擎与账号 engine account login 登录 账号'), bodies: ['account'], more: ['engine'] },
   // 模型
-  { id: 'models', l: '模型与智能程度', ic: 'artifact', group: 'model', desc: '模型菜单里出现哪些模型、哪些置顶，以及每个模型能调的智能程度。', keywords: 'model 模型 effort', bodies: ['models'] },
-  { id: 'providers', l: '供应商', ic: 'cloud', group: 'model', desc: '第三方接口或中转站：地址、密钥和默认模型。每个对话可以在模型菜单里换用。', keywords: '供应商 / 环境 provider 中转 api key', bodies: ['providers', 'proxy'] },
-  { id: 'gateway', l: '模型网关', ic: 'gateway', group: 'model', desc: '把几个供应商组成一个本机入口：一个额度用完自动换下一个，不同协议之间自动转换。', keywords: 'gateway 网关', bodies: ['gateway'] },
+  { id: 'models', l: tr('模型与智能程度'), ic: 'artifact', group: 'model', desc: tr('模型菜单里出现哪些模型、哪些置顶，以及每个模型能调的智能程度。'), keywords: tr('model 模型 effort'), bodies: ['models'] },
+  { id: 'providers', l: tr('供应商'), ic: 'cloud', group: 'model', desc: tr('第三方接口或中转站：地址、密钥和默认模型。每个对话可以在模型菜单里换用。'), keywords: tr('供应商 / 环境 provider 中转 api key'), bodies: ['providers', 'proxy'] },
+  { id: 'gateway', l: tr('模型网关'), ic: 'gateway', group: 'model', desc: tr('把几个供应商组成一个本机入口：一个额度用完自动换下一个，不同协议之间自动转换。'), keywords: tr('gateway 网关'), bodies: ['gateway'] },
   // 扩展
   {
-    id: 'mcp', l: 'MCP 与插件', ic: 'mcp', group: 'ext', desc: '给 Claude 接上外部工具和数据源（MCP），或安装插件市场里的插件。', keywords: 'mcp plugin 插件',
+    id: 'mcp', l: tr('MCP 与插件'), ic: 'mcp', group: 'ext', desc: tr('给 Claude 接上外部工具和数据源（MCP），或安装插件市场里的插件。'), keywords: tr('mcp plugin 插件'),
     tabs: [
-      { id: 'servers', l: 'MCP 服务器', bodies: ['mcp', 'mcpCatalog'], more: ['mcpJson'], keywords: 'mcp server 服务器' },
-      { id: 'plugins', l: '插件', bodies: ['plugins'], keywords: 'plugin plugins 插件' },
+      { id: 'servers', l: tr('MCP 服务器'), bodies: ['mcp', 'mcpCatalog'], more: ['mcpJson'], keywords: tr('mcp server 服务器') },
+      { id: 'plugins', l: tr('插件'), bodies: ['plugins'], keywords: tr('plugin plugins 插件') },
     ],
   },
-  { id: 'skills', l: 'Skills', ic: 'skill', group: 'ext', desc: '可复用的工作方法：从 GitHub 安装、新建、编辑。', keywords: 'skill 技能', bodies: ['skills'], more: ['skillsBackup'] },
+  { id: 'skills', l: 'Skills', ic: 'skill', group: 'ext', desc: tr('可复用的工作方法：从 GitHub 安装、新建、编辑。'), keywords: tr('skill 技能'), bodies: ['skills'], more: ['skillsBackup'] },
   {
-    id: 'agents', l: 'Agents 与子代理', ic: 'agent', group: 'ext', desc: '其它编程 Agent（Codex、Gemini CLI…）的安装、登录与启动参数，以及 Claude 自己的子代理。', keywords: 'agent agents 子代理',
+    id: 'agents', l: tr('Agents 与子代理'), ic: 'agent', group: 'ext', desc: tr('其它编程 Agent（Codex、Gemini CLI…）的安装、登录与启动参数，以及 Claude 自己的子代理。'), keywords: tr('agent agents 子代理'),
     tabs: [
       { id: 'cli', l: TERMS.agents, bodies: ['agents'], keywords: 'CLI Agents codex gemini qwen kimi' },
-      { id: 'subagents', l: 'Claude 子代理', bodies: ['subagents'], keywords: 'subagent Claude 子代理' },
+      { id: 'subagents', l: tr('Claude 子代理'), bodies: ['subagents'], keywords: tr('subagent Claude 子代理') },
     ],
   },
-  { id: 'memory', l: '共享记忆', ic: 'memory', group: 'ext', desc: '所有 Agent 共用的一份记忆：做过的决定、约束、踩过的坑。', keywords: 'memory 记忆', bodies: ['memory'] },
+  { id: 'memory', l: tr('共享记忆'), ic: 'memory', group: 'ext', desc: tr('所有 Agent 共用的一份记忆：做过的决定、约束、踩过的坑。'), keywords: tr('memory 记忆'), bodies: ['memory'] },
   // 连接
-  { id: 'remote', l: '手机与其它电脑', ic: 'device', group: 'connect', desc: '在手机上接着用，或者把其它电脑上的对话接到这里。', keywords: '远程 / 手机 remote phone 手机 远程', bodies: ['remote', 'peers'], more: ['anywhere', 'hosts'] },
-  { id: 'im', l: 'IM 机器人', ic: 'chat', group: 'connect', desc: '在 Telegram、飞书、钉钉等聊天软件里给 Claude 派活、批准操作。', keywords: 'IM 网关 im bot 机器人', bodies: ['im'] },
-  { id: 'web', l: '联网', ic: 'web', group: 'connect', desc: '让 Agent 能搜索、能打开网页：用什么搜索，在哪个浏览器里打开。', keywords: 'web 联网 上网 搜索 浏览器 search browser', bodies: ['web'] },
+  { id: 'remote', l: tr('手机与其它电脑'), ic: 'device', group: 'connect', desc: tr('在手机上接着用，或者把其它电脑上的对话接到这里。'), keywords: tr('远程 / 手机 remote phone 手机 远程'), bodies: ['remote', 'peers'], more: ['anywhere', 'hosts'] },
+  { id: 'im', l: tr('IM 机器人'), ic: 'chat', group: 'connect', desc: tr('在 Telegram、飞书、钉钉等聊天软件里给 Claude 派活、批准操作。'), keywords: tr('IM 网关 im bot 机器人'), bodies: ['im'] },
+  { id: 'web', l: tr('联网'), ic: 'web', group: 'connect', desc: tr('让 Agent 能搜索、能打开网页：用什么搜索，在哪个浏览器里打开。'), keywords: tr('web 联网 上网 搜索 浏览器 search browser'), bodies: ['web'] },
   // 数据
-  { id: 'library', l: '对话库', ic: 'archive', group: 'data', desc: '把 Codex、OpenCode 等其它 Agent 的历史对话并进侧栏和搜索。', keywords: 'library 会话库 对话库 历史', bodies: ['library'] },
-  { id: 'secrets', l: '密钥', ic: 'lock', group: 'data', desc: '供应商的 API Key 怎么存在本机。', keywords: 'secret 密钥 加密', bodies: ['secrets'] },
+  { id: 'library', l: tr('对话库'), ic: 'archive', group: 'data', desc: tr('把 Codex、OpenCode 等其它 Agent 的历史对话并进侧栏和搜索。'), keywords: tr('library 会话库 对话库 历史'), bodies: ['library'] },
+  { id: 'secrets', l: tr('密钥'), ic: 'lock', group: 'data', desc: tr('供应商的 API Key 怎么存在本机。'), keywords: tr('secret 密钥 加密'), bodies: ['secrets'] },
   // 高级
-  { id: 'hooks', l: 'Hooks', ic: 'bolt', group: 'advanced', advanced: true, desc: 'Claude Code 在某些事件时运行的命令（只读列表，来自 settings.json 和插件）。', keywords: 'hook 钩子', bodies: ['hooks'] },
-  { id: 'env', l: '环境变量', ic: 'config', group: 'advanced', advanced: true, desc: '写进 ~/.claude/settings.json 的 env，所有对话生效；留空表示不设置。供应商的地址和密钥不在这里。', keywords: 'env 环境变量', bodies: ['env'] },
-  { id: 'tools', l: 'CLI 工具', ic: 'keyboard', group: 'advanced', advanced: true, desc: '本机装了哪些命令行工具（git、gh、node…），Claude 用得上的都在这里检测。', keywords: 'tools cli 工具', bodies: ['tools'] },
-  { id: 'diagnostics', l: '诊断', ic: 'info', group: 'advanced', advanced: true, desc: '出问题时打一个诊断包：日志尾部和脱敏后的配置。', keywords: 'diagnostic 诊断 日志', bodies: ['diagnostics'] },
-  { id: 'update', l: '更新', ic: 'refresh', group: 'advanced', advanced: true, desc: '当前版本与更新。', keywords: 'update 更新 版本', bodies: ['update'] },
-  { id: 'raw', l: 'settings.json', ic: 'copy', group: 'advanced', advanced: true, desc: '直接编辑 Claude Code 的 settings.json（用户 / 项目 / 本机）。', keywords: 'settings json raw 原文', bodies: ['raw'] },
+  { id: 'hooks', l: 'Hooks', ic: 'bolt', group: 'advanced', advanced: true, desc: tr('Claude Code 在某些事件时运行的命令（只读列表，来自 settings.json 和插件）。'), keywords: tr('hook 钩子'), bodies: ['hooks'] },
+  { id: 'env', l: tr('环境变量'), ic: 'config', group: 'advanced', advanced: true, desc: tr('写进 ~/.claude/settings.json 的 env，所有对话生效；留空表示不设置。供应商的地址和密钥不在这里。'), keywords: tr('env 环境变量'), bodies: ['env'] },
+  { id: 'tools', l: tr('CLI 工具'), ic: 'keyboard', group: 'advanced', advanced: true, desc: tr('本机装了哪些命令行工具（git、gh、node…），Claude 用得上的都在这里检测。'), keywords: tr('tools cli 工具'), bodies: ['tools'] },
+  { id: 'diagnostics', l: tr('诊断'), ic: 'info', group: 'advanced', advanced: true, desc: tr('出问题时打一个诊断包：日志尾部和脱敏后的配置。'), keywords: tr('diagnostic 诊断 日志'), bodies: ['diagnostics'] },
+  { id: 'update', l: tr('更新'), ic: 'refresh', group: 'advanced', advanced: true, desc: tr('当前版本与更新。'), keywords: tr('update 更新 版本'), bodies: ['update'] },
+  { id: 'raw', l: 'settings.json', ic: 'copy', group: 'advanced', advanced: true, desc: tr('直接编辑 Claude Code 的 settings.json（用户 / 项目 / 本机）。'), keywords: tr('settings json raw 原文'), bodies: ['raw'] },
 ];
 
 export const VISIBLE_SECTIONS = SETTINGS_SECTIONS.filter((s) => !s.advanced);
@@ -257,7 +259,7 @@ export type SettingsHit =
   | { kind: 'page'; section: SectionMeta; tab?: TabMeta; body?: BodyId; more?: boolean; title: string; crumb: string };
 
 function crumbOf(section: SectionMeta, tab?: TabMeta, more?: boolean): string {
-  return [groupLabel(section.group), section.l, tab?.l, more ? '更多选项' : undefined].filter(Boolean).join(' › ');
+  return [groupLabel(section.group), section.l, tab?.l, more ? tr('更多选项') : undefined].filter(Boolean).join(' › ');
 }
 
 /**
@@ -297,10 +299,10 @@ export function searchSettings(query: string): SettingsHit[] {
 /** The small status at the end of a nav row (Linear's 「Desktop · Disabled」): only what is known. */
 export function navStatus(o: { loggedIn?: boolean | null; providers?: number; gatewayEnabled?: boolean | null }): Record<string, string> {
   const out: Record<string, string> = {};
-  if (o.loggedIn === true) out.account = '已登录';
-  else if (o.loggedIn === false) out.account = '未登录';
+  if (o.loggedIn === true) out.account = tr('已登录');
+  else if (o.loggedIn === false) out.account = tr('未登录');
   if (o.providers) out.providers = String(o.providers);
-  if (o.gatewayEnabled === true) out.gateway = '开';
-  else if (o.gatewayEnabled === false) out.gateway = '关';
+  if (o.gatewayEnabled === true) out.gateway = tr('开');
+  else if (o.gatewayEnabled === false) out.gateway = tr('关');
   return out;
 }

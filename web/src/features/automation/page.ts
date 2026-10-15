@@ -2,18 +2,19 @@
 // from the sidebar's 自动化. Pure — AutomationPage.tsx draws it, state.ts opens / closes it.
 import type { LayoutAction } from '@/model/layout';
 import type { IconName } from '@/ui/icons';
+import { tr } from '@/i18n';
 
 /** The page's title. It is set in the heading face, so ui/heading-text.ts lists it. */
-export const AUTOMATION_TITLE = '自动化';
+export const AUTOMATION_TITLE = tr('自动化');
 
 export const AUTOMATION_TABS = ['schedules', 'goals', 'orchestra'] as const;
 export type AutomationTab = (typeof AUTOMATION_TABS)[number];
 
 /** Each tab: its name, one line on what it is for (the old sidebar menu said the same), and the 新建 button's words. */
 export const AUTOMATION_TAB_INFO: Record<AutomationTab, { label: string; icon: IconName; desc: string; newLabel: string }> = {
-  schedules: { label: '定时任务', icon: 'tasks', desc: '按时间自动开对话、跑提示词', newLabel: '新建定时任务' },
-  goals: { label: '目标', icon: 'goals', desc: '定一个目标，让 Claude 一轮轮做到完成', newLabel: '新目标' },
-  orchestra: { label: '编排', icon: 'orchestra', desc: '把一件事拆给几个 Agent：分工、审批、比选', newLabel: '新建工作流' },
+  schedules: { label: tr('定时任务'), icon: 'tasks', desc: tr('按时间自动开对话、跑提示词'), newLabel: tr('新建定时任务') },
+  goals: { label: tr('目标'), icon: 'goals', desc: tr('定一个目标，让 Claude 一轮轮做到完成'), newLabel: tr('新目标') },
+  orchestra: { label: tr('编排'), icon: 'orchestra', desc: tr('把一件事拆给几个 Agent：分工、审批、比选'), newLabel: tr('新建工作流') },
 };
 
 /**

@@ -1,3 +1,4 @@
+import { tr } from '@/i18n';
 // The app's own updates, renderer side (desktop only): what the prompt says and when it shows. The main process
 // decides how this build updates (desktop/src/update-policy.ts) and sends its state on `desktop:update`.
 
@@ -58,39 +59,39 @@ export interface PromptCopy {
 
 /** The words, by kind and by what this build is. */
 export function promptCopy(p: Prompt, o: { platform: string; mode?: UpdateState['mode']; portable?: boolean; running: number }): PromptCopy {
-  const title = p.required ? `这一版必须更新：v${p.version}` : p.kind === 'ready' ? `新版本 v${p.version} 已准备好` : `有新版本 v${p.version}`;
+  const title = p.required ? tr('这一版必须更新：v{version}', { version: p.version }) : p.kind === 'ready' ? tr('新版本 v{version} 已准备好', { version: p.version }) : tr('有新版本 v{version}', { version: p.version });
   if (p.kind === 'ready') {
     return {
       title,
-      lead: '已经在后台下载好了，重启一下就能用上。',
-      primary: '立即重启更新',
-      later: p.required ? undefined : '稍后：下次退出软件时会自动装好。',
-      warn: o.running > 0 ? `有 ${o.running} 个对话正在运行，重启会中断它们（记录都在，重启后发消息就能继续）。` : undefined,
+      lead: tr('已经在后台下载好了，重启一下就能用上。'),
+      primary: tr('立即重启更新'),
+      later: p.required ? undefined : tr('稍后：下次退出软件时会自动装好。'),
+      warn: o.running > 0 ? tr('有 {running} 个对话正在运行，重启会中断它们（记录都在，重启后发消息就能继续）。', { running: o.running }) : undefined,
     };
   }
   if (o.platform === 'darwin') {
     return {
       title,
-      lead: 'macOS 版没有 Apple 签名，不能自己安装更新：点下面的按钮下载新版。',
-      primary: '下载新版本',
-      later: p.required ? undefined : '稍后：明天或下次打开软件时再提醒。',
-      after: '下载好以后：退出本软件，打开下载的 dmg，把 Claude Web 拖进「应用程序」，选「替换」。对话和设置都会保留。',
+      lead: tr('macOS 版没有 Apple 签名，不能自己安装更新：点下面的按钮下载新版。'),
+      primary: tr('下载新版本'),
+      later: p.required ? undefined : tr('稍后：明天或下次打开软件时再提醒。'),
+      after: tr('下载好以后：退出本软件，打开下载的 dmg，把 Claude Web 拖进「应用程序」，选「替换」。对话和设置都会保留。'),
     };
   }
   if (o.portable) {
     return {
       title,
-      lead: '免安装版不能自己更新：点下面的按钮下载新的免安装版。',
-      primary: '下载新版本',
-      later: p.required ? undefined : '稍后：明天或下次打开软件时再提醒。',
-      after: '下载好以后：退出本软件，用新的 exe 替换现在这个。对话和设置不在 exe 里，不会丢。',
+      lead: tr('免安装版不能自己更新：点下面的按钮下载新的免安装版。'),
+      primary: tr('下载新版本'),
+      later: p.required ? undefined : tr('稍后：明天或下次打开软件时再提醒。'),
+      after: tr('下载好以后：退出本软件，用新的 exe 替换现在这个。对话和设置不在 exe 里，不会丢。'),
     };
   }
   return {
     title,
-    lead: o.mode === 'auto' ? '自动下载没有成功：点下面的按钮手动下载安装包。' : '点下面的按钮下载新版本。',
-    primary: '下载新版本',
-    later: p.required ? undefined : '稍后：明天或下次打开软件时再提醒。',
-    after: '下载好以后：退出本软件，运行下载的安装包覆盖安装。对话和设置都会保留。',
+    lead: o.mode === 'auto' ? tr('自动下载没有成功：点下面的按钮手动下载安装包。') : tr('点下面的按钮下载新版本。'),
+    primary: tr('下载新版本'),
+    later: p.required ? undefined : tr('稍后：明天或下次打开软件时再提醒。'),
+    after: tr('下载好以后：退出本软件，运行下载的安装包覆盖安装。对话和设置都会保留。'),
   };
 }

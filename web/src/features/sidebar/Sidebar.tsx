@@ -30,6 +30,7 @@ import { openExtensions } from '@/features/extensions/state';
 import { openBackground } from '@/features/background/state';
 import { useSection } from '@/features/sections';
 import type { ProjectMenuId, ProjectsHeadId, RowId, SectionId, TopId } from './entries';
+import { tr, trAs } from '@/i18n';
 
 /** Ids of conversations that must stay in view past a group's cut: running / waiting ones (a stable string, not the `open` map). */
 const busyIds = (s: ReturnType<typeof useStore.getState>) =>
@@ -134,7 +135,7 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
       const cwd = sessionMeta[s.sessionId]?.groupCwd ?? s.cwd ?? '';
       const w = projectFor(cwd, workspaces);
       const m = w ? byWs : other;
-      const k = w ? w.id : cwd || '(未知目录)';
+      const k = w ? w.id : cwd || tr('(未知目录)');
       (m.get(k) ?? m.set(k, []).get(k)!).push(s);
     }
     return { byWs, other: [...other.entries()].sort((a, b) => b[1][0].lastModified - a[1][0].lastModified), peers: [...byPeer.entries()] };
@@ -211,7 +212,7 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
     shown: shown[k],
     setShown: (n: number | undefined) => setShown((m) => ({ ...m, [k]: n })),
     busy: items.some(isBusy),
-    emptyText: ql ? '没有匹配的对话' : narrowed ? '' : '还没有对话',
+    emptyText: ql ? tr('没有匹配的对话') : narrowed ? '' : tr('还没有对话'),
   });
   // one folder of 文件夹: named like the folder (its parent's name after it when another one has the same name)
   const folderGroup = (cwd: string, arr: SessionSummary[]) => (
@@ -223,10 +224,10 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
       title={cwd}
       className={clsx('other', spellMake && 'spelled')}
       actions={spellMake
-        ? <button className="mk-proj" data-id={pm('make-project')} title={`设为项目：${cwd} 钉在「项目」里`} onClick={() => void addWorkspace(cwd).catch((e) => toast(e.message))}>设为项目</button>
+        ? <button className="mk-proj" data-id={pm('make-project')} title={tr('设为项目：{cwd} 钉在「项目」里', { cwd })} onClick={() => void addWorkspace(cwd).catch((e) => toast(e.message))}>{tr('设为项目')}</button>
         : <>
-          <button className="icon-btn xs" data-id={pm('new-here')} title="在这里新建对话" aria-label="在这里新建对话" onClick={() => { void useStore.getState().openSession({ cwd }).catch((e) => toast(e.message)); closeDrawer(); }}><Icon name="edit" size={13} /></button>
-          <button className="icon-btn xs" data-id={pm('make-project')} title="设为项目（钉在上面）" aria-label="设为项目" onClick={() => void addWorkspace(cwd).catch((e) => toast(e.message))}><Icon name="pin" size={13} /></button>
+          <button className="icon-btn xs" data-id={pm('new-here')} title={tr('在这里新建对话')} aria-label={tr('在这里新建对话')} onClick={() => { void useStore.getState().openSession({ cwd }).catch((e) => toast(e.message)); closeDrawer(); }}><Icon name="edit" size={13} /></button>
+          <button className="icon-btn xs" data-id={pm('make-project')} title={tr('设为项目（钉在上面）')} aria-label={tr('设为项目')} onClick={() => void addWorkspace(cwd).catch((e) => toast(e.message))}><Icon name="pin" size={13} /></button>
         </>}
     />
   );
@@ -241,49 +242,49 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
       <div className="sb-top">
         <span className="brand"><span className="logo"><Icon name="claude" size={18} /></span>Claude Web</span>
         {mobile
-          ? <button className="icon-btn" data-id={top('collapse')} title={`收起侧栏 (${modKey}+B)`} aria-label="收起侧栏" onClick={() => useStore.setState({ sidebarOpen: false })}><Icon name="sidebar" size={16} /></button>
-          : <button className="icon-btn sb-find" data-id={top('search')} title={`搜索对话、命令和设置 (${modKey}+K)`} aria-label="搜索" onClick={() => useStore.setState({ paletteOpen: true })}><Icon name="search" size={16} /></button>}
+          ? <button className="icon-btn" data-id={top('collapse')} title={tr('收起侧栏 ({modKey}+B)', { modKey })} aria-label={tr('收起侧栏')} onClick={() => useStore.setState({ sidebarOpen: false })}><Icon name="sidebar" size={16} /></button>
+          : <button className="icon-btn sb-find" data-id={top('search')} title={tr('搜索对话、命令和设置 ({modKey}+K)', { modKey })} aria-label={tr('搜索')} onClick={() => useStore.setState({ paletteOpen: true })}><Icon name="search" size={16} /></button>}
       </div>
-      <nav className="sb-nav" aria-label="导航">
-        <button className={clsx('nav', !activeId && section === 'chat' && 'active')} data-id={top('new')} onClick={() => { onNew(); closeDrawer(); }}><Icon name="edit" size={16} />新对话<span className="k">{desktop ? `${modKey} N` : 'Alt N'}</span></button>
+      <nav className="sb-nav" aria-label={tr('导航')}>
+        <button className={clsx('nav', !activeId && section === 'chat' && 'active')} data-id={top('new')} onClick={() => { onNew(); closeDrawer(); }}><Icon name="edit" size={16} />{tr('新对话')}<span className="k">{desktop ? `${modKey} N` : 'Alt N'}</span></button>
         {mobile && <>
-          <button className="nav" data-id={top('search')} title="搜索对话、命令和设置" onClick={() => { useStore.setState({ paletteOpen: true }); closeDrawer(); }}><Icon name="search" size={16} />搜索<span className="k">{modKey} K</span></button>
+          <button className="nav" data-id={top('search')} title={tr('搜索对话、命令和设置')} onClick={() => { useStore.setState({ paletteOpen: true }); closeDrawer(); }}><Icon name="search" size={16} />{tr('搜索')}<span className="k">{modKey} K</span></button>
           {/* 自动化 → the automation page (定时任务 · 目标 · 编排, spec §5.9) over the main area, on the tab shown last */}
           {/* 后台 → what runs besides the turns (sub-agents, workflows, background commands), spec 2026-10-12 */}
-          <button className={clsx('nav', section === 'background' && 'active')} data-id={top('background')} title="在跑的子代理、工作流和后台命令" aria-pressed={section === 'background'} onClick={() => { setMenu(null); openBackground(); }}><Icon name="office" size={16} />后台</button>
-          <button className={clsx('nav', section === 'automation' && 'active')} data-id={top('automation')} title="定时任务、目标、编排" aria-pressed={section === 'automation'} onClick={() => { setMenu(null); openAutomation(); }}><Icon name="tasks" size={16} />自动化</button>
-          <button className={clsx('nav', section === 'extensions' && 'active')} data-id={top('extensions')} title="连接器、Skills、插件" aria-pressed={section === 'extensions'} onClick={() => { setMenu(null); openExtensions(); }}><Icon name="extensions" size={16} />扩展</button>
+          <button className={clsx('nav', section === 'background' && 'active')} data-id={top('background')} title={tr('在跑的子代理、工作流和后台命令')} aria-pressed={section === 'background'} onClick={() => { setMenu(null); openBackground(); }}><Icon name="office" size={16} />{tr('后台')}</button>
+          <button className={clsx('nav', section === 'automation' && 'active')} data-id={top('automation')} title={tr('定时任务、目标、编排')} aria-pressed={section === 'automation'} onClick={() => { setMenu(null); openAutomation(); }}><Icon name="tasks" size={16} />{tr('自动化')}</button>
+          <button className={clsx('nav', section === 'extensions' && 'active')} data-id={top('extensions')} title={tr('连接器、Skills、插件')} aria-pressed={section === 'extensions'} onClick={() => { setMenu(null); openExtensions(); }}><Icon name="extensions" size={16} />{tr('扩展')}</button>
         </>}
       </nav>
       <NeedsYou ctx={ctx} />
       <div className={clsx('sb-list', selecting && 'selecting')}>
         {selecting && (
-          <div className="sel-bar" data-id={selBar} role="toolbar" aria-label="批量操作">
-            <span className="n">已选 {selected.length}</span>
-            <button className="btn sm ghost" title="只选当前显示出来的对话（展开的项目、已显示的行）" onClick={() => setPicked(allOn ? new Set() : new Set(order))}>{allOn ? '全不选' : `全选 ${rendered.length}`}</button>
+          <div className="sel-bar" data-id={selBar} role="toolbar" aria-label={tr('批量操作')}>
+            <span className="n">{tr('已选 {selectedCount}', { selectedCount: selected.length })}</span>
+            <button className="btn sm ghost" title={tr('只选当前显示出来的对话（展开的项目、已显示的行）')} onClick={() => setPicked(allOn ? new Set() : new Set(order))}>{allOn ? tr('全不选') : tr('全选 {renderedCount}', { renderedCount: rendered.length })}</button>
             <span className="grow" />
-            {selCaps.archive && <button className="btn sm" onClick={async () => { await setArchived(selected, !allArchived); endSelect(); }}><Icon name="archive" size={12} /> {allArchived ? '取消归档' : '归档'}</button>}
-            {selCaps.delete && <button className="btn sm danger" onClick={async () => { if (await deleteSessions(selected)) endSelect(); }}><Icon name="trash" size={12} /> 删除</button>}
-            <button className="btn sm ghost" title="退出多选 (Esc)" onClick={endSelect}>完成</button>
-            {selected.length > 0 && !selCaps.archive && !selCaps.delete && <span className="hint">选中的对话来源不支持批量操作</span>}
+            {selCaps.archive && <button className="btn sm" onClick={async () => { await setArchived(selected, !allArchived); endSelect(); }}><Icon name="archive" size={12} /> {allArchived ? tr('取消归档') : tr('归档')}</button>}
+            {selCaps.delete && <button className="btn sm danger" onClick={async () => { if (await deleteSessions(selected)) endSelect(); }}><Icon name="trash" size={12} /> {tr('删除')}</button>}
+            <button className="btn sm ghost" title={tr('退出多选 (Esc)')} onClick={endSelect}>{tr('完成')}</button>
+            {selected.length > 0 && !selCaps.archive && !selCaps.delete && <span className="hint">{tr('选中的对话来源不支持批量操作')}</span>}
           </div>
         )}
         {narrowed && !selecting && (
           <div className="sb-filtered" role="status">
             <Icon name="filter" size={12} />
             <span className="what" title={summary.join(' · ')}>{summary.join(' · ')}</span>
-            <button className="link" onClick={clearFilters}>清除</button>
+            <button className="link" onClick={clearFilters}>{tr('清除')}</button>
           </div>
         )}
         {pinned.length > 0 && (
-          <Group {...groupProps('__pinned', pinned)} section dataId={sec('pinned')} name="置顶" icon="pin" className="pinned" />
+          <Group {...groupProps('__pinned', pinned)} section dataId={sec('pinned')} name={tr('置顶')} icon="pin" className="pinned" />
         )}
         <div className="sb-sec" data-id={sec('projects')}>
           <div className="sb-sec-h">
-            <span>项目</span>
+            <span>{trAs('项目', 'Projects')}</span>
             <span className="grow" />
             <span className="anchor">
-              <button className={clsx('icon-btn xs', (narrowed || showArchived || menu === 'filter') && 'on')} data-id={head('filter')} title="筛选：来源 / 机器 / 已归档 / 选择多个" aria-label="筛选" aria-haspopup="menu" aria-expanded={menu === 'filter'} onClick={toggleMenu('filter')}>
+              <button className={clsx('icon-btn xs', (narrowed || showArchived || menu === 'filter') && 'on')} data-id={head('filter')} title={tr('筛选：来源 / 机器 / 已归档 / 选择多个')} aria-label={tr('筛选')} aria-haspopup="menu" aria-expanded={menu === 'filter'} onClick={toggleMenu('filter')}>
                 <Icon name="filter" size={14} />{(narrowed || showArchived) && <span className="fdot" />}
               </button>
               {menu === 'filter' && (
@@ -297,12 +298,12 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
                 />
               )}
             </span>
-            <button className="icon-btn xs" data-id={head('add-project')} title="打开文件夹（添加项目）" aria-label="打开文件夹" onClick={pickWorkspace}><Icon name="plus" size={15} /></button>
+            <button className="icon-btn xs" data-id={head('add-project')} title={tr('打开文件夹（添加项目）')} aria-label={tr('打开文件夹')} onClick={pickWorkspace}><Icon name="plus" size={15} /></button>
           </div>
           {empty && (
             <div className="ws-empty sb-empty" data-empty={empty.openButton ? 'open' : 'make-project'}>
               {empty.text}
-              {empty.openButton && <div><button className="btn sm primary" onClick={pickWorkspace}><Icon name="folder" size={13} /> 打开文件夹</button></div>}
+              {empty.openButton && <div><button className="btn sm primary" onClick={pickWorkspace}><Icon name="folder" size={13} /> {tr('打开文件夹')}</button></div>}
             </div>
           )}
           {workspaces.map((w) => {
@@ -341,12 +342,12 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
                 {...groupProps(w.id, arr)}
                 name={w.name}
                 icon="folder"
-                title={drag ? `${w.path}\n拖动可以调整项目的顺序` : w.path}
+                title={drag ? tr("{path}\n拖动可以调整项目的顺序", { path: w.path }) : w.path}
                 onContextMenu={projMenu}
                 drag={drag}
                 actions={<>
-                  <button className="icon-btn xs" data-id={pm('new-here')} title="在这里新建对话" aria-label="在这里新建对话" onClick={() => { void useStore.getState().openSession({ cwd: w.path }).catch((e) => toast(e.message)); closeDrawer(); }}><Icon name="edit" size={13} /></button>
-                  <button className="icon-btn xs" title="更多" aria-label="项目菜单" aria-haspopup="menu" aria-expanded={menu === mk} onClick={projMenu}><Icon name="more" size={14} /></button>
+                  <button className="icon-btn xs" data-id={pm('new-here')} title={tr('在这里新建对话')} aria-label={tr('在这里新建对话')} onClick={() => { void useStore.getState().openSession({ cwd: w.path }).catch((e) => toast(e.message)); closeDrawer(); }}><Icon name="edit" size={13} /></button>
+                  <button className="icon-btn xs" title={tr('更多')} aria-label={tr('项目菜单')} aria-haspopup="menu" aria-expanded={menu === mk} onClick={projMenu}><Icon name="more" size={14} /></button>
                 </>}
                 menu={menu === mk ? <ProjectMenu w={w} onClose={() => closeMenu(mk)} /> : undefined}
               />
@@ -355,17 +356,17 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
         </div>
         {grouped.other.length > 0 && (
           <div className="sb-sec" data-id={sec('other')}>
-            <div className="sb-sec-h" title="不在项目里的对话，每个文件夹一组，最近用过的在上面"><span>文件夹</span></div>
+            <div className="sb-sec-h" title={tr('不在项目里的对话，每个文件夹一组，最近用过的在上面')}><span>{tr('文件夹')}</span></div>
             {folders.recent.map(([cwd, arr]) => folderGroup(cwd, arr))}
             {folders.older.length > 0 && (
               <>
-                <div className="sb-sec-h fold sb-older-h" data-id="older" role="button" tabIndex={0} aria-expanded={!otherCollapsed} onClick={() => toggleGroup('__older', otherCollapsed)} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggleGroup('__older', otherCollapsed); } }} title="更早用过的文件夹">
+                <div className="sb-sec-h fold sb-older-h" data-id="older" role="button" tabIndex={0} aria-expanded={!otherCollapsed} onClick={() => toggleGroup('__older', otherCollapsed)} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggleGroup('__older', otherCollapsed); } }} title={tr('更早用过的文件夹')}>
                   <Icon name={otherCollapsed ? 'chevronRight' : 'chevronDown'} size={12} className="sec-chev" />
-                  <span>更早的文件夹</span>
-                  {otherCollapsed && (otherBusy ? <span className="spin" title="有对话在运行" /> : <span className="n">{folders.older.length}</span>)}
+                  <span>{tr('更早的文件夹')}</span>
+                  {otherCollapsed && (otherBusy ? <span className="spin" title={tr('有对话在运行')} /> : <span className="n">{folders.older.length}</span>)}
                 </div>
                 {otherKept.length > 0 && (
-                  <div className="sb-rows sb-kept" role="group" aria-label="更早的文件夹里当前 / 运行中的对话">
+                  <div className="sb-rows sb-kept" role="group" aria-label={tr('更早的文件夹里当前 / 运行中的对话')}>
                     {otherKept.map((s) => (
                       <div key={s.sessionId} className="sb-row-wrap">
                         <SessionRow s={s} ctx={ctx} flat />
@@ -381,7 +382,7 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
         )}
         {grouped.peers.length > 0 && (
           <div className="sb-sec" data-id={sec('peers')}>
-            <div className="sb-sec-h"><span>其它电脑</span></div>
+            <div className="sb-sec-h"><span>{tr('其它电脑')}</span></div>
             {grouped.peers.map(([id, arr]) => {
               const k = `peer:${id}`;
               const p = arr[0]?.peer;
@@ -392,15 +393,15 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
                   name={p?.name ?? id}
                   icon="machine"
                   className="peer"
-                  title={p?.offline ? '离线：显示上次的列表，只读' : '在另一台电脑上：打开、续聊、审批都经那台电脑'}
-                  badge={p?.offline ? <span className="badge">离线</span> : undefined}
+                  title={p?.offline ? tr('离线：显示上次的列表，只读') : tr('在另一台电脑上：打开、续聊、审批都经那台电脑')}
+                  badge={p?.offline ? <span className="badge">{tr('离线')}</span> : undefined}
                 />
               );
             })}
           </div>
         )}
         {!visible.length && narrowed && (
-          <div className="empty sb-empty">没有匹配的对话<div><button className="btn sm" onClick={clearFilters}>清除筛选</button></div></div>
+          <div className="empty sb-empty">{tr('没有匹配的对话')}<div><button className="btn sm" onClick={clearFilters}>{tr('清除筛选')}</button></div></div>
         )}
       </div>
       {pending.length > 0 && hintOk && <DiscoveryHint pending={pending} />}

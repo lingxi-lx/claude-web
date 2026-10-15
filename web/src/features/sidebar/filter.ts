@@ -1,4 +1,5 @@
 import type { AgentKind, SessionMeta, SessionSummary } from '@shared';
+import { tr } from '@/i18n';
 
 export interface SessionFilter {
   source: AgentKind | 'all';
@@ -19,7 +20,7 @@ export interface MachineCount { id: string; name: string; n: number; offline?: b
 
 /** 「本机」 first, then every machine that has sessions in the list (children excluded), for the machine chips. */
 export function machineCounts(all: SessionSummary[]): MachineCount[] {
-  const out = new Map<string, MachineCount>([['local', { id: 'local', name: '本机', n: 0 }]]);
+  const out = new Map<string, MachineCount>([['local', { id: 'local', name: tr('本机'), n: 0 }]]);
   for (const s of all) {
     if (s.parentId) continue;
     const id = machineOf(s);

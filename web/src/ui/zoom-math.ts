@@ -1,3 +1,4 @@
+import { tr } from '@/i18n';
 // 界面缩放, the pure part: how a factor reads, and what a window says after a request. The desktop shell owns the
 // factor (desktop/src/zoom.ts); the page shows it and asks for changes (ui/zoom.ts).
 
@@ -20,10 +21,10 @@ export const ZOOM_TOP = 3;
  */
 export function zoomNotice(e: ZoomOutcome): string | null {
   const now = zoomPercent(e.zoom);
-  if (e.changed) return `界面缩放 ${now}`;
-  if (e.ask === 'in') return e.max < ZOOM_TOP ? `已经放到最大了（${now}）：再大，窗口就放不进这块屏幕` : `已经放到最大了（${now}）`;
-  if (e.ask === 'out') return `已经缩到最小了（${now}）`;
-  if (e.ask === 'reset') return `界面缩放已经是 ${now}`;
+  if (e.changed) return tr('界面缩放 {now}', { now });
+  if (e.ask === 'in') return e.max < ZOOM_TOP ? tr('已经放到最大了（{now}）：再大，窗口就放不进这块屏幕', { now }) : tr('已经放到最大了（{now}）', { now });
+  if (e.ask === 'out') return tr('已经缩到最小了（{now}）', { now });
+  if (e.ask === 'reset') return tr('界面缩放已经是 {now}', { now });
   return null;
 }
 

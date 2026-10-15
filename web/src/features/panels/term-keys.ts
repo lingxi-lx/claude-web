@@ -1,3 +1,4 @@
+import { tr } from '@/i18n';
 // The row of keys above a phone's keyboard in the terminal (TerminalPanel.tsx draws it; UI refresh §8 「终端」):
 // which keys there are, and what a tap — or the next typed character with Ctrl / Alt armed — sends to the pty.
 // Pure. The byte sequences are the ones xterm.js sends for the same keys on a real keyboard.
@@ -17,21 +18,21 @@ export interface TermKeyDef {
 export const TERM_KEYS: readonly TermKeyDef[] = [
   { id: 'esc', label: 'Esc', name: 'Esc' },
   { id: 'tab', label: 'Tab', name: 'Tab' },
-  { id: 'ctrl', label: 'Ctrl', name: 'Ctrl（按一下，对下一个键生效）', sticky: true },
-  { id: 'alt', label: 'Alt', name: 'Alt（按一下，对下一个键生效）', sticky: true },
-  { id: 'up', label: '↑', name: '上' },
-  { id: 'down', label: '↓', name: '下' },
-  { id: 'left', label: '←', name: '左' },
-  { id: 'right', label: '→', name: '右' },
-  { id: 'ctrl-c', label: 'Ctrl+C', name: 'Ctrl+C（中断）' },
-  { id: 'paste', label: '粘贴', name: '粘贴' },
+  { id: 'ctrl', label: 'Ctrl', name: tr('Ctrl（按一下，对下一个键生效）'), sticky: true },
+  { id: 'alt', label: 'Alt', name: tr('Alt（按一下，对下一个键生效）'), sticky: true },
+  { id: 'up', label: '↑', name: tr('上') },
+  { id: 'down', label: '↓', name: tr('下') },
+  { id: 'left', label: '←', name: tr('左') },
+  { id: 'right', label: '→', name: tr('右') },
+  { id: 'ctrl-c', label: 'Ctrl+C', name: tr('Ctrl+C（中断）') },
+  { id: 'paste', label: tr('粘贴'), name: tr('粘贴') },
 ];
-export const TERM_KEYS_LABEL = '终端按键';
+export const TERM_KEYS_LABEL = tr('终端按键');
 
 /** The browser has no clipboard to read from here (not https), it refused, or there was no text in it. */
-export const PASTE_NO_API = '浏览器没有允许读取剪贴板：这个地址不是 https，浏览器不提供剪贴板';
-export const PASTE_DENIED = '浏览器没有允许读取剪贴板';
-export const PASTE_EMPTY = '剪贴板里没有文字';
+export const PASTE_NO_API = tr('浏览器没有允许读取剪贴板：这个地址不是 https，浏览器不提供剪贴板');
+export const PASTE_DENIED = tr('浏览器没有允许读取剪贴板');
+export const PASTE_EMPTY = tr('剪贴板里没有文字');
 
 /** Which sticky keys are armed. */
 export interface Mods { ctrl: boolean; alt: boolean }

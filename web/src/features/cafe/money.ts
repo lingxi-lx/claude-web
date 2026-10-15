@@ -1,6 +1,7 @@
 // 网吧's prices (spec §3): the seat's 网费 is make-believe (元 per hour, `cafe.rate`); the dollars are a rough estimate
 // from the real token count — the model's input price on all of it (a sub-agent reports one total), so it is low.
 import { claudeInputPrice } from '../../../../server/src/usage/pricing';
+import { tr } from '@/i18n';
 
 export const DEFAULT_RATE = 5;
 
@@ -17,4 +18,4 @@ export function estimateUsd(tokens: number | undefined, model: string | undefine
 }
 
 export const yuan = (n: number) => `¥${n.toFixed(2)}`;
-export const usd = (n: number | undefined) => (n === undefined ? '费用未知' : `约 $${n < 0.01 ? n.toFixed(3) : n.toFixed(2)}`);
+export const usd = (n: number | undefined) => (n === undefined ? tr('费用未知') : tr('约 ${n}', { n: n < 0.01 ? n.toFixed(3) : n.toFixed(2) }));

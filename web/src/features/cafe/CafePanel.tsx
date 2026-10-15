@@ -4,6 +4,7 @@ import { lazy, Suspense } from 'react';
 import { useStore } from '@/store';
 import { openAgent, openBackground, useBackground } from '@/features/background/state';
 import { ErrorBoundary } from '@/ui/ErrorBoundary';
+import { tr } from '@/i18n';
 
 const Cafe = lazy(() => import('./Cafe').then((m) => ({ default: m.Cafe })));
 
@@ -12,7 +13,7 @@ export function CafePanel() {
   const session = useBackground((s) => (sid ? s.sessions[sid] : undefined));
   return (
     <div className="cafe-panel">
-      <ErrorBoundary area="网吧">
+      <ErrorBoundary area={tr('网吧')}>
         <Suspense fallback={null}>
           <Cafe
             session={session ?? (sid ? { sessionId: sid, updatedAt: 0, tasks: [], events: [] } : undefined)}

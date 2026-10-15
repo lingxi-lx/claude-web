@@ -17,6 +17,7 @@ import type http from 'node:http';
 import { Agent, Dispatcher, ProxyAgent, setGlobalDispatcher } from 'undici';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import type { ProxyStatus } from '../protocol.js';
+import { tr } from '../i18n/index.js';
 
 type Env = Record<string, string | undefined>;
 
@@ -190,10 +191,10 @@ export interface SystemProxy { url: string; noProxy: string[]; source: 'system' 
 export function parseProxySetting(v: unknown): { mode: 'system' } | { mode: 'off' } | { mode: 'custom'; url: string } {
   if (v === undefined || v === null || v === '' || v === 'system') return { mode: 'system' };
   if (v === 'off') return { mode: 'off' };
-  if (typeof v !== 'string') throw new Error('代理设置无效');
-  if (/^socks/i.test(v.trim())) throw new Error('暂不支持 SOCKS 代理：请填梯子的 HTTP 代理端口（Clash 的混合端口也可以）');
+  if (typeof v !== 'string') throw new Error(tr('代理设置无效'));
+  if (/^socks/i.test(v.trim())) throw new Error(tr('暂不支持 SOCKS 代理：请填梯子的 HTTP 代理端口（Clash 的混合端口也可以）'));
   const url = normalizeProxyUrl(v, true);
-  if (!url) throw new Error('代理地址无效：填 http://127.0.0.1:7890 这样的地址');
+  if (!url) throw new Error(tr('代理地址无效：填 http://127.0.0.1:7890 这样的地址'));
   return { mode: 'custom', url };
 }
 
@@ -254,7 +255,7 @@ export class ProxyManager {
     if (s.mode === 'custom') {
       url = s.url;
       source = 'setting';
-      if (!(await this.d.reachable(url))) note = `连不上 ${maskProxy(url)}：梯子开着吗？`;
+      if (!(await this.d.reachable(url))) note = tr('连不上 {maskProxy}：梯子开着吗？', { maskProxy: maskProxy(url) });
     } else if (s.mode === 'system') {
       if (envUrl) {
         url = envUrl;
@@ -270,7 +271,7 @@ export class ProxyManager {
             source = found.proxy.source;
             extra = found.proxy.noProxy;
           } else {
-            note = `系统代理 ${maskProxy(found.proxy.url)} 连不上（梯子可能已经退出），现在直连`;
+            note = tr('系统代理 {maskProxy} 连不上（梯子可能已经退出），现在直连', { maskProxy: maskProxy(found.proxy.url) });
           }
         }
       }
@@ -346,13 +347,13 @@ export async function detectSystemProxy(platform: NodeJS.Platform = process.plat
     if (/^0x0*1$/i.test(v.ProxyEnable ?? '')) {
       const url = parseProxyServer(v.ProxyServer ?? '');
       if (url) return { proxy: { url, noProxy, source: 'system' } };
-      if (v.ProxyServer) return { proxy: null, note: '系统代理只有 SOCKS：请在这里填梯子的 HTTP 代理地址' };
+      if (v.ProxyServer) return { proxy: null, note: tr('系统代理只有 SOCKS：请在这里填梯子的 HTTP 代理地址') };
     }
     if (v.AutoConfigURL) {
       const pac = await fetchPac(v.AutoConfigURL);
       const url = pac ? pacProxy(pac) : null;
       if (url) return { proxy: { url, noProxy, source: 'pac' } };
-      return { proxy: null, note: pac ? 'PAC 脚本里没有 HTTP 代理（可能只有 SOCKS）：请在这里填梯子的 HTTP 代理地址' : '读不到系统设置的 PAC 脚本' };
+      return { proxy: null, note: pac ? tr('PAC 脚本里没有 HTTP 代理（可能只有 SOCKS）：请在这里填梯子的 HTTP 代理地址') : tr('读不到系统设置的 PAC 脚本') };
     }
     return { proxy: null };
   }

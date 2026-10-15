@@ -1,6 +1,7 @@
 // The web tools as a conversation shows them (server/src/web/mcp.ts: the MCP server `web`): a step's verb and target,
 // and what a permission card asks. Pure.
 import type { IconName } from '@/ui/icons';
+import { tr } from '@/i18n';
 
 export const WEB_TOOLS = ['web_search', 'browser_open', 'browser_read', 'browser_find', 'browser_click', 'browser_type', 'browser_press_key', 'browser_scroll', 'browser_back', 'browser_screenshot', 'browser_computer', 'character_guide', 'character_draft', 'character_save', 'character_assign', 'character_list'] as const;
 export type WebTool = (typeof WEB_TOOLS)[number];
@@ -27,51 +28,51 @@ export interface WebToolLabel { icon: IconName; verb: string; arg: string }
 
 export function webToolLabel(tool: WebTool, input: Record<string, unknown> | undefined): WebToolLabel {
   switch (tool) {
-    case 'web_search': return { icon: 'search', verb: '搜索网页:', arg: str(input, 'query') };
-    case 'browser_open': return { icon: 'web', verb: '打开网页:', arg: shortAddress(str(input, 'url')) };
-    case 'browser_read': return { icon: 'web', verb: '读网页', arg: Number(input?.offset) > 0 ? `从第 ${Number(input?.offset)} 个字符` : '' };
-    case 'browser_find': return { icon: 'search', verb: '在网页里找:', arg: str(input, 'query') };
-    case 'browser_click': return { icon: 'cursor', verb: '点击网页:', arg: refText(input?.ref) };
-    case 'browser_type': return { icon: 'keyboard', verb: '在网页里输入:', arg: `${str(input, 'text').slice(0, 80)}${input?.submit === true ? ' ↵' : ''}` };
-    case 'browser_press_key': return { icon: 'keyboard', verb: '按键:', arg: str(input, 'key') };
-    case 'browser_scroll': return { icon: 'web', verb: input?.direction === 'up' ? '向上滚动网页' : '向下滚动网页', arg: '' };
-    case 'browser_back': return { icon: 'web', verb: '返回上一页', arg: '' };
-    case 'browser_screenshot': return { icon: 'image', verb: '给网页截图', arg: '' };
+    case 'web_search': return { icon: 'search', verb: tr('搜索网页:'), arg: str(input, 'query') };
+    case 'browser_open': return { icon: 'web', verb: tr('打开网页:'), arg: shortAddress(str(input, 'url')) };
+    case 'browser_read': return { icon: 'web', verb: tr('读网页'), arg: Number(input?.offset) > 0 ? tr('从第 {offset} 个字符', { offset: Number(input?.offset) }) : '' };
+    case 'browser_find': return { icon: 'search', verb: tr('在网页里找:'), arg: str(input, 'query') };
+    case 'browser_click': return { icon: 'cursor', verb: tr('点击网页:'), arg: refText(input?.ref) };
+    case 'browser_type': return { icon: 'keyboard', verb: tr('在网页里输入:'), arg: `${str(input, 'text').slice(0, 80)}${input?.submit === true ? ' ↵' : ''}` };
+    case 'browser_press_key': return { icon: 'keyboard', verb: tr('按键:'), arg: str(input, 'key') };
+    case 'browser_scroll': return { icon: 'web', verb: input?.direction === 'up' ? tr('向上滚动网页') : tr('向下滚动网页'), arg: '' };
+    case 'browser_back': return { icon: 'web', verb: tr('返回上一页'), arg: '' };
+    case 'browser_screenshot': return { icon: 'image', verb: tr('给网页截图'), arg: '' };
     case 'browser_computer': return computerLabel(input);
     // 网吧's characters (server/src/characters/tool-defs.ts) ride on the same server
-    case 'character_guide': return { icon: 'user', verb: '看捏角色的说明', arg: '' };
-    case 'character_draft': { const c = input?.character as Record<string, unknown> | undefined; return { icon: 'user', verb: '画角色草稿:', arg: str(c, 'name') || str(c, 'id') }; }
-    case 'character_save': return { icon: 'user', verb: '保存角色:', arg: str(input, 'id') };
-    case 'character_assign': return { icon: 'user', verb: input?.id === null ? '收回角色:' : '把角色给:', arg: input?.id === null ? targetText(str(input, 'target')) : `${str(input, 'id')} → ${targetText(str(input, 'target'))}` };
-    case 'character_list': return { icon: 'user', verb: '看角色库', arg: '' };
+    case 'character_guide': return { icon: 'user', verb: tr('看捏角色的说明'), arg: '' };
+    case 'character_draft': { const c = input?.character as Record<string, unknown> | undefined; return { icon: 'user', verb: tr('画角色草稿:'), arg: str(c, 'name') || str(c, 'id') }; }
+    case 'character_save': return { icon: 'user', verb: tr('保存角色:'), arg: str(input, 'id') };
+    case 'character_assign': return { icon: 'user', verb: input?.id === null ? tr('收回角色:') : tr('把角色给:'), arg: input?.id === null ? targetText(str(input, 'target')) : `${str(input, 'id')} → ${targetText(str(input, 'target'))}` };
+    case 'character_list': return { icon: 'user', verb: tr('看角色库'), arg: '' };
   }
 }
 
 /** `type:Explore` → 「Explore 类子代理」 */
 function targetText(t: string): string {
-  if (t === 'admin') return '网管';
-  if (t === 'default') return '所有客人';
-  if (t.startsWith('type:')) return `${t.slice(5)} 类子代理`;
-  if (t.startsWith('name:')) return `叫 ${t.slice(5)} 的客人`;
+  if (t === 'admin') return tr('网管');
+  if (t === 'default') return tr('所有客人');
+  if (t.startsWith('type:')) return tr('{t} 类子代理', { t: t.slice(5) });
+  if (t.startsWith('name:')) return tr('叫 {t} 的客人', { t: t.slice(5) });
   return t;
 }
 
 const at = (v: unknown) => (Array.isArray(v) && v.length === 2 && v.every((n) => typeof n === 'number') ? `(${Math.round(v[0] as number)}, ${Math.round(v[1] as number)})` : '');
-const CLICKS: Record<string, string> = { left_click: '点击网页', right_click: '右键点击网页', middle_click: '中键点击网页', double_click: '双击网页', triple_click: '三连击网页' };
+const CLICKS: Record<string, string> = { left_click: tr('点击网页'), right_click: tr('右键点击网页'), middle_click: tr('中键点击网页'), double_click: tr('双击网页'), triple_click: tr('三连击网页') };
 
 /** browser_computer: the mouse and keyboard by position — said as what is done, where. */
 function computerLabel(input: Record<string, unknown> | undefined): WebToolLabel {
   const action = str(input, 'action');
   if (CLICKS[action]) return { icon: 'cursor', verb: `${CLICKS[action]}:`, arg: at(input?.coordinate) };
   switch (action) {
-    case 'screenshot': return { icon: 'image', verb: '给网页截图', arg: '' };
-    case 'mouse_move': return { icon: 'cursor', verb: '把鼠标移到:', arg: at(input?.coordinate) };
-    case 'left_click_drag': return { icon: 'cursor', verb: '在网页上拖动:', arg: `${at(input?.start_coordinate)} → ${at(input?.coordinate)}` };
-    case 'scroll': return { icon: 'web', verb: `${{ up: '向上', down: '向下', left: '向左', right: '向右' }[str(input, 'scroll_direction')] ?? ''}滚动网页`, arg: '' };
-    case 'type': return { icon: 'keyboard', verb: '在网页里输入:', arg: str(input, 'text').slice(0, 80) };
-    case 'key': return { icon: 'keyboard', verb: '按键:', arg: str(input, 'text') };
-    case 'wait': return { icon: 'web', verb: '等网页一会儿', arg: '' };
-    default: return { icon: 'cursor', verb: '操作网页', arg: '' };
+    case 'screenshot': return { icon: 'image', verb: tr('给网页截图'), arg: '' };
+    case 'mouse_move': return { icon: 'cursor', verb: tr('把鼠标移到:'), arg: at(input?.coordinate) };
+    case 'left_click_drag': return { icon: 'cursor', verb: tr('在网页上拖动:'), arg: `${at(input?.start_coordinate)} → ${at(input?.coordinate)}` };
+    case 'scroll': return { icon: 'web', verb: tr('{v}滚动网页', { v: { up: tr('向上'), down: tr('向下'), left: tr('向左'), right: tr('向右') }[str(input, 'scroll_direction')] ?? '' }), arg: '' };
+    case 'type': return { icon: 'keyboard', verb: tr('在网页里输入:'), arg: str(input, 'text').slice(0, 80) };
+    case 'key': return { icon: 'keyboard', verb: tr('按键:'), arg: str(input, 'text') };
+    case 'wait': return { icon: 'web', verb: tr('等网页一会儿'), arg: '' };
+    default: return { icon: 'cursor', verb: tr('操作网页'), arg: '' };
   }
 }
 const refText = (ref: unknown) => (typeof ref === 'string' || typeof ref === 'number' ? `[${String(ref).replace(/^\[|\]$/g, '')}]` : '');
@@ -79,28 +80,28 @@ const refText = (ref: unknown) => (typeof ref === 'string' || typeof ref === 'nu
 /** 「Claude 想在浏览器里打开 github.com」: what a permission card asks for a web tool. */
 export function webToolAsk(tool: WebTool, input: Record<string, unknown> | undefined, agent: string): string {
   switch (tool) {
-    case 'web_search': return `${agent} 想搜索网页`;
-    case 'browser_open': { const h = host(str(input, 'url')); return h ? `${agent} 想在浏览器里打开 ${h}` : `${agent} 想在浏览器里打开一个网页`; }
-    case 'browser_read': return `${agent} 想读浏览器里的网页`;
-    case 'browser_find': return `${agent} 想在网页里查找`;
-    case 'browser_click': return `${agent} 想在网页上点一下`;
-    case 'browser_type': return input?.submit === true ? `${agent} 想在网页上输入并提交` : `${agent} 想在网页上输入文字`;
-    case 'browser_press_key': return `${agent} 想在网页上按键`;
-    case 'browser_scroll': return `${agent} 想滚动网页`;
-    case 'browser_back': return `${agent} 想让网页返回上一页`;
-    case 'browser_screenshot': return `${agent} 想给网页截图`;
+    case 'web_search': return tr('{agent} 想搜索网页', { agent });
+    case 'browser_open': { const h = host(str(input, 'url')); return h ? tr('{agent} 想在浏览器里打开 {h}', { agent, h }) : tr('{agent} 想在浏览器里打开一个网页', { agent }); }
+    case 'browser_read': return tr('{agent} 想读浏览器里的网页', { agent });
+    case 'browser_find': return tr('{agent} 想在网页里查找', { agent });
+    case 'browser_click': return tr('{agent} 想在网页上点一下', { agent });
+    case 'browser_type': return input?.submit === true ? tr('{agent} 想在网页上输入并提交', { agent }) : tr('{agent} 想在网页上输入文字', { agent });
+    case 'browser_press_key': return tr('{agent} 想在网页上按键', { agent });
+    case 'browser_scroll': return tr('{agent} 想滚动网页', { agent });
+    case 'browser_back': return tr('{agent} 想让网页返回上一页', { agent });
+    case 'browser_screenshot': return tr('{agent} 想给网页截图', { agent });
     case 'browser_computer': {
       const action = str(input, 'action');
-      if (action === 'screenshot') return `${agent} 想给网页截图`;
-      if (action === 'type') return `${agent} 想在网页上输入文字`;
-      if (action === 'key') return `${agent} 想在网页上按键`;
-      if (action === 'scroll') return `${agent} 想滚动网页`;
-      if (action === 'wait') return `${agent} 想等网页一会儿`;
-      if (action === 'left_click_drag') return `${agent} 想在网页上拖动鼠标`;
-      if (action === 'mouse_move') return `${agent} 想在网页上移动鼠标`;
-      return `${agent} 想用鼠标点网页上的一个位置`;
+      if (action === 'screenshot') return tr('{agent} 想给网页截图', { agent });
+      if (action === 'type') return tr('{agent} 想在网页上输入文字', { agent });
+      if (action === 'key') return tr('{agent} 想在网页上按键', { agent });
+      if (action === 'scroll') return tr('{agent} 想滚动网页', { agent });
+      if (action === 'wait') return tr('{agent} 想等网页一会儿', { agent });
+      if (action === 'left_click_drag') return tr('{agent} 想在网页上拖动鼠标', { agent });
+      if (action === 'mouse_move') return tr('{agent} 想在网页上移动鼠标', { agent });
+      return tr('{agent} 想用鼠标点网页上的一个位置', { agent });
     }
-    case 'character_assign': return input?.id === null ? `${agent} 想把${targetText(str(input, 'target'))}换回默认形象` : `${agent} 想把角色 ${str(input, 'id')} 给${targetText(str(input, 'target'))}`;
-    case 'character_guide': case 'character_draft': case 'character_save': case 'character_list': return `${agent} 想改网吧的角色库`;
+    case 'character_assign': return input?.id === null ? tr('{agent} 想把{targetText}换回默认形象', { agent, targetText: targetText(str(input, 'target')) }) : tr('{agent} 想把角色 {str} 给{targetText}', { agent, str: str(input, 'id'), targetText: targetText(str(input, 'target')) });
+    case 'character_guide': case 'character_draft': case 'character_save': case 'character_list': return tr('{agent} 想改网吧的角色库', { agent });
   }
 }

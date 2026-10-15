@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { chunk, type AdapterState, type ImAdapter, type OutboundOptions } from './types.js';
 import { proxyAgentFor } from '../net/proxy.js';
+import { tr } from '../i18n/index.js';
 
 /** Feishu / Lark bot over the SDK's long connection (no public URL). Buttons are interactive cards → card.action.trigger. */
 export class FeishuAdapter extends EventEmitter implements ImAdapter {
@@ -44,7 +45,7 @@ export class FeishuAdapter extends EventEmitter implements ImAdapter {
           const id = data.action?.value?.id;
           if (!id) return {};
           this.emit('message', { chatId: data.context?.open_chat_id ?? '', userId: data.operator?.open_id ?? '', userName: '', text: '', callback: id, raw: data });
-          return { toast: { type: 'success', content: '已收到' } };
+          return { toast: { type: 'success', content: tr('已收到') } };
         },
       });
       this.wsClient = new Lark.WSClient({ appId: this.appId, appSecret: this.appSecret, domain, agent, loggerLevel: Lark.LoggerLevel.error });
@@ -62,8 +63,8 @@ export class FeishuAdapter extends EventEmitter implements ImAdapter {
   }
 
   async send(chatId: string, text: string, o: OutboundOptions = {}) {
-    if (!this.client) throw new Error('未连接');
-    const parts = chunk(text || '(空)', this.maxLen);
+    if (!this.client) throw new Error(tr('未连接'));
+    const parts = chunk(text || tr('(空)'), this.maxLen);
     for (let i = 0; i < parts.length; i++) {
       const last = i === parts.length - 1;
       if (last && o.buttons?.length) {

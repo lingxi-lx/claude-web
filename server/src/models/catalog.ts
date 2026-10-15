@@ -1,4 +1,5 @@
 import type { AgentKind, EffortLevel, ModelInfo, ProviderType, RuntimeKind } from '../protocol.js';
+import { tr } from '../i18n/index.js';
 
 /**
  * The one model / effort table.
@@ -48,12 +49,12 @@ export interface AgentCatalog {
 export const CATALOG: Partial<Record<AgentKind, AgentCatalog>> = {
   claude: {
     models: [
-      { id: 'claude-fable-5-1', label: 'Fable 5.1', hint: '最强，慢、贵', effort: FIVE },
-      { id: 'claude-opus-5-5', label: 'Opus 5.5', hint: '复杂任务', effort: FIVE },
-      { id: 'claude-sonnet-5-5', label: 'Sonnet 5.5', hint: '日常编码', effort: FIVE },
-      { id: 'claude-sonnet-5', label: 'Sonnet 5', hint: '日常编码（官方 sonnet 别名）', effort: FIVE },
-      { id: 'claude-opus-5', label: 'Opus 5', hint: '复杂任务', effort: FIVE },
-      { id: 'claude-haiku-4-5', label: 'Haiku 4.5', hint: '快、便宜', effort: FIVE },
+      { id: 'claude-fable-5-1', label: 'Fable 5.1', hint: tr('最强，慢、贵'), effort: FIVE },
+      { id: 'claude-opus-5-5', label: 'Opus 5.5', hint: tr('复杂任务'), effort: FIVE },
+      { id: 'claude-sonnet-5-5', label: 'Sonnet 5.5', hint: tr('日常编码'), effort: FIVE },
+      { id: 'claude-sonnet-5', label: 'Sonnet 5', hint: tr('日常编码（官方 sonnet 别名）'), effort: FIVE },
+      { id: 'claude-opus-5', label: 'Opus 5', hint: tr('复杂任务'), effort: FIVE },
+      { id: 'claude-haiku-4-5', label: 'Haiku 4.5', hint: tr('快、便宜'), effort: FIVE },
       { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', effort: FIVE, legacy: true },
       { id: 'claude-fable-5', label: 'Fable 5', effort: FIVE, legacy: true },
       { id: 'claude-opus-4-8', label: 'Opus 4.8', effort: FIVE, legacy: true },
@@ -75,10 +76,10 @@ export const CATALOG: Partial<Record<AgentKind, AgentCatalog>> = {
   },
   codex: {
     models: [
-      { id: 'gpt-5.6-sol', label: '5.6 Sol', hint: '旗舰，推荐默认' },
+      { id: 'gpt-5.6-sol', label: '5.6 Sol', hint: tr('旗舰，推荐默认') },
       { id: 'gpt-5.6-terra', label: '5.6 Terra' },
-      { id: 'gpt-5.6-luna', label: '5.6 Luna', hint: '快' },
-      { id: 'gpt-5.6-pro', label: '5.6 Pro', hint: '最深推理，慢' },
+      { id: 'gpt-5.6-luna', label: '5.6 Luna', hint: tr('快') },
+      { id: 'gpt-5.6-pro', label: '5.6 Pro', hint: tr('最深推理，慢') },
       { id: 'gpt-5.5', label: '5.5', legacy: true },
       { id: 'gpt-5.3-codex-spark', label: '5.3 Codex Spark', legacy: true },
     ],
@@ -90,26 +91,26 @@ export const CATALOG: Partial<Record<AgentKind, AgentCatalog>> = {
   gemini: {
     models: [
       { id: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro' },
-      { id: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash Lite', hint: '快' },
+      { id: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash Lite', hint: tr('快') },
       { id: 'gemini-3-pro', label: 'Gemini 3 Pro' },
       { id: 'gemini-3-flash', label: 'Gemini 3 Flash' },
     ],
     effort: [],
     supportsEffort: false,
-    note: 'Gemini CLI 不能调智能程度：思考深度由它自己的 thinkingLevel 控制，随包 SDK 只有 LOW / HIGH。',
+    note: tr('Gemini CLI 不能调智能程度：思考深度由它自己的 thinkingLevel 控制，随包 SDK 只有 LOW / HIGH。'),
   },
   qwen: {
     models: [{ id: 'qwen3-coder-plus', label: 'Qwen3 Coder Plus' }],
     effort: FIVE,
     supportsEffort: true,
-    note: '官方文档只列出了 qwen3-coder-plus；智能程度会按各家接口的支持情况截断。',
+    note: tr('官方文档只列出了 qwen3-coder-plus；智能程度会按各家接口的支持情况截断。'),
   },
   kimi: {
     models: [],
     effort: [],
     supportsEffort: false,
     unverified: true,
-    note: 'Kimi CLI 的模型表与智能程度开关未能核实，请以 `kimi --help` / 官方文档为准。',
+    note: tr('Kimi CLI 的模型表与智能程度开关未能核实，请以 `kimi --help` / 官方文档为准。'),
   },
 };
 
@@ -235,8 +236,8 @@ export const preferredRuntime = (p: { type: ProviderType; runtime?: RuntimeKind;
  */
 export function profileFitError(agent: AgentKind, type: ProviderType, runtime?: RuntimeKind): string | null {
   const types = providerTypesFor(agent);
-  if (!types.includes(type)) return `${AGENT_LABEL[agent] ?? agent} 不能用 ${type} 类型的供应商（只支持 ${types.join(' / ')}）`;
-  if (agent === 'claude' && runtime === 'claude' && (type === 'openai' || type === 'gemini' || type === 'grok')) return `官方 Claude Code 只支持 Anthropic 兼容 / 模型网关类型的供应商，${type} 类型要换成 ccb 运行内核（设置 → 账号与登录 → 更多选项）`;
+  if (!types.includes(type)) return tr('{agent} 不能用 {type} 类型的供应商（只支持 {types}）', { agent: AGENT_LABEL[agent] ?? agent, type, types: types.join(' / ') });
+  if (agent === 'claude' && runtime === 'claude' && (type === 'openai' || type === 'gemini' || type === 'grok')) return tr('官方 Claude Code 只支持 Anthropic 兼容 / 模型网关类型的供应商，{type} 类型要换成 ccb 运行内核（设置 → 账号与登录 → 更多选项）', { type });
   return null;
 }
 

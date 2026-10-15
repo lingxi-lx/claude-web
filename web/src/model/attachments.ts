@@ -3,6 +3,7 @@ import { authToken } from '@/ws/client';
 import type { AttachmentRef } from '@shared';
 import { skipDirName } from './attachment-filter';
 import { appUrl } from '@/util/app-url';
+import { tr } from '@/i18n';
 
 export const LONG_PASTE_CHARS = 3000;
 export const LONG_PASTE_LINES = 60;
@@ -95,8 +96,8 @@ export async function uploadAttachment(sessionId: string, file: Blob, rel: strin
     const xhr = new XMLHttpRequest();
     xhr.open('POST', url);
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total);
-    xhr.onload = () => (xhr.status === 200 ? res(JSON.parse(xhr.responseText)) : rej(new Error(`上传失败 ${xhr.status}: ${xhr.responseText}`)));
-    xhr.onerror = () => rej(new Error('上传失败：网络错误'));
+    xhr.onload = () => (xhr.status === 200 ? res(JSON.parse(xhr.responseText)) : rej(new Error(tr('上传失败 {status}: {responseText}', { status: xhr.status, responseText: xhr.responseText }))));
+    xhr.onerror = () => rej(new Error(tr('上传失败：网络错误')));
     xhr.send(file);
   });
 }

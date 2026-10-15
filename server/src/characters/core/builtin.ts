@@ -1,4 +1,5 @@
 import type { CharacterDef } from './types.js';
+import { tr } from '../../i18n/index.js';
 
 // The built-in characters (spec §2): the octopus every guest is by default (its colour is the agent's: the renderer
 // swaps the body colours) and the admin — the octopus in a blue cap with a staff badge. Drawn by
@@ -19,7 +20,7 @@ const EYES: [number, number][] = [[7,8],[8,8],[9,8],[15,8],[16,8],[17,8],[7,9],[
 export const OCTOPUS: CharacterDef = {
   v: 1,
   id: 'octopus',
-  name: '小章鱼',
+  name: tr('小章鱼'),
   palette: PALETTE,
   front: [
     "........................",
@@ -80,7 +81,7 @@ export const OCTOPUS: CharacterDef = {
 export const ADMIN: CharacterDef = {
   v: 1,
   id: 'admin',
-  name: '网管',
+  name: tr('网管'),
   palette: { ...PALETTE, b: '#2b6cd6', d: '#1d4a99' },
   front: [
     "............b...........",

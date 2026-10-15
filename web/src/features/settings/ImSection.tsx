@@ -7,6 +7,7 @@ import type { AgentKind, ImGatewayInfo, ImKind, ImKindDef } from '@shared';
 import { ProviderSelect } from '@/features/providers/ProviderSelect';
 import { Icon } from '@/ui/icons';
 import { MODE_LABEL } from '@/ui/terms';
+import { tr } from '@/i18n';
 
 const MODES = (['default', 'acceptEdits', 'bypassPermissions'] as const).map((m) => [m, MODE_LABEL[m]] as const);
 
@@ -36,51 +37,51 @@ function GatewayCard({ g, def, onChange }: { g: ImGatewayInfo; def: ImKindDef; o
   const agentInfo = g.agent ? agents.find((a) => a.kind === g.agent) : undefined;
   const agentName = agentInfo?.name ?? g.agent;
   const defId = g.agent ? agentInfo?.providerId : (settings.defaultProviderId as string | undefined);
-  const sameAsNew = providers.find((p) => p.id === defId)?.name ?? (g.agent ? `${agentName} 自己的登录` : 'Claude 账号');
+  const sameAsNew = providers.find((p) => p.id === defId)?.name ?? (g.agent ? tr('{agentName} 自己的登录', { agentName }) : tr('Claude 账号'));
   return (
     <div className={clsx('row agent-card', !g.enabled && 'muted')} style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span className={clsx('dot', g.state === 'running' ? 'running' : g.state === 'error' ? 'error' : g.state === 'starting' ? 'waiting' : 'idle')} />
         <span style={{ fontSize: 16 }}>{def.icon}</span>
         <div className="grow">
-          <div>{g.name} <span className="muted" style={{ fontSize: 12 }}>{def.name}{g.botName ? ` · ${g.botName}` : ''}</span> {!def.inbound && <span className="badge" style={{ marginLeft: 4 }}>仅通知</span>}</div>
-          <div className={clsx('sub', g.state === 'error' && 'err')}>{g.state === 'running' ? `已连接 · ${g.allowUsers.length} 个授权用户 · ${g.bindings.length} 个聊天` : g.state === 'error' ? g.error : g.state === 'starting' ? '连接中…' : '已停止'}</div>
+          <div>{g.name} <span className="muted" style={{ fontSize: 12 }}>{def.name}{g.botName ? ` · ${g.botName}` : ''}</span> {!def.inbound && <span className="badge" style={{ marginLeft: 4 }}>{tr('仅通知')}</span>}</div>
+          <div className={clsx('sub', g.state === 'error' && 'err')}>{g.state === 'running' ? tr('已连接 · {allowUsersCount} 个授权用户 · {bindingsCount} 个聊天', { allowUsersCount: g.allowUsers.length, bindingsCount: g.bindings.length }) : g.state === 'error' ? g.error : g.state === 'starting' ? tr('连接中…') : tr('已停止')}</div>
         </div>
-        <label className="chip"><input type="checkbox" checked={g.enabled} onChange={(e) => patch({ enabled: e.target.checked })} /> 启用</label>
-        <button className="btn sm ghost" disabled={busy || g.state !== 'running'} onClick={test}>测试</button>
-        <button className="btn sm ghost" onClick={() => setOpen(!open)}>{open ? '收起' : '配置'}</button>
+        <label className="chip"><input type="checkbox" checked={g.enabled} onChange={(e) => patch({ enabled: e.target.checked })} /> {tr('启用')}</label>
+        <button className="btn sm ghost" disabled={busy || g.state !== 'running'} onClick={test}>{tr('测试')}</button>
+        <button className="btn sm ghost" onClick={() => setOpen(!open)}>{open ? tr('收起') : tr('配置')}</button>
       </div>
       {open && (
         <div className="agent-form">
-          <label>名称<input className="field" value={name} onChange={(e) => setName(e.target.value)} /></label>
+          <label>{tr('名称')}<input className="field" value={name} onChange={(e) => setName(e.target.value)} /></label>
           {def.fields.map((fl) => <label key={fl.key}>{fl.label}<input className="field" type={fl.secret ? 'password' : 'text'} value={f[fl.key] ?? ''} onChange={(e) => setF({ ...f, [fl.key]: e.target.value })} placeholder={fl.hint ?? ''} autoComplete="off" /></label>)}
-          <label>默认项目<select className="field" value={g.defaultCwd} onChange={(e) => patch({ defaultCwd: e.target.value })}><option value="">第一个项目</option>{workspaces.map((w) => <option key={w.id} value={w.path}>{w.name} · {w.path}</option>)}</select></label>
-          <label>权限模式<select className="field" value={g.permissionMode} onChange={(e) => patch({ permissionMode: e.target.value })}>{MODES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
-          <label>用哪个 Agent<select className="field" value={g.agent} onChange={(e) => patch({ agent: e.target.value })}><option value="">Claude Code</option>{agents.filter((a) => a.kind !== 'claude' && a.installed && a.enabled).map((a) => <option key={a.kind} value={a.kind}>{a.name}</option>)}</select></label>
+          <label>{tr('默认项目')}<select className="field" value={g.defaultCwd} onChange={(e) => patch({ defaultCwd: e.target.value })}><option value="">{tr('第一个项目')}</option>{workspaces.map((w) => <option key={w.id} value={w.path}>{w.name} · {w.path}</option>)}</select></label>
+          <label>{tr('权限模式')}<select className="field" value={g.permissionMode} onChange={(e) => patch({ permissionMode: e.target.value })}>{MODES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+          <label>{tr('用哪个 Agent')}<select className="field" value={g.agent} onChange={(e) => patch({ agent: e.target.value })}><option value="">Claude Code</option>{agents.filter((a) => a.kind !== 'claude' && a.installed && a.enabled).map((a) => <option key={a.kind} value={a.kind}>{a.name}</option>)}</select></label>
           {/* the bot's new conversations: a relay, the account, or whatever a new conversation in the window gets */}
-          <label>用哪个供应商<ProviderSelect agent={(g.agent || 'claude') as AgentKind} value={g.providerId ?? ''} onChange={(v) => patch({ providerId: v })} first={{ label: `跟新对话一样（${sameAsNew}）`, title: '和在窗口里开新对话时用的一样' }} own={g.agent ? `${agentName} 自己的登录` : 'Claude 账号'} /></label>
-          <label className="chip" style={{ alignSelf: 'end' }}><input type="checkbox" checked={g.verbose} onChange={(e) => patch({ verbose: e.target.checked })} /> 推送工具调用过程</label>
+          <label>{tr('用哪个供应商')}<ProviderSelect agent={(g.agent || 'claude') as AgentKind} value={g.providerId ?? ''} onChange={(v) => patch({ providerId: v })} first={{ label: tr('跟新对话一样（{sameAsNew}）', { sameAsNew }), title: tr('和在窗口里开新对话时用的一样') }} own={g.agent ? tr('{agentName} 自己的登录', { agentName }) : tr('Claude 账号')} /></label>
+          <label className="chip" style={{ alignSelf: 'end' }}><input type="checkbox" checked={g.verbose} onChange={(e) => patch({ verbose: e.target.checked })} /> {tr('推送工具调用过程')}</label>
           <div style={{ gridColumn: '1 / -1' }} className="sub">{def.help}</div>
           <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', gridColumn: '1 / -1' }}>
-            <button className="btn sm ghost danger" onClick={async () => { if (await dlg.confirm(`删除机器人「${g.name}」？`, { danger: true, okLabel: '删除' })) await patch(null); }}>删除</button>
+            <button className="btn sm ghost danger" onClick={async () => { if (await dlg.confirm(tr('删除机器人「{name}」？', { name: g.name }), { danger: true, okLabel: tr('删除') })) await patch(null); }}>{tr('删除')}</button>
             <span className="grow" />
-            <button className="btn sm" disabled={busy} onClick={save}>保存并连接</button>
+            <button className="btn sm" disabled={busy} onClick={save}>{tr('保存并连接')}</button>
           </div>
           {def.inbound && (
             <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--line)', paddingTop: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <b style={{ fontSize: 13 }}>授权用户</b>
-                <span className="sub">在 IM 里给机器人发 <code>/pair 配对码</code> 即可加入</span>
+                <b style={{ fontSize: 13 }}>{tr('授权用户')}</b>
+                <span className="sub">{tr('在 IM 里给机器人发')} <code>{tr('/pair 配对码')}</code> {tr('即可加入')}</span>
                 <span className="grow" />
-                <label className="chip" title="危险：任何能和机器人说话的人都能操作"><input type="checkbox" checked={g.openAccess} onChange={(e) => patch({ openAccess: e.target.checked })} /> 不限制用户</label>
-                <button className="btn sm" onClick={async () => { try { setPair(await ws.request({ kind: 'im.pairCode', id: g.id })); } catch (e: any) { toast(e.message); } }}>生成配对码</button>
+                <label className="chip" title={tr('危险：任何能和机器人说话的人都能操作')}><input type="checkbox" checked={g.openAccess} onChange={(e) => patch({ openAccess: e.target.checked })} /> {tr('不限制用户')}</label>
+                <button className="btn sm" onClick={async () => { try { setPair(await ws.request({ kind: 'im.pairCode', id: g.id })); } catch (e: any) { toast(e.message); } }}>{tr('生成配对码')}</button>
               </div>
-              {pair && left > 0 && <div style={{ marginTop: 6 }}><span className="pair-code" style={{ fontSize: 22 }}>{pair.code}</span> <span className="sub">{left}s 后失效 · 发送 <code>/pair {pair.code}</code></span></div>}
+              {pair && left > 0 && <div style={{ marginTop: 6 }}><span className="pair-code" style={{ fontSize: 22 }}>{pair.code}</span> <span className="sub">{tr('{left}s 后失效 · 发送', { left })} <code>/pair {pair.code}</code></span></div>}
               <div className="chips" style={{ marginTop: 6 }}>
-                {g.allowUsers.map((u) => <span key={u} className="chip">{g.allowNames?.[u] ?? u} <button className="x" title="移除" aria-label="移除" onClick={() => patch({ allowUsers: g.allowUsers.filter((x) => x !== u) })}><Icon name="close" size={10} /></button></span>)}
-                {g.allowUsers.length === 0 && <span className="sub">还没有授权用户</span>}
+                {g.allowUsers.map((u) => <span key={u} className="chip">{g.allowNames?.[u] ?? u} <button className="x" title={tr('移除')} aria-label={tr('移除')} onClick={() => patch({ allowUsers: g.allowUsers.filter((x) => x !== u) })}><Icon name="close" size={10} /></button></span>)}
+                {g.allowUsers.length === 0 && <span className="sub">{tr('还没有授权用户')}</span>}
               </div>
-              {g.bindings.length > 0 && <div className="sub" style={{ marginTop: 6 }}>聊天绑定：{g.bindings.map((b) => <span key={b.chatId} className="chip" style={{ marginRight: 4 }}>{b.chatId} → {b.sessionId.slice(0, 8)} <button className="x" title="解除绑定" aria-label="解除绑定" onClick={() => ws.request({ kind: 'im.unbind', gatewayId: g.id, chatId: b.chatId }).then(onChange).catch((e) => toast(e.message))}><Icon name="close" size={10} /></button></span>)}</div>}
+              {g.bindings.length > 0 && <div className="sub" style={{ marginTop: 6 }}>{tr('聊天绑定：')}{g.bindings.map((b) => <span key={b.chatId} className="chip" style={{ marginRight: 4 }}>{b.chatId} → {b.sessionId.slice(0, 8)} <button className="x" title={tr('解除绑定')} aria-label={tr('解除绑定')} onClick={() => ws.request({ kind: 'im.unbind', gatewayId: g.id, chatId: b.chatId }).then(onChange).catch((e) => toast(e.message))}><Icon name="close" size={10} /></button></span>)}</div>}
             </div>
           )}
         </div>
@@ -103,18 +104,17 @@ export function ImSection() {
   return (
     <div className="section">
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-        <h5 style={{ margin: 0 }}>机器人</h5>
+        <h5 style={{ margin: 0 }}>{tr('机器人')}</h5>
         <span className="grow" />
-        <span className="muted" style={{ fontSize: 13 }}>添加</span>
+        <span className="muted" style={{ fontSize: 13 }}>{tr('添加')}</span>
         {kinds.map((k) => <button key={k.kind} className="btn sm ghost" onClick={() => add(k.kind)} title={k.help}><Icon name="plus" size={12} /> {k.name}</button>)}
       </div>
       <div className="list">
         {list.map((g) => { const def = kinds.find((k) => k.kind === g.kind); return def ? <GatewayCard key={g.id} g={g} def={def} onChange={load} /> : null; })}
-        {list.length === 0 && <div className="empty">还没有机器人。点上面的按钮添加一个：Telegram 最简单（找 @BotFather 要个 token）。</div>}
+        {list.length === 0 && <div className="empty">{tr('还没有机器人。点上面的按钮添加一个：Telegram 最简单（找 @BotFather 要个 token）。')}</div>}
       </div>
       <div className="sub" style={{ marginTop: 8 }}>
-        每个聊天绑定一个对话：直接发文字就是提问；<code>/new</code> 开新对话、<code>/sessions</code> + <code>/use</code> 切换、<code>/stop</code> 中断、<code>/allow</code> / <code>/deny</code> 或按钮处理权限；其它 <code>/命令</code> 原样转给 Claude。
-        微信没有开放的机器人接口，暂不支持；企业微信只能推送通知。
+        {tr('每个聊天绑定一个对话：直接发文字就是提问；')}<code>/new</code> {tr('开新对话、')}<code>/sessions</code> + <code>/use</code> {tr('切换、')}<code>/stop</code> {tr('中断、')}<code>/allow</code> / <code>/deny</code> {tr('或按钮处理权限；其它')} <code>{tr('/命令')}</code> {tr('原样转给 Claude。 微信没有开放的机器人接口，暂不支持；企业微信只能推送通知。')}
       </div>
     </div>
   );

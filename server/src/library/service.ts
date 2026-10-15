@@ -16,6 +16,7 @@ import { dataDir } from '../files/service.js';
 import { INDEX_TEXT_MAX, LibraryIndex } from './index-db.js';
 import { libraryId, parseLibraryId } from './ids.js';
 import type { SessionSource } from './types.js';
+import { tr } from '../i18n/index.js';
 
 const LIST_TTL_MS = 60_000;
 /** A source with a file watcher (Codex) learns about changes from it; the TTL is only a backstop. */
@@ -31,7 +32,7 @@ const PAGE = 100; // Codex thread/list page size (and everyone else's)
 const MAX_PAGES = 500;
 const READ_PAGE = 50;
 const TRASH_KEEP_MS = 30 * 86_400_000;
-const UNSUPPORTED = '该来源不支持此操作';
+const UNSUPPORTED = tr('该来源不支持此操作');
 
 /** The thread a Codex rollout file belongs to: `…/rollout-<date>T<time>-<thread uuid>.jsonl` (name per codex-rs). */
 export function codexRolloutId(rel: string): string | null {
@@ -298,7 +299,7 @@ export class LibraryService extends EventEmitter {
         this.late.add(p);
         const cached = this.perKind.get(kind);
         if (cached) {
-          this.errors.set(kind, `列出对话超时（${Math.round(ms / 1000)} 秒），后台仍在读取`);
+          this.errors.set(kind, tr('列出对话超时（{ms} 秒），后台仍在读取', { ms: Math.round(ms / 1000) }));
           this.timeoutErr.add(kind);
         } else {
           this.loading.add(kind);
@@ -424,7 +425,7 @@ export class LibraryService extends EventEmitter {
       const inflight = this.opts.isLive?.(id) ? [] : this.inflight.get(id) ?? [];
       return { messages: [...(await this.transcripts.load(id)), ...inflight.map((m) => ({ ...m, session_id: id }))] };
     }
-    if (!r.source || !r.nativeId) throw new Error('这个对话的来源没有加入对话库');
+    if (!r.source || !r.nativeId) throw new Error(tr('这个对话的来源没有加入对话库'));
     try {
       return await r.source.read(r.nativeId, { cursor, limit });
     } catch (e: any) {
@@ -526,7 +527,7 @@ export class LibraryService extends EventEmitter {
       const src = this.source(kind);
       let st: SourceStatus;
       try {
-        st = src ? await src.status() : { kind, name: defName, installed, detected: installed, joined: true, dismissed: false, enabled: false, disabledReason: '没有可用的对话来源' };
+        st = src ? await src.status() : { kind, name: defName, installed, detected: installed, joined: true, dismissed: false, enabled: false, disabledReason: tr('没有可用的对话来源') };
       } catch (e: any) {
         st = { kind, name: defName, installed, detected: installed, joined: true, dismissed: false, enabled: false, error: e?.message ?? String(e) };
       }
@@ -561,12 +562,12 @@ export class LibraryService extends EventEmitter {
 
   async join(kind: AgentKind, joined: boolean): Promise<void> {
     if (kind === 'claude') {
-      if (!joined) throw new Error('Claude Code 的对话始终在对话库里，不能移出');
+      if (!joined) throw new Error(tr('Claude Code 的对话始终在对话库里，不能移出'));
       return;
     }
     const cur = this.setting('library.joined').filter((k) => k !== kind);
     if (joined) {
-      if (!this.source(kind)) throw new Error(`没有 ${kind} 的对话来源`);
+      if (!this.source(kind)) throw new Error(tr('没有 {kind} 的对话来源', { kind }));
       await this.meta.setSetting('library.joined', [...cur, kind]);
       await this.meta.setSetting('library.dismissed', this.setting('library.dismissed').filter((k) => k !== kind));
       this.invalidate(kind);
@@ -710,7 +711,7 @@ export class LibraryService extends EventEmitter {
     let s = this.byId.get(id);
     if (!s) { await this.list(); s = this.byId.get(id); }
     const cwd = s?.cwd || head?.cwd;
-    if (!cwd) throw new Error('对话库里找不到这个对话');
+    if (!cwd) throw new Error(tr('对话库里找不到这个对话'));
     return { agent: head?.agent ?? route.kind, cwd, title: s?.title ?? head?.title };
   }
 
@@ -727,8 +728,8 @@ export class LibraryService extends EventEmitter {
       let s = this.byId.get(id);
       if (!s) { await this.list(); s = this.byId.get(id); }
       const route = parseLibraryId(id);
-      if (!s || route.kind === 'claude') throw new Error('对话库里找不到这个对话');
-      if (!this.isJoined(route.kind)) throw new Error('这个对话的来源没有加入对话库');
+      if (!s || route.kind === 'claude') throw new Error(tr('对话库里找不到这个对话'));
+      if (!this.isJoined(route.kind)) throw new Error(tr('这个对话的来源没有加入对话库'));
       await this.transcripts.create({ sessionId: id, agent: route.kind, cwd: s.cwd, title: s.title, createdAt: s.createdAt ?? s.lastModified ?? Date.now(), nativeSessionId: route.nativeId, imported: true });
       return { agent: route.kind, cwd: s.cwd };
     })();

@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { resolveSpawn } from './resolve.js';
 import { killTree } from './kill-tree.js';
+import { tr } from '../i18n/index.js';
 
 /**
  * Newline-delimited JSON-RPC 2.0 over a child process's stdio (what ACP agents and `codex app-server` speak).
@@ -35,7 +36,7 @@ export class JsonRpcProcess extends EventEmitter {
     // EPIPE when the agent dies with a write in flight: a stream 'error' with no listener would crash the server
     this.child.stdin!.on('error', (e) => { this.stderrTail = (this.stderrTail + `\n[stdin] ${e.message}`).slice(-4000); });
     this.child.on('error', (e) => { const first = !this.exited; this.exited = true; this.failAll(e); if (first) this.emit('exit', -1, e.message); });
-    this.child.on('exit', (code) => { const first = !this.exited; this.exited = true; this.failAll(new Error(`进程退出 ${code}`)); if (first) this.emit('exit', code); });
+    this.child.on('exit', (code) => { const first = !this.exited; this.exited = true; this.failAll(new Error(tr('进程退出 {code}', { code }))); if (first) this.emit('exit', code); });
   }
 
   get pid() { return this.child.pid; }
@@ -88,10 +89,10 @@ export class JsonRpcProcess extends EventEmitter {
   request<T = any>(method: string, params?: unknown, timeoutMs = 0): Promise<T> {
     const id = ++this.seq;
     // write() drops messages once the process is gone; without this a request with no timeout would hang forever
-    if (this.exited) return Promise.reject(new Error(`${method}：进程已退出`));
+    if (this.exited) return Promise.reject(new Error(tr('{method}：进程已退出', { method })));
     return new Promise<T>((resolve, reject) => {
       const p: any = { resolve, reject };
-      if (timeoutMs > 0) p.timer = setTimeout(() => { this.pending.delete(id); reject(new Error(`${method} 超时`)); }, timeoutMs);
+      if (timeoutMs > 0) p.timer = setTimeout(() => { this.pending.delete(id); reject(new Error(tr('{method} 超时', { method }))); }, timeoutMs);
       this.pending.set(id, p);
       this.write({ jsonrpc: '2.0', id, method, params });
     });

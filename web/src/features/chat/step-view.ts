@@ -3,6 +3,7 @@
 // model/turn.ts.
 import type { ToolUseBlock } from '@/model/conversation';
 import { fmtDuration } from '@/model/turn';
+import { tr } from '@/i18n';
 
 /** done · active (running, or its input still streaming) · pending (called, not started) · failed · stopped (cut off
  *  when the turn was stopped) · waiting on the user */
@@ -21,7 +22,7 @@ export function stepState(t: Pick<ToolUseBlock, 'id' | 'status' | 'stopped'>, wa
 export const stepBusy = (st: StepState): boolean => st === 'active' || st === 'pending' || st === 'waiting';
 
 // the registry's verbs name their object (「读取文件:」); in a row the object is the chip next to the verb
-const SHORT_VERB: Record<string, string> = { '读取文件': '读取', '写入文件': '写入', '编辑文件': '编辑', '运行命令': '运行', '列出文件': '列出', '搜索文本': '搜索' };
+const SHORT_VERB: Record<string, string> = { [tr('读取文件')]: tr('读取'), [tr('写入文件')]: tr('写入'), [tr('编辑文件')]: tr('编辑'), [tr('运行命令')]: tr('运行'), [tr('列出文件')]: tr('列出'), [tr('搜索文本')]: tr('搜索') };
 
 /** The verb as a row shows it: 「读取文件:」 → 「读取」, 「搜索网页:」 → 「搜索网页」, 「Fetch」 → 「Fetch」. */
 export function shortVerb(verb: string): string {
@@ -32,18 +33,18 @@ export function shortVerb(verb: string): string {
 /** `0.4 秒` · `9.9 秒` · `12 秒` · `1 分 42 秒` — one decimal under ten seconds, then like the turn summary. */
 export function fmtStepDuration(ms: number): string {
   const tenths = Math.round(ms / 100);
-  if (tenths < 100) return `${(Math.max(1, tenths) / 10).toFixed(1)} 秒`;
+  if (tenths < 100) return tr('{Math} 秒', { Math: (Math.max(1, tenths) / 10).toFixed(1) });
   return fmtDuration(ms);
 }
 
 /** A merged row, read out: 「读取 ×3 · a.ts 等」 (the row shows the same three parts: verb ×N, then the first target). */
 export function mergedLabel(verb: string, count: number, target: string): string {
   const head = `${verb} ×${count}`.trim();
-  return target ? `${head} · ${target} 等` : head;
+  return target ? tr('{head} · {target} 等', { head, target }) : head;
 }
 
 /** The chip of a merged row: the first step's target, 「等」 after it. */
-export const mergedTarget = (target: string): string => (target ? `${target} 等` : '');
+export const mergedTarget = (target: string): string => (target ? tr('{target} 等', { target }) : '');
 
 interface Clock { from: number; st: StepState; whole: boolean; ms?: number }
 // by the step object: a reloaded conversation has new objects, and nothing measured for them

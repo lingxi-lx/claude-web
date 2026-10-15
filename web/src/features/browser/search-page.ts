@@ -11,6 +11,7 @@ import type { BrowserSearchPage } from '@shared';
 import agentSrc from './page-agent.js?raw';
 import { hasWebview, type WebviewEl } from './state';
 import { loadable } from './url';
+import { tr } from '@/i18n';
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -110,7 +111,7 @@ async function read(w: Worker): Promise<BrowserSearchPage | null> {
 }
 
 async function load(url: string, partition: string): Promise<BrowserSearchPage> {
-  if (!loadable(url)) throw new Error(`不是能打开的地址：${url.slice(0, 200)}`);
+  if (!loadable(url)) throw new Error(tr('不是能打开的地址：{url}', { url: url.slice(0, 200) }));
   const unreachable = (why: string): BrowserSearchPage => ({ url, title: '', text: '', candidates: [], failed: why });
   let w = await take(partition);
   let before = 0;
@@ -156,7 +157,7 @@ async function load(url: string, partition: string): Promise<BrowserSearchPage> 
       if (Date.now() >= end) break;
       await sleep(POLL_MS);
     }
-    if (!page) throw new Error('结果页没有回应。');
+    if (!page) throw new Error(tr('结果页没有回应。'));
     return page;
   } finally {
     give(w);
@@ -165,6 +166,6 @@ async function load(url: string, partition: string): Promise<BrowserSearchPage> 
 
 /** Load a search engine's result page and list what it shows. `failed` in the answer: the page could not be loaded. */
 export function searchPage(url: string, partition: string): Promise<BrowserSearchPage> {
-  if (!hasWebview()) return Promise.reject(new Error('这个窗口没有内置浏览器'));
+  if (!hasWebview()) return Promise.reject(new Error(tr('这个窗口没有内置浏览器')));
   return load(url, partition);
 }

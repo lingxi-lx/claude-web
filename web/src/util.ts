@@ -1,14 +1,15 @@
 import { parseLibraryId, parsePeerId } from '@shared';
+import { tr, dateLocale } from '@/i18n';
 
 export function ago(ts: number | string | undefined): string {
   if (!ts) return '';
   const t = typeof ts === 'string' ? Date.parse(ts) : ts;
   const d = Date.now() - t;
-  if (d < 60_000) return '刚刚';
-  if (d < 3600_000) return `${Math.floor(d / 60_000)} 分钟`;
-  if (d < 86400_000) return `${Math.floor(d / 3600_000)} 小时`;
-  if (d < 7 * 86400_000) return `${Math.floor(d / 86400_000)} 天`;
-  return new Date(t).toLocaleDateString();
+  if (d < 60_000) return tr('刚刚');
+  if (d < 3600_000) return tr('{d} 分钟', { d: Math.floor(d / 60_000) });
+  if (d < 86400_000) return tr('{d} 小时', { d: Math.floor(d / 3600_000) });
+  if (d < 7 * 86400_000) return tr('{d} 天', { d: Math.floor(d / 86400_000) });
+  return new Date(t).toLocaleDateString(dateLocale());
 }
 
 export function fmtTok(n: number | undefined): string {
@@ -74,7 +75,7 @@ export function toolSummary(name: string, input: Record<string, unknown>): strin
     case 'AskUserQuestion':
       return (input.questions as any[])?.map((q) => q.question).join(' / ') ?? '';
     case 'ExitPlanMode':
-      return '请求批准计划';
+      return tr('请求批准计划');
     default: {
       const first = Object.entries(input).find(([, v]) => typeof v === 'string');
       return first ? `${first[0]}=${(first[1] as string).slice(0, 100)}` : JSON.stringify(input).slice(0, 100);

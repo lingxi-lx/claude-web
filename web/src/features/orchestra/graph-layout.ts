@@ -1,3 +1,4 @@
+import { tr } from '@/i18n';
 // Execution-graph layout for the orchestration panel: columns = topological layers, SVG edges between
 // card anchors. Pure, so it's unit tested and shared by the editor preview and the run view.
 
@@ -72,11 +73,11 @@ export function nextNodeId(ids: string[]): string {
 
 /** Template variables a node's prompt can use: input + every other node's output / approval. */
 export function promptVars(nodes: { id: string; kind: string; title: string }[], self: string): { token: string; label: string }[] {
-  const out = [{ token: '{{input}}', label: '启动输入' }];
+  const out = [{ token: '{{input}}', label: tr('启动输入') }];
   for (const n of nodes) {
     if (n.id === self) continue;
-    if (n.kind === 'approval') out.push({ token: `{{nodes.${n.id}.approval}}`, label: `${n.title || n.id} 的审批意见` });
-    else out.push({ token: `{{nodes.${n.id}.output}}`, label: `${n.title || n.id} 的输出` });
+    if (n.kind === 'approval') out.push({ token: `{{nodes.${n.id}.approval}}`, label: tr('{title} 的审批意见', { title: n.title || n.id }) });
+    else out.push({ token: `{{nodes.${n.id}.output}}`, label: tr('{title} 的输出', { title: n.title || n.id }) });
   }
   return out;
 }

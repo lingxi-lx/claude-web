@@ -1,5 +1,6 @@
 import type { ClientRequest, ServerEvent, SessionSummary } from '../protocol.js';
 import { isPeerId, parsePeerId, peerSessionId } from './types.js';
+import { tr } from '../i18n/index.js';
 
 /**
  * Pure id rewriting between this machine and one peer. Outbound: a request about
@@ -38,8 +39,8 @@ const OWN_WINDOW_ONLY = new Set<ClientRequest['kind']>(['browser.host', 'browser
 
 /** Why a request from another machine is refused whatever it is about; null = judged like any other. */
 export function refusedFromPeer(req: ClientRequest): string | null {
-  if (req.kind.startsWith('peers.')) return '其它机器不能管理本机的机器列表';
-  if (OWN_WINDOW_ONLY.has(req.kind)) return '只有本机的桌面窗口才能提供内置浏览器';
+  if (req.kind.startsWith('peers.')) return tr('其它机器不能管理本机的机器列表');
+  if (OWN_WINDOW_ONLY.has(req.kind)) return tr('只有本机的桌面窗口才能提供内置浏览器');
   return null;
 }
 
@@ -67,10 +68,10 @@ export function planRoute(req: ClientRequest): RoutePlan {
   if (!peers.size) return { kind: 'none' };
   if (SPLIT.has(req.kind)) return { kind: 'split' };
   if (LOCAL.has(req.kind)) return { kind: 'local' };
-  if (req.kind === 'session.switchAgent') return { kind: 'reject', reason: '其它机器上的对话请用「交给本机的 Agent 继续」' };
-  if (!FORWARD.has(req.kind)) return { kind: 'reject', reason: `其它机器上的对话不支持「${req.kind}」` };
+  if (req.kind === 'session.switchAgent') return { kind: 'reject', reason: tr('其它机器上的对话请用「交给本机的 Agent 继续」') };
+  if (!FORWARD.has(req.kind)) return { kind: 'reject', reason: tr('其它机器上的对话不支持「{kind}」', { kind: req.kind }) };
   // a forwarded request goes to exactly one machine, and only concerns that machine's sessions
-  if (peers.size > 1 || ids.some((id) => !isPeerId(id))) return { kind: 'reject', reason: '一个请求不能同时涉及多台机器' };
+  if (peers.size > 1 || ids.some((id) => !isPeerId(id))) return { kind: 'reject', reason: tr('一个请求不能同时涉及多台机器') };
   return { kind: 'forward', peerId: [...peers][0] };
 }
 

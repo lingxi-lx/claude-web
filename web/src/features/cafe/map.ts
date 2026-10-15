@@ -11,6 +11,7 @@
 // tiles each; after the last one, 4 tiles of front aisle. At least 18 deep, so the service band fits.
 import type { BgAgent, BgSession, BgTask } from '@shared';
 import type { Facing } from '@characters';
+import { tr } from '@/i18n';
 
 export const COLS = 34;
 export const SEATS_PER_ROW = 6;
@@ -78,7 +79,7 @@ interface Group { label: string; agents: Member[] }
 /** Who sits together: a workflow's agents by phase (no phase: the workflow's own row), then the single sub-agents. */
 function groups(tasks: BgTask[]): Group[] {
   const out: Group[] = [];
-  const singles: Group = { label: '子代理', agents: [] };
+  const singles: Group = { label: tr('子代理'), agents: [] };
   for (const t of tasks) {
     if (t.kind === 'workflow') {
       const byPhase = new Map<number, Member[]>();

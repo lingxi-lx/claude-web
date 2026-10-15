@@ -13,14 +13,15 @@ import { FeishuAdapter } from './feishu.js';
 import { WecomAdapter } from './wecom.js';
 import type { ImAdapter } from './types.js';
 import { proxy } from '../net/proxy.js';
+import { tr } from '../i18n/index.js';
 
 export const IM_KINDS: { kind: ImKind; name: string; icon: string; inbound: boolean; fields: { key: string; label: string; secret?: boolean; hint?: string }[]; help: string }[] = [
-  { kind: 'telegram', name: 'Telegram', icon: '✈️', inbound: true, fields: [{ key: 'botToken', label: 'Bot Token', secret: true, hint: '@BotFather 创建机器人后得到' }], help: '和 @BotFather 聊 /newbot 拿 token；私聊机器人或把它拉进群。长轮询，不需要公网。' },
-  { kind: 'discord', name: 'Discord', icon: '🎮', inbound: true, fields: [{ key: 'botToken', label: 'Bot Token', secret: true, hint: 'Developer Portal → Bot → Token；需要打开 Message Content Intent' }], help: '在 Developer Portal 建应用 → Bot，开启 MESSAGE CONTENT INTENT，用 OAuth2 URL（scope bot，权限 Send Messages / Read Message History）邀请进服务器。' },
-  { kind: 'slack', name: 'Slack', icon: '💬', inbound: true, fields: [{ key: 'appToken', label: 'App-Level Token (xapp-)', secret: true, hint: 'Socket Mode 用，scope connections:write' }, { key: 'botToken', label: 'Bot Token (xoxb-)', secret: true, hint: 'scopes: chat:write, app_mentions:read, im:history, im:read' }], help: '建 Slack App → 开启 Socket Mode → Event Subscriptions 订阅 message.im 与 app_mention → Interactivity 打开。私聊机器人或在频道 @它。' },
-  { kind: 'feishu', name: '飞书 / Lark', icon: '🐦', inbound: true, fields: [{ key: 'appId', label: 'App ID' }, { key: 'appSecret', label: 'App Secret', secret: true }, { key: 'lark', label: 'Lark 国际版（true/false）', hint: '默认飞书国内' }], help: '开放平台建自建应用 → 添加机器人能力 → 事件订阅选「长连接」并订阅 im.message.receive_v1 与 card.action.trigger → 权限 im:message、im:message:send_as_bot → 发布版本。' },
-  { kind: 'dingtalk', name: '钉钉', icon: '📌', inbound: true, fields: [{ key: 'clientId', label: 'Client ID (AppKey)' }, { key: 'clientSecret', label: 'Client Secret', secret: true }], help: '开放平台建应用 → 添加机器人 → 消息接收模式选 Stream → 发布。群里 @机器人 或单聊。' },
-  { kind: 'wecom', name: '企业微信（仅通知）', icon: '🏢', inbound: false, fields: [{ key: 'webhookUrl', label: '群机器人 Webhook', secret: true }], help: '群设置 → 群机器人 → 添加 → 复制 Webhook。企业微信收消息需要公网回调地址，这里只做通知推送（需要你 / 完成 / 出错）。' },
+  { kind: 'telegram', name: 'Telegram', icon: '✈️', inbound: true, fields: [{ key: 'botToken', label: 'Bot Token', secret: true, hint: tr('@BotFather 创建机器人后得到') }], help: tr('和 @BotFather 聊 /newbot 拿 token；私聊机器人或把它拉进群。长轮询，不需要公网。') },
+  { kind: 'discord', name: 'Discord', icon: '🎮', inbound: true, fields: [{ key: 'botToken', label: 'Bot Token', secret: true, hint: tr('Developer Portal → Bot → Token；需要打开 Message Content Intent') }], help: tr('在 Developer Portal 建应用 → Bot，开启 MESSAGE CONTENT INTENT，用 OAuth2 URL（scope bot，权限 Send Messages / Read Message History）邀请进服务器。') },
+  { kind: 'slack', name: 'Slack', icon: '💬', inbound: true, fields: [{ key: 'appToken', label: 'App-Level Token (xapp-)', secret: true, hint: tr('Socket Mode 用，scope connections:write') }, { key: 'botToken', label: 'Bot Token (xoxb-)', secret: true, hint: 'scopes: chat:write, app_mentions:read, im:history, im:read' }], help: tr('建 Slack App → 开启 Socket Mode → Event Subscriptions 订阅 message.im 与 app_mention → Interactivity 打开。私聊机器人或在频道 @它。') },
+  { kind: 'feishu', name: tr('飞书 / Lark'), icon: '🐦', inbound: true, fields: [{ key: 'appId', label: 'App ID' }, { key: 'appSecret', label: 'App Secret', secret: true }, { key: 'lark', label: tr('Lark 国际版（true/false）'), hint: tr('默认飞书国内') }], help: tr('开放平台建自建应用 → 添加机器人能力 → 事件订阅选「长连接」并订阅 im.message.receive_v1 与 card.action.trigger → 权限 im:message、im:message:send_as_bot → 发布版本。') },
+  { kind: 'dingtalk', name: tr('钉钉'), icon: '📌', inbound: true, fields: [{ key: 'clientId', label: 'Client ID (AppKey)' }, { key: 'clientSecret', label: 'Client Secret', secret: true }], help: tr('开放平台建应用 → 添加机器人 → 消息接收模式选 Stream → 发布。群里 @机器人 或单聊。') },
+  { kind: 'wecom', name: tr('企业微信（仅通知）'), icon: '🏢', inbound: false, fields: [{ key: 'webhookUrl', label: tr('群机器人 Webhook'), secret: true }], help: tr('群设置 → 群机器人 → 添加 → 复制 Webhook。企业微信收消息需要公网回调地址，这里只做通知推送（需要你 / 完成 / 出错）。') },
 ];
 
 /** Owns adapters for configured gateways, stores their configs (secrets protected), exposes status for the UI. */
@@ -49,7 +50,7 @@ export class ImService extends EventEmitter {
       case 'feishu': return new FeishuAdapter(c.appId, c.appSecret, c.lark === 'true');
       case 'dingtalk': return new DingTalkAdapter(c.clientId, c.clientSecret);
       case 'wecom': return new WecomAdapter(c.webhookUrl);
-      default: throw new Error(`未知网关类型 ${g.kind}`);
+      default: throw new Error(tr('未知网关类型 {kind}', { kind: g.kind }));
     }
   }
 
@@ -90,7 +91,7 @@ export class ImService extends EventEmitter {
     const prev = this.meta.imGateways().find((g) => g.id === id);
     const kind = (patch.kind ?? prev?.kind) as ImKind;
     const def = IM_KINDS.find((k) => k.kind === kind);
-    if (!def) throw new Error('未知网关类型');
+    if (!def) throw new Error(tr('未知网关类型'));
     const config: Record<string, string> = { ...(prev?.config ?? {}) };
     for (const [k, v] of Object.entries(patch.config ?? {})) {
       const f = def.fields.find((x) => x.key === k);
@@ -107,13 +108,13 @@ export class ImService extends EventEmitter {
   /** Send a test message to every bound chat (or report there is none). */
   async test(id: string): Promise<string> {
     const a = this.adapters.get(id);
-    if (!a) throw new Error('网关未启动');
-    if (a.state !== 'running') throw new Error(a.error || `状态 ${a.state}`);
+    if (!a) throw new Error(tr('网关未启动'));
+    if (a.state !== 'running') throw new Error(a.error || tr('状态 {state}', { state: a.state }));
     const chats = this.meta.imBindings().filter((b) => b.gatewayId === id);
-    if (!a.inbound) { await a.send('', '✅ Claude Web 测试消息'); return '已发送测试消息'; }
-    if (!chats.length) return `已连接（${a.botName || a.kind}）。还没有聊天绑定：去 IM 里给机器人发 /pair <配对码>`;
-    for (const c of chats) await a.send(c.chatId, '✅ Claude Web 测试消息');
-    return `已向 ${chats.length} 个聊天发送测试消息`;
+    if (!a.inbound) { await a.send('', tr('✅ Claude Web 测试消息')); return tr('已发送测试消息'); }
+    if (!chats.length) return tr('已连接（{botName}）。还没有聊天绑定：去 IM 里给机器人发 /pair <配对码>', { botName: a.botName || a.kind });
+    for (const c of chats) await a.send(c.chatId, tr('✅ Claude Web 测试消息'));
+    return tr('已向 {chatsCount} 个聊天发送测试消息', { chatsCount: chats.length });
   }
 
   async stopAll() { for (const id of [...this.adapters.keys()]) await this.stop(id); }

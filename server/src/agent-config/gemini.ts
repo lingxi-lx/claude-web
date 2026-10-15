@@ -6,6 +6,7 @@ import type { AgentConfigBackup, AgentSettingField, McpSpec } from './types.js';
 import { checkField, cliEnv, fieldValue, fileList, homeOf, readConfig, standardFiles, type AdapterCtx, type AgentConfigAdapter } from './adapter.js';
 import { runCliOk } from './cli.js';
 import { parseConfig, setJsonPath } from './edit.js';
+import { tr } from '../i18n/index.js';
 
 interface Flavor {
   kind: 'gemini' | 'qwen';
@@ -23,8 +24,8 @@ export const GEMINI: Flavor = {
   // GEMINI_CLI_HOME replaces the home directory; `.gemini` lives under it (gemini-cli 0.41 `homedir()`)
   dir: (env, home) => path.join(env.GEMINI_CLI_HOME || home, '.gemini'),
   fields: [
-    { key: 'model.name', label: '默认模型', type: 'string', hint: 'settings.json 的 model.name' },
-    { key: 'general.defaultApprovalMode', label: '默认审批模式', type: 'enum', options: ['default', 'auto_edit', 'plan'], hint: 'YOLO 只能用命令行参数开启' },
+    { key: 'model.name', label: tr('默认模型'), type: 'string', hint: tr('settings.json 的 model.name') },
+    { key: 'general.defaultApprovalMode', label: tr('默认审批模式'), type: 'enum', options: ['default', 'auto_edit', 'plan'], hint: tr('YOLO 只能用命令行参数开启') },
   ],
 };
 
@@ -34,7 +35,7 @@ export const QWEN: Flavor = {
   instructions: 'QWEN.md',
   // QWEN_HOME is the `.qwen` directory itself (qwen-code 0.24 Storage.getGlobalQwenDir)
   dir: (env, home) => env.QWEN_HOME || path.join(home, '.qwen'),
-  fields: [{ key: 'model.name', label: '默认模型', type: 'string', hint: 'settings.json 的 model.name' }],
+  fields: [{ key: 'model.name', label: tr('默认模型'), type: 'string', hint: tr('settings.json 的 model.name') }],
 };
 
 export class GeminiLikeConfigAdapter implements AgentConfigAdapter {
@@ -78,14 +79,14 @@ export class GeminiLikeConfigAdapter implements AgentConfigAdapter {
       corrected = next !== null;
       return next;
     });
-    return `已通过 ${this.kind} mcp add 添加（用户级）${corrected ? '，并按原值修正了 CLI 写错的字段' : ''}`;
+    return tr('已通过 {kind} mcp add 添加（用户级）{v}', { kind: this.kind, v: corrected ? tr('，并按原值修正了 CLI 写错的字段') : '' });
   }
 
   /** The settings.json text with `mcpServers.<name>` fixed up to match `spec`, or null if the CLI got it right. */
   private correctEntry(text: string, spec: McpSpec): string | null {
     const doc = parseConfig(text, 'json') as any;
     const cur = doc.mcpServers?.[spec.name];
-    if (!cur || typeof cur !== 'object') throw new Error(`${this.kind} mcp add 之后 settings.json 里没有 ${spec.name}`);
+    if (!cur || typeof cur !== 'object') throw new Error(tr('{kind} mcp add 之后 settings.json 里没有 {name}', { kind: this.kind, name: spec.name }));
     const want: Record<string, unknown> = spec.transport === 'stdio'
       ? { command: spec.command, args: spec.args ?? [], env: spec.env && Object.keys(spec.env).length ? spec.env : undefined }
       : spec.transport === 'http'
@@ -102,8 +103,8 @@ export class GeminiLikeConfigAdapter implements AgentConfigAdapter {
 
   async mcpRemove(name: string): Promise<string> {
     const { result } = await this.ctx.backups.guard(this.kind, this.configPath(), `mcp remove ${name}`, () => runCliOk(this.ctx.cli(), ['mcp', 'remove', '-s', 'user', name], { cwd: homeOf(this.ctx) }));
-    if (/not found/i.test(result.stdout + result.stderr)) throw new Error(`${this.name} 的用户设置里没有名为 ${name} 的 MCP 服务器`);
-    return `已通过 ${this.kind} mcp remove 删除`;
+    if (/not found/i.test(result.stdout + result.stderr)) throw new Error(tr('{name} 的用户设置里没有名为 {name2} 的 MCP 服务器', { name: this.name, name2: name }));
+    return tr('已通过 {kind} mcp remove 删除', { kind: this.kind });
   }
 
   async settings(): Promise<AgentSettingField[]> {
@@ -113,6 +114,6 @@ export class GeminiLikeConfigAdapter implements AgentConfigAdapter {
 
   async setSetting(key: string, value: string | null): Promise<AgentConfigBackup | null> {
     checkField(this.flavor.fields, key, value);
-    return this.ctx.backups.writeChecked(this.kind, this.configPath(), (t) => setJsonPath(t, key.split('.'), value || undefined), `设置 ${key}`);
+    return this.ctx.backups.writeChecked(this.kind, this.configPath(), (t) => setJsonPath(t, key.split('.'), value || undefined), tr('设置 {key}', { key }));
   }
 }

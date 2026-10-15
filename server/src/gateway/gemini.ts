@@ -1,6 +1,7 @@
 // Gemini generateContent / streamGenerateContent ⇄ IR. Shapes per ai.google.dev (v1beta, camelCase JSON).
 import { newId, linkToolNames, mergeAlternating, resultText, type IrEvent, type IrMessage, type IrPart, type IrRequest, type IrResponse, type IrStop, type IrTool, type IrUsage, type StreamParser, type StreamRenderer } from './ir.js';
 import { sse } from './sse.js';
+import { tr } from '../i18n/index.js';
 
 /**
  * Gemini 3 rejects history function calls that carry no thought signature. Calls that did not come from
@@ -196,7 +197,7 @@ export class GeminiStreamParser implements StreamParser {
   end(): IrEvent[] {
     if (this.done) return [];
     this.done = true;
-    if (!this.started) return [{ t: 'error', message: '上游流意外结束' }];
+    if (!this.started) return [{ t: 'error', message: tr('上游流意外结束') }];
     return [{ t: 'end', stop: this.sawTool && (this.stop ?? 'end') === 'end' ? 'tool_use' : this.stop ?? 'end' }];
   }
 }
@@ -237,6 +238,6 @@ export class GeminiStreamRenderer implements StreamRenderer {
     return '';
   }
   end(): string {
-    return this.finished ? '' : this.push({ t: 'error', message: '上游流意外结束' });
+    return this.finished ? '' : this.push({ t: 'error', message: tr('上游流意外结束') });
   }
 }

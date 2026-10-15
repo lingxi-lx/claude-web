@@ -31,6 +31,7 @@ import { execFileTree, killTree } from '../agents/kill-tree.js';
 import { libraryId } from './ids.js';
 import { opencodeToMessages } from './opencode-convert.js';
 import { isNotInstalled, type SessionSource } from './types.js';
+import { tr } from '../i18n/index.js';
 
 const PORT_RE = /https?:\/\/127\.0\.0\.1:(\d+)/;
 const IDLE_MS = 300_000; // 5 min — library-only process, never shared with a live chat session
@@ -106,7 +107,7 @@ export class OpenCodeSource implements SessionSource {
       let buf = '';
       let settled = false;
       const finish = (fn: () => void) => { if (settled) return; settled = true; clearTimeout(timer); fn(); };
-      const timer = setTimeout(() => finish(() => { void killTree(child); reject(new Error('opencode serve：等待端口超时')); }), START_TIMEOUT_MS);
+      const timer = setTimeout(() => finish(() => { void killTree(child); reject(new Error(tr('opencode serve：等待端口超时'))); }), START_TIMEOUT_MS);
       const onData = (d: Buffer) => {
         buf += d.toString('utf8');
         const m = PORT_RE.exec(buf);
@@ -115,7 +116,7 @@ export class OpenCodeSource implements SessionSource {
       child.stdout?.on('data', onData);
       child.stderr?.on('data', onData);
       child.on('error', (e) => finish(() => reject(e)));
-      child.on('exit', (code) => finish(() => reject(new Error(`opencode serve 退出，code=${code}`))));
+      child.on('exit', (code) => finish(() => reject(new Error(tr('opencode serve 退出，code={code}', { code })))));
     });
   }
 
@@ -132,7 +133,7 @@ export class OpenCodeSource implements SessionSource {
       .then((p) => {
         if (gen !== this.gen) {
           void killTree(p.child);
-          throw new Error('OpenCodeSource：启动完成前已被 close()');
+          throw new Error(tr('OpenCodeSource：启动完成前已被 close()'));
         }
         this.proc = p;
         return p;
@@ -286,7 +287,7 @@ export class OpenCodeSource implements SessionSource {
       await execFileTree(r.command, r.args, { cwd, timeoutMs: this.opts.deleteTimeoutMs ?? DELETE_TIMEOUT_MS, env: { ...process.env, ...l.env, ...r.env }, windowsVerbatimArguments: r.via === 'cmd' }).done;
     } catch (e: any) {
       const tail = (e?.killed ? e.message : e?.stderr || e?.message || String(e)).toString().slice(-2000);
-      throw new Error(`opencode session delete ${nativeId} 失败：${tail}`);
+      throw new Error(tr('opencode session delete {nativeId} 失败：{tail}', { nativeId, tail }));
     }
   }
 

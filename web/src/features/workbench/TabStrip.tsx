@@ -7,15 +7,16 @@ import { clsx, basename } from '@/util';
 import { Icon, type IconName } from '@/ui/icons';
 import { MIME_TILE, hasType, tilePayload } from './dnd';
 import { SidebarReveal } from './pane-edge';
+import { tr } from '@/i18n';
 
 export function tileTitle(t: Tile, sessions: { sessionId: string; title: string }[]): { icon: IconName; text: string } {
   const icon = iconFor(t);
   if (t.title) return { icon, text: t.title };
   switch (t.kind) {
-    case 'chat': return { icon, text: t.sessionId ? sessions.find((s) => s.sessionId === t.sessionId)?.title ?? t.sessionId.slice(0, 8) : '新对话' };
+    case 'chat': return { icon, text: t.sessionId ? sessions.find((s) => s.sessionId === t.sessionId)?.title ?? t.sessionId.slice(0, 8) : tr('新对话') };
     case 'doc': return { icon, text: basename(t.path) };
     case 'diff': return { icon, text: basename(t.path) };
-    case 'term': return { icon, text: `终端 · ${basename(t.cwd) || t.cwd}` };
+    case 'term': return { icon, text: tr('终端 · {basename}', { basename: basename(t.cwd) || t.cwd }) };
     case 'browser': return { icon, text: (() => { try { return new URL(t.url).host || t.url; } catch { return t.url; } })() };
     case 'panel': return { icon, text: PANEL_TITLES[t.panel] ?? t.panel };
   }
@@ -71,7 +72,7 @@ export function TabStrip({ pane, groupId, index, zoomed, single, lead, workbench
   return (
     <div className="tabstrip" onDragOver={(e) => { if (hasType(e.dataTransfer, MIME_TILE)) { e.preventDefault(); e.stopPropagation(); } }} onDrop={onDrop} onDragLeave={() => setOver(null)}>
       {lead && <SidebarReveal />}
-      {paneCount > 1 && <span className="pane-idx" title={`分屏 ${index + 1}（Alt+${index + 1}）`}>{index + 1}</span>}
+      {paneCount > 1 && <span className="pane-idx" title={tr('分屏 {index}（Alt+{index2}）', { index: index + 1, index2: index + 1 })}>{index + 1}</span>}
       <div className="tabs">
         {pane.tiles.map((t, i) => {
           const { icon, text } = tileTitle(t, sessions);
@@ -87,7 +88,7 @@ export function TabStrip({ pane, groupId, index, zoomed, single, lead, workbench
               onClick={() => dispatch({ t: 'tile.activate', paneId: pane.id, tileId: t.id })}
               onDoubleClick={() => startRename(t)}
               onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); closeTile(pane.id, t.id); } }}
-              title={`${text}\n双击重命名 · 中键关闭 · 可拖到别的分屏`}
+              title={tr("{text}\n双击重命名 · 中键关闭 · 可拖到别的分屏", { text })}
             >
               {live && live !== 'history' && live !== 'closed' && <span className={clsx('dot', live)} />}
               {!live && <span className="ic"><Icon name={icon} size={14} /></span>}
@@ -96,17 +97,17 @@ export function TabStrip({ pane, groupId, index, zoomed, single, lead, workbench
               ) : (
                 <span className="t">{text}{dirty[t.id] ? ' •' : ''}</span>
               )}
-              <button className="x" title="关闭" aria-label="关闭标签" onClick={(e) => { e.stopPropagation(); closeTile(pane.id, t.id); }}><Icon name="close" size={11} /></button>
+              <button className="x" title={tr('关闭')} aria-label={tr('关闭标签')} onClick={(e) => { e.stopPropagation(); closeTile(pane.id, t.id); }}><Icon name="close" size={11} /></button>
             </div>
           );
         })}
         <span ref={addBox} style={{ position: 'relative' }}>
-          <button className="tab-add" title="新标签页" aria-label="新标签页" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)}><Icon name="plus" size={14} /></button>
+          <button className="tab-add" title={tr('新标签页')} aria-label={tr('新标签页')} aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)}><Icon name="plus" size={14} /></button>
           {menu && (
-            <div className="menu" role="menu" aria-label="新标签页" style={{ top: 26, left: 0 }} onMouseLeave={() => setMenu(false)}>
-              <button onClick={() => { setMenu(false); dispatch({ t: 'tile.open', paneId: pane.id, tile: chatTile(null), mode: 'tab' }); }}><Icon name="chat" size={14} /> 新对话</button>
-              <button onClick={() => { setMenu(false); const cwd = currentCwd(pane, open); dispatch({ t: 'tile.open', paneId: pane.id, tile: { id: `t${Date.now()}`, kind: 'term', cwd }, mode: 'tab' }); }}><Icon name="terminal" size={14} /> 终端</button>
-              <button onClick={() => { setMenu(false); dispatch({ t: 'tile.open', paneId: pane.id, tile: { id: `t${Date.now()}`, kind: 'browser', url: 'http://localhost:3000' }, mode: 'tab' }); }}><Icon name="browser" size={14} /> 浏览器</button>
+            <div className="menu" role="menu" aria-label={tr('新标签页')} style={{ top: 26, left: 0 }} onMouseLeave={() => setMenu(false)}>
+              <button onClick={() => { setMenu(false); dispatch({ t: 'tile.open', paneId: pane.id, tile: chatTile(null), mode: 'tab' }); }}><Icon name="chat" size={14} /> {tr('新对话')}</button>
+              <button onClick={() => { setMenu(false); const cwd = currentCwd(pane, open); dispatch({ t: 'tile.open', paneId: pane.id, tile: { id: `t${Date.now()}`, kind: 'term', cwd }, mode: 'tab' }); }}><Icon name="terminal" size={14} /> {tr('终端')}</button>
+              <button onClick={() => { setMenu(false); dispatch({ t: 'tile.open', paneId: pane.id, tile: { id: `t${Date.now()}`, kind: 'browser', url: 'http://localhost:3000' }, mode: 'tab' }); }}><Icon name="browser" size={14} /> {tr('浏览器')}</button>
               {PANELS.map((p) => (
                 <button key={p.id} onClick={() => { setMenu(false); dispatch({ t: 'tile.open', paneId: pane.id, tile: { id: `t${Date.now()}`, kind: 'panel', panel: p.id }, mode: 'tab' }); }}><Icon name={p.icon} size={14} /> {p.title}</button>
               ))}
@@ -115,10 +116,10 @@ export function TabStrip({ pane, groupId, index, zoomed, single, lead, workbench
         </span>
       </div>
       <span className="grow" />
-      {canSplit && <button className="icon-btn xs" title="向右分屏 (Ctrl+D)" onClick={() => dispatch({ t: 'pane.split', paneId: pane.id, dir: 'row' })}><Icon name="splitRight" size={14} /></button>}
-      {canSplit && <button className="icon-btn xs" title="向下分屏 (Ctrl+Shift+D)" onClick={() => dispatch({ t: 'pane.split', paneId: pane.id, dir: 'col' })}><Icon name="splitDown" size={14} /></button>}
-      {!single && <button className={clsx('icon-btn xs', zoomed && 'active')} title={zoomed ? '还原 (Ctrl+Shift+Enter)' : '放大这个分屏 (Ctrl+Shift+Enter)'} onClick={() => dispatch({ t: 'pane.zoom', paneId: zoomed ? null : pane.id })}><Icon name="zoom" size={14} /></button>}
-      {!single && <button className="icon-btn xs" title="关闭这个分屏" aria-label="关闭这个分屏" onClick={() => dispatch({ t: 'pane.close', paneId: pane.id })}><Icon name="close" size={14} /></button>}
+      {canSplit && <button className="icon-btn xs" title={tr('向右分屏 (Ctrl+D)')} onClick={() => dispatch({ t: 'pane.split', paneId: pane.id, dir: 'row' })}><Icon name="splitRight" size={14} /></button>}
+      {canSplit && <button className="icon-btn xs" title={tr('向下分屏 (Ctrl+Shift+D)')} onClick={() => dispatch({ t: 'pane.split', paneId: pane.id, dir: 'col' })}><Icon name="splitDown" size={14} /></button>}
+      {!single && <button className={clsx('icon-btn xs', zoomed && 'active')} title={zoomed ? tr('还原 (Ctrl+Shift+Enter)') : tr('放大这个分屏 (Ctrl+Shift+Enter)')} onClick={() => dispatch({ t: 'pane.zoom', paneId: zoomed ? null : pane.id })}><Icon name="zoom" size={14} /></button>}
+      {!single && <button className="icon-btn xs" title={tr('关闭这个分屏')} aria-label={tr('关闭这个分屏')} onClick={() => dispatch({ t: 'pane.close', paneId: pane.id })}><Icon name="close" size={14} /></button>}
     </div>
   );
 }
@@ -134,7 +135,7 @@ export function MobileTileBar({ paneId, tile }: { paneId: string; tile: Tile }) 
       <SidebarReveal />
       <span className="ic"><Icon name={icon} size={14} /></span>
       <span className="t" title={text}>{text}{dirty ? ' •' : ''}</span>
-      <button className="icon-btn" title="关闭" aria-label="关闭" onClick={() => closeTile(paneId, tile.id)}><Icon name="close" size={16} /></button>
+      <button className="icon-btn" title={tr('关闭')} aria-label={tr('关闭')} onClick={() => closeTile(paneId, tile.id)}><Icon name="close" size={16} /></button>
     </div>
   );
 }

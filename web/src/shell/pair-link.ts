@@ -3,6 +3,7 @@
 // with a link on iOS (ruling R12b), and the memory of links already tried. Pure.
 import { brokerEntries, stunEntries, unb64u, type BrokerDef, type MuxResponse } from '@anywhere';
 import { DEVICE_ID_RE } from './devices';
+import { tr } from './i18n';
 
 /** A PC's signaling brokers and STUN servers, when they are not the defaults (from its pairing link). */
 export interface PcLists {
@@ -83,7 +84,7 @@ export function readPairAnswer(res: MuxResponse): { token: string; id: string } 
   const token = j?.token;
   const id = j?.device?.id;
   if (res.status === 200 && typeof token === 'string' && token && typeof id === 'string' && DEVICE_ID_RE.test(id)) return { token, id };
-  return { error: `配对没有成功：电脑的回答读不出来（状态 ${res.status}）` };
+  return { error: tr('配对没有成功：电脑的回答读不出来（状态 {status}）', { status: res.status }) };
 }
 
 /**

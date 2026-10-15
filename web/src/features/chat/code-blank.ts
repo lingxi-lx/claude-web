@@ -1,3 +1,4 @@
+import { tr } from '@/i18n';
 // A code block that has text but shows none (reported 2026-10-09: the header says「12 行」, the body is blank —
 // never reproduced here). CodeBlock measures itself a moment after its text settles; when the text is missing,
 // takes no room or is drawn in its background colour it redraws once, then falls back to plain text, and says in
@@ -79,7 +80,7 @@ export function browserOf(ua: string): string {
     ['Opera', /OPR\/(\d+)/], ['Firefox', /Firefox\/(\d+)/], ['Chrome', /Chrome\/(\d+)/], ['Safari', /Version\/(\d+)[\d.]* .*Safari\//],
   ];
   for (const [name, re] of tests) { const m = re.exec(ua); if (m) return `${name} ${m[1]}`; }
-  return '未知浏览器';
+  return tr('未知浏览器');
 }
 
 export interface BlankInfo {
@@ -101,31 +102,31 @@ export interface BlankInfo {
 }
 
 const PROBLEM_TEXT: Record<BlankProblem, string> = {
-  empty: '代码块有内容却显示为空',
-  collapsed: '代码块有内容却不占位置',
-  invisible: '代码块的字和底色一样、看不见',
+  empty: tr('代码块有内容却显示为空'),
+  collapsed: tr('代码块有内容却不占位置'),
+  invisible: tr('代码块的字和底色一样、看不见'),
 };
 const OUTCOME_TEXT: Record<BlankOutcome, string> = {
-  redrawn: '重画一次后恢复',
-  plain: '改成纯文本后恢复',
-  still: '重画和改成纯文本都没用',
+  redrawn: tr('重画一次后恢复'),
+  plain: tr('改成纯文本后恢复'),
+  still: tr('重画和改成纯文本都没用'),
 };
 
-const few = (xs: string[]) => (xs.length > 3 ? `${xs.slice(0, 3).join('、')} 等 ${xs.length} 种` : xs.join('、'));
+const few = (xs: string[]) => (xs.length > 3 ? tr('{xs} 等 {xsCount} 种', { xs: xs.slice(0, 3).join('、'), xsCount: xs.length }) : xs.join('、'));
 
 /** One server.log line (`client.log`, level warn). Names and counts only — the code may be private. */
 export function blankMessage(i: BlankInfo): string {
   const parts = [
     `${PROBLEM_TEXT[i.problem]}，${OUTCOME_TEXT[i.outcome]}`,
-    `语言 ${i.lang || '自动识别'}`,
-    `${i.lines} 行`,
-    `${i.chars} 字`,
-    i.streaming ? '正在输出' : '已完成',
+    tr('语言 {lang}', { lang: i.lang || tr('自动识别') }),
+    tr('{lines} 行', { lines: i.lines }),
+    tr('{chars} 字', { chars: i.chars }),
+    i.streaming ? tr('正在输出') : tr('已完成'),
   ];
-  if (i.translated) parts.push(`页面被 ${i.translated} 改过`);
-  if (i.foreignTags.length) parts.push(`外来标签 ${few(i.foreignTags)}`);
-  if (i.foreignAttrs.length) parts.push(`外来属性 ${few(i.foreignAttrs)}`);
-  if (i.forcedColors) parts.push('系统高对比度');
-  parts.push(i.browser, i.desktop ? '桌面版' : '浏览器');
+  if (i.translated) parts.push(tr('页面被 {translated} 改过', { translated: i.translated }));
+  if (i.foreignTags.length) parts.push(tr('外来标签 {few}', { few: few(i.foreignTags) }));
+  if (i.foreignAttrs.length) parts.push(tr('外来属性 {few}', { few: few(i.foreignAttrs) }));
+  if (i.forcedColors) parts.push(tr('系统高对比度'));
+  parts.push(i.browser, i.desktop ? tr('桌面版') : tr('浏览器'));
   return parts.join(' · ');
 }

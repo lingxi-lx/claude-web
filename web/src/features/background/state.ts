@@ -7,6 +7,7 @@ import { ws } from '@/ws/client';
 import { closeOtherPages, registerPage } from '@/features/sections/pages';
 import { markPageOpened } from '@/features/automation/state';
 import { hasLive, reopenRun, sortSessions, stopNote } from './model';
+import { tr } from '@/i18n';
 
 export interface BgDrawer { sessionId: string; taskId: string; agentKey: string; runId?: string }
 
@@ -66,7 +67,7 @@ export function openAgent(d: BgDrawer): void { useBackground.setState({ drawer: 
 export function closeAgent(): void { useBackground.setState({ drawer: undefined }); }
 
 export function stopTask(sessionId: string, taskId: string): void {
-  void ws.request({ kind: 'session.stopTask', sessionId, taskId }).catch((e: any) => useStore.getState().toast(`停止失败：${e?.message ?? e}`));
+  void ws.request({ kind: 'session.stopTask', sessionId, taskId }).catch((e: any) => useStore.getState().toast(tr('停止失败：{message}', { message: e?.message ?? e })));
 }
 
 /** Whether a conversation has background work running (the composer's pill, the 停止 note). */

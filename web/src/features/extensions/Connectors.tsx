@@ -10,6 +10,7 @@ import { mcpChanged, useMcpChanged } from '@/features/panels/ConfigPanel';
 import { MCP_CATALOG } from '@/features/settings/mcp-catalog';
 import { connectorLook } from './brands';
 import { connectorNeeds, connectorStatus, filterCatalog, type Configured } from './connectors-model';
+import { tr } from '@/i18n';
 
 /** A connector's mark in its tile: the service's own, or one of our icons. */
 export function ConnectorTile({ id, size = 36 }: { id: string; size?: number }) {
@@ -26,7 +27,7 @@ export function ConnectorTile({ id, size = 36 }: { id: string; size?: number }) 
 }
 
 type Scope = 'user' | 'project' | 'local';
-const SCOPE_LABEL: Record<Scope, string> = { user: '所有项目', project: '这个项目（写进 .mcp.json，跟着仓库走）', local: '这个项目（只在这台电脑）' };
+const SCOPE_LABEL: Record<Scope, string> = { user: tr('所有项目'), project: tr('这个项目（写进 .mcp.json，跟着仓库走）'), local: tr('这个项目（只在这台电脑）') };
 
 /**
  * 连接器 (spec 2026-10-10-ui-structure §4): what is connected, then a directory to add from — each entry the
@@ -39,7 +40,7 @@ export function Connectors() {
   const toast = useStore((s) => s.toast);
   const cwd = active?.cwd;
   const [q, setQ] = useState('');
-  const [cat, setCat] = useState('全部');
+  const [cat, setCat] = useState(tr('全部'));
   const [scope, setScope] = useState<Scope>('user');
   const [configured, setConfigured] = useState<Configured[] | null>(null);
   const [err, setErr] = useState('');
@@ -56,7 +57,7 @@ export function Connectors() {
   useMcpChanged(() => void reload());
 
   const names = useMemo(() => new Set((configured ?? []).map((s) => s.name)), [configured]);
-  const cats = useMemo(() => ['全部', ...new Set(MCP_CATALOG.map((c) => c.cat))], []);
+  const cats = useMemo(() => [tr('全部'), ...new Set(MCP_CATALOG.map((c) => c.cat))], []);
   const items = useMemo(() => filterCatalog(MCP_CATALOG, { cat, query: q }), [cat, q]);
 
   const add = async (name: string, json: Record<string, unknown>, env?: string[], oauth?: boolean) => {
@@ -64,7 +65,7 @@ export function Connectors() {
     if (env?.length) {
       const vals: Record<string, string> = {};
       for (const k of env) {
-        const v = await dlg.prompt(`「${name}」需要 ${k}`, '', { placeholder: k });
+        const v = await dlg.prompt(tr('「{name}」需要 {k}', { name, k }), '', { placeholder: k });
         if (v === null) return;
         if (v) vals[k] = v;
       }
@@ -73,13 +74,13 @@ export function Connectors() {
     setBusy(name);
     try {
       await ws.request({ kind: 'config.mcp.add', name, json: JSON.stringify(cfg), scope, cwd });
-      toast(`已添加 ${name}${oauth ? '。第一次用的时候，在对话里输入 /mcp 完成登录' : ''}`, true);
+      toast(tr('已添加 {name}{v}', { name, v: oauth ? tr('。第一次用的时候，在对话里输入 /mcp 完成登录') : '' }), true);
       mcpChanged();
     } catch (e: any) { toast(e.message); }
     setBusy(null);
   };
   const remove = async (name: string) => {
-    if (!(await dlg.confirm(`移除连接器「${name}」？`, { danger: true }))) return;
+    if (!(await dlg.confirm(tr('移除连接器「{name}」？', { name }), { danger: true }))) return;
     setBusy(name);
     try { await ws.request({ kind: 'config.mcp.remove', name }); mcpChanged(); } catch (e: any) { toast(e.message); }
     setBusy(null);
@@ -87,7 +88,7 @@ export function Connectors() {
   const searchRegistry = async () => {
     if (!q.trim()) return;
     setRegBusy(true);
-    try { setReg(await ws.request<RegistryServer[]>({ kind: 'mcp.registry', query: q })); } catch (e: any) { toast(`官方目录：${e.message}`); setReg([]); }
+    try { setReg(await ws.request<RegistryServer[]>({ kind: 'mcp.registry', query: q })); } catch (e: any) { toast(tr('官方目录：{message}', { message: e.message })); setReg([]); }
     setRegBusy(false);
   };
   const checkHealth = async () => {
@@ -101,11 +102,11 @@ export function Connectors() {
       <div className="cx-bar">
         <label className="cx-search">
           <Icon name="search" size={15} />
-          <input value={q} placeholder="搜索连接器…" aria-label="搜索连接器" onChange={(e) => { setQ(e.target.value); setReg(null); }} onKeyDown={(e) => { if (e.key === 'Enter' && !imeComposing(e.nativeEvent)) void searchRegistry(); }} />
-          {q && <button type="button" className="icon-btn xs" aria-label="清除" onClick={() => { setQ(''); setReg(null); }}><Icon name="close" size={12} /></button>}
+          <input value={q} placeholder={tr('搜索连接器…')} aria-label={tr('搜索连接器')} onChange={(e) => { setQ(e.target.value); setReg(null); }} onKeyDown={(e) => { if (e.key === 'Enter' && !imeComposing(e.nativeEvent)) void searchRegistry(); }} />
+          {q && <button type="button" className="icon-btn xs" aria-label={tr('清除')} onClick={() => { setQ(''); setReg(null); }}><Icon name="close" size={12} /></button>}
         </label>
-        <label className="cx-scope" title="新加的连接器给谁用">
-          <span>添加到</span>
+        <label className="cx-scope" title={tr('新加的连接器给谁用')}>
+          <span>{tr('添加到')}</span>
           <select className="field" value={scope} onChange={(e) => setScope(e.target.value as Scope)}>
             <option value="user">{SCOPE_LABEL.user}</option>
             <option value="project" disabled={!cwd}>{SCOPE_LABEL.project}</option>
@@ -117,10 +118,10 @@ export function Connectors() {
       {configured && configured.length > 0 && (
         <section className="cx-sec" data-id="connected">
           <div className="cx-h">
-            <h3>已连接</h3>
+            <h3>{tr('已连接')}</h3>
             <span className="n">{configured.length}</span>
             <span className="grow" />
-            <button className="link" disabled={hBusy} title="挨个连一下，看哪个通、哪个要登录" onClick={checkHealth}>{hBusy ? '检查中…' : '检查连接'}</button>
+            <button className="link" disabled={hBusy} title={tr('挨个连一下，看哪个通、哪个要登录')} onClick={checkHealth}>{hBusy ? tr('检查中…') : tr('检查连接')}</button>
           </div>
           <div className="cx-grid">
             {configured.map((s) => {
@@ -132,18 +133,18 @@ export function Connectors() {
                     <span className="cx-n">{MCP_CATALOG.find((c) => c.id === s.name)?.name ?? s.name}</span>
                     <span className={clsx('cx-st', st.tone)}><span className="cx-dot" />{st.text}</span>
                   </span>
-                  <button className="icon-btn cx-rm" disabled={busy === s.name} title="移除" aria-label={`移除 ${s.name}`} onClick={() => void remove(s.name)}><Icon name="trash" size={15} /></button>
+                  <button className="icon-btn cx-rm" disabled={busy === s.name} title={tr('移除')} aria-label={tr('移除 {name}', { name: s.name })} onClick={() => void remove(s.name)}><Icon name="trash" size={15} /></button>
                 </div>
               );
             })}
           </div>
         </section>
       )}
-      {err && <div className="cx-err" role="status"><Icon name="alert" size={14} />读不到已连接的列表：{err}</div>}
+      {err && <div className="cx-err" role="status"><Icon name="alert" size={14} />{tr('读不到已连接的列表：{err}', { err })}</div>}
 
       <section className="cx-sec" data-id="directory">
-        <div className="cx-h"><h3>目录</h3></div>
-        <div className="cx-cats" role="tablist" aria-label="分类">
+        <div className="cx-h"><h3>{tr('目录')}</h3></div>
+        <div className="cx-cats" role="tablist" aria-label={tr('分类')}>
           {cats.map((c) => <button key={c} role="tab" aria-selected={cat === c} className={clsx('ht', cat === c && 'on')} onClick={() => setCat(c)}>{c}</button>)}
         </div>
         <div className="cx-grid">
@@ -159,25 +160,25 @@ export function Connectors() {
                   <span className="cx-d">{c.desc}</span>
                 </span>
                 {has
-                  ? <span className="cx-added" title="已添加"><Icon name="check" size={16} /></span>
-                  : <button className="icon-btn cx-add" disabled={busy === c.id} title={`添加 ${c.name}`} aria-label={`添加 ${c.name}`} onClick={() => void add(c.id, c.json, c.env, c.oauth)}>{busy === c.id ? <span className="spinner" /> : <Icon name="plus" size={17} />}</button>}
+                  ? <span className="cx-added" title={tr('已添加')}><Icon name="check" size={16} /></span>
+                  : <button className="icon-btn cx-add" disabled={busy === c.id} title={tr('添加 {name}', { name: c.name })} aria-label={tr('添加 {name}', { name: c.name })} onClick={() => void add(c.id, c.json, c.env, c.oauth)}>{busy === c.id ? <span className="spinner" /> : <Icon name="plus" size={17} />}</button>}
               </div>
             );
           })}
         </div>
-        {!items.length && <div className="cx-none">目录里没有叫「{q}」的。</div>}
+        {!items.length && <div className="cx-none">{tr('目录里没有叫「{q}」的。', { q })}</div>}
       </section>
 
       <div className="cx-foot">
         {q.trim()
-          ? <button className="btn sm" disabled={regBusy} onClick={searchRegistry}><Icon name="search" size={13} />{regBusy ? '搜索中…' : `在官方目录里搜「${q.trim()}」`}</button>
-          : <span className="cx-hint">没找到想要的？在上面输入名字，可以到官方目录里搜。</span>}
+          ? <button className="btn sm" disabled={regBusy} onClick={searchRegistry}><Icon name="search" size={13} />{regBusy ? tr('搜索中…') : tr('在官方目录里搜「{q}」', { q: q.trim() })}</button>
+          : <span className="cx-hint">{tr('没找到想要的？在上面输入名字，可以到官方目录里搜。')}</span>}
         <span className="grow" />
-        <button className="link" onClick={() => useStore.getState().openSettings({ section: 'mcp-json' })}>用配置手动添加…</button>
+        <button className="link" onClick={() => useStore.getState().openSettings({ section: 'mcp-json' })}>{tr('用配置手动添加…')}</button>
       </div>
       {reg && (
         <section className="cx-sec" data-id="registry">
-          <div className="cx-h"><h3>官方目录</h3><span className="n">{reg.length}</span></div>
+          <div className="cx-h"><h3>{tr('官方目录')}</h3><span className="n">{reg.length}</span></div>
           <div className="cx-grid one">
             {reg.map((r) => {
               const name = r.name.split('/').pop()!.replace(/[^\w.-]/g, '-');
@@ -189,15 +190,15 @@ export function Connectors() {
                     <span className="cx-n">{r.name}</span>
                     <span className="cx-d">{r.description}</span>
                   </span>
-                  {r.repo && <a className="icon-btn" href={r.repo} target="_blank" rel="noreferrer" title="它的仓库" aria-label="仓库"><Icon name="external" size={15} /></a>}
+                  {r.repo && <a className="icon-btn" href={r.repo} target="_blank" rel="noreferrer" title={tr('它的仓库')} aria-label={tr('仓库')}><Icon name="external" size={15} /></a>}
                   {has
-                    ? <span className="cx-added" title="已添加"><Icon name="check" size={16} /></span>
-                    : <button className="icon-btn cx-add" disabled={!r.install || busy === name} title={r.install ? `添加 ${name}` : '这一项没有可用的安装方式'} aria-label={`添加 ${name}`} onClick={() => r.install && void add(name, r.install.command ? { type: 'stdio', command: r.install.command, args: r.install.args } : { type: r.install.transport, url: r.install.url }, r.install.env)}>{busy === name ? <span className="spinner" /> : <Icon name="plus" size={17} />}</button>}
+                    ? <span className="cx-added" title={tr('已添加')}><Icon name="check" size={16} /></span>
+                    : <button className="icon-btn cx-add" disabled={!r.install || busy === name} title={r.install ? tr('添加 {name}', { name }) : tr('这一项没有可用的安装方式')} aria-label={tr('添加 {name}', { name })} onClick={() => r.install && void add(name, r.install.command ? { type: 'stdio', command: r.install.command, args: r.install.args } : { type: r.install.transport, url: r.install.url }, r.install.env)}>{busy === name ? <span className="spinner" /> : <Icon name="plus" size={17} />}</button>}
                 </div>
               );
             })}
           </div>
-          {!reg.length && <div className="cx-none">官方目录里也没有。</div>}
+          {!reg.length && <div className="cx-none">{tr('官方目录里也没有。')}</div>}
         </section>
       )}
     </div>

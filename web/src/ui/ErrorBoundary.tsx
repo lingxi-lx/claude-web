@@ -3,6 +3,7 @@ import { ws } from '@/ws/client';
 import { useStore } from '@/store';
 import { Icon } from '@/ui/icons';
 import { crashTargets, formatErrorReport, toReport, type ErrorReport } from './error-report';
+import { tr } from '@/i18n';
 
 /**
  * Error boundaries: a component that throws takes down only its own region (a tile, a dock panel, one
@@ -35,7 +36,7 @@ function legacyCopy(text: string) {
 }
 
 function Thrower({ area }: { area: string }): never {
-  throw new Error(`__cwCrash：${area} 的测试错误`);
+  throw new Error(tr('__cwCrash：{area} 的测试错误', { area }));
 }
 
 interface Props {
@@ -107,13 +108,13 @@ export class ErrorBoundary extends Component<Props, State> {
       <div className={cls} role="alert" data-area={this.props.area}>
         <div className="eb-head">
           <span className="eb-ic"><Icon name="alert" size={this.props.compact ? 13 : 16} /></span>
-          <span className="eb-title">这里出错了</span>
+          <span className="eb-title">{tr('这里出错了')}</span>
           {!this.props.compact && <span className="eb-area">{this.props.area}</span>}
         </div>
         <div className="eb-msg" title={report.message}>{firstLine}</div>
         <div className="eb-actions">
-          <button type="button" className="btn sm" onClick={this.reset}><Icon name="refresh" size={12} /> 重试</button>
-          <button type="button" className="btn sm ghost" onClick={this.copy}><Icon name={copied ? 'check' : 'copy'} size={12} /> {copied ? '已复制' : '复制错误信息'}</button>
+          <button type="button" className="btn sm" onClick={this.reset}><Icon name="refresh" size={12} /> {tr('重试')}</button>
+          <button type="button" className="btn sm ghost" onClick={this.copy}><Icon name={copied ? 'check' : 'copy'} size={12} /> {copied ? tr('已复制') : tr('复制错误信息')}</button>
         </div>
       </div>
     );

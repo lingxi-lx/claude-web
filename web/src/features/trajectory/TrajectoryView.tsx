@@ -4,6 +4,7 @@ import { walkTools } from '@/model/conversation';
 import { groupTurns } from '@/model/turn';
 import { toolSummary } from '@/util';
 import { Icon } from '@/ui/icons';
+import { tr } from '@/i18n';
 
 export function TrajectoryView() {
   const active = useScopedSession();
@@ -32,8 +33,8 @@ export function TrajectoryView() {
     <div className="chat">
       <div className="traj">
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
-          <input className="mono" placeholder="搜索工具调用…" value={q} onChange={(e) => setQ(e.target.value)} style={{ background: 'var(--bg-1)', border: '1px solid var(--line)', borderRadius: 4, padding: '4px 8px', width: 260 }} />
-          <span style={{ color: 'var(--fg-2)', fontSize: 13 }}>{rows.length} 次调用</span>
+          <input className="mono" placeholder={tr('搜索工具调用…')} value={q} onChange={(e) => setQ(e.target.value)} style={{ background: 'var(--bg-1)', border: '1px solid var(--line)', borderRadius: 4, padding: '4px 8px', width: 260 }} />
+          <span style={{ color: 'var(--fg-2)', fontSize: 13 }}>{tr('{rowsCount} 次调用', { rowsCount: rows.length })}</span>
           {Object.entries(counts)
             .sort((a, b) => b[1] - a[1])
             .map(([n, c]) => (
@@ -45,11 +46,11 @@ export function TrajectoryView() {
         <table>
           <thead>
             <tr>
-              <th>轮</th>
-              <th>工具</th>
-              <th>参数</th>
-              <th>状态</th>
-              <th>耗时</th>
+              <th>{tr('轮')}</th>
+              <th>{tr('工具')}</th>
+              <th>{tr('参数')}</th>
+              <th>{tr('状态')}</th>
+              <th>{tr('耗时')}</th>
             </tr>
           </thead>
           <tbody>
@@ -72,7 +73,7 @@ export function TrajectoryView() {
             ))}
           </tbody>
         </table>
-        {!rows.length && <div className="empty">还没有工具调用</div>}
+        {!rows.length && <div className="empty">{tr('还没有工具调用')}</div>}
       </div>
     </div>
   );

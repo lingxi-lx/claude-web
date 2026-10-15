@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { GitService } from '../git/service.js';
 import type { VcsDetail, VcsItem, VcsRepo } from '../protocol.js';
+import { tr } from '../i18n/index.js';
 
 const execFileAsync = promisify(execFile);
 const isWin = process.platform === 'win32';
@@ -21,15 +22,15 @@ export class VcsService {
   async target(cwd: string, explicit?: string): Promise<Target> {
     if (explicit) {
       const m = /^(?:https?:\/\/([^/]+)\/)?([^/@\s]+)\/([^/@\s]+?)(?:\.git)?(?:@([^\s]+))?$/.exec(explicit.trim());
-      if (!m) throw new Error('仓库格式：owner/repo 或 https://host/owner/repo');
+      if (!m) throw new Error(tr('仓库格式：owner/repo 或 https://host/owner/repo'));
       const host = m[4] ?? m[1] ?? 'github.com';
       return { provider: /gitlab/i.test(host) ? 'gitlab' : 'github', host, owner: m[2], repo: m[3] };
     }
     const remotes = await this.git.remotes(cwd);
     const url = (remotes.find((r) => r.name === 'origin') ?? remotes[0])?.url;
-    if (!url) throw new Error('这个目录没有 git remote');
+    if (!url) throw new Error(tr('这个目录没有 git remote'));
     const m = /^(?:https?:\/\/(?:[^@]+@)?([^/:]+)(?::\d+)?\/|git@([^:]+):|ssh:\/\/(?:[^@]+@)?([^/:]+)(?::\d+)?\/)([^/]+)\/(.+?)(?:\.git)?\/?$/.exec(url.trim());
-    if (!m) throw new Error(`看不懂 remote：${url}`);
+    if (!m) throw new Error(tr('看不懂 remote：{url}', { url }));
     const host = m[1] ?? m[2] ?? m[3];
     const parts = m[5].split('/');
     return { provider: /gitlab/i.test(host) ? 'gitlab' : 'github', host, owner: m[4] + (parts.length > 1 ? `/${parts.slice(0, -1).join('/')}` : ''), repo: parts[parts.length - 1] };
@@ -47,7 +48,7 @@ export class VcsService {
       token = process.env.GITLAB_TOKEN ?? '';
       if (!token) { try { const { stdout } = await execFileAsync(isWin ? 'glab.exe' : 'glab', ['config', 'get', 'token', '-h', t.host], { windowsHide: true, timeout: 15_000 }); token = stdout.trim(); } catch { /* not logged in */ } }
     }
-    if (!token) throw new Error(t.provider === 'github' ? '未登录 GitHub：运行 `gh auth login`，或设置 GH_TOKEN' : '未登录 GitLab：运行 `glab auth login`，或设置 GITLAB_TOKEN');
+    if (!token) throw new Error(t.provider === 'github' ? tr('未登录 GitHub：运行 `gh auth login`，或设置 GH_TOKEN') : tr('未登录 GitLab：运行 `glab auth login`，或设置 GITLAB_TOKEN'));
     this.tokens.set(key, { token, at: Date.now() });
     return token;
   }

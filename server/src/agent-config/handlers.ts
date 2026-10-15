@@ -1,9 +1,10 @@
 // WS dispatch for `agentConfig.*` — the hub forwards every request with that prefix here.
 import type { AgentConfigKind, AgentConfigRequest } from './types.js';
 import { AGENT_CONFIG_KINDS, type AgentConfigService } from './service.js';
+import { tr } from '../i18n/index.js';
 
 const kindOk = (k: unknown): AgentConfigKind => {
-  if (!AGENT_CONFIG_KINDS.includes(k as AgentConfigKind)) throw new Error(`不支持的 agent：${String(k)}`);
+  if (!AGENT_CONFIG_KINDS.includes(k as AgentConfigKind)) throw new Error(tr('不支持的 agent：{k}', { k: String(k) }));
   return k as AgentConfigKind;
 };
 

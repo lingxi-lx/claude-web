@@ -10,6 +10,7 @@ import { SearchView } from './SearchView';
 import { Artifacts, useArtifacts } from './Artifacts';
 import { useGitStatus } from './git-status';
 import { useRightPanel } from './right-panel';
+import { tr } from '@/i18n';
 
 /** The last open request (`useRightPanel().explorer.n`) the right panel's 文件 applied (each is applied once). */
 let appliedIntent = 0;
@@ -48,14 +49,14 @@ export function FilesView({ visible, inDock }: { visible: boolean; inDock?: bool
   if (shownSid !== sid) { setShownSid(sid); setAskedArtifacts(false); }
 
   if (!active) return <EmptyState e={EMPTY.filesNoChat} />;
-  if (peer) return <div className="empty">这个对话在机器「{peer.name}」上，它的文件在那台机器上。</div>;
+  if (peer) return <div className="empty">{tr('这个对话在机器「{name}」上，它的文件在那台机器上。', { name: peer.name })}</div>;
   const pick = (m: 'tree' | 'search') => { setMode(m); if (m === 'search') setSearched(true); };
   return (
     <div className="files-view">
       <div className="fv-head">
-        <span className="seg" role="tablist" aria-label="文件或搜索">
-          <button role="tab" aria-selected={mode === 'tree'} className={clsx(mode === 'tree' && 'active')} onClick={() => pick('tree')}>文件</button>
-          <button role="tab" aria-selected={mode === 'search'} className={clsx(mode === 'search' && 'active')} onClick={() => pick('search')}>搜索</button>
+        <span className="seg" role="tablist" aria-label={tr('文件或搜索')}>
+          <button role="tab" aria-selected={mode === 'tree'} className={clsx(mode === 'tree' && 'active')} onClick={() => pick('tree')}>{tr('文件')}</button>
+          <button role="tab" aria-selected={mode === 'search'} className={clsx(mode === 'search' && 'active')} onClick={() => pick('search')}>{tr('搜索')}</button>
         </span>
       </div>
       <div className="fv-body" hidden={mode !== 'tree'}>
@@ -63,12 +64,12 @@ export function FilesView({ visible, inDock }: { visible: boolean; inDock?: bool
           <div className={clsx('fv-group', showArtifacts && 'open')}>
             <button className="fv-group-head" aria-expanded={showArtifacts} onClick={() => setShowArtifacts(!showArtifacts)}>
               <Icon name={showArtifacts ? 'chevronDown' : 'chevronRight'} size={12} />
-              <span className="grow">本对话{TERMS.artifacts}</span>
+              <span className="grow">{tr('本对话{artifacts}', { artifacts: TERMS.artifacts })}</span>
               <span className="n">{artifacts.length}</span>
             </button>
             {showArtifacts && (artifacts.length
               ? <Artifacts sessionId={sid!} compact />
-              : <div className="fv-empty">还没有生成的文件。Claude 新建的文件（Write / Artifact）之后会出现在这里。</div>)}
+              : <div className="fv-empty">{tr('还没有生成的文件。Claude 新建的文件（Write / Artifact）之后会出现在这里。')}</div>)}
           </div>
         )}
         <FileTree root={cwd} gitStatus={gitStatus} />

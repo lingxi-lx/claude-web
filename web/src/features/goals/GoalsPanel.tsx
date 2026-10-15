@@ -9,11 +9,12 @@ import type { Goal, GoalEvidence } from '@shared';
 import { EMPTY, MODE_LABEL } from '@/ui/terms';
 import { EmptyState } from '@/ui/EmptyState';
 import { imeComposing } from '@/ui/ime';
+import { tr, dateLocale } from '@/i18n';
 
 /** The permission modes a goal can run in: it runs unattended, so only these three (as before, in interface words). */
 const GOAL_MODES = ['default', 'acceptEdits', 'bypassPermissions'] as const;
 
-const STATUS_L: Record<Goal['status'], string> = { draft: '草稿', active: '进行中', paused: '已暂停', complete: '已完成', blocked: '卡住', max_turns: '到上限' };
+const STATUS_L: Record<Goal['status'], string> = { draft: tr('草稿'), active: tr('进行中'), paused: tr('已暂停'), complete: tr('已完成'), blocked: tr('卡住'), max_turns: tr('到上限') };
 const EV_IC: Record<GoalEvidence['kind'], IconName> = { file: 'edit', command: 'bash', test: 'checkCircle', commit: 'commit', note: 'info', error: 'close', blocked: 'alert' };
 const fmt = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(n));
 const since = (t?: number) => { if (!t) return ''; const s = (Date.now() - t) / 1000; return s < 60 ? `${Math.floor(s)}s` : s < 3600 ? `${Math.floor(s / 60)}m` : `${(s / 3600).toFixed(1)}h`; };
@@ -24,17 +25,17 @@ function Editor({ g, onDone }: { g: Partial<Goal> & { cwd: string }; onDone: (v:
   const [f, setF] = useState({ objective: g.objective ?? '', spec: g.spec ?? '', cwd: g.cwd, maxTurns: g.maxTurns ?? 50, tokenBudget: g.tokenBudget ?? null, agent: g.agent ?? '', permissionMode: g.permissionMode ?? 'acceptEdits' });
   return (
     <div className="goal-editor">
-      <label>目标（一句话说清「做到什么算完成」）<textarea className="field" rows={3} value={f.objective} onChange={(e) => setF({ ...f, objective: e.target.value })} placeholder="例如：把 /api/users 的 N+1 查询修掉，加上回归测试，CI 全绿" /></label>
-      <label>活规格 / 验收标准（Markdown，可随时改，下一轮生效）<textarea className="field mono" rows={6} value={f.spec} onChange={(e) => setF({ ...f, spec: e.target.value })} placeholder={'- [ ] 验收点 1\n- [ ] 验收点 2\n约束：不改公共 API'} /></label>
+      <label>{tr('目标（一句话说清「做到什么算完成」）')}<textarea className="field" rows={3} value={f.objective} onChange={(e) => setF({ ...f, objective: e.target.value })} placeholder={tr('例如：把 /api/users 的 N+1 查询修掉，加上回归测试，CI 全绿')} /></label>
+      <label>{tr('活规格 / 验收标准（Markdown，可随时改，下一轮生效）')}<textarea className="field mono" rows={6} value={f.spec} onChange={(e) => setF({ ...f, spec: e.target.value })} placeholder={tr("- [ ] 验收点 1\n- [ ] 验收点 2\n约束：不改公共 API")} /></label>
       <div className="row3">
-        <label>项目<select className="field" value={f.cwd} onChange={(e) => setF({ ...f, cwd: e.target.value })}>{[...new Set([f.cwd, ...workspaces.map((w) => w.path)])].filter(Boolean).map((p) => <option key={p} value={p}>{p}</option>)}</select></label>
-        <label>用哪个 Agent<select className="field" value={f.agent} onChange={(e) => setF({ ...f, agent: e.target.value })}><option value="">Claude Code</option>{agents.filter((a) => a.kind !== 'claude' && a.installed && a.enabled).map((a) => <option key={a.kind} value={a.kind}>{a.name}</option>)}</select></label>
-        <label>权限<select className="field" value={f.permissionMode} onChange={(e) => setF({ ...f, permissionMode: e.target.value })}>{GOAL_MODES.map((m) => <option key={m} value={m}>{MODE_LABEL[m]}</option>)}</select></label>
-        <label>最大轮数<input className="field" type="number" value={f.maxTurns} onChange={(e) => setF({ ...f, maxTurns: Number(e.target.value) || 50 })} /></label>
-        <label>Token 预算（空 = 不限）<input className="field" type="number" value={f.tokenBudget ?? ''} onChange={(e) => setF({ ...f, tokenBudget: e.target.value ? Number(e.target.value) : null })} /></label>
+        <label>{tr('项目')}<select className="field" value={f.cwd} onChange={(e) => setF({ ...f, cwd: e.target.value })}>{[...new Set([f.cwd, ...workspaces.map((w) => w.path)])].filter(Boolean).map((p) => <option key={p} value={p}>{p}</option>)}</select></label>
+        <label>{tr('用哪个 Agent')}<select className="field" value={f.agent} onChange={(e) => setF({ ...f, agent: e.target.value })}><option value="">Claude Code</option>{agents.filter((a) => a.kind !== 'claude' && a.installed && a.enabled).map((a) => <option key={a.kind} value={a.kind}>{a.name}</option>)}</select></label>
+        <label>{tr('权限')}<select className="field" value={f.permissionMode} onChange={(e) => setF({ ...f, permissionMode: e.target.value })}>{GOAL_MODES.map((m) => <option key={m} value={m}>{MODE_LABEL[m]}</option>)}</select></label>
+        <label>{tr('最大轮数')}<input className="field" type="number" value={f.maxTurns} onChange={(e) => setF({ ...f, maxTurns: Number(e.target.value) || 50 })} /></label>
+        <label>{tr('Token 预算（空 = 不限）')}<input className="field" type="number" value={f.tokenBudget ?? ''} onChange={(e) => setF({ ...f, tokenBudget: e.target.value ? Number(e.target.value) : null })} /></label>
       </div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
-        <button className="btn sm" disabled={!f.objective.trim() || !f.cwd} onClick={() => onDone(f)}>保存</button>
+        <button className="btn sm" disabled={!f.objective.trim() || !f.cwd} onClick={() => onDone(f)}>{tr('保存')}</button>
       </div>
     </div>
   );
@@ -58,31 +59,31 @@ function GoalCard({ g, open, onOpen, page }: { g: Goal; open: boolean; onOpen: (
         <span className={clsx('dot', g.status === 'active' ? 'running' : g.status === 'blocked' ? 'error' : g.status === 'complete' ? 'idle' : g.status === 'paused' || g.status === 'max_turns' ? 'waiting' : 'idle')} />
         <div className="grow">
           <div className="t">{g.objective.split('\n')[0].slice(0, 120)}</div>
-          <div className="m">{STATUS_L[g.status]} · {g.turnsExecuted}/{g.maxTurns} 轮 · {fmt(g.tokensUsed)} tok{g.tokenBudget ? ` / ${fmt(g.tokenBudget)}` : ''}{g.costUsd ? ` · $${g.costUsd.toFixed(2)}` : ''}{g.startedAt && g.status === 'active' ? ` · ${since(g.startedAt)}` : ''}{lastTest ? ` · 测试${lastTest.ok === false ? '失败' : lastTest.ok ? '通过' : '运行中'}` : ''}</div>
+          <div className="m">{tr('{v} · {turnsExecuted}/{maxTurns} 轮 · {tokensUsed} tok{v2}{v3}{v4}{v5}', { v: STATUS_L[g.status], turnsExecuted: g.turnsExecuted, maxTurns: g.maxTurns, tokensUsed: fmt(g.tokensUsed), v2: g.tokenBudget ? ` / ${fmt(g.tokenBudget)}` : '', v3: g.costUsd ? ` · $${g.costUsd.toFixed(2)}` : '', v4: g.startedAt && g.status === 'active' ? ` · ${since(g.startedAt)}` : '', v5: lastTest ? tr(' · 测试{v}', { v: lastTest.ok === false ? tr('失败') : lastTest.ok ? tr('通过') : tr('运行中') }) : '' })}</div>
         </div>
-        <div className="prog" title={`${done}/${g.steps.length} 步`}><div style={{ width: `${pct}%` }} /></div>
-        {page && g.sessionId && <button className="btn sm ghost goal-go" title="进入这个目标的对话" onClick={(e) => { e.stopPropagation(); setActive(g.sessionId!); }}>打开对话 <Icon name="arrowRight" size={12} /></button>}
+        <div className="prog" title={tr('{done}/{stepsCount} 步', { done, stepsCount: g.steps.length })}><div style={{ width: `${pct}%` }} /></div>
+        {page && g.sessionId && <button className="btn sm ghost goal-go" title={tr('进入这个目标的对话')} onClick={(e) => { e.stopPropagation(); setActive(g.sessionId!); }}>{tr('打开对话')} <Icon name="arrowRight" size={12} /></button>}
       </div>
       {open && (
         <div className="goal-b">
           <div className="actions">
-            {(g.status === 'draft' || g.status === 'paused' || g.status === 'blocked' || g.status === 'max_turns') && <button className="btn sm" onClick={() => req({ kind: g.status === 'draft' ? 'goals.start' : 'goals.resume', id: g.id }, g.status === 'draft' ? '已启动' : '继续推进')}><Icon name="play" size={12} /> {g.status === 'draft' ? '启动' : '继续'}</button>}
-            {g.status === 'active' && <button className="btn sm ghost" onClick={() => req({ kind: 'goals.pause', id: g.id }, '已暂停')}><Icon name="pause" size={12} /> 暂停</button>}
-            {g.status !== 'complete' && <button className="btn sm ghost" onClick={() => req({ kind: 'goals.complete', id: g.id }, '已标记完成')}><Icon name="check" size={12} /> 标记完成</button>}
-            {g.sessionId && <button className="btn sm ghost" onClick={() => setActive(g.sessionId!)}>打开对话</button>}
-            <button className="btn sm ghost" onClick={() => setEditing(!editing)}>{editing ? '收起' : '编辑'}</button>
+            {(g.status === 'draft' || g.status === 'paused' || g.status === 'blocked' || g.status === 'max_turns') && <button className="btn sm" onClick={() => req({ kind: g.status === 'draft' ? 'goals.start' : 'goals.resume', id: g.id }, g.status === 'draft' ? tr('已启动') : tr('继续推进'))}><Icon name="play" size={12} /> {g.status === 'draft' ? tr('启动') : tr('继续')}</button>}
+            {g.status === 'active' && <button className="btn sm ghost" onClick={() => req({ kind: 'goals.pause', id: g.id }, tr('已暂停'))}><Icon name="pause" size={12} /> {tr('暂停')}</button>}
+            {g.status !== 'complete' && <button className="btn sm ghost" onClick={() => req({ kind: 'goals.complete', id: g.id }, tr('已标记完成'))}><Icon name="check" size={12} /> {tr('标记完成')}</button>}
+            {g.sessionId && <button className="btn sm ghost" onClick={() => setActive(g.sessionId!)}>{tr('打开对话')}</button>}
+            <button className="btn sm ghost" onClick={() => setEditing(!editing)}>{editing ? tr('收起') : tr('编辑')}</button>
             <span className="grow" />
-            <button className="btn sm ghost danger" onClick={async () => { if (await dlg.confirm('删除这个目标？', { message: '它的对话不会被删除。', danger: true, okLabel: '删除' })) await req({ kind: 'goals.remove', id: g.id }); }}>删除</button>
+            <button className="btn sm ghost danger" onClick={async () => { if (await dlg.confirm(tr('删除这个目标？'), { message: tr('它的对话不会被删除。'), danger: true, okLabel: tr('删除') })) await req({ kind: 'goals.remove', id: g.id }); }}>{tr('删除')}</button>
           </div>
-          {editing && <Editor g={g} onDone={async (v) => { await req({ kind: 'goals.update', id: g.id, patch: v }, '已保存'); setEditing(false); }} />}
+          {editing && <Editor g={g} onDone={async (v) => { await req({ kind: 'goals.update', id: g.id, patch: v }, tr('已保存')); setEditing(false); }} />}
           <div className="seg mini" style={{ alignSelf: 'flex-start' }}>
-            <button className={clsx(tab === 'graph' && 'active')} onClick={() => setTab('graph')}>执行图 {g.steps.length ? `${done}/${g.steps.length}` : ''}</button>
-            <button className={clsx(tab === 'spec' && 'active')} onClick={() => setTab('spec')}>活规格</button>
-            <button className={clsx(tab === 'evidence' && 'active')} onClick={() => setTab('evidence')}>证据 {g.evidence.length}</button>
+            <button className={clsx(tab === 'graph' && 'active')} onClick={() => setTab('graph')}>{tr('执行图 {v}', { v: g.steps.length ? `${done}/${g.steps.length}` : '' })}</button>
+            <button className={clsx(tab === 'spec' && 'active')} onClick={() => setTab('spec')}>{tr('活规格')}</button>
+            <button className={clsx(tab === 'evidence' && 'active')} onClick={() => setTab('evidence')}>{tr('证据 {evidenceCount}', { evidenceCount: g.evidence.length })}</button>
           </div>
           {tab === 'graph' && (
             <div className="goal-graph">
-              {g.steps.length === 0 && <div className="empty">还没有步骤：模型用 TodoWrite 规划后会出现在这里</div>}
+              {g.steps.length === 0 && <div className="empty">{tr('还没有步骤：模型用 TodoWrite 规划后会出现在这里')}</div>}
               {g.steps.map((s, i) => (
                 <div key={s.id} className={clsx('step', s.status)}>
                   <span className="n">{s.status === 'completed' ? <Icon name="check" size={12} /> : s.status === 'in_progress' ? <Icon name="play" size={11} /> : i + 1}</span>
@@ -90,14 +91,14 @@ function GoalCard({ g, open, onOpen, page }: { g: Goal; open: boolean; onOpen: (
                   {i < g.steps.length - 1 && <span className="edge" />}
                 </div>
               ))}
-              {g.lastResult && <details className="last"><summary>上一轮结论</summary><Markdown text={g.lastResult} /></details>}
+              {g.lastResult && <details className="last"><summary>{tr('上一轮结论')}</summary><Markdown text={g.lastResult} /></details>}
             </div>
           )}
           {tab === 'spec' && (
             <div className="goal-spec">
-              <textarea className="field mono" rows={10} value={spec} onChange={(e) => setSpec(e.target.value)} placeholder="验收标准、约束、不变量… 改完保存，下一轮提示里生效" />
+              <textarea className="field mono" rows={10} value={spec} onChange={(e) => setSpec(e.target.value)} placeholder={tr('验收标准、约束、不变量… 改完保存，下一轮提示里生效')} />
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginTop: 4 }}>
-                <button className="btn sm" disabled={spec === g.spec} onClick={() => req({ kind: 'goals.update', id: g.id, patch: { spec } }, '规格已更新')}>保存规格</button>
+                <button className="btn sm" disabled={spec === g.spec} onClick={() => req({ kind: 'goals.update', id: g.id, patch: { spec } }, tr('规格已更新'))}>{tr('保存规格')}</button>
               </div>
             </div>
           )}
@@ -107,12 +108,12 @@ function GoalCard({ g, open, onOpen, page }: { g: Goal; open: boolean; onOpen: (
                 <div key={i} className={clsx('ev', e.kind, e.ok === false && 'bad', e.ok === true && 'good')}>
                   <span className="ic">{EV_IC[e.kind]}</span>
                   <span className="txt">{e.summary}</span>
-                  <span className="when">{new Date(e.at).toLocaleTimeString()}</span>
+                  <span className="when">{new Date(e.at).toLocaleTimeString(dateLocale())}</span>
                 </div>
               ))}
-              {g.evidence.length === 0 && <div className="empty">还没有证据</div>}
+              {g.evidence.length === 0 && <div className="empty">{tr('还没有证据')}</div>}
               <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                <input className="field" placeholder="加一条人工备注…" onKeyDown={async (e) => { const v = (e.target as HTMLInputElement).value.trim(); if (e.key === 'Enter' && !imeComposing(e.nativeEvent) && v) { await req({ kind: 'goals.note', id: g.id, text: v }); (e.target as HTMLInputElement).value = ''; } }} />
+                <input className="field" placeholder={tr('加一条人工备注…')} onKeyDown={async (e) => { const v = (e.target as HTMLInputElement).value.trim(); if (e.key === 'Enter' && !imeComposing(e.nativeEvent) && v) { await req({ kind: 'goals.note', id: g.id, text: v }); (e.target as HTMLInputElement).value = ''; } }} />
               </div>
             </div>
           )}
@@ -143,16 +144,16 @@ export function GoalsPanel({ page = false, newSignal = 0 }: { page?: boolean; ne
   return (
     <div className={clsx('goals', page && 'page')}>
       <div className="goals-head">
-        <div className="seg mini"><button className={clsx(filter === 'active' && 'active')} onClick={() => setFilter('active')}>未完成</button><button className={clsx(filter === 'all' && 'active')} onClick={() => setFilter('all')}>全部</button></div>
-        <span className="muted" style={{ fontSize: 13 }}>{counts.active} 进行中{counts.blocked ? ` · ${counts.blocked} 需要你` : ''}</span>
+        <div className="seg mini"><button className={clsx(filter === 'active' && 'active')} onClick={() => setFilter('active')}>{tr('未完成')}</button><button className={clsx(filter === 'all' && 'active')} onClick={() => setFilter('all')}>{tr('全部')}</button></div>
+        <span className="muted" style={{ fontSize: 13 }}>{tr('{active} 进行中{v}', { active: counts.active, v: counts.blocked ? tr(' · {blocked} 需要你', { blocked: counts.blocked }) : '' })}</span>
         <span className="grow" />
-        {(!page || creating) && <button className="btn sm" onClick={() => setCreating(!creating)}>{creating ? '收起' : <><Icon name="plus" size={12} /> 新目标</>}</button>}
+        {(!page || creating) && <button className="btn sm" onClick={() => setCreating(!creating)}>{creating ? tr('收起') : <><Icon name="plus" size={12} /> {tr('新目标')}</>}</button>}
       </div>
-      {creating && <Editor g={{ cwd: activeCwd ?? workspaces[0]?.path ?? '' }} onDone={async (v) => { try { const g = await ws.request<Goal>({ kind: 'goals.create', ...v }); setCreating(false); setOpenId(g.id); if (await dlg.confirm('目标已创建，现在启动？', { message: '会开一个新对话并把目标 + 规格发过去，然后自动一轮轮推进。', okLabel: '启动' })) await ws.request({ kind: 'goals.start', id: g.id }); } catch (e: any) { toast(e.message); } }} />}
+      {creating && <Editor g={{ cwd: activeCwd ?? workspaces[0]?.path ?? '' }} onDone={async (v) => { try { const g = await ws.request<Goal>({ kind: 'goals.create', ...v }); setCreating(false); setOpenId(g.id); if (await dlg.confirm(tr('目标已创建，现在启动？'), { message: tr('会开一个新对话并把目标 + 规格发过去，然后自动一轮轮推进。'), okLabel: tr('启动') })) await ws.request({ kind: 'goals.start', id: g.id }); } catch (e: any) { toast(e.message); } }} />}
       <div className="goals-list">
         {shown.map((g) => <GoalCard key={g.id} g={g} page={page} open={openId === g.id} onOpen={() => setOpenId(openId === g.id ? null : g.id)} />)}
         {shown.length === 0 && !creating && (goals.length
-          ? <div className="empty">目标都完成了。<button className="link" onClick={() => setFilter('all')}>看全部</button></div>
+          ? <div className="empty">{tr('目标都完成了。')}<button className="link" onClick={() => setFilter('all')}>{tr('看全部')}</button></div>
           : <EmptyState e={EMPTY.goals} />)}
       </div>
     </div>

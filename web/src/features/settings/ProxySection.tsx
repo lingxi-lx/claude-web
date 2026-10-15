@@ -6,25 +6,26 @@ import type { ProxyStatus } from '@shared';
 import { imeComposing } from '@/ui/ime';
 import { Row } from './controls';
 import { Segmented } from '@/ui/Segmented';
+import { tr } from '@/i18n';
 
 // 设置 → 供应商 → 网络代理 (server net/proxy.ts). A ladder in rule / PAC mode only sets the system proxy, which Node
 // never looks at (user report: 403「所在地区」with the ladder on); the server reads it — or HTTP(S)_PROXY — and hands it
 // to every Agent it starts and to its own requests (provider tests, model lists, IM).
 
 type Mode = ProxyStatus['setting'];
-const MODES: { id: Mode; l: string }[] = [{ id: 'system', l: '跟随系统' }, { id: 'off', l: '不使用' }, { id: 'custom', l: '自定义' }];
+const MODES: { id: Mode; l: string }[] = [{ id: 'system', l: tr('跟随系统') }, { id: 'off', l: tr('不使用') }, { id: 'custom', l: tr('自定义') }];
 const SOURCE: Record<NonNullable<ProxyStatus['source']>, string> = {
-  setting: '你填的地址',
-  env: '启动时的环境变量 HTTPS_PROXY',
-  system: '系统代理',
-  pac: '系统代理的 PAC 脚本',
+  setting: tr('你填的地址'),
+  env: tr('启动时的环境变量 HTTPS_PROXY'),
+  system: tr('系统代理'),
+  pac: tr('系统代理的 PAC 脚本'),
 };
 
 /** The one line under the choice: what is in use now. */
 export function proxyLine(st: ProxyStatus): string {
-  if (st.active) return `正在使用 ${st.active}（${SOURCE[st.source ?? 'system']}）`;
-  if (st.setting === 'off') return '不使用代理：所有请求直连。';
-  return '没有检测到代理：所有请求直连。';
+  if (st.active) return tr('正在使用 {active}（{v}）', { active: st.active, v: SOURCE[st.source ?? 'system'] });
+  if (st.setting === 'off') return tr('不使用代理：所有请求直连。');
+  return tr('没有检测到代理：所有请求直连。');
 }
 
 export function ProxySection() {
@@ -56,22 +57,22 @@ export function ProxySection() {
 
   return (
     <div className="section" data-id="proxy">
-      <h5>网络代理</h5>
-      <Row label="代理" hint="跟随系统：先看启动时的 HTTPS_PROXY 环境变量，再看系统代理（梯子的「系统代理」开关）。用在所有 Agent 和本机发出的请求上；改动对新开的对话生效，已经在跑的对话重开后才用上。">
-        <Segmented className="sp-seg" label="代理" arrows disabled={busy} value={picked} options={MODES.map((o) => ({ value: o.id, label: o.l }))} onChange={(id) => pick(id)} />
+      <h5>{tr('网络代理')}</h5>
+      <Row label={tr('代理')} hint={tr('跟随系统：先看启动时的 HTTPS_PROXY 环境变量，再看系统代理（梯子的「系统代理」开关）。用在所有 Agent 和本机发出的请求上；改动对新开的对话生效，已经在跑的对话重开后才用上。')}>
+        <Segmented className="sp-seg" label={tr('代理')} arrows disabled={busy} value={picked} options={MODES.map((o) => ({ value: o.id, label: o.l }))} onChange={(id) => pick(id)} />
       </Row>
       {picked === 'custom' && (
-        <Row label="代理地址" hint="梯子的 HTTP 代理端口，比如 Clash 的 http://127.0.0.1:7890（SOCKS 端口不行）。">
+        <Row label={tr('代理地址')} hint={tr('梯子的 HTTP 代理端口，比如 Clash 的 http://127.0.0.1:7890（SOCKS 端口不行）。')}>
           <div style={{ display: 'flex', gap: 6 }}>
             <input className="field" style={{ width: 220 }} placeholder="http://127.0.0.1:7890" value={addr} onChange={(e) => setAddr(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !imeComposing(e.nativeEvent) && addr.trim()) void save(addr.trim()); }} />
-            <button className="btn sm" disabled={busy || !addr.trim()} onClick={() => void save(addr.trim())}>保存</button>
+            <button className="btn sm" disabled={busy || !addr.trim()} onClick={() => void save(addr.trim())}>{tr('保存')}</button>
           </div>
         </Row>
       )}
       <div className="sub" style={{ marginTop: 6 }} data-id="proxy-status">
-        {st ? proxyLine(st) : '读取中…'}
+        {st ? proxyLine(st) : tr('读取中…')}
         {st?.note && <div style={{ color: 'var(--warn)' }}>{st.note}</div>}
-        {' '}<button className="link" disabled={busy} onClick={() => void recheck()}>重新检测</button>
+        {' '}<button className="link" disabled={busy} onClick={() => void recheck()}>{tr('重新检测')}</button>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import type { ClientRequest } from '../protocol.js';
+import { tr } from '../i18n/index.js';
 
 type ClientLog = Extract<ClientRequest, { kind: 'client.log' }>;
 
@@ -63,7 +64,7 @@ export class ClientLogGate<K extends object> {
     this.take(this.all, this.global, now);
     this.seen.set(key, { t: now, dup: 0 });
     if (this.seen.size > 500) for (const [k, v] of this.seen) { if (now - v.t >= this.windowMs || this.seen.size > 500) this.seen.delete(k); else break; }
-    const repeats = prev?.dup ? `（自上次记录以来重复 ${prev.dup} 次）` : '';
+    const repeats = prev?.dup ? tr('（自上次记录以来重复 {dup} 次）', { dup: prev.dup }) : '';
     const parts = [`[web ${req.level === 'warn' ? 'warn' : 'error'}] ${area}: ${message}${repeats}${req.url ? `  (${flat(req.url, 200)})` : ''}`];
     if (req.stack) parts.push(block(req.stack, 4000));
     if (req.componentStack) parts.push(`  component stack:\n${block(req.componentStack, 2000)}`);

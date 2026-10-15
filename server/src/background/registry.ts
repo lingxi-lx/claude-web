@@ -2,6 +2,7 @@
 // The shapes are the official CLI's (sdk.d.ts SDKTask*Message; a workflow's `workflow_progress` is not in the d.ts —
 // read from its bundle and 60 saved runs, 2026-10-12): our engine sends the same since 2.8.4-cw.3.
 import type { BgAgent, BgAgentState, BgEvent, BgKind, BgSession, BgStatus, BgTask } from './types.js';
+import { tr } from '../i18n/index.js';
 
 export const AGENT_COLORS = 10;
 export const MAX_EVENTS = 200;
@@ -85,7 +86,7 @@ function newTask(s: BgState, m: any, now: number, kind: BgKind): BgTask {
     startedAt: now,
     agents: [],
   };
-  if (kind === 'agent') t.agents.push({ key: t.id, color: nextColor(s), label: t.description || str(m.subagent_type) || '子代理', agentId: t.id, ...(str(m.subagent_type) ? { agentType: m.subagent_type } : {}), state: 'running', startedAt: now, beats: [] });
+  if (kind === 'agent') t.agents.push({ key: t.id, color: nextColor(s), label: t.description || str(m.subagent_type) || tr('子代理'), agentId: t.id, ...(str(m.subagent_type) ? { agentType: m.subagent_type } : {}), state: 'running', startedAt: now, beats: [] });
   s.tasks.push(t);
   return t;
 }
@@ -137,9 +138,9 @@ export function mergeWorkflowAgent(s: BgState, t: BgTask, e: any, now: number, q
     changed = true;
     if (state === 'done' || state === 'failed') a.endedAt = num(e.startedAt) !== undefined && num(e.durationMs) !== undefined ? e.startedAt + e.durationMs : now;
     if (!quiet) {
-      if (state === 'running' && was === 'queued') agentEvent(s, t, a, now, 'start', '开始');
-      else if (state === 'done') agentEvent(s, t, a, now, 'done', a.cached ? '用了上次的结果' : '完成');
-      else if (state === 'failed') agentEvent(s, t, a, now, 'error', a.error ? `失败：${a.error}` : '失败');
+      if (state === 'running' && was === 'queued') agentEvent(s, t, a, now, 'start', tr('开始'));
+      else if (state === 'done') agentEvent(s, t, a, now, 'done', a.cached ? tr('用了上次的结果') : tr('完成'));
+      else if (state === 'failed') agentEvent(s, t, a, now, 'error', a.error ? tr('失败：{error}', { error: a.error }) : tr('失败'));
     }
   }
   return changed;
@@ -154,7 +155,7 @@ export function mergeWorkflowProgress(s: BgState, t: BgTask, list: unknown[], no
       if (index === undefined) continue;
       t.phases ??= [];
       const p = t.phases.find((x) => x.index === index);
-      const title = str(e.title) ?? `阶段 ${index}`;
+      const title = str(e.title) ?? tr('阶段 {index}', { index });
       if (!p) { t.phases.push({ index, title }); t.phases.sort((a, b) => a.index - b.index); changed = true; }
       else if (p.title !== title) { p.title = title; changed = true; }
     } else if (e?.type === 'workflow_agent') {
@@ -177,7 +178,7 @@ function settleAgents(t: BgTask, now: number, status: BgStatus, why?: string) {
   }
 }
 
-const END_TEXT: Record<BgStatus, string> = { completed: '完成', failed: '失败', stopped: '已停止', running: '' };
+const END_TEXT: Record<BgStatus, string> = { completed: tr('完成'), failed: tr('失败'), stopped: tr('已停止'), running: '' };
 const END_TONE: Record<BgStatus, BgEvent['tone']> = { completed: 'done', failed: 'error', stopped: 'stop', running: 'tool' };
 
 function endTask(s: BgState, t: BgTask, status: BgStatus, now: number, summary?: string, reason?: string) {
@@ -195,7 +196,7 @@ function endTask(s: BgState, t: BgTask, status: BgStatus, now: number, summary?:
 function startTask(s: BgState, m: any, at: number, now = at): BgTask {
   const t = newTask(s, m, at, kindOf(m.task_type, m.subagent_type));
   const a = t.agents[0];
-  const text = t.kind === 'workflow' ? `工作流 ${t.name ?? t.description} 开始` : t.kind === 'shell' ? `开始运行：${t.description}` : '开始';
+  const text = t.kind === 'workflow' ? tr('工作流 {name} 开始', { name: t.name ?? t.description }) : t.kind === 'shell' ? tr('开始运行：{description}', { description: t.description }) : tr('开始');
   event(s, { at: now, taskId: t.id, ...(a ? { agent: a.key, color: a.color } : {}), who: a?.label ?? t.name ?? t.description, text, tone: 'start' });
   return t;
 }

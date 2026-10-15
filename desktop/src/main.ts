@@ -10,6 +10,7 @@ import { captureGuest } from './browser-capture';
 import { cleanUserAgent } from './user-agent';
 import os from 'node:os';
 import { ZOOM_STEPS, cleanZoom, fitWindow, minWindow, nextZoom, scaleCaption, trafficLightY, zoomAsk, zoomLimit, type ZoomAsk } from './zoom';
+import { getLocale, initLanguage, tr } from './i18n.js';
 
 const isMac = process.platform === 'darwin';
 
@@ -139,13 +140,13 @@ function windowUrl(base: string, winId: string) {
  */
 function splashUrl(dark: boolean): string {
   const [bg, fg, mut] = dark ? ['#12110f', '#c4c2be', '#868480'] : ['#f7f6f2', '#47433f', '#7f7b77'];
-  const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>${APP_NAME}</title><style>`
+  const html = `<!doctype html><html lang="${getLocale() === 'zh' ? 'zh-CN' : 'en'}"><head><meta charset="utf-8"><title>${APP_NAME}</title><style>`
     + `html,body{height:100%;margin:0;background:${bg};color:${fg};font:14px "Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI",system-ui,sans-serif;-webkit-app-region:drag;user-select:none;cursor:default}`
     + `body{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}`
     + `.n{font-size:17px;font-weight:600}.s{color:${mut}}`
     + `.d{width:18px;height:18px;border:2px solid ${mut};border-top-color:transparent;border-radius:50%;animation:r .9s linear infinite}`
     + `@keyframes r{to{transform:rotate(360deg)}}@media (prefers-reduced-motion:reduce){.d{animation:none}}`
-    + `</style></head><body><div class="d"></div><div class="n">${APP_NAME}</div><div class="s">正在启动…</div></body></html>`;
+    + `</style></head><body><div class="d"></div><div class="n">${APP_NAME}</div><div class="s">${tr('正在启动…')}</div></body></html>`;
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
 }
 
@@ -241,11 +242,11 @@ function updateBadge() {
   if (process.platform === 'win32' && m && !m.isDestroyed()) {
     if (pendingCount > 0) {
       const img = badgeImage(pendingCount);
-      m.setOverlayIcon(img, `${pendingCount} 个待处理`);
+      m.setOverlayIcon(img, tr('{pendingCount} 个待处理', { pendingCount }));
     } else m.setOverlayIcon(null, '');
   }
   if (isMac) app.dock?.setBadge(pendingCount > 0 ? String(pendingCount) : '');
-  tray?.setToolTip(pendingCount > 0 ? `${APP_NAME} · ${pendingCount} 个待处理` : APP_NAME);
+  tray?.setToolTip(pendingCount > 0 ? tr('{APP_NAME} · {pendingCount} 个待处理', { APP_NAME, pendingCount }) : APP_NAME);
 }
 
 function badgeImage(n: number) {
@@ -331,90 +332,90 @@ function buildMenu() {
       label: APP_NAME,
       submenu: [
         { role: 'about' }, { type: 'separator' },
-        { label: '设置…', accelerator: 'Cmd+,', click: () => sendCommand('settings') },
+        { label: tr('设置…'), accelerator: 'Cmd+,', click: () => sendCommand('settings') },
         { type: 'separator' }, { role: 'services' }, { type: 'separator' },
         { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' },
-        { label: `退出 ${APP_NAME}`, accelerator: 'Cmd+Q', click: () => void requestQuit() },
+        { label: tr('退出 {APP_NAME}', { APP_NAME }), accelerator: 'Cmd+Q', click: () => void requestQuit() },
       ],
     } as Electron.MenuItemConstructorOptions] : []),
     {
-      label: '对话',
+      label: tr('对话'),
       submenu: [
-        cmd('新对话', 'CmdOrCtrl+N', 'new'),
-        cmd('命令面板', 'CmdOrCtrl+K', 'palette'),
-        cmd('搜索对话', 'CmdOrCtrl+P', 'palette'),
+        cmd(tr('新对话'), 'CmdOrCtrl+N', 'new'),
+        cmd(tr('命令面板'), 'CmdOrCtrl+K', 'palette'),
+        cmd(tr('搜索对话'), 'CmdOrCtrl+P', 'palette'),
         { type: 'separator' },
-        cmd('中断当前轮', 'CmdOrCtrl+Shift+C', 'interrupt'),
-        cmd('结束当前对话的进程', 'CmdOrCtrl+Shift+Q', 'close'),
-        ...(isMac ? [] : [{ type: 'separator' }, { label: '退出', accelerator: 'CmdOrCtrl+Q', click: () => void requestQuit() }] as Electron.MenuItemConstructorOptions[]),
+        cmd(tr('中断当前轮'), 'CmdOrCtrl+Shift+C', 'interrupt'),
+        cmd(tr('结束当前对话的进程'), 'CmdOrCtrl+Shift+Q', 'close'),
+        ...(isMac ? [] : [{ type: 'separator' }, { label: tr('退出'), accelerator: 'CmdOrCtrl+Q', click: () => void requestQuit() }] as Electron.MenuItemConstructorOptions[]),
       ],
     },
     {
-      label: '工作台',
+      label: tr('工作台'),
       submenu: [
-        cmd('新分组', 'CmdOrCtrl+T', 'group.new'),
-        cmd('关闭分组', 'CmdOrCtrl+Shift+W', 'group.close'),
-        cmd('重命名分组', 'F2', 'group.rename'),
-        cmd('下一个分组', 'Ctrl+Tab', 'group.next'),
-        cmd('上一个分组', 'Ctrl+Shift+Tab', 'group.prev'),
-        ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ({ ...cmd(`跳到分组 ${n}`, `CmdOrCtrl+${n}`, `group.jump.${n - 1}`), visible: n <= 3 })),
+        cmd(tr('新分组'), 'CmdOrCtrl+T', 'group.new'),
+        cmd(tr('关闭分组'), 'CmdOrCtrl+Shift+W', 'group.close'),
+        cmd(tr('重命名分组'), 'F2', 'group.rename'),
+        cmd(tr('下一个分组'), 'Ctrl+Tab', 'group.next'),
+        cmd(tr('上一个分组'), 'Ctrl+Shift+Tab', 'group.prev'),
+        ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ({ ...cmd(tr('跳到分组 {n}', { n }), `CmdOrCtrl+${n}`, `group.jump.${n - 1}`), visible: n <= 3 })),
         { type: 'separator' },
-        cmd('向右分屏', 'CmdOrCtrl+D', 'pane.splitRight'),
-        cmd('向下分屏', 'CmdOrCtrl+Shift+D', 'pane.splitDown'),
-        cmd('关闭标签页（最后一个则关掉这个分屏）', 'CmdOrCtrl+W', 'tile.close'),
-        cmd('放大 / 还原分屏', 'CmdOrCtrl+Shift+Enter', 'pane.zoom'),
-        cmd('下一个分屏', 'CmdOrCtrl+Alt+Right', 'pane.next'),
-        cmd('上一个分屏', 'CmdOrCtrl+Alt+Left', 'pane.prev'),
-        ...[1, 2, 3, 4, 5, 6].map((n) => ({ ...cmd(`跳到分屏 ${n}`, `Alt+${n}`, `pane.jump.${n - 1}`), visible: n <= 2 })),
+        cmd(tr('向右分屏'), 'CmdOrCtrl+D', 'pane.splitRight'),
+        cmd(tr('向下分屏'), 'CmdOrCtrl+Shift+D', 'pane.splitDown'),
+        cmd(tr('关闭标签页（最后一个则关掉这个分屏）'), 'CmdOrCtrl+W', 'tile.close'),
+        cmd(tr('放大 / 还原分屏'), 'CmdOrCtrl+Shift+Enter', 'pane.zoom'),
+        cmd(tr('下一个分屏'), 'CmdOrCtrl+Alt+Right', 'pane.next'),
+        cmd(tr('上一个分屏'), 'CmdOrCtrl+Alt+Left', 'pane.prev'),
+        ...[1, 2, 3, 4, 5, 6].map((n) => ({ ...cmd(tr('跳到分屏 {n}', { n }), `Alt+${n}`, `pane.jump.${n - 1}`), visible: n <= 2 })),
         { type: 'separator' },
-        cmd('新标签页', 'CmdOrCtrl+Shift+T', 'tile.new'),
-        cmd('下一个标签页', 'CmdOrCtrl+PageDown', 'tile.next'),
-        cmd('上一个标签页', 'CmdOrCtrl+PageUp', 'tile.prev'),
+        cmd(tr('新标签页'), 'CmdOrCtrl+Shift+T', 'tile.new'),
+        cmd(tr('下一个标签页'), 'CmdOrCtrl+PageDown', 'tile.next'),
+        cmd(tr('上一个标签页'), 'CmdOrCtrl+PageUp', 'tile.prev'),
         { type: 'separator' },
-        cmd('在新窗口打开当前分组', 'CmdOrCtrl+Shift+N', 'window.new'),
+        cmd(tr('在新窗口打开当前分组'), 'CmdOrCtrl+Shift+N', 'window.new'),
       ],
     },
     {
-      label: '视图',
+      label: tr('视图'),
       submenu: [
-        cmd('侧栏', 'CmdOrCtrl+B', 'sidebar'),
-        cmd('对话 / 步骤视图', 'Alt+J', 'tab'),
+        cmd(tr('侧栏'), 'CmdOrCtrl+B', 'sidebar'),
+        cmd(tr('对话 / 步骤视图'), 'Alt+J', 'tab'),
         { type: 'separator' },
-        cmd('右侧面板', 'CmdOrCtrl+J', 'dock.toggle'),
-        cmd('右侧面板收成图标栏', 'CmdOrCtrl+Shift+J', 'dock.minimize'),
-        cmd('总览（Mission Control）', 'CmdOrCtrl+Shift+M', 'panel.mission'),
-        cmd('任务面板', 'CmdOrCtrl+Shift+1', 'panel.tasks'),
-        cmd('审阅（改动）', 'CmdOrCtrl+Shift+2', 'panel.files'),
-        cmd('用量', 'CmdOrCtrl+Shift+3', 'panel.usage'),
-        ...(isMac ? [] : [cmd('设置', 'CmdOrCtrl+,', 'settings')]),
-        cmd('配置中心（右侧面板）', undefined, 'panel.config'),
-        cmd('终端', 'CmdOrCtrl+`', 'panel.terminal'),
+        cmd(tr('右侧面板'), 'CmdOrCtrl+J', 'dock.toggle'),
+        cmd(tr('右侧面板收成图标栏'), 'CmdOrCtrl+Shift+J', 'dock.minimize'),
+        cmd(tr('总览（Mission Control）'), 'CmdOrCtrl+Shift+M', 'panel.mission'),
+        cmd(tr('任务面板'), 'CmdOrCtrl+Shift+1', 'panel.tasks'),
+        cmd(tr('审阅（改动）'), 'CmdOrCtrl+Shift+2', 'panel.files'),
+        cmd(tr('用量'), 'CmdOrCtrl+Shift+3', 'panel.usage'),
+        ...(isMac ? [] : [cmd(tr('设置'), 'CmdOrCtrl+,', 'settings')]),
+        cmd(tr('配置中心（右侧面板）'), undefined, 'panel.config'),
+        cmd(tr('终端'), 'CmdOrCtrl+`', 'panel.terminal'),
         { type: 'separator' },
-        cmd('键盘快捷键', 'F1', 'shortcuts'),
+        cmd(tr('键盘快捷键'), 'F1', 'shortcuts'),
         { role: 'togglefullscreen' },
         { type: 'separator' },
         // 界面缩放 — ours, not the zoomIn / zoomOut roles (see setZoom). `=` is the key itself; `Plus` is it with Shift,
         // and the keypad has its own names
-        { label: '放大界面', accelerator: 'CmdOrCtrl+=', click: () => void setZoom('in') },
-        { label: '缩小界面', accelerator: 'CmdOrCtrl+-', click: () => void setZoom('out') },
-        { label: '还原界面大小', accelerator: 'CmdOrCtrl+0', click: () => void setZoom('reset') },
+        { label: tr('放大界面'), accelerator: 'CmdOrCtrl+=', click: () => void setZoom('in') },
+        { label: tr('缩小界面'), accelerator: 'CmdOrCtrl+-', click: () => void setZoom('out') },
+        { label: tr('还原界面大小'), accelerator: 'CmdOrCtrl+0', click: () => void setZoom('reset') },
         ...([['CmdOrCtrl+Plus', 'in'], ['CmdOrCtrl+numadd', 'in'], ['CmdOrCtrl+numsub', 'out'], ['CmdOrCtrl+num0', 'reset']] as const)
-          .map(([accelerator, ask]): Electron.MenuItemConstructorOptions => ({ label: `界面缩放（${accelerator}）`, accelerator, visible: false, click: () => void setZoom(ask) })),
+          .map(([accelerator, ask]): Electron.MenuItemConstructorOptions => ({ label: tr('界面缩放（{accelerator}）', { accelerator }), accelerator, visible: false, click: () => void setZoom(ask) })),
         { type: 'separator' },
         { role: 'reload' }, { role: 'toggleDevTools' },
       ],
     },
     {
-      label: '编辑',
+      label: tr('编辑'),
       submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }],
     },
-    ...(isMac ? [{ label: '窗口', role: 'windowMenu' } as Electron.MenuItemConstructorOptions] : []),
+    ...(isMac ? [{ label: tr('窗口'), role: 'windowMenu' } as Electron.MenuItemConstructorOptions] : []),
     {
-      label: '帮助',
+      label: tr('帮助'),
       submenu: [
-        { label: '打开数据目录', click: () => void shell.openPath(app.getPath('userData')) },
-        { label: '在浏览器中打开', click: () => host.info && void shell.openExternal(host.info.url) },
-        { label: `版本 ${app.getVersion()}`, enabled: false },
+        { label: tr('打开数据目录'), click: () => void shell.openPath(app.getPath('userData')) },
+        { label: tr('在浏览器中打开'), click: () => host.info && void shell.openExternal(host.info.url) },
+        { label: tr('版本 {getVersion}', { getVersion: app.getVersion() }), enabled: false },
       ],
     },
   ];
@@ -427,10 +428,10 @@ function buildTray() {
   tray = new Tray(img);
   tray.setToolTip(APP_NAME);
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: '打开', click: () => showWindow(wins.get('main') ?? focusedWin()) },
-    { label: '新对话', click: () => sendCommand('new') },
+    { label: tr('打开'), click: () => showWindow(wins.get('main') ?? focusedWin()) },
+    { label: tr('新对话'), click: () => sendCommand('new') },
     { type: 'separator' },
-    { label: '退出', click: () => void requestQuit() },
+    { label: tr('退出'), click: () => void requestQuit() },
   ]));
   // macOS opens the context menu on click by itself; a click handler there would fight it
   if (!isMac) tray.on('click', () => showWindow(wins.get('main') ?? focusedWin()));
@@ -456,8 +457,8 @@ async function requestQuit() {
   const confirmExit = await getSetting(focusedWin(), 'ui.confirmExit', true);
   if (confirmExit && (running.size > 0 || pending > 0 || dirty > 0)) {
     const w = focusedWin();
-    const parts = [running.size ? `${running.size} 个对话在运行` : '', pending ? `${pending} 个权限请求待处理` : '', dirty ? `${dirty} 个文件未保存` : ''].filter(Boolean);
-    const r = await dialog.showMessageBox(w ?? undefined as any, { type: 'question', buttons: ['退出', dirty ? '取消（回去保存）' : '取消', '最小化到托盘'], defaultId: 1, cancelId: 1, message: parts.join('，'), detail: '退出会结束对话的进程（记录保留在磁盘，发消息即可继续）；未保存的编辑会丢失。' });
+    const parts = [running.size ? tr('{runningCount} 个对话在运行', { runningCount: running.size }) : '', pending ? tr('{pending} 个权限请求待处理', { pending }) : '', dirty ? tr('{dirty} 个文件未保存', { dirty }) : ''].filter(Boolean);
+    const r = await dialog.showMessageBox(w ?? undefined as any, { type: 'question', buttons: [tr('退出'), dirty ? tr('取消（回去保存）') : tr('取消'), tr('最小化到托盘')], defaultId: 1, cancelId: 1, message: parts.join('，'), detail: tr('退出会结束对话的进程（记录保留在磁盘，发消息即可继续）；未保存的编辑会丢失。') });
     if (r.response === 1) return;
     if (r.response === 2) { for (const [, x] of liveWins()) x.hide(); return; }
   }
@@ -517,7 +518,7 @@ function setupUpdater() {
 }
 /** Look for a new version. `manual`: the button in settings (reports why it could not look). */
 function checkForUpdate(manual = false) {
-  if (!app.isPackaged && !updateFeed()) { if (manual) setUpdate({ status: 'error', error: '开发模式不检查更新' }); return; }
+  if (!app.isPackaged && !updateFeed()) { if (manual) setUpdate({ status: 'error', error: tr('开发模式不检查更新') }); return; }
   if (updateState.status === 'checking' || updateState.status === 'downloading' || updateState.status === 'downloaded') return;
   autoUpdater.checkForUpdates().catch((e) => setUpdate({ status: 'error', error: firstLine(e) }));
 }
@@ -531,7 +532,7 @@ function scheduleUpdateChecks() {
 // ---------- IPC ----------
 ipcMain.handle('desktop:pickDir', async (e) => {
   const w = BrowserWindow.fromWebContents(e.sender) ?? focusedWin();
-  const r = await dialog.showOpenDialog(w!, { properties: ['openDirectory', 'createDirectory'], title: '选择工作目录' });
+  const r = await dialog.showOpenDialog(w!, { properties: ['openDirectory', 'createDirectory'], title: tr('选择工作目录') });
   return r.canceled ? null : r.filePaths[0];
 });
 ipcMain.handle('desktop:openPath', (_e, p: string) => shell.openPath(p));
@@ -605,6 +606,7 @@ const keepAwake = new KeepAwake(powerSaveBlocker);
 host.on('keepAwake', (on: boolean) => { mainLog(`[keep-awake] ${on ? 'on' : 'off'}`); keepAwake.set(on); });
 
 if (gotLock) app.whenReady().then(async () => {
+  initLanguage(app.getLocale()); // before any window, menu or dialog is worded
   // the window first (on the splash), then the server: see splashUrl
   const hidden = process.argv.includes('--hidden');
   const main = createWindow(null, 'main', undefined, hidden);
@@ -618,10 +620,10 @@ if (gotLock) app.whenReady().then(async () => {
     if (main.isDestroyed()) createWindow(info.url, 'main', undefined, hidden);
     else void main.loadURL(windowUrl(info.url, 'main'));
     for (const id of Object.keys(st.windows)) if (id !== 'main') createWindow(info.url, id, undefined, hidden);
-    host.on('crash', (code) => new Notification({ title: APP_NAME, body: `后台服务退出（${code}），正在重启…` }).show());
+    host.on('crash', (code) => new Notification({ title: APP_NAME, body: tr('后台服务退出（{code}），正在重启…', { code }) }).show());
     host.on('ready', (i) => { if (i.url !== info.url) for (const [id, w] of liveWins()) void w.loadURL(windowUrl(i.url, id)); });
   } catch (e: any) {
-    const msg = `启动失败：${e?.stack ?? e?.message ?? e}`;
+    const msg = tr('启动失败：{stack}', { stack: e?.stack ?? e?.message ?? e });
     try { fs.appendFileSync(path.join(app.getPath('userData'), 'main.log'), `[${new Date().toISOString()}] ${msg}\n`); } catch { /* ignore */ }
     dialog.showErrorBox(APP_NAME, msg);
     app.quit();

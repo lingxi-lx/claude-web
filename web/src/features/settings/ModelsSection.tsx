@@ -10,6 +10,7 @@ import { refreshAllModels, useGatewayGroups, useRefreshRun } from '@/features/mo
 import { agoText } from '@/features/models/ModelMenu';
 import '@/features/models/models.css';
 import { TERMS, ULTRACODE, effortLabel, effortTitle } from '@/ui/terms';
+import { tr } from '@/i18n';
 
 /** stable fallback for the selectors below (a fresh `[]` per call re-renders forever: React #185) */
 const NONE: string[] = [];
@@ -51,7 +52,7 @@ export function ModelsSection() {
     if (p.defaultModel === model) return;
     try {
       await ws.request({ kind: 'providers.upsert', provider: { id: p.id, defaultModel: model } });
-      toast(`「${p.name}」的默认模型改为 ${model}`, true);
+      toast(tr('「{name}」的默认模型改为 {model}', { name: p.name, model }), true);
     } catch (e: any) { toast(e.message); }
   };
   const fetchable = providers.filter((p) => p.type !== 'gateway');
@@ -66,14 +67,14 @@ export function ModelsSection() {
   return (
     <>
       <div className="models-top">
-        <button className="btn sm" onClick={() => void refreshAllModels()} disabled={refresh.running || !fetchable.length} title="拉取每个供应商的 /v1/models（只列模型，不花 token）">
-          {refresh.running ? <span className="spinner" /> : <Icon name="refresh" size={13} />} {refresh.running ? `刷新中 ${refresh.done}/${refresh.total}` : '刷新全部模型'}
+        <button className="btn sm" onClick={() => void refreshAllModels()} disabled={refresh.running || !fetchable.length} title={tr('拉取每个供应商的 /v1/models（只列模型，不花 token）')}>
+          {refresh.running ? <span className="spinner" /> : <Icon name="refresh" size={13} />} {refresh.running ? tr('刷新中 {done}/{total}', { done: refresh.done, total: refresh.total }) : tr('刷新全部模型')}
         </button>
         <div className="seg" role="tablist">
-          <button role="tab" aria-selected={view === 'model'} className={clsx(view === 'model' && 'active')} onClick={() => setView('model')}>按模型</button>
-          <button role="tab" aria-selected={view === 'profile'} className={clsx(view === 'profile' && 'active')} onClick={() => setView('profile')}>按供应商</button>
+          <button role="tab" aria-selected={view === 'model'} className={clsx(view === 'model' && 'active')} onClick={() => setView('model')}>{tr('按模型')}</button>
+          <button role="tab" aria-selected={view === 'profile'} className={clsx(view === 'profile' && 'active')} onClick={() => setView('profile')}>{tr('按供应商')}</button>
         </div>
-        {view === 'model' && <input className="field" value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索模型或供应商…" aria-label="搜索模型" />}
+        {view === 'model' && <input className="field" value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr('搜索模型或供应商…')} aria-label={tr('搜索模型')} />}
       </div>
 
       {fetchable.length > 0 && (
@@ -84,11 +85,11 @@ export function ModelsSection() {
               <div key={p.id} className="pf">
                 <div className="n">
                   <Icon name="cloud" size={12} /><span title={p.name}>{p.name}</span><span className="badge">{p.type}</span>
-                  <button className="icon-btn xs" title="只刷新这个供应商" aria-label={`刷新 ${p.name}`} disabled={refresh.running} onClick={() => void refreshAllModels([p.id])}>{pending ? <span className="spinner" /> : <Icon name="refresh" size={11} />}</button>
+                  <button className="icon-btn xs" title={tr('只刷新这个供应商')} aria-label={tr('刷新 {name}', { name: p.name })} disabled={refresh.running} onClick={() => void refreshAllModels([p.id])}>{pending ? <span className="spinner" /> : <Icon name="refresh" size={11} />}</button>
                 </div>
                 {p.modelsError
-                  ? <div className="s err" title={p.modelsError}>拉取失败：{p.modelsError}</div>
-                  : <div className="s">{p.models?.length ? `${p.models.length} 个模型` : '还没拉取'}{p.modelsAt ? ` · ${agoText(p.modelsAt)}` : ''}</div>}
+                  ? <div className="s err" title={p.modelsError}>{tr('拉取失败：{modelsError}', { modelsError: p.modelsError })}</div>
+                  : <div className="s">{p.models?.length ? tr('{modelsCount} 个模型', { modelsCount: p.models.length }) : tr('还没拉取')}{p.modelsAt ? ` · ${agoText(p.modelsAt)}` : ''}</div>}
               </div>
             );
           })}
@@ -98,7 +99,7 @@ export function ModelsSection() {
       {view === 'model' ? (
         <div className="models-table-wrap">
           <table className="models-table">
-            <thead><tr><th>模型</th><th>提供它的供应商（点击设为它的默认模型）</th><th aria-label="收藏与显示" /></tr></thead>
+            <thead><tr><th>{tr('模型')}</th><th>{tr('提供它的供应商（点击设为它的默认模型）')}</th><th aria-label={tr('收藏与显示')} /></tr></thead>
             <tbody>
               {rows.map((r) => {
                 const hidden = rowHidden(r);
@@ -110,18 +111,18 @@ export function ModelsSection() {
                       {r.providers.map((x) => {
                         const p = providers.find((pp) => pp.id === x.id);
                         return p
-                          ? <button key={x.id} className={clsx('prov-chip', x.isDefault && 'def')} title={x.isDefault ? `「${p.name}」的默认模型` : `设为「${p.name}」的默认模型`} onClick={() => void makeDefault(p, r.model)}>{x.isDefault && <Icon name="check" size={10} />}{x.name}</button>
-                          : <span key={x.id} className="prov-chip static" title="claude.ai 登录（内置模型，没有默认模型可设）">{x.name}</span>;
+                          ? <button key={x.id} className={clsx('prov-chip', x.isDefault && 'def')} title={x.isDefault ? tr('「{name}」的默认模型', { name: p.name }) : tr('设为「{name}」的默认模型', { name: p.name })} onClick={() => void makeDefault(p, r.model)}>{x.isDefault && <Icon name="check" size={10} />}{x.name}</button>
+                          : <span key={x.id} className="prov-chip static" title={tr('claude.ai 登录（内置模型，没有默认模型可设）')}>{x.name}</span>;
                       })}
                     </td>
                     <td className="acts">
-                      <button className={clsx('mm-star', fav && 'on')} aria-label={fav ? '取消收藏' : '收藏'} title={fav ? '取消收藏' : '收藏（在模型菜单置顶）'} onClick={() => setRowFav(r, !fav)}><Icon name="star" size={12} /></button>
-                      <button className={clsx('toggle', !hidden && 'on')} role="switch" aria-checked={!hidden} aria-label={`显示 ${r.model}`} title={hidden ? '已隐藏' : '在模型菜单显示'} onClick={() => setRowHidden(r, !hidden)} />
+                      <button className={clsx('mm-star', fav && 'on')} aria-label={fav ? tr('取消收藏') : tr('收藏')} title={fav ? tr('取消收藏') : tr('收藏（在模型菜单置顶）')} onClick={() => setRowFav(r, !fav)}><Icon name="star" size={12} /></button>
+                      <button className={clsx('toggle', !hidden && 'on')} role="switch" aria-checked={!hidden} aria-label={tr('显示 {model}', { model: r.model })} title={hidden ? tr('已隐藏') : tr('在模型菜单显示')} onClick={() => setRowHidden(r, !hidden)} />
                     </td>
                   </tr>
                 );
               })}
-              {!rows.length && <tr><td colSpan={3} className="empty">{q ? `没有匹配「${q}」的模型` : '还没有模型：加一个供应商，然后点「刷新全部模型」'}</td></tr>}
+              {!rows.length && <tr><td colSpan={3} className="empty">{q ? tr('没有匹配「{q}」的模型', { q }) : tr('还没有模型：加一个供应商，然后点「刷新全部模型」')}</td></tr>}
             </tbody>
           </table>
         </div>
@@ -135,17 +136,17 @@ export function ModelsSection() {
                 <h5><Icon name={AGENT_ICONS[kind] ?? 'agent'} size={13} /> {name}</h5>
                 <div className="list">
                   {models.map((m) => row(kind === 'claude' ? m.value : `${kind}:${m.value}`, m.displayName, m.description || undefined))}
-                  {!models.length && <div className="empty">{c?.unverified ? '模型表未核实' : '没有内置模型'}</div>}
+                  {!models.length && <div className="empty">{c?.unverified ? tr('模型表未核实') : tr('没有内置模型')}</div>}
                 </div>
                 <div className="efforts">
                   {c?.supportsEffort && c.effort.length > 0 ? (
                     <>
                       <span className="label">{TERMS.effort}</span>
-                      {c.effort.map((e) => <span key={e} className={clsx('badge', e === c.defaultEffort && 'ok')} title={`${effortTitle(e)}${e === c.defaultEffort ? ' · 默认' : ''}`}>{effortLabel(e)}</span>)}
+                      {c.effort.map((e) => <span key={e} className={clsx('badge', e === c.defaultEffort && 'ok')} title={`${effortTitle(e)}${e === c.defaultEffort ? tr(' · 默认') : ''}`}>{effortLabel(e)}</span>)}
                       {c.supportsUltracode && <span className="badge" title={ULTRACODE.title}><Icon name="bolt" size={10} /> {ULTRACODE.label}</span>}
                     </>
                   ) : (
-                    <span className="sub">不能调智能程度</span>
+                    <span className="sub">{tr('不能调智能程度')}</span>
                   )}
                 </div>
                 {c?.note && <div className="sub" style={{ padding: '2px 4px' }}>{c.note}</div>}
@@ -158,15 +159,15 @@ export function ModelsSection() {
               <div key={p.id} className="section">
                 <h5><Icon name={p.type === 'gateway' ? 'gateway' : 'cloud'} size={13} /> {p.name} <span className="badge">{p.type}</span></h5>
                 <div className="list">
-                  {models.map((m) => row(`${p.id}:${m}`, m, p.defaultModel === m ? '默认' : undefined))}
-                  {!models.length && <div className="empty">{p.type === 'gateway' ? '网关组的成员还没有模型列表' : '点上面的「刷新全部模型」拉取模型列表'}</div>}
+                  {models.map((m) => row(`${p.id}:${m}`, m, p.defaultModel === m ? tr('默认') : undefined))}
+                  {!models.length && <div className="empty">{p.type === 'gateway' ? tr('网关组的成员还没有模型列表') : tr('点上面的「刷新全部模型」拉取模型列表')}</div>}
                 </div>
               </div>
             );
           })}
         </>
       )}
-      <div className="sub" style={{ padding: '8px 4px 0' }}>关掉的模型不再出现在输入框的模型菜单里；星标的模型在菜单里置顶。「刷新全部模型」只请求各供应商的 <code>/v1/models</code>，不跑对话、不花 token；启动后也会在后台刷新超过 24 小时的列表。每个模型能调的智能程度是内置的，Agent 自己报上来的模型列表优先。</div>
+      <div className="sub" style={{ padding: '8px 4px 0' }}>{tr('关掉的模型不再出现在输入框的模型菜单里；星标的模型在菜单里置顶。「刷新全部模型」只请求各供应商的')} <code>/v1/models</code>{tr('，不跑对话、不花 token；启动后也会在后台刷新超过 24 小时的列表。每个模型能调的智能程度是内置的，Agent 自己报上来的模型列表优先。')}</div>
     </>
   );
 }

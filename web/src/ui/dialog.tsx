@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { create } from 'zustand';
 import { imeComposing } from './ime';
+import { tr } from '@/i18n';
 
 // Promise-based replacements for window.confirm / prompt / alert, rendered in-app (Electron's native dialogs
 // steal focus and look foreign; browsers may block them). One dialog at a time, queued.
@@ -34,9 +35,9 @@ function ask<T>(spec: DialogSpec): Promise<T> {
   return new Promise<T>((resolve) => useDialogStore.getState().push({ id: ++dialogSeq, spec, resolve }));
 }
 export const dlg = {
-  confirm: (title: string, o: Partial<DialogSpec> = {}) => ask<boolean>({ kind: 'confirm', title, okLabel: '确定', cancelLabel: '取消', ...o }),
-  prompt: (title: string, defaultValue = '', o: Partial<DialogSpec> = {}) => ask<string | null>({ kind: 'prompt', title, defaultValue, okLabel: '确定', cancelLabel: '取消', ...o }),
-  alert: (title: string, o: Partial<DialogSpec> = {}) => ask<void>({ kind: 'alert', title, okLabel: '好', ...o }),
+  confirm: (title: string, o: Partial<DialogSpec> = {}) => ask<boolean>({ kind: 'confirm', title, okLabel: tr('确定'), cancelLabel: tr('取消'), ...o }),
+  prompt: (title: string, defaultValue = '', o: Partial<DialogSpec> = {}) => ask<string | null>({ kind: 'prompt', title, defaultValue, okLabel: tr('确定'), cancelLabel: tr('取消'), ...o }),
+  alert: (title: string, o: Partial<DialogSpec> = {}) => ask<void>({ kind: 'alert', title, okLabel: tr('好'), ...o }),
 };
 
 export function DialogHost() {

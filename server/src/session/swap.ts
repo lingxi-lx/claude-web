@@ -6,6 +6,7 @@ import { CLAUDE_PROVIDER_ID, type AgentKind, type OpenSessionParams, type Sessio
 import type { CanonicalLog } from './canonical.js';
 import { renderBriefing, toClaudeEntries } from './handoff.js';
 import { seedCanonical } from '../library/briefing.js';
+import { tr } from '../i18n/index.js';
 
 /**
  * Swapping what is behind a live session without the user losing the session.
@@ -60,7 +61,7 @@ async function stop(pool: RunnerPool, sessionId: string) {
   await pool.close(sessionId).catch(() => { /* already gone */ });
   // a turn cut off by the switch never gets its result: windows kept it open (timer running, tool cards spinning)
   if (midTurn) {
-    const text = '已切换，这一轮被中断了。需要的话把刚才的消息再发一次。';
+    const text = tr('已切换，这一轮被中断了。需要的话把刚才的消息再发一次。');
     pool.emit('message', sessionId, {
       type: 'result', subtype: 'error_during_execution', is_error: true, result: text, errors: [text], terminal_reason: 'aborted_swap',
       duration_ms: 0, duration_api_ms: 0, num_turns: 0, total_cost_usd: 0,
@@ -119,7 +120,7 @@ export const normProvider = (id: string | undefined) => (id && id !== 'claude' ?
 export async function recordProviderSwitch(d: Pick<SwapDeps, 'meta' | 'canonical'>, sessionId: string, from: string | undefined, providerId: string | undefined, providerName: string): Promise<void> {
   // not fire-and-forget: a failed meta save would otherwise be an unhandled rejection that kills the server
   await d.meta.setSessionMeta(sessionId, { providerId: normProvider(providerId) }).catch(() => { /* kept in memory; the next save persists it */ });
-  d.canonical.mark(sessionId, { providerId: normProvider(providerId), providerName, fromProviderId: normProvider(from) ?? 'claude', note: `已切换到供应商「${providerName}」` });
+  d.canonical.mark(sessionId, { providerId: normProvider(providerId), providerName, fromProviderId: normProvider(from) ?? 'claude', note: tr('已切换到供应商「{providerName}」', { providerName }) });
 }
 
 /**
@@ -230,7 +231,7 @@ async function swapAgentNow(d: SwapDeps, sessionId: string, agent: AgentKind, mo
     }
   }
   const briefing = renderBriefing(events, { fromAgent: from, toAgent: agent, cwd, objective }).text;
-  d.canonical.mark(sessionId, { agent, model, note: `已从 ${from} 交接给 ${agent}` });
+  d.canonical.mark(sessionId, { agent, model, note: tr('已从 {from} 交接给 {agent}', { from, agent }) });
 
   const params: OpenSessionParams = {
     sessionId,
@@ -253,7 +254,7 @@ async function swapAgentNow(d: SwapDeps, sessionId: string, agent: AgentKind, mo
   else {
     await d.transcripts.unpark(sessionId, agent);
     if (await d.transcripts.exists(sessionId)) await d.transcripts.patchHead(sessionId, { agent, model });
-    else await d.transcripts.create({ agent, cwd, title: objective ?? '交接的对话', createdAt: Date.now(), sessionId, model });
+    else await d.transcripts.create({ agent, cwd, title: objective ?? tr('交接的对话'), createdAt: Date.now(), sessionId, model });
   }
 
   const r = d.pool.open(params);
@@ -271,7 +272,7 @@ async function swapAgentNow(d: SwapDeps, sessionId: string, agent: AgentKind, mo
  * in the library summary's cwd, never this process's.
  */
 async function handOverImported(d: SwapDeps, fromId: string, src: { agent: AgentKind; cwd: string; title?: string }, agent: AgentKind, model: string | undefined, objective?: string): Promise<SwapResult> {
-  if (!d.readAll) throw new Error('对话库不可用，无法交接导入的对话');
+  if (!d.readAll) throw new Error(tr('对话库不可用，无法交接导入的对话'));
   const native = await d.readAll(fromId); // no history → no hand-over (don't start an empty session)
   const sessionId = randomUUID();
   const cwd = src.cwd;
@@ -279,10 +280,10 @@ async function handOverImported(d: SwapDeps, fromId: string, src: { agent: Agent
   if (native.length) await seedCanonical(d.canonical, sessionId, native);
   const events = await d.canonical.load(sessionId);
   const briefing = renderBriefing(events, { fromAgent: src.agent, toAgent: agent, cwd, objective }).text;
-  d.canonical.mark(sessionId, { agent, model, note: `已从 ${src.agent} 的对话 ${fromId} 交接给 ${agent}` });
+  d.canonical.mark(sessionId, { agent, model, note: tr('已从 {agent} 的对话 {fromId} 交接给 {agent2}', { agent: src.agent, fromId, agent2: agent }) });
 
   if (agent !== 'claude') {
-    const title = objective ?? (src.title ? `${src.title}（交接）` : '交接的对话');
+    const title = objective ?? (src.title ? tr('{title}（交接）', { title: src.title }) : tr('交接的对话'));
     await d.transcripts.create({ agent, cwd, title, createdAt: Date.now(), sessionId, model });
   }
   const params = {

@@ -8,6 +8,7 @@ import { imeComposing } from '@/ui/ime';
 import { CAPABILITIES, CHANNELS, capabilitiesFor, parseChannels, plusSections, withChannels, withFeature, type FeatureKey } from './capabilities';
 import { PLUS_ID } from './ids';
 import { Popover } from './Popover';
+import { tr } from '@/i18n';
 
 export interface PlusMenuProps {
   /** the conversation runs on Claude (the capabilities are Claude Code flags) */
@@ -40,12 +41,12 @@ export function PlusMenu(p: PlusMenuProps) {
   const close = (refocus: boolean) => { setOpen(false); if (refocus) btn.current?.focus(); };
   return (
     <>
-      <button ref={btn} type="button" className={clsx('plus', open && 'open')} disabled={p.disabled} onClick={() => setOpen((o) => !o)} title="添加文件、引用对话，或让 Claude 这次还能做什么" aria-label="添加" aria-haspopup="menu" aria-expanded={open}>
+      <button ref={btn} type="button" className={clsx('plus', open && 'open')} disabled={p.disabled} onClick={() => setOpen((o) => !o)} title={tr('添加文件、引用对话，或让 Claude 这次还能做什么')} aria-label={tr('添加')} aria-haspopup="menu" aria-expanded={open}>
         <Icon name="plus" size={16} />
       </button>
       {open && (
-        <ErrorBoundary area="+ 菜单" compact onReset={() => setOpen(false)}>
-          <Popover anchor={btn} onClose={close} prefer="up" align="left" className="plus-menu" label="添加">
+        <ErrorBoundary area={tr('+ 菜单')} compact onReset={() => setOpen(false)}>
+          <Popover anchor={btn} onClose={close} prefer="up" align="left" className="plus-menu" label={tr('添加')}>
             <PlusBody {...p} close={close} />
           </Popover>
         </ErrorBoundary>
@@ -68,10 +69,10 @@ function PlusBody(p: PlusMenuProps & { close: (refocus: boolean) => void }) {
     const on = !!p.features[k] && !c.unavailable;
     return (
       <button key={k} type="button" data-mi data-id={k} role="menuitemcheckbox" aria-checked={on} aria-disabled={s.readOnly || !!c.unavailable || undefined}
-        className={clsx('cm-it', on && 'on', (s.readOnly || c.unavailable) && 'ro', c.unavailable && 'na')} title={c.unavailable ? c.title : s.readOnly ? `${c.title}\n这个对话${on ? '开着' : '没开'}` : c.title} onClick={() => { if (!c.unavailable) toggle(k); }}>
+        className={clsx('cm-it', on && 'on', (s.readOnly || c.unavailable) && 'ro', c.unavailable && 'na')} title={c.unavailable ? c.title : s.readOnly ? tr("{title}\n这个对话{v}", { title: c.title, v: on ? tr('开着') : tr('没开') }) : c.title} onClick={() => { if (!c.unavailable) toggle(k); }}>
         <span className="cm-ic"><Icon name={c.icon} size={15} /></span>
         <span className="cm-tx"><span className="cm-l">{c.label}</span><span className="cm-d">{c.unavailable ?? c.desc}</span></span>
-        {c.unavailable ? <span className="cm-na">暂不可用</span> : <span className={clsx('toggle sm', on && 'on')} aria-hidden />}
+        {c.unavailable ? <span className="cm-na">{tr('暂不可用')}</span> : <span className={clsx('toggle sm', on && 'on')} aria-hidden />}
       </button>
     );
   };
@@ -89,20 +90,20 @@ function PlusBody(p: PlusMenuProps & { close: (refocus: boolean) => void }) {
         );
       })}
       <div className="menu-sep" />
-      <div className="cm-h">这次对话可以…</div>
+      <div className="cm-h">{tr('这次对话可以…')}</div>
       {s.note && <div className="cm-sub">{s.note}</div>}
       {s.capabilities && CAPABILITIES.filter((c) => c.group === 'main').map((c) => row(c.key))}
       {s.goal && (
-        <button type="button" data-mi data-id={PLUS_ID.goal} role="menuitem" className="cm-it" title="在输入框写下目标并发送：Claude 会一轮接一轮做下去，直到完成或卡住（等同于 /goal）" onClick={() => { p.close(false); p.onGoal(); }}>
+        <button type="button" data-mi data-id={PLUS_ID.goal} role="menuitem" className="cm-it" title={tr('在输入框写下目标并发送：Claude 会一轮接一轮做下去，直到完成或卡住（等同于 /goal）')} onClick={() => { p.close(false); p.onGoal(); }}>
           <span className="cm-ic"><Icon name="goals" size={15} /></span>
-          <span className="cm-tx"><span className="cm-l">设定一个目标</span><span className="cm-d">一轮接一轮做下去，直到完成或卡住</span></span>
+          <span className="cm-tx"><span className="cm-l">{tr('设定一个目标')}</span><span className="cm-d">{tr('一轮接一轮做下去，直到完成或卡住')}</span></span>
           <span className="cm-r"><Icon name="chevronRight" size={12} /></span>
         </button>
       )}
       {s.capabilities && (
         <>
           <div className="menu-sep" />
-          <div className="cm-h">进阶</div>
+          <div className="cm-h">{tr('进阶')}</div>
           {/* Brief and 频道 are rows of their own (final review M3: 功能 → Brief was 2 clicks, so is + → Brief) */}
           {CAPABILITIES.filter((c) => c.group === 'advanced').map((c) => row(c.key))}
           <ChannelsField features={p.features} readOnly={s.readOnly} onFeatures={p.onFeatures} />
@@ -139,7 +140,7 @@ function ChannelsField({ features, readOnly, onFeatures }: { features: SessionFe
       <label className="cm-tx">
         <span className="cm-l">{CHANNELS.label}</span>
         <span className="cm-d">{CHANNELS.desc}</span>
-        <input className="field" data-mi placeholder={readOnly ? '' : CHANNELS.placeholder} value={text} readOnly={readOnly} aria-label="频道"
+        <input className="field" data-mi placeholder={readOnly ? '' : CHANNELS.placeholder} value={text} readOnly={readOnly} aria-label={tr('频道')}
           onChange={(e) => {
             if (readOnly) return;
             setText(e.target.value);
@@ -165,8 +166,8 @@ function ReferenceList({ selfId, onBack, onPick }: { selfId?: string; onBack: ()
   return (
     <div className="cm-ref">
       <div className="cm-ref-head">
-        <button type="button" data-mi className="icon-btn xs" aria-label="返回" onClick={onBack}><Icon name="chevronRight" size={12} className="flip" /></button>
-        <input className="field" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索对话…" aria-label="搜索对话"
+        <button type="button" data-mi className="icon-btn xs" aria-label={tr('返回')} onClick={onBack}><Icon name="chevronRight" size={12} className="flip" /></button>
+        <input className="field" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr('搜索对话…')} aria-label={tr('搜索对话')}
           onKeyDown={(e) => { if (e.key === 'Enter' && !imeComposing(e.nativeEvent) && list[0]) { e.preventDefault(); onPick({ id: list[0].sessionId, title: list[0].title }); } }} />
       </div>
       <div className="cm-ref-list">
@@ -177,7 +178,7 @@ function ReferenceList({ selfId, onBack, onPick }: { selfId?: string; onBack: ()
             <span className="cm-r">{s.cwd.split(/[\\/]/).pop()} · {ago(s.lastModified)}</span>
           </button>
         ))}
-        {!list.length && <div className="menu-note">{q ? `没有匹配「${q}」的对话` : '还没有别的对话'}</div>}
+        {!list.length && <div className="menu-note">{q ? tr('没有匹配「{q}」的对话', { q }) : tr('还没有别的对话')}</div>}
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import chokidar from 'chokidar';
 import type { GitBranch, GitError, GitErrorKind, GitFileStatus, GitLogEntry, GitStatus, GitWorktree } from '../protocol.js';
+import { tr } from '../i18n/index.js';
 
 // for-each-ref does not expand %xNN like log does → pass the separator byte literally
 const SEP = String.fromCharCode(0x1f);
@@ -46,20 +47,20 @@ let pathspecFile: Promise<boolean> | null = null;
 export function resetGitVersionCache() { pathspecFile = null; }
 
 const HINTS: Record<GitErrorKind, string> = {
-  not_repo: '这个目录不是 git 仓库。可以在终端里 git init，或选一个仓库目录。',
-  no_upstream: '当前分支没有上游分支。用「推送并设置上游」（git push -u origin <分支>）。',
-  auth: '认证失败。检查凭据（gh auth login / 凭据管理器），或改用 SSH 远程地址。',
-  rejected: '远程有新提交，推送被拒绝。先拉取（pull --rebase）再推送。',
-  conflict: '有合并冲突。在编辑器里解决冲突文件，暂存后再提交（或 git merge --abort 放弃）。',
-  detached: '当前处于分离 HEAD。先新建分支（checkout -b）再提交。',
-  dirty: '工作区有未提交的改动，会被切换分支覆盖。先提交或 stash。',
-  nothing_to_commit: '没有暂存的改动。先暂存文件再提交。',
-  identity: '没有配置提交身份。运行 git config --global user.name / user.email。',
-  lock: '仓库被锁（.git/index.lock）。确认没有别的 git 进程后删除锁文件。',
-  unrelated: '两个分支没有共同历史。确认远程地址正确，或用 --allow-unrelated-histories。',
-  network: '连不上远程。检查网络、代理或远程地址。',
-  unknown_rev: '找不到这个分支或提交。先 fetch，或检查名字。',
-  exists: '同名分支 / worktree 已存在。换个名字或先删除旧的。',
+  not_repo: tr('这个目录不是 git 仓库。可以在终端里 git init，或选一个仓库目录。'),
+  no_upstream: tr('当前分支没有上游分支。用「推送并设置上游」（git push -u origin <分支>）。'),
+  auth: tr('认证失败。检查凭据（gh auth login / 凭据管理器），或改用 SSH 远程地址。'),
+  rejected: tr('远程有新提交，推送被拒绝。先拉取（pull --rebase）再推送。'),
+  conflict: tr('有合并冲突。在编辑器里解决冲突文件，暂存后再提交（或 git merge --abort 放弃）。'),
+  detached: tr('当前处于分离 HEAD。先新建分支（checkout -b）再提交。'),
+  dirty: tr('工作区有未提交的改动，会被切换分支覆盖。先提交或 stash。'),
+  nothing_to_commit: tr('没有暂存的改动。先暂存文件再提交。'),
+  identity: tr('没有配置提交身份。运行 git config --global user.name / user.email。'),
+  lock: tr('仓库被锁（.git/index.lock）。确认没有别的 git 进程后删除锁文件。'),
+  unrelated: tr('两个分支没有共同历史。确认远程地址正确，或用 --allow-unrelated-histories。'),
+  network: tr('连不上远程。检查网络、代理或远程地址。'),
+  unknown_rev: tr('找不到这个分支或提交。先 fetch，或检查名字。'),
+  exists: tr('同名分支 / worktree 已存在。换个名字或先删除旧的。'),
   unknown: '',
 };
 

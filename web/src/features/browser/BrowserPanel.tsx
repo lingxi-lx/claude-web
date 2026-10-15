@@ -9,13 +9,14 @@ import { selectionOf } from './guest';
 import { closeTab, ensureTab, frontTab, guestOf, guestReady, hasWebview, newTab, patchTab, setGuest, useBrowser, type BrowserTab, type WebviewEl } from './state';
 import { RECENT_KEY, addressToUrl, frameSandbox, loadable, pushRecent, readRecent, siteHue, siteLetter, siteOf } from './url';
 import './browser.css';
+import { tr } from '@/i18n';
 
 /** A site's letter on its own colour: what stands for a page that has no icon of ours to show. */
 function SiteMark({ url, size = 16 }: { url: string; size?: number }) {
   return <span className="bw-mark" style={{ width: size, height: size, fontSize: Math.round(size * 0.58), ['--h' as string]: siteHue(url) }} aria-hidden>{siteLetter(url)}</span>;
 }
 
-const tabName = (t: BrowserTab) => t.title || (t.url ? siteOf(t.url) : '新标签页');
+const tabName = (t: BrowserTab) => t.title || (t.url ? siteOf(t.url) : tr('新标签页'));
 
 /** Send the page in a tab somewhere else: back, forward, again — whatever the page element offers. */
 function drive(tabId: string, fn: 'goBack' | 'goForward' | 'reload' | 'stop') {
@@ -80,7 +81,7 @@ function TabView({ tab, front }: { tab: BrowserTab; front: boolean }) {
       const f = e as unknown as { errorCode?: number; errorDescription?: string; isMainFrame?: boolean };
       // -3: the load was replaced by another (a redirect in script, a download) — not a failure to show
       if (f.isMainFrame === false || f.errorCode === -3) return;
-      patchTab(id, { loading: false, error: `${f.errorDescription || '加载失败'}（${f.errorCode ?? '?'}）` });
+      patchTab(id, { loading: false, error: `${f.errorDescription || tr('加载失败')}（${f.errorCode ?? '?'}）` });
     };
     el.addEventListener('dom-ready', onReady);
     el.addEventListener('did-start-loading', onStart);
@@ -111,15 +112,15 @@ function TabView({ tab, front }: { tab: BrowserTab; front: boolean }) {
       ) : (
         <>
           <iframe src={tab.frameUrl ?? tab.src} title={tabName(tab)} sandbox={frameSandbox(tab.frameUrl ?? tab.src, location.origin)} />
-          <div className="bw-hint">网页版里只能显示允许被嵌入的网站，其它的是空白：点右上角 ··· 在系统浏览器打开。完整的浏览器在桌面版里。</div>
+          <div className="bw-hint">{tr('网页版里只能显示允许被嵌入的网站，其它的是空白：点右上角 ··· 在系统浏览器打开。完整的浏览器在桌面版里。')}</div>
         </>
       )}
       {tab.error && (
         <div className="bw-error" role="alert">
           <span className="tile-ic tint-warn"><Icon name="alert" size={18} /></span>
-          <b>打不开这个页面</b>
+          <b>{tr('打不开这个页面')}</b>
           <span className="why">{siteOf(tab.url)} · {tab.error}</span>
-          <button className="btn sm" onClick={() => { patchTab(tab.id, { error: undefined }); drive(tab.id, 'reload'); }}>再试一次</button>
+          <button className="btn sm" onClick={() => { patchTab(tab.id, { error: undefined }); drive(tab.id, 'reload'); }}>{tr('再试一次')}</button>
         </div>
       )}
     </div>
@@ -143,11 +144,11 @@ function NewTabPage({ tab, front }: { tab: BrowserTab; front: boolean }) {
       <span className="hero-ic tint-info"><Icon name="web" size={26} /></span>
       <form className="bw-search" onSubmit={(e) => { e.preventDefault(); go(tab, q); }}>
         <Icon name="search" size={16} />
-        <input ref={box} value={q} spellCheck={false} placeholder="搜索，或者输入网址" aria-label="搜索，或者输入网址" onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && imeComposing(e.nativeEvent)) e.preventDefault(); }} />
+        <input ref={box} value={q} spellCheck={false} placeholder={tr('搜索，或者输入网址')} aria-label={tr('搜索，或者输入网址')} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && imeComposing(e.nativeEvent)) e.preventDefault(); }} />
       </form>
       {sites.length > 0 && (
         <div className="bw-recent" data-id="recent">
-          <div className="bw-h">最近打开</div>
+          <div className="bw-h">{tr('最近打开')}</div>
           <div className="bw-sites">
             {sites.map((r) => (
               <button key={r.url} className="bw-site" title={r.url} onClick={() => go(tab, r.url)}>
@@ -158,7 +159,7 @@ function NewTabPage({ tab, front }: { tab: BrowserTab; front: boolean }) {
           </div>
         </div>
       )}
-      <p className="bw-tip"><Icon name="sparkle" size={13} />Agent 也用这个浏览器：在对话里让它「搜一下……」或者「打开这个网址看看」，它打开的页面会出现在这里。</p>
+      <p className="bw-tip"><Icon name="sparkle" size={13} />{tr('Agent 也用这个浏览器：在对话里让它「搜一下……」或者「打开这个网址看看」，它打开的页面会出现在这里。')}</p>
     </div>
   );
 }
@@ -179,31 +180,31 @@ function AddressBar({ tab }: { tab: BrowserTab }) {
 
   /** Hand the page to the conversation in front: its address, and what is selected on it. */
   const toChat = async () => {
-    if (!active?.sessionId) return toast('先打开一个对话，再把页面发给它');
+    if (!active?.sessionId) return toast(tr('先打开一个对话，再把页面发给它'));
     const picked = await selectionOf(tab.id);
     const st = useStore.getState();
     const cur = st.open[active.sessionId]?.draft ?? '';
-    const lines = [`页面：${tab.title ? `${tab.title} ` : ''}${tab.url}`, ...(picked ? [`选中的内容：\n${picked}`] : [])];
+    const lines = [tr('页面：{v}{url}', { v: tab.title ? `${tab.title} ` : '', url: tab.url }), ...(picked ? [tr("选中的内容：\n{picked}", { picked })] : [])];
     st.setDraft(active.sessionId, `${cur}${cur && !cur.endsWith('\n') ? '\n' : ''}${lines.join('\n')}\n`);
-    toast(picked ? '页面地址和选中的内容已放进输入框' : '页面地址已放进输入框', true);
+    toast(picked ? tr('页面地址和选中的内容已放进输入框') : tr('页面地址已放进输入框'), true);
   };
   const external = () => (desktop ? void desktop.openExternal(tab.url) : window.open(tab.url, '_blank', 'noopener,noreferrer'));
 
   return (
     <div className="bw-bar">
-      <button className="icon-btn xs" disabled={!tab.back} title="后退" aria-label="后退" onClick={() => drive(tab.id, 'goBack')}><Icon name="chevronLeft" size={15} /></button>
-      <button className="icon-btn xs" disabled={!tab.fwd} title="前进" aria-label="前进" onClick={() => drive(tab.id, 'goForward')}><Icon name="chevronRight" size={15} /></button>
+      <button className="icon-btn xs" disabled={!tab.back} title={tr('后退')} aria-label={tr('后退')} onClick={() => drive(tab.id, 'goBack')}><Icon name="chevronLeft" size={15} /></button>
+      <button className="icon-btn xs" disabled={!tab.fwd} title={tr('前进')} aria-label={tr('前进')} onClick={() => drive(tab.id, 'goForward')}><Icon name="chevronRight" size={15} /></button>
       {tab.loading
-        ? <button className="icon-btn xs" title="停止加载" aria-label="停止加载" onClick={() => drive(tab.id, 'stop')}><Icon name="close" size={14} /></button>
-        : <button className="icon-btn xs" disabled={!hasPage} title="重新加载" aria-label="重新加载" onClick={() => drive(tab.id, 'reload')}><Icon name="refresh" size={14} /></button>}
+        ? <button className="icon-btn xs" title={tr('停止加载')} aria-label={tr('停止加载')} onClick={() => drive(tab.id, 'stop')}><Icon name="close" size={14} /></button>
+        : <button className="icon-btn xs" disabled={!hasPage} title={tr('重新加载')} aria-label={tr('重新加载')} onClick={() => drive(tab.id, 'reload')}><Icon name="refresh" size={14} /></button>}
       <div className={clsx('bw-addr', editing && 'on', tab.loading && 'loading')}>
         <Icon name={/^https:/i.test(tab.url) ? 'lock' : 'web'} size={13} />
         <input
           ref={field}
           value={addr}
           spellCheck={false}
-          placeholder="搜索，或者输入网址"
-          aria-label="地址"
+          placeholder={tr('搜索，或者输入网址')}
+          aria-label={tr('地址')}
           data-id="address"
           onFocus={(e) => { setEditing(true); e.currentTarget.select(); }}
           onBlur={() => setEditing(false)}
@@ -215,14 +216,14 @@ function AddressBar({ tab }: { tab: BrowserTab }) {
           }}
         />
       </div>
-      <button className="icon-btn xs" disabled={!hasPage} title="把这个页面的地址（和选中的文字）放进对话的输入框" aria-label="发给对话" data-id="to-chat" onClick={() => void toChat()}><Icon name="quote" size={14} /></button>
-      <button className="icon-btn xs" title="新标签页" aria-label="新标签页" data-id="new-tab" onClick={() => newTab()}><Icon name="plus" size={15} /></button>
-      <button ref={more} className={clsx('icon-btn xs', menu && 'active')} disabled={!hasPage} title="更多" aria-label="更多" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)}><Icon name="more" size={15} /></button>
+      <button className="icon-btn xs" disabled={!hasPage} title={tr('把这个页面的地址（和选中的文字）放进对话的输入框')} aria-label={tr('发给对话')} data-id="to-chat" onClick={() => void toChat()}><Icon name="quote" size={14} /></button>
+      <button className="icon-btn xs" title={tr('新标签页')} aria-label={tr('新标签页')} data-id="new-tab" onClick={() => newTab()}><Icon name="plus" size={15} /></button>
+      <button ref={more} className={clsx('icon-btn xs', menu && 'active')} disabled={!hasPage} title={tr('更多')} aria-label={tr('更多')} aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)}><Icon name="more" size={15} /></button>
       {menu && (
-        <Popover anchor={more} onClose={closeMenu} prefer="down" align="right" className="bw-menu" label="这个页面">
-          <button type="button" data-mi role="menuitem" className="cm-it" onClick={() => { closeMenu(false); external(); }}><span className="cm-ck"><Icon name="external" size={14} /></span><span className="cm-tx"><span className="cm-l">在系统浏览器打开</span></span></button>
-          <button type="button" data-mi role="menuitem" className="cm-it" onClick={() => { closeMenu(false); void navigator.clipboard?.writeText(tab.url).then(() => toast('已复制地址', true), () => toast('没能复制')); }}><span className="cm-ck"><Icon name="copy" size={14} /></span><span className="cm-tx"><span className="cm-l">复制地址</span></span></button>
-          {hasWebview() && <button type="button" data-mi role="menuitem" className="cm-it" onClick={() => { closeMenu(false); try { guestOf(tab.id)?.openDevTools?.(); } catch { /* not attached */ } }}><span className="cm-ck"><Icon name="bash" size={14} /></span><span className="cm-tx"><span className="cm-l">开发者工具</span></span></button>}
+        <Popover anchor={more} onClose={closeMenu} prefer="down" align="right" className="bw-menu" label={tr('这个页面')}>
+          <button type="button" data-mi role="menuitem" className="cm-it" onClick={() => { closeMenu(false); external(); }}><span className="cm-ck"><Icon name="external" size={14} /></span><span className="cm-tx"><span className="cm-l">{tr('在系统浏览器打开')}</span></span></button>
+          <button type="button" data-mi role="menuitem" className="cm-it" onClick={() => { closeMenu(false); void navigator.clipboard?.writeText(tab.url).then(() => toast(tr('已复制地址'), true), () => toast(tr('没能复制'))); }}><span className="cm-ck"><Icon name="copy" size={14} /></span><span className="cm-tx"><span className="cm-l">{tr('复制地址')}</span></span></button>
+          {hasWebview() && <button type="button" data-mi role="menuitem" className="cm-it" onClick={() => { closeMenu(false); try { guestOf(tab.id)?.openDevTools?.(); } catch { /* not attached */ } }}><span className="cm-ck"><Icon name="bash" size={14} /></span><span className="cm-tx"><span className="cm-l">{tr('开发者工具')}</span></span></button>}
         </Popover>
       )}
     </div>
@@ -236,9 +237,9 @@ function AgentStrip({ tab }: { tab: BrowserTab }) {
   return (
     <div className={clsx('bw-agent', tab.busy && 'busy')} data-id="agent-strip">
       <Icon name="sparkle" size={13} />
-      <span className="t">{tab.busy ? 'Agent 正在操作这个页面' : 'Agent 打开的页面'}{title ? ` · ${title}` : ''}</span>
+      <span className="t">{tab.busy ? tr('Agent 正在操作这个页面') : tr('Agent 打开的页面')}{title ? ` · ${title}` : ''}</span>
       <span className="grow" />
-      {tab.agent && <button className="link" onClick={() => void loadHistory(tab.agent!)}>看对话</button>}
+      {tab.agent && <button className="link" onClick={() => void loadHistory(tab.agent!)}>{tr('看对话')}</button>}
     </div>
   );
 }
@@ -259,15 +260,15 @@ export function BrowserPanel({ visible }: { visible: boolean }) {
   return (
     <div className="bw" data-visible={visible || undefined}>
       {tabs.length > 1 && (
-        <div className="bw-tabs" role="tablist" aria-label="浏览器的标签页">
+        <div className="bw-tabs" role="tablist" aria-label={tr('浏览器的标签页')}>
           {tabs.map((t) => (
-            <div key={t.id} role="tab" tabIndex={0} aria-selected={t.id === tab.id} className={clsx('bw-tab', t.id === tab.id && 'on', t.agent && 'agent')} data-tab={t.id} title={`${tabName(t)}${t.agent ? '\nAgent 打开的页面' : ''}`}
+            <div key={t.id} role="tab" tabIndex={0} aria-selected={t.id === tab.id} className={clsx('bw-tab', t.id === tab.id && 'on', t.agent && 'agent')} data-tab={t.id} title={`${tabName(t)}${t.agent ? tr("\nAgent 打开的页面") : ''}`}
               onClick={() => frontTab(t.id)}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); frontTab(t.id); } }}
               onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); closeTab(t.id); } }}>
               {t.loading ? <span className="spinner" aria-hidden /> : t.agent ? <span className="bw-bot" aria-hidden><Icon name="sparkle" size={12} /></span> : t.url ? <SiteMark url={t.url} /> : <Icon name="web" size={13} />}
               <span className="t">{tabName(t)}</span>
-              <button className="x" title="关闭标签页" aria-label={`关闭 ${tabName(t)}`} onClick={(e) => { e.stopPropagation(); closeTab(t.id); }}><Icon name="close" size={11} /></button>
+              <button className="x" title={tr('关闭标签页')} aria-label={tr('关闭 {tabName}', { tabName: tabName(t) })} onClick={(e) => { e.stopPropagation(); closeTab(t.id); }}><Icon name="close" size={11} /></button>
             </div>
           ))}
         </div>

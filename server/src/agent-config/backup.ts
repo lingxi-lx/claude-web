@@ -6,6 +6,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { AgentConfigBackup, AgentConfigKind } from './types.js';
 import { parseConfig, type ConfigFormat } from './edit.js';
+import { tr } from '../i18n/index.js';
 
 const KINDS: AgentConfigKind[] = ['codex', 'gemini', 'qwen', 'opencode'];
 const DEFAULT_KEEP = 100; // per agent, not counting each file's first backup (kept forever)
@@ -35,7 +36,7 @@ export interface WriteOptions {
   retryDelayMs?: number;
 }
 
-export const BUSY_MESSAGE = '文件被占用（可能有 agent 正在运行），请关闭后重试';
+export const BUSY_MESSAGE = tr('文件被占用（可能有 agent 正在运行），请关闭后重试');
 
 /** Where a write to `file` must land: through symlinks (a dotfiles-managed config stays a link). */
 async function realTarget(file: string): Promise<string> {
@@ -77,7 +78,7 @@ export async function atomicWrite(file: string, data: Buffer | string, opts: Wri
 function utf8Text(buf: Buffer | null): string {
   if (!buf) return '';
   const text = buf.toString('utf8');
-  if (!Buffer.from(text, 'utf8').equals(buf)) throw new Error('文件不是 UTF-8 编码，未修改');
+  if (!Buffer.from(text, 'utf8').equals(buf)) throw new Error(tr('文件不是 UTF-8 编码，未修改'));
   return text;
 }
 
@@ -184,7 +185,7 @@ export class BackupStore {
         let next: string | null;
         try { next = fix(utf8Text(await readOrNull(file))); } catch (e: any) {
           await this.rollback(file, original);
-          throw new Error(`${path.basename(file)} 纠正失败，已回滚：${e?.message ?? e}`);
+          throw new Error(tr('{basename} 纠正失败，已回滚：{message}', { basename: path.basename(file), message: e?.message ?? e }));
         }
         if (next !== null) { await this.write(file, next); await this.verify(file, original); }
       }
@@ -201,7 +202,7 @@ export class BackupStore {
     if (now === null || (original && now.equals(original))) return;
     try { checkParses(now, file); } catch (e: any) {
       await this.rollback(file, original);
-      throw new Error(`写入后 ${path.basename(file)} 无法解析，已回滚：${e?.message ?? e}`);
+      throw new Error(tr('写入后 {basename} 无法解析，已回滚：{message}', { basename: path.basename(file), message: e?.message ?? e }));
     }
   }
 
@@ -223,14 +224,14 @@ export class BackupStore {
   /** Put a backup back in place. The current file is backed up first, and the restored bytes must parse. */
   async restore(id: string): Promise<AgentConfigBackup> {
     const m = /^([a-z]+)\/([\w.-]+)$/.exec(id);
-    if (!m || !KINDS.includes(m[1] as AgentConfigKind) || m[2] === 'index.jsonl') throw new Error(`无效的备份 id：${id}`);
+    if (!m || !KINDS.includes(m[1] as AgentConfigKind) || m[2] === 'index.jsonl') throw new Error(tr('无效的备份 id：{id}', { id }));
     const entry = (await this.list(m[1] as AgentConfigKind)).find((e) => e.id === id);
-    if (!entry) throw new Error(`备份不存在：${id}`);
+    if (!entry) throw new Error(tr('备份不存在：{id}', { id }));
     const bytes = await fs.readFile(path.join(this.root, id));
     checkParses(bytes, entry.path); // never restore something that doesn't parse
     await this.locked(entry.path, async () => {
       const original = await readOrNull(entry.path);
-      const before = await this.backupUnlocked(entry.agent, entry.path, `恢复 ${path.basename(id)} 之前`, original);
+      const before = await this.backupUnlocked(entry.agent, entry.path, tr('恢复 {basename} 之前', { basename: path.basename(id) }), original);
       try { await this.write(entry.path, bytes); } catch (e) { await this.discard(before); throw e; }
       await this.verify(entry.path, original);
     });

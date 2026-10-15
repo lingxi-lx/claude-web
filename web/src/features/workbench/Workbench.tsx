@@ -11,6 +11,7 @@ import { usePageOpen } from '@/features/sections';
 import { GroupBar } from './GroupBar';
 import { PaneLayer } from './PaneLayer';
 import { ConnectionBanner } from './ConnectionBanner';
+import { tr } from '@/i18n';
 
 // the 扩展 page loads when it is first opened (the directory and its marks are not in the app's first file)
 // 后台 too: the office and the graph are not in the app's first file
@@ -41,9 +42,9 @@ export function Workbench() {
       {vis.groupBar && <GroupBar />}
       <div className="main-stack">
         <PaneLayer tabStrips={vis.tabStrip} underGroupBar={vis.groupBar} workbench={workbench && !mobile} inert={autoOpen} />
-        {bgSeen && <ErrorBoundary area="后台"><Suspense fallback={null}><BackgroundPage /></Suspense></ErrorBoundary>}
-        {autoSeen && <ErrorBoundary area="自动化"><AutomationPage /></ErrorBoundary>}
-        {extSeen && <ErrorBoundary area="扩展"><Suspense fallback={null}><ExtensionsPage /></Suspense></ErrorBoundary>}
+        {bgSeen && <ErrorBoundary area={tr('后台')}><Suspense fallback={null}><BackgroundPage /></Suspense></ErrorBoundary>}
+        {autoSeen && <ErrorBoundary area={tr('自动化')}><AutomationPage /></ErrorBoundary>}
+        {extSeen && <ErrorBoundary area={tr('扩展')}><Suspense fallback={null}><ExtensionsPage /></Suspense></ErrorBoundary>}
       </div>
       <ConnectionBanner />
     </div>

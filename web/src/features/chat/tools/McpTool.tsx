@@ -6,9 +6,10 @@ import { Expandable } from '../Expandable';
 import { Markdown } from '../Markdown';
 import { clsx } from '@/util';
 import { Icon } from '@/ui/icons';
+import { tr } from '@/i18n';
 
 export function ErrorPre({ text }: { text: string }) {
-  return <CodeBlock code={text || '(no error text)'} lang="plaintext" title="错误" wrap className="err" maxLines={40} />;
+  return <CodeBlock code={text || '(no error text)'} lang="plaintext" title={tr('错误')} wrap className="err" maxLines={40} />;
 }
 
 export function ImageGrid({ images }: { images: string[] }) {
@@ -41,10 +42,10 @@ export function JsonTree({ value, name, depth = 0, path = '$' }: { value: unknow
         <span className="chev"><Icon name={open ? 'chevronDown' : 'chevronRight'} size={11} /></span>
         {name !== undefined && <span className="jt-key">{name}: </span>}
         <span className="jt-meta">{label}</span>
-        <button className="jt-copy" title={`复制路径 ${path}`} onClick={copy} aria-label="复制路径"><Icon name="copy" size={11} /></button>
+        <button className="jt-copy" title={tr('复制路径 {path}', { path })} onClick={copy} aria-label={tr('复制路径')}><Icon name="copy" size={11} /></button>
       </div>
       {open && entries.slice(0, 500).map(([k, v]) => <JsonTree key={k} name={k} value={v} depth={depth + 1} path={Array.isArray(value) ? `${path}[${k}]` : `${path}.${k}`} />)}
-      {open && entries.length > 500 && <div className="jt-row" style={{ paddingLeft: (depth + 1) * 14, color: 'var(--fg-3)' }}>… 还有 {entries.length - 500} 项</div>}
+      {open && entries.length > 500 && <div className="jt-row" style={{ paddingLeft: (depth + 1) * 14, color: 'var(--fg-3)' }}>{tr('… 还有 {entriesCount} 项', { entriesCount: entries.length - 500 })}</div>}
     </div>
   );
 }
@@ -100,14 +101,14 @@ export function ToolOutput({ r }: { r: NonNullable<ToolUseBlock['result']> }) {
         looksMarkdown(r.content) ? (
           <Expandable text={r.content} lines={30} chars={6000}>{(v) => <div className="tool-md"><Markdown text={v} /></div>}</Expandable>
         ) : (
-          <Expandable text={r.content} lines={30} chars={6000}>{(v) => <CodeBlock code={v} lang="plaintext" title="输出" wrap />}</Expandable>
+          <Expandable text={r.content} lines={30} chars={6000}>{(v) => <CodeBlock code={v} lang="plaintext" title={tr('输出')} wrap />}</Expandable>
         )
       ) : !r.images?.length ? (
-        <div className="tool-meta">（无输出）</div>
+        <div className="tool-meta">{tr('（无输出）')}</div>
       ) : null}
       {r.structured !== undefined && r.structured !== null && typeof r.structured === 'object' && (
         <details className="structured">
-          <summary>结构化输出</summary>
+          <summary>{tr('结构化输出')}</summary>
           <div className="jt"><JsonTree value={r.structured} /></div>
         </details>
       )}

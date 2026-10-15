@@ -11,6 +11,7 @@ import { DirPicker } from './DirPicker';
 import { Popover } from './Popover';
 import { PROJECT_MENU_ID } from './ids';
 import { busyInCheckout, liveSessions } from './branch-guard';
+import { tr } from '@/i18n';
 
 /** A default name for a new worktree: `task-0928-1432`. */
 export function worktreeName(d = new Date()): string {
@@ -35,15 +36,15 @@ export function ProjectChip({ cwd, recent, onPick, onBrowse, worktree, onWorktre
   const toggle = async (close: () => void) => {
     close();
     if (worktree) { onWorktree(''); return; }
-    const n = (await dlg.prompt('在独立副本里运行', worktreeName(), { message: '新对话会在这个项目的一个独立副本（worktree）里工作，不动你当前的检出。给这个副本起个名字：', okLabel: '开启' }))?.trim();
+    const n = (await dlg.prompt(tr('在独立副本里运行'), worktreeName(), { message: tr('新对话会在这个项目的一个独立副本（worktree）里工作，不动你当前的检出。给这个副本起个名字：'), okLabel: tr('开启') }))?.trim();
     if (n) onWorktree(n);
   };
   return (
     <DirPicker cwd={cwd} recent={recent} onPick={onPick} onBrowse={onBrowse}
       footer={(close) => (
-        <button type="button" role="menuitemcheckbox" aria-checked={!!worktree} data-id={PROJECT_MENU_ID.worktree} className="dirmenu-wt" onClick={() => void toggle(close)} title="Claude Code 的 --worktree：在仓库的独立副本里运行，改动在自己的分支上">
+        <button type="button" role="menuitemcheckbox" aria-checked={!!worktree} data-id={PROJECT_MENU_ID.worktree} className="dirmenu-wt" onClick={() => void toggle(close)} title={tr('Claude Code 的 --worktree：在仓库的独立副本里运行，改动在自己的分支上')}>
           <Icon name="branch" size={13} />
-          <span className="grow">在{TERMS.worktree}里运行{worktree ? `：${worktree}` : ''}</span>
+          <span className="grow">{tr('在{worktree}里运行{v}', { worktree: TERMS.worktree, v: worktree ? `：${worktree}` : '' })}</span>
           <span className={clsx('toggle sm', worktree && 'on')} aria-hidden />
         </button>
       )} />
@@ -65,14 +66,14 @@ export function BranchChip({ cwd }: { cwd: string }) {
   return (
     <>
       <button ref={chip} type="button" className={clsx('cchip branch-chip', open && 'open')} onClick={() => setOpen((o) => !o)}
-        title={`分支 ${git.branch}${dirty ? ` · ${dirty} 处未提交的改动` : ''}\n点击切换分支`} aria-label={`分支：${git.branch}`} aria-haspopup="menu" aria-expanded={open}>
+        title={tr("分支 {branch}{v}\n点击切换分支", { branch: git.branch, v: dirty ? tr(' · {dirty} 处未提交的改动', { dirty }) : '' })} aria-label={tr('分支：{branch}', { branch: git.branch })} aria-haspopup="menu" aria-expanded={open}>
         <Icon name="branch" size={14} />
         <span className="cc-l opt">{git.branch}{dirty ? ' •' : ''}</span>
         <span className="caret opt"><Icon name="chevronDown" size={10} /></span>
       </button>
       {open && (
-        <ErrorBoundary area="分支菜单" compact onReset={() => setOpen(false)}>
-          <Popover anchor={chip} onClose={(r) => { setOpen(false); if (r) chip.current?.focus(); }} prefer="down" align="left" className="cm-branch" label="分支">
+        <ErrorBoundary area={tr('分支菜单')} compact onReset={() => setOpen(false)}>
+          <Popover anchor={chip} onClose={(r) => { setOpen(false); if (r) chip.current?.focus(); }} prefer="down" align="left" className="cm-branch" label={tr('分支')}>
             <BranchList cwd={cwd} root={git.root ?? cwd} onDone={(changed) => { setOpen(false); chip.current?.focus(); if (changed) reload(); }} />
           </Popover>
         </ErrorBoundary>
@@ -116,25 +117,25 @@ function BranchList({ cwd, root, onDone }: { cwd: string; root: string; onDone: 
     const n = busyInCheckout(root, liveSessions(st.sessions, st.open));
     if (n > 0) {
       onDone(false); // the question comes up over the page, not under a menu that stays open
-      if (!(await dlg.confirm(`切换到 ${b.name}？`, {
-        message: `${n} 个对话正在这个项目里运行，切换后它们会看到切换后的文件（它们读写的是同一份检出）。想让新对话和它们互不干扰，可以改用「在${TERMS.worktree}里运行」。`,
-        okLabel: '仍然切换',
+      if (!(await dlg.confirm(tr('切换到 {name}？', { name: b.name }), {
+        message: tr('{n} 个对话正在这个项目里运行，切换后它们会看到切换后的文件（它们读写的是同一份检出）。想让新对话和它们互不干扰，可以改用「在{worktree}里运行」。', { n, worktree: TERMS.worktree }),
+        okLabel: tr('仍然切换'),
       }))) return;
     }
     setBusy(true);
     try {
       await ws.request({ kind: 'git.checkout', cwd, name: b.name });
-      toast(`已切换到 ${b.name}`, true);
+      toast(tr('已切换到 {name}', { name: b.name }), true);
       onDone(true);
     } catch (e: any) { toast(String(e.message).split('\n\n')[0]); } finally { setBusy(false); }
   };
   return (
     <>
       {(branches?.filter((b) => !b.remote).length ?? 0) > 8 && (
-        <div className="cm-search"><Icon name="search" size={13} /><input className="field" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="筛选分支…" aria-label="筛选分支" /></div>
+        <div className="cm-search"><Icon name="search" size={13} /><input className="field" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr('筛选分支…')} aria-label={tr('筛选分支')} /></div>
       )}
-      <div className="cm-h">切换分支</div>
-      {branches === null && <div className="menu-note"><span className="spinner" /> 读取分支…</div>}
+      <div className="cm-h">{tr('切换分支')}</div>
+      {branches === null && <div className="menu-note"><span className="spinner" /> {tr('读取分支…')}</div>}
       <div className="cm-scroll">
         {local.map((b) => (
           <button key={b.name} type="button" data-mi role="menuitemradio" aria-checked={b.current} className={clsx('cm-it one', b.current && 'on')} disabled={busy} onClick={() => void checkout(b)}>
@@ -143,7 +144,7 @@ function BranchList({ cwd, root, onDone }: { cwd: string; root: string; onDone: 
           </button>
         ))}
       </div>
-      {branches !== null && !local.length && <div className="menu-note">{q ? '没有匹配的分支' : '没有本地分支'}</div>}
+      {branches !== null && !local.length && <div className="menu-note">{q ? tr('没有匹配的分支') : tr('没有本地分支')}</div>}
     </>
   );
 }

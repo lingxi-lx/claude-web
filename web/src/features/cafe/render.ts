@@ -11,6 +11,7 @@ import type { Actor, World } from './sim';
 import { bakeCharacter } from './bake';
 import { fee, usd, yuan } from './money';
 import type { BgSession } from '@shared';
+import { tr } from '@/i18n';
 
 export const WALL = 56;
 const PAD = 10;
@@ -173,10 +174,10 @@ export function render(out: Ctx, cw: number, ch: number, w: World, view: View, l
     c.font = '700 11px "Segoe UI", "Microsoft YaHei UI", sans-serif';
     c.textBaseline = 'alphabetic';
     c.fillStyle = flick ? '#5a2048' : '#ff6ad0';
-    c.fillText('CLAUDE 网咖', 0, 0);
+    c.fillText(tr('CLAUDE 网咖'), 0, 0);
     c.font = '600 6px "Segoe UI", "Microsoft YaHei UI", sans-serif';
     c.fillStyle = '#3cdcff';
-    c.fillText('24H · 包夜 · 冷饮 · 泡面', 1, 9);
+    c.fillText(tr('24H · 包夜 · 冷饮 · 泡面'), 1, 9);
     c.restore();
   }
   // posters on the back-left wall
@@ -529,14 +530,14 @@ function labels(c: Ctx, w: World, view: View, sz: { ox: number; oy: number }, lo
   }
   // the door's sign
   const d = onPage(view, sz, m.door.u + 2, m.door.v + 1, 0);
-  pill(c, d.x, d.y + 22 * s, m.full ? `客满 · 还有 ${m.overflow} 位在排队` : '空位充足', m.full ? '#ffffff' : '#0e2a1c', m.full ? '#c23a30' : '#4fe08a', Math.round(10 * s));
+  pill(c, d.x, d.y + 22 * s, m.full ? tr('客满 · 还有 {overflow} 位在排队', { overflow: m.overflow }) : tr('空位充足'), m.full ? '#ffffff' : '#0e2a1c', m.full ? '#c23a30' : '#4fe08a', Math.round(10 * s));
 }
 
 function receiptCard(c: Ctx, x: number, y: number, r: World['receipts'][number], s: number) {
   const lines = [
-    r.kind === 'failed' ? `异常下机 · ${r.name}` : r.kind === 'stopped' ? `被叫下机 · ${r.name}` : `结账 · ${r.name}`,
-    `座位 ${String(r.seat).padStart(2, '0')}  上机 ${Math.floor(r.ms / 60000)}:${String(Math.floor(r.ms / 1000) % 60).padStart(2, '0')}`,
-    `网费 ${yuan(r.fee)}`,
+    r.kind === 'failed' ? tr('异常下机 · {name}', { name: r.name }) : r.kind === 'stopped' ? tr('被叫下机 · {name}', { name: r.name }) : tr('结账 · {name}', { name: r.name }),
+    tr('座位 {padStart}  上机 {ms}:{padStart2}', { padStart: String(r.seat).padStart(2, '0'), ms: Math.floor(r.ms / 60000), padStart2: String(Math.floor(r.ms / 1000) % 60).padStart(2, '0') }),
+    tr('网费 {yuan}', { yuan: yuan(r.fee) }),
     `${r.tokens ? `${Math.round(r.tokens / 100) / 10}k token  ` : ''}${usd(r.usd)}`,
   ];
   const size = Math.round(11 * s);

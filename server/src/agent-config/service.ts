@@ -13,6 +13,7 @@ import { GEMINI, GeminiLikeConfigAdapter, QWEN } from './gemini.js';
 import { OpenCodeConfigAdapter } from './opencode.js';
 import { parseConfig } from './edit.js';
 import { findOnPath } from '../agents/resolve.js';
+import { tr } from '../i18n/index.js';
 
 export const AGENT_CONFIG_KINDS: AgentConfigKind[] = ['codex', 'gemini', 'qwen', 'opencode'];
 export const MASK = '••••••';
@@ -40,29 +41,29 @@ const ENV_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /** Reject specs the CLIs would choke on (or that could smuggle extra argv / TOML keys). */
 export function validateSpec(spec: McpSpec, transports: McpSpec['transport'][]): McpSpec {
-  if (!spec || typeof spec !== 'object' || Array.isArray(spec)) throw new Error('缺少 MCP 配置');
+  if (!spec || typeof spec !== 'object' || Array.isArray(spec)) throw new Error(tr('缺少 MCP 配置'));
   const str = (v: unknown) => v === undefined || typeof v === 'string';
   const dict = (v: unknown) => v === undefined || (!!v && typeof v === 'object' && !Array.isArray(v));
-  if (typeof spec.name !== 'string' || !NAME.test(spec.name)) throw new Error(`名称 ${typeof spec.name === 'string' ? spec.name : ''} 不合法：只能用字母、数字、_ 和 -`);
-  if (!['stdio', 'http', 'sse'].includes(spec.transport)) throw new Error(`未知传输方式 ${String(spec.transport)}`);
-  if (!transports.includes(spec.transport)) throw new Error(`不支持 ${spec.transport} 传输`);
-  if (!str(spec.command) || !str(spec.url)) throw new Error('command / url 必须是字符串');
-  if (spec.args !== undefined && (!Array.isArray(spec.args) || spec.args.some((a) => typeof a !== 'string'))) throw new Error('args 必须是字符串数组');
-  if (!dict(spec.env)) throw new Error('env 必须是对象');
-  if (!dict(spec.headers)) throw new Error('headers 必须是对象');
+  if (typeof spec.name !== 'string' || !NAME.test(spec.name)) throw new Error(tr('名称 {name} 不合法：只能用字母、数字、_ 和 -', { name: typeof spec.name === 'string' ? spec.name : '' }));
+  if (!['stdio', 'http', 'sse'].includes(spec.transport)) throw new Error(tr('未知传输方式 {transport}', { transport: String(spec.transport) }));
+  if (!transports.includes(spec.transport)) throw new Error(tr('不支持 {transport} 传输', { transport: spec.transport }));
+  if (!str(spec.command) || !str(spec.url)) throw new Error(tr('command / url 必须是字符串'));
+  if (spec.args !== undefined && (!Array.isArray(spec.args) || spec.args.some((a) => typeof a !== 'string'))) throw new Error(tr('args 必须是字符串数组'));
+  if (!dict(spec.env)) throw new Error(tr('env 必须是对象'));
+  if (!dict(spec.headers)) throw new Error(tr('headers 必须是对象'));
   if (spec.transport === 'stdio') {
-    if (!spec.command?.trim()) throw new Error('stdio 服务器需要命令');
-  } else if (!/^https?:\/\/\S+$/i.test(spec.url ?? '')) throw new Error('URL 必须以 http:// 或 https:// 开头');
-  if (spec.url?.includes(MASK) || spec.command?.includes(MASK) || spec.args?.some((a) => a.includes(MASK))) throw new Error('URL / 参数里有打码值，请填写真实值');
+    if (!spec.command?.trim()) throw new Error(tr('stdio 服务器需要命令'));
+  } else if (!/^https?:\/\/\S+$/i.test(spec.url ?? '')) throw new Error(tr('URL 必须以 http:// 或 https:// 开头'));
+  if (spec.url?.includes(MASK) || spec.command?.includes(MASK) || spec.args?.some((a) => a.includes(MASK))) throw new Error(tr('URL / 参数里有打码值，请填写真实值'));
   for (const [k, v] of Object.entries(spec.env ?? {})) {
-    if (!ENV_KEY.test(k)) throw new Error(`环境变量名 ${k} 不合法`);
-    if (typeof v !== 'string' || /[\r\n]/.test(v)) throw new Error(`环境变量 ${k} 的值不合法`);
-    if (v === MASK) throw new Error(`环境变量 ${k} 是打码值，请填写真实值`);
+    if (!ENV_KEY.test(k)) throw new Error(tr('环境变量名 {k} 不合法', { k }));
+    if (typeof v !== 'string' || /[\r\n]/.test(v)) throw new Error(tr('环境变量 {k} 的值不合法', { k }));
+    if (v === MASK) throw new Error(tr('环境变量 {k} 是打码值，请填写真实值', { k }));
   }
   for (const [k, v] of Object.entries(spec.headers ?? {})) {
-    if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(k)) throw new Error(`header 名 ${k} 不合法`);
-    if (typeof v !== 'string' || /[\r\n]/.test(v)) throw new Error(`header ${k} 的值不合法`);
-    if (v === MASK) throw new Error(`header ${k} 是打码值，请填写真实值`);
+    if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(k)) throw new Error(tr('header 名 {k} 不合法', { k }));
+    if (typeof v !== 'string' || /[\r\n]/.test(v)) throw new Error(tr('header {k} 的值不合法', { k }));
+    if (v === MASK) throw new Error(tr('header {k} 是打码值，请填写真实值', { k }));
   }
   return spec;
 }
@@ -127,7 +128,7 @@ export class AgentConfigService {
 
   adapter(kind: AgentConfigKind): AgentConfigAdapter {
     const a = this.adapters.get(kind);
-    if (!a) throw new Error(`不支持的 agent：${kind}`);
+    if (!a) throw new Error(tr('不支持的 agent：{kind}', { kind }));
     return a;
   }
 
@@ -162,7 +163,7 @@ export class AgentConfigService {
     // Codex lists through its CLI, which can't be asked when it isn't there; the others read their files
     if (kind !== 'codex' || installed) {
       try { mcp = (await a.mcpList()).map(maskSpec); } catch (e: any) { mcpError = e?.message ?? String(e); }
-    } else mcpError = '未安装 Codex，无法运行 codex mcp list';
+    } else mcpError = tr('未安装 Codex，无法运行 codex mcp list');
     let settings: AgentConfigState['settings'] = [], settingsError: string | undefined;
     try { settings = await a.settings(); } catch (e: any) { settingsError = e?.message ?? String(e); }
     return { kind, name: a.name, installed, version: info?.version ?? '', configPath: a.configPath(), files, mcp, mcpError, mcpVia: a.mcpVia, transports: a.transports, settings, settingsError };
@@ -173,14 +174,14 @@ export class AgentConfigService {
     validateSpec(spec, a.transports);
     if (!overwrite) {
       let existing: McpSpec[];
-      try { existing = await a.mcpList(); } catch (e: any) { throw new Error(`无法读取 ${a.name} 现有的 MCP 列表，未添加：${e?.message ?? e}`); }
-      if (existing.some((s) => s.name === spec.name)) throw new Error(`已存在同名服务器 ${spec.name}（勾选「覆盖」可替换）`);
+      try { existing = await a.mcpList(); } catch (e: any) { throw new Error(tr('无法读取 {name} 现有的 MCP 列表，未添加：{message}', { name: a.name, message: e?.message ?? e })); }
+      if (existing.some((s) => s.name === spec.name)) throw new Error(tr('已存在同名服务器 {name}（勾选「覆盖」可替换）', { name: spec.name }));
     }
     return a.mcpAdd(spec);
   }
 
   async mcpRemove(kind: AgentConfigKind, name: string): Promise<string> {
-    if (!NAME.test(name)) throw new Error(`名称 ${name} 不合法`);
+    if (!NAME.test(name)) throw new Error(tr('名称 {name} 不合法', { name }));
     return this.adapter(kind).mcpRemove(name);
   }
 
@@ -195,8 +196,8 @@ export class AgentConfigService {
   }
 
   async set(kind: AgentConfigKind, key: string, value: string | null): Promise<AgentConfigBackup | null> {
-    if (typeof key !== 'string') throw new Error('设置项名必须是字符串');
-    if (value !== null && typeof value !== 'string') throw new Error('设置值必须是字符串（或 null 清除）');
+    if (typeof key !== 'string') throw new Error(tr('设置项名必须是字符串'));
+    if (value !== null && typeof value !== 'string') throw new Error(tr('设置值必须是字符串（或 null 清除）'));
     return this.adapter(kind).setSetting(key, value);
   }
 
@@ -205,7 +206,7 @@ export class AgentConfigService {
     const files = await this.adapter(kind).files(cwd);
     const norm = (p: string) => (process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p));
     const hit = files.find((f) => norm(f.path) === norm(file));
-    if (!hit) throw new Error(`不是 ${kind} 的配置 / 说明文件：${file}`);
+    if (!hit) throw new Error(tr('不是 {kind} 的配置 / 说明文件：{file}', { kind, file }));
     if (!hit.exists) {
       await fs.mkdir(path.dirname(hit.path), { recursive: true });
       await fs.writeFile(hit.path, hit.kind === 'config' && hit.path.endsWith('.json') ? '{}\n' : '', { flag: 'wx' }).catch((e) => { if (e?.code !== 'EEXIST') throw e; });
@@ -251,7 +252,7 @@ export class AgentConfigService {
     // local overrides project overrides user, same precedence as Claude Code
     const all = (await this.claudeAll(cwd)).filter((e) => e.spec.name === name);
     const hit = all.find((e) => e.scope === 'local') ?? all.find((e) => e.scope === 'project') ?? all[0];
-    if (!hit) throw new Error(`Claude 里没有名为 ${name} 的 MCP 服务器`);
+    if (!hit) throw new Error(tr('Claude 里没有名为 {name} 的 MCP 服务器', { name }));
     return hit.spec;
   }
 }

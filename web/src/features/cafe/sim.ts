@@ -13,6 +13,7 @@ import type { Facing, Pose } from '@characters';
 import { buildMap, guestKey, type CafeMap, type Spot, type Use } from './map';
 import { findPath, type Tile } from './path';
 import { estimateUsd, fee } from './money';
+import { tr } from '@/i18n';
 
 export type Doing =
   | 'toDesk' | 'checkin' | 'toSeat' | 'work' | 'game' | 'toActivity' | 'activity' | 'bsod'
@@ -106,12 +107,12 @@ export function createWorld(seed: number, now: number): World {
   const map = buildMap(undefined, now);
   return {
     t: now, born: now, rng: seed | 0, map, mapAt: now, actors: [], receipts: [], dings: [],
-    admin: { key: 'admin', taskId: '', agentKey: '', name: '网管', color: 0, u: map.admin.u, v: map.admin.v, facing: 'se', pose: 'stand', doing: 'home', path: [], until: 0, screen: 'off' },
+    admin: { key: 'admin', taskId: '', agentKey: '', name: tr('网管'), color: 0, u: map.admin.u, v: map.admin.v, facing: 'se', pose: 'stand', doing: 'home', path: [], until: 0, screen: 'off' },
     nextShout: now + 20_000, nextPatrol: now + 25_000,
   };
 }
 
-const SHOUTS = ['欢迎光临', '谁的泡面没扔', '充电宝记得还', '包间还有空位', '小声点，有人在写代码'];
+const SHOUTS = [tr('欢迎光临'), tr('谁的泡面没扔'), tr('充电宝记得还'), tr('包间还有空位'), tr('小声点，有人在写代码')];
 
 const terminal = (a: BgAgent) => a.state === 'done' || a.state === 'failed' || a.state === 'stopped';
 
@@ -262,7 +263,7 @@ export function step(prev: World, snap: BgSession | undefined, now: number, o: S
           x.doing = 'checkin';
           x.until = now + CHECKIN_MS;
           x.facing = 'nw';
-          w.admin.bubble = { text: `欢迎光临，${String(x.seat ?? 0).padStart(2, '0')} 号机`, until: now + BUBBLE_MS };
+          w.admin.bubble = { text: tr('欢迎光临，{padStart} 号机', { padStart: String(x.seat ?? 0).padStart(2, '0') }), until: now + BUBBLE_MS };
         }
         break;
       case 'checkin':
@@ -307,7 +308,7 @@ export function step(prev: World, snap: BgSession | undefined, now: number, o: S
           w.receipts = [r, ...w.receipts].slice(0, MAX_RECEIPTS);
           w.dings = [...w.dings, now];
           x.bubble = undefined;
-          if (x.leaving === 'stopped') w.admin.bubble = { text: `${String(x.seat ?? 0).padStart(2, '0')} 号机被叫下机`, until: now + BUBBLE_MS };
+          if (x.leaving === 'stopped') w.admin.bubble = { text: tr('{padStart} 号机被叫下机', { padStart: String(x.seat ?? 0).padStart(2, '0') }), until: now + BUBBLE_MS };
         }
         break;
       case 'checkout':
@@ -334,7 +335,7 @@ export function step(prev: World, snap: BgSession | undefined, now: number, o: S
   if (w.shout && w.shout.until <= now) w.shout = undefined;
   if (now >= w.nextShout) {
     const seated = w.actors.filter((x) => x.doing === 'work' || x.doing === 'game');
-    const lines = seated.length ? [...SHOUTS, `${String(pick(w, seated).seat ?? 1).padStart(2, '0')} 号机还有 5 分钟`] : SHOUTS;
+    const lines = seated.length ? [...SHOUTS, tr('{padStart} 号机还有 5 分钟', { padStart: String(pick(w, seated).seat ?? 1).padStart(2, '0') })] : SHOUTS;
     w.shout = { text: pick(w, lines), until: now + 4000 };
     w.nextShout = now + between(w, 60_000, 120_000);
   }

@@ -16,6 +16,7 @@ import { worstWindow } from '@/features/sidebar/UsageRing';
 import { accountName } from '@/features/sidebar/status';
 import { ACCOUNT_PANELS, type AccountId, type TopId } from '@/features/sidebar/entries';
 import { MAX_PINS, RAIL_MORE, RAIL_PINS_KEY, RAIL_SECTIONS, railPanel, readPins, togglePin } from './rail-model';
+import { tr } from '@/i18n';
 
 /** One button of the rail: an icon, its name beside it on hover (`data-tip`, drawn by the style sheet). */
 function RailBtn({ id, icon, tip, on, className, children, ...rest }: { id: string; icon: IconName; tip: string; on?: boolean; className?: string; children?: React.ReactNode } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
@@ -40,12 +41,12 @@ function MoreMenu({ pins, onClose }: { pins: PanelId[]; onClose: () => void }) {
   const toast = useStore((s) => s.toast);
   const pin = (id: PanelId) => {
     const next = togglePin(pins, id);
-    if (!next) { toast(`图标栏上最多钉 ${MAX_PINS} 个：先取下一个`); return; }
+    if (!next) { toast(tr('图标栏上最多钉 {MAX_PINS} 个：先取下一个', { MAX_PINS })); return; }
     setSetting(RAIL_PINS_KEY, next);
   };
   return (
-    <Menu onClose={onClose} className="rail-menu" side="right" label="更多">
-      <div className="rm-h">更多</div>
+    <Menu onClose={onClose} className="rail-menu" side="right" label={tr('更多')}>
+      <div className="rm-h">{tr('更多')}</div>
       {RAIL_MORE.map((id) => {
         const p = railPanel(id);
         const pinned = pins.includes(id);
@@ -55,7 +56,7 @@ function MoreMenu({ pins, onClose }: { pins: PanelId[]; onClose: () => void }) {
               <Icon name={p.icon} size={16} />
               <span className="rm-t"><span className="l">{p.label}</span><span className="h">{p.hint}</span></span>
             </button>
-            <button className={clsx('rm-pin', pinned && 'on')} data-id={`pin-${id}`} aria-pressed={pinned} aria-label={pinned ? `从图标栏取下「${p.label}」` : `把「${p.label}」钉到图标栏`} title={pinned ? '从图标栏取下' : '钉到图标栏'} onClick={(e) => { e.stopPropagation(); pin(id); }}>
+            <button className={clsx('rm-pin', pinned && 'on')} data-id={`pin-${id}`} aria-pressed={pinned} aria-label={pinned ? tr('从图标栏取下「{label}」', { label: p.label }) : tr('把「{label}」钉到图标栏', { label: p.label })} title={pinned ? tr('从图标栏取下') : tr('钉到图标栏')} onClick={(e) => { e.stopPropagation(); pin(id); }}>
               <Icon name="pin" size={13} />
             </button>
           </div>
@@ -115,12 +116,12 @@ export function Rail() {
   const acct = (x: AccountId) => x;
   const dot: Partial<Record<Section, boolean>> = { chat: waiting && section !== 'chat', automation: orchWaiting > 0 && section !== 'automation' };
   return (
-    <nav className="rail" aria-label="分区">
+    <nav className="rail" aria-label={tr('分区')}>
       <div className="rail-top">
         <RailBtn
           id={top('collapse')}
           icon="sidebar"
-          tip={`${sidebarOpen ? '收起' : '展开'}侧栏 (${modKey}+B)`}
+          tip={tr('{v}侧栏 ({modKey}+B)', { v: sidebarOpen ? tr('收起') : tr('展开'), modKey })}
           className={clsx('rail-side', !sidebarOpen && 'sb-reveal')}
           aria-expanded={sidebarOpen}
           onClick={() => useStore.setState({ sidebarOpen: !sidebarOpen })}
@@ -139,7 +140,7 @@ export function Rail() {
           return <RailBtn key={id} id={`panel-${id}`} icon={p.icon} tip={p.label} on={shown} aria-pressed={shown} className="pinned" onClick={() => togglePanel(id)} />;
         })}
         <span className="rail-anchor">
-          <RailBtn id={top('more')} icon="more" tip="更多" on={menu === 'more'} aria-haspopup="menu" aria-expanded={menu === 'more'} onClick={toggle('more')} />
+          <RailBtn id={top('more')} icon="more" tip={tr('更多')} on={menu === 'more'} aria-haspopup="menu" aria-expanded={menu === 'more'} onClick={toggle('more')} />
           {menu === 'more' && <MoreMenu pins={pins} onClose={() => close('more')} />}
         </span>
       </div>
@@ -147,12 +148,12 @@ export function Rail() {
         <RailBtn
           id={acct('settings')}
           icon="settings"
-          tip={`设置 (${modKey}+,)`}
+          tip={tr('设置 ({modKey}+,)', { modKey })}
           onClick={() => useStore.getState().openSettings()}
           onContextMenu={(e) => { e.preventDefault(); showPanel(ACCOUNT_PANELS.config); }}
         />
         <span className="rail-anchor">
-          <button type="button" className={clsx('rail-acct', menu === 'account' && 'on')} data-id={acct('account')} data-tip={connected ? who.name : '连接断开，正在重连…'} aria-label={`账户：${who.name}`} aria-haspopup="menu" aria-expanded={menu === 'account'} onClick={toggle('account')}>
+          <button type="button" className={clsx('rail-acct', menu === 'account' && 'on')} data-id={acct('account')} data-tip={connected ? who.name : tr('连接断开，正在重连…')} aria-label={tr('账户：{name}', { name: who.name })} aria-haspopup="menu" aria-expanded={menu === 'account'} onClick={toggle('account')}>
             <Avatar initial={who.initial} signedIn={who.signedIn} percent={worst ? worst.percent : null} connected={connected} />
           </button>
           {menu === 'account' && <AccountMenu auth={auth} name={who.name} side="right" onClose={() => close('account')} />}

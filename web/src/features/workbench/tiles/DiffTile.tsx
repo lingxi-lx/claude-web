@@ -6,6 +6,7 @@ import { langFromPath } from '@/features/chat/highlight';
 import { useStore } from '@/store';
 import { basename } from '@/util';
 import type { Tile } from '@/model/layout';
+import { tr } from '@/i18n';
 
 type DiffResult = { kind: 'diff'; text: string } | { kind: 'content'; text: string } | { kind: 'new'; text: string } | { kind: 'unchanged' | 'clean' | 'binary' } | { kind: 'error'; text: string } | { kind: 'commit'; text: string; stat: string };
 
@@ -34,28 +35,28 @@ export function DiffTile({ tile }: { tile: Extract<Tile, { kind: 'diff' }> }) {
     const off = ws.on((e) => { if (e.kind === 'git.changed' || (e.kind === 'fs.changed' && e.path.toLowerCase().replace(/\//g, '\\') === tile.path.toLowerCase().replace(/\//g, '\\'))) load(); });
     return () => { off(); };
   }, [tile.path, tile.staged, tile.rev]);
-  const title = tile.rev ? `提交 ${tile.rev.slice(0, 7)}` : `${tile.staged ? '已暂存 · ' : ''}${basename(tile.path)}`;
+  const title = tile.rev ? tr('提交 {rev}', { rev: tile.rev.slice(0, 7) }) : `${tile.staged ? tr('已暂存 · ') : ''}${basename(tile.path)}`;
   return (
     <div className="doc-tile">
       <div className="doc-head">
         <b>± {title}</b>
         <span className="mono path" title={tile.path}>{tile.rev ? cwd : tile.path}</span>
         <span className="grow" />
-        {!tile.rev && <button className="btn sm ghost" onClick={() => openTile({ id: `d${Date.now()}`, kind: 'doc', path: tile.path }, 'tab')}>编辑</button>}
-        <button className="btn sm ghost" onClick={load}>刷新</button>
+        {!tile.rev && <button className="btn sm ghost" onClick={() => openTile({ id: `d${Date.now()}`, kind: 'doc', path: tile.path }, 'tab')}>{tr('编辑')}</button>}
+        <button className="btn sm ghost" onClick={load}>{tr('刷新')}</button>
       </div>
       <div className="doc-body">
-        {!r && <div className="empty">加载中…</div>}
+        {!r && <div className="empty">{tr('加载中…')}</div>}
         {r?.kind === 'commit' && (
           <>
             <pre className="commit-stat">{r.stat}</pre>
-            {r.text.trim() ? <DiffView unified={r.text} title={tile.rev} collapse /> : <div className="empty">空提交</div>}
+            {r.text.trim() ? <DiffView unified={r.text} title={tile.rev} collapse /> : <div className="empty">{tr('空提交')}</div>}
           </>
         )}
         {r?.kind === 'diff' && <DiffView unified={r.text} title={tile.path} collapse />}
-        {(r?.kind === 'content' || r?.kind === 'new') && <CodeBlock code={r.text} lang={langFromPath(tile.path)} title={`${r.kind === 'new' ? '新文件 · ' : ''}${tile.path}`} lineNumbers className="tall" />}
-        {(r?.kind === 'unchanged' || r?.kind === 'clean') && <div className="empty">{tile.staged ? '没有已暂存的改动' : '相对 HEAD 无改动'}</div>}
-        {r?.kind === 'binary' && <div className="empty">二进制文件</div>}
+        {(r?.kind === 'content' || r?.kind === 'new') && <CodeBlock code={r.text} lang={langFromPath(tile.path)} title={`${r.kind === 'new' ? tr('新文件 · ') : ''}${tile.path}`} lineNumbers className="tall" />}
+        {(r?.kind === 'unchanged' || r?.kind === 'clean') && <div className="empty">{tile.staged ? tr('没有已暂存的改动') : tr('相对 HEAD 无改动')}</div>}
+        {r?.kind === 'binary' && <div className="empty">{tr('二进制文件')}</div>}
         {r?.kind === 'error' && <div className="empty" style={{ color: 'var(--red)' }}>{r.text}</div>}
       </div>
     </div>

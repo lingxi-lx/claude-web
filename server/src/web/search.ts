@@ -3,6 +3,7 @@ import { parseDuckDuckGo } from './engines/duckduckgo.js';
 import { PAGE_ENGINES, readResultPage, resultPageUrl, type PageEngineId, type RawSearchPage } from './engines/pages.js';
 import { httpUrl, type ParsedPage, type SearchHit } from './engines/types.js';
 import { relevance } from './relevance.js';
+import { tr } from '../i18n/index.js';
 
 /**
  * Web search for every agent, without an API key — the way browser agents do it: the engine's result page is opened
@@ -24,15 +25,15 @@ export type EngineId = PageEngineId | 'brave';
 export type EngineSetting = 'auto' | EngineId;
 /** `browser`: only in the built-in browser (there is no way to fetch its page as a program). */
 export const ENGINES: { id: EngineSetting; label: string; needsKey: boolean; browser?: boolean }[] = [
-  { id: 'auto', label: '自动（DuckDuckGo → Bing → Yahoo → 百度）', needsKey: false },
+  { id: 'auto', label: tr('自动（DuckDuckGo → Bing → Yahoo → 百度）'), needsKey: false },
   { id: 'duckduckgo', label: 'DuckDuckGo', needsKey: false },
   { id: 'bing', label: 'Bing', needsKey: false },
   { id: 'google', label: 'Google', needsKey: false, browser: true },
   { id: 'yahoo', label: 'Yahoo', needsKey: false, browser: true },
-  { id: 'baidu', label: '百度', needsKey: false, browser: true },
-  { id: 'brave', label: 'Brave Search（API，要密钥）', needsKey: true },
+  { id: 'baidu', label: tr('百度'), needsKey: false, browser: true },
+  { id: 'brave', label: tr('Brave Search（API，要密钥）'), needsKey: true },
 ];
-const LABEL: Record<EngineId, string> = { duckduckgo: 'DuckDuckGo', bing: 'Bing', google: 'Google', yahoo: 'Yahoo', baidu: '百度', brave: 'Brave Search' };
+const LABEL: Record<EngineId, string> = { duckduckgo: 'DuckDuckGo', bing: 'Bing', google: 'Google', yahoo: 'Yahoo', baidu: tr('百度'), brave: 'Brave Search' };
 const isPageEngine = (e: EngineId): e is PageEngineId => (PAGE_ENGINES as readonly string[]).includes(e);
 export const engineLabel = (id: string) => LABEL[id as EngineId] ?? id;
 
@@ -78,7 +79,7 @@ export const BROWSER_TIMEOUT_MS = 40_000;
 export const REFUSED_COOLDOWN_MS = 60_000;
 /** …one that could not be reached at all (blocked network, timeout) after this. */
 export const UNREACHABLE_COOLDOWN_MS = 5 * 60_000;
-const UNRELATED = '返回的结果和搜索词对不上';
+const UNRELATED = tr('返回的结果和搜索词对不上');
 
 /**
  * The engine answered, but not with results (or did not answer): `auto` goes on to the next one.
@@ -125,9 +126,9 @@ interface Ctx { fetch: typeof fetch; env: Record<string, string | undefined>; ke
 async function page(engine: EngineId, url: string, ctx: Ctx, query: string, parse: (html: string) => ParsedPage): Promise<SearchHit[]> {
   const res = await ctx.fetch(url, { headers: { ...BROWSER_HEADERS, 'Accept-Language': acceptLanguage(query) }, redirect: 'follow', signal: ctx.signal });
   // DuckDuckGo answers 202 with its "bots use DuckDuckGo too" page when asked too often
-  if (res.status !== 200) throw new EngineRefused(engine, res.status === 202 || res.status === 429 ? `HTTP ${res.status}（请求太频繁，被限流了）` : `HTTP ${res.status}`, true);
+  if (res.status !== 200) throw new EngineRefused(engine, res.status === 202 || res.status === 429 ? tr('HTTP {status}（请求太频繁，被限流了）', { status: res.status }) : `HTTP ${res.status}`, true);
   const parsed = parse(await res.text());
-  if (parsed.state === 'blocked') throw new EngineRefused(engine, '没有返回结果页（可能要求验证，或者把这次请求当成了机器人）', true);
+  if (parsed.state === 'blocked') throw new EngineRefused(engine, tr('没有返回结果页（可能要求验证，或者把这次请求当成了机器人）'), true);
   return parsed.results;
 }
 
@@ -136,7 +137,7 @@ const RUN: Partial<Record<EngineId, (query: string, ctx: Ctx) => Promise<SearchH
   bing: (q, ctx) => page('bing', `${base(ctx.env, 'CW_BING_URL', 'https://www.bing.com')}/search?q=${encodeURIComponent(q)}&setmkt=${bingMarket(q)}`, ctx, q, parseBing),
   duckduckgo: (q, ctx) => page('duckduckgo', `${base(ctx.env, 'CW_DDG_URL', 'https://html.duckduckgo.com')}/html/?q=${encodeURIComponent(q)}`, ctx, q, parseDuckDuckGo),
   async brave(q, ctx) {
-    if (!ctx.keys.brave) throw new EngineRefused('brave', '还没有填 API Key');
+    if (!ctx.keys.brave) throw new EngineRefused('brave', tr('还没有填 API Key'));
     const res = await ctx.fetch(`${base(ctx.env, 'CW_BRAVE_URL', 'https://api.search.brave.com')}/res/v1/web/search?q=${encodeURIComponent(q)}&count=${ctx.count}`, {
       headers: { accept: 'application/json', 'x-subscription-token': ctx.keys.brave },
       signal: ctx.signal,
@@ -152,11 +153,11 @@ async function json(engine: EngineId, res: Response): Promise<any> {
   let j: any = null;
   try { j = JSON.parse(text); } catch { /* not JSON */ }
   if (!res.ok) {
-    if (res.status === 401 || res.status === 403) throw new EngineRefused(engine, `API Key 不对或没有权限（HTTP ${res.status}）`);
+    if (res.status === 401 || res.status === 403) throw new EngineRefused(engine, tr('API Key 不对或没有权限（HTTP {status}）', { status: res.status }));
     const said = typeof j?.detail?.error === 'string' ? j.detail.error : typeof j?.error?.detail === 'string' ? j.error.detail : typeof j?.error === 'string' ? j.error : typeof j?.message === 'string' ? j.message : '';
     throw new EngineRefused(engine, `HTTP ${res.status}${said ? ` ${said.slice(0, 160)}` : ''}`, res.status === 429 || res.status >= 500);
   }
-  if (!j || typeof j !== 'object') throw new EngineRefused(engine, '返回的不是 JSON', true);
+  if (!j || typeof j !== 'object') throw new EngineRefused(engine, tr('返回的不是 JSON'), true);
   return j;
 }
 
@@ -182,10 +183,10 @@ export function autoOrder(keys: { brave?: string } = {}, o: { browser?: boolean 
   return [...(keys.brave ? (['brave'] as const) : []), ...(o.browser ? (['duckduckgo', 'bing', 'yahoo', 'baidu'] as const) : (['bing', 'duckduckgo'] as const))];
 }
 
-export const NEEDS_BROWSER = '要用桌面版 Claude Web 的内置浏览器来搜（现在没有桌面窗口连着）';
+export const NEEDS_BROWSER = tr('要用桌面版 Claude Web 的内置浏览器来搜（现在没有桌面窗口连着）');
 /** The window was there when the search began and stopped answering part-way. */
-const BROWSER_GONE = '要用内置浏览器来搜，而它这次没有应答';
-const challenged = (url: string) => `要求验证，或者没有给出结果页。可以用 browser_open 打开 ${url} ，请用户在内置浏览器里完成验证后再搜`;
+const BROWSER_GONE = tr('要用内置浏览器来搜，而它这次没有应答');
+const challenged = (url: string) => tr('要求验证，或者没有给出结果页。可以用 browser_open 打开 {url} ，请用户在内置浏览器里完成验证后再搜', { url });
 
 export function clampCount(n: unknown): number {
   const v = typeof n === 'number' && Number.isFinite(n) ? Math.floor(n) : DEFAULT_COUNT;
@@ -194,7 +195,7 @@ export function clampCount(n: unknown): number {
 
 export async function search(query: string, opts: SearchOptions = {}, deps: SearchDeps = {}): Promise<SearchOutcome> {
   const q = query.trim();
-  if (!q) throw new Error('搜索词是空的');
+  if (!q) throw new Error(tr('搜索词是空的'));
   const count = clampCount(opts.count);
   const setting = opts.engine ?? 'auto';
   const auto = setting === 'auto';
@@ -207,9 +208,9 @@ export async function search(query: string, opts: SearchOptions = {}, deps: Sear
   /** the window stopped answering during this search: the rest is fetched by this process */
   let browser = deps.browser;
   for (const engine of auto ? autoOrder(keys, { browser: !!browser }) : [setting]) {
-    if (opts.signal?.aborted) throw new Error('搜索被取消了');
+    if (opts.signal?.aborted) throw new Error(tr('搜索被取消了'));
     const resting = auto ? cooldown?.get(engine) : undefined;
-    if (resting && resting.until > now()) { refused.push(`${LABEL[engine]}：${resting.why}（刚失败过，过一会儿再试它）`); continue; }
+    if (resting && resting.until > now()) { refused.push(tr('{v}：{why}（刚失败过，过一会儿再试它）', { v: LABEL[engine], why: resting.why })); continue; }
     const own = RUN[engine];
     let timeout: AbortSignal | null = null;
     const within = (ms: number) => {
@@ -229,7 +230,7 @@ export async function search(query: string, opts: SearchOptions = {}, deps: Sear
           browser = undefined;
           timeout = null;
           if (silent) deps.onBrowserSilent?.();
-          if (!own) throw new EngineRefused(engine, `内置浏览器没有完成这次搜索（${silent ? '没有在限定时间内应答' : reason(e)}）`);
+          if (!own) throw new EngineRefused(engine, tr('内置浏览器没有完成这次搜索（{reason}）', { reason: silent ? tr('没有在限定时间内应答') : reason(e) }));
         }
         if (raw) {
           // the page itself could not be loaded: the engine is out of reach from here, like a failed fetch
@@ -255,9 +256,9 @@ export async function search(query: string, opts: SearchOptions = {}, deps: Sear
       }
       return { engine, results };
     } catch (e) {
-      if (opts.signal?.aborted) throw new Error('搜索被取消了');
+      if (opts.signal?.aborted) throw new Error(tr('搜索被取消了'));
       const known = e instanceof EngineRefused;
-      const why = known ? e.message.slice(LABEL[engine].length + 1) : (timeout as AbortSignal | null)?.aborted ? '超时' : reason(e);
+      const why = known ? e.message.slice(LABEL[engine].length + 1) : (timeout as AbortSignal | null)?.aborted ? tr('超时') : reason(e);
       refused.push(`${LABEL[engine]}：${why}`);
       // not reached at all (a blocked network costs the whole timeout every time), or told to come back later
       if (!known) cooldown?.set(engine, { until: now() + UNREACHABLE_COOLDOWN_MS, why });
@@ -266,7 +267,7 @@ export async function search(query: string, opts: SearchOptions = {}, deps: Sear
   }
   if (weak) return weak;
   if (empty) return { engine: empty, results: [] };
-  throw new Error(`搜索没有成功。${refused.join('；')}`);
+  throw new Error(tr('搜索没有成功。{refused}', { refused: refused.join('；') }));
 }
 
 /** A fetch failure in a few words: undici hides the reason in `cause` ("fetch failed" says nothing). */

@@ -8,6 +8,7 @@ import { Icon } from '@/ui/icons';
 import { connectModel, loginInTerminal } from '@/features/providers/ConnectModel';
 import type { Provider } from '@shared';
 import { accountFailed } from './account-fail';
+import { tr } from '@/i18n';
 
 function useTick(active: boolean, ms = 1000) {
   const [, setN] = useState(0);
@@ -59,7 +60,7 @@ export function StatusStrip({ sessionId }: { sessionId: string }) {
     try {
       await ws.request({ kind: 'session.setProvider', sessionId, providerId: p.id });
       if (st().open[sessionId]?.lastSent) await st().retryLast(sessionId);
-      else st().toast(`这个对话已改用「${p.name}」，再发一次消息就行`);
+      else st().toast(tr('这个对话已改用「{name}」，再发一次消息就行', { name: p.name }));
     } catch (e: any) { st().toast(e?.message ?? String(e)); }
   };
   const useModel = async () => {
@@ -76,49 +77,49 @@ export function StatusStrip({ sessionId }: { sessionId: string }) {
       {alarm && (
         <span className="chip warn">
           {alarm.kind === 'no_reply'
-            ? `${alarm.minutes} 分钟还没收到模型的任何回复，供应商${upstream}可能没有响应`
-            : `${alarm.minutes} 分钟没有模型调用了，可能卡住`}
-          <button className="link" onClick={() => void st().interrupt(sessionId)}>中断</button>
+            ? tr('{minutes} 分钟还没收到模型的任何回复，供应商{upstream}可能没有响应', { minutes: alarm.minutes, upstream })
+            : tr('{minutes} 分钟没有模型调用了，可能卡住', { minutes: alarm.minutes })}
+          <button className="link" onClick={() => void st().interrupt(sessionId)}>{tr('中断')}</button>
         </span>
       )}
       {showErr && res && noLogin && (
         <span className="chip err" title={res.text} data-err="no-login">
-          Claude 账号还没登录 · 接一个模型（API Key）继续这个对话，或者登录 Claude 账号
-          <button className="link" data-act="connect" onClick={() => void useModel()}>接一个模型</button>
-          <button className="link" data-act="login" onClick={loginInTerminal}>用 Claude 账号登录</button>
+          {tr('Claude 账号还没登录 · 接一个模型（API Key）继续这个对话，或者登录 Claude 账号')}
+          <button className="link" data-act="connect" onClick={() => void useModel()}>{tr('接一个模型')}</button>
+          <button className="link" data-act="login" onClick={loginInTerminal}>{tr('用 Claude 账号登录')}</button>
         </span>
       )}
       {showErr && res && accountFail && (
         <span className="chip err" title={res.text} data-err="account-not-provider">
-          {ERROR_LABEL[res.errorKind!]} · 这个对话用的是「Claude 账号」，没有经过你添加的{providers.length === 1 ? `「${providers[0].name}」` : '供应商'}
+          {tr('{v} · 这个对话用的是「Claude 账号」，没有经过你添加的{v2}', { v: ERROR_LABEL[res.errorKind!], v2: providers.length === 1 ? `「${providers[0].name}」` : tr('供应商') })}
           {providers.length === 1
-            ? <button className="link" data-act="use-provider" onClick={() => void switchTo(providers[0])}>改用「{providers[0].name}」重试</button>
-            : <button className="link" data-act="use-provider" onClick={() => void useModel()}>改用供应商重试</button>}
-          {o.lastSent && <button className="link" onClick={() => st().retryLast(sessionId)}>重试</button>}
+            ? <button className="link" data-act="use-provider" onClick={() => void switchTo(providers[0])}>{tr('改用「{name}」重试', { name: providers[0].name })}</button>
+            : <button className="link" data-act="use-provider" onClick={() => void useModel()}>{tr('改用供应商重试')}</button>}
+          {o.lastSent && <button className="link" onClick={() => st().retryLast(sessionId)}>{tr('重试')}</button>}
         </span>
       )}
       {showErr && res && !noLogin && !accountFail && (
         <span className={clsx('chip', res.errorKind === 'aborted' ? 'muted' : 'err')} title={res.text}>
           {ERROR_LABEL[res.errorKind!]}{res.apiStatus ? ` HTTP ${res.apiStatus}` : ''} · {ERROR_HINT[res.errorKind!]}
-          {res.errorKind !== 'aborted' && res.errorKind !== 'context' && o.lastSent && <button className="link" onClick={() => st().retryLast(sessionId)}>重试</button>}
+          {res.errorKind !== 'aborted' && res.errorKind !== 'context' && o.lastSent && <button className="link" onClick={() => st().retryLast(sessionId)}>{tr('重试')}</button>}
           {res.errorKind === 'context' && <button className="link" onClick={() => st().send(sessionId, '/compact')}>/compact</button>}
         </span>
       )}
       {rlActive && (
         <span className="chip warn">
-          额度用尽{resetAt ? ` · ${countdown(resetAt)} 后重置` : ''}
+          {tr('额度用尽{v}', { v: resetAt ? tr(' · {countdown} 后重置', { countdown: countdown(resetAt) }) : '' })}
           <label className="inline">
             <input type="checkbox" checked={!!settings.autoContinueOnReset} onChange={(e) => { void setSetting('autoContinueOnReset', e.target.checked); if (!e.target.checked) disarmAutoContinue(sessionId); }} />
-            额度恢复后自动继续
+            {tr('额度恢复后自动继续')}
           </label>
         </span>
       )}
-      {armed && <span className="chip"><span className="spinner" /> {countdown(armed)} 后自动继续 <button className="link" onClick={() => { disarmAutoContinue(sessionId); useStore.setState({}); }}>取消</button></span>}
+      {armed && <span className="chip"><span className="spinner" /> {tr('{countdown} 后自动继续', { countdown: countdown(armed) })} <button className="link" onClick={() => { disarmAutoContinue(sessionId); useStore.setState({}); }}>{tr('取消')}</button></span>}
       {/* ≥ 95 % only, and only the action: the ring in the composer already says how full it is */}
       {cuWarn && cu && (
-        <span className="chip err ctx-full" title={`上下文 ${cu.percentage}% · ${fmtTok(cu.totalTokens)} / ${fmtTok(cu.maxTokens)}`}>
-          {cu.overLimit ? '上下文已超限' : '上下文快满了'}
-          <button className="link" onClick={() => st().send(sessionId, '/compact')}>/compact 压缩</button>
+        <span className="chip err ctx-full" title={tr('上下文 {percentage}% · {fmtTok} / {fmtTok2}', { percentage: cu.percentage, fmtTok: fmtTok(cu.totalTokens), fmtTok2: fmtTok(cu.maxTokens) })}>
+          {cu.overLimit ? tr('上下文已超限') : tr('上下文快满了')}
+          <button className="link" onClick={() => st().send(sessionId, '/compact')}>{tr('/compact 压缩')}</button>
         </span>
       )}
       {/* keep the strip subscribed to the ws so the compact request resolves */}

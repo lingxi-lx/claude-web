@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Monaco } from './monaco';
+import { tr } from '@/i18n';
 
 let loader: Promise<Monaco> | null = null;
 export const loadMonaco = () => (loader ??= import('./monaco').then((m) => m.monaco));
@@ -108,6 +109,6 @@ export function MonacoEditor({ path, value, version, language, readOnly, line, o
   useEffect(() => { editorRef.current?.updateOptions({ readOnly: !!readOnly }); }, [readOnly]);
   useEffect(() => { if (line && editorRef.current) { editorRef.current.revealLineInCenter(line); editorRef.current.setPosition({ lineNumber: line, column: 1 }); } }, [line]);
 
-  if (err) return <div className="empty" style={{ color: 'var(--red)' }}>编辑器加载失败：{err}</div>;
+  if (err) return <div className="empty" style={{ color: 'var(--red)' }}>{tr('编辑器加载失败：{err}', { err })}</div>;
   return <div ref={ref} className="monaco-host" />;
 }

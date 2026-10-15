@@ -1,4 +1,5 @@
 import { execFile, type ChildProcess } from 'node:child_process';
+import { tr } from '../i18n/index.js';
 
 /**
  * Every descendant of `root` in a `ps -A -o pid= -o ppid=` listing, breadth-first (children before
@@ -83,7 +84,7 @@ export function execFileTree(
         const e = err as Error & { stdout?: string; stderr?: string; killed?: boolean };
         e.stdout = String(stdout ?? '');
         e.stderr = String(stderr ?? '');
-        if (timedOut) { e.message = `超时（${Math.round(opts.timeoutMs / 1000)} 秒）：${e.message}`; e.killed = true; }
+        if (timedOut) { e.message = tr('超时（{timeoutMs} 秒）：{message}', { timeoutMs: Math.round(opts.timeoutMs / 1000), message: e.message }); e.killed = true; }
         reject(e);
         return;
       }

@@ -1,8 +1,9 @@
 // 后台 (spec 2026-10-12-background-office-design.md §3): the words and counts the page, the composer's pill, the task
 // panel and a workflow card share. Pure — no store, so node tests can import it.
 import type { BgAgent, BgSession, BgTask } from '@shared';
+import { tr } from '@/i18n';
 
-export const BG_TITLE = '后台';
+export const BG_TITLE = tr('后台');
 
 const running = (t: BgTask) => t.status === 'running';
 
@@ -38,44 +39,44 @@ export function reopenRun(o: { asked?: string; selected?: string; was?: string; 
 export function pillText(s: BgSession | undefined): string | null {
   const c = liveCounts(s);
   if (!c.tasks) return null;
-  const parts = [c.workflows && `${c.workflows} 个工作流`, c.agents && `${c.agents} 个子代理`, c.shells && `${c.shells} 条命令`].filter(Boolean);
-  const busy = c.workflows && c.running ? ` · ${c.running} 个在跑` : '';
+  const parts = [c.workflows && tr('{workflows} 个工作流', { workflows: c.workflows }), c.agents && tr('{agents} 个子代理', { agents: c.agents }), c.shells && tr('{shells} 条命令', { shells: c.shells })].filter(Boolean);
+  const busy = c.workflows && c.running ? tr(' · {running} 个在跑', { running: c.running }) : '';
   return `${BG_TITLE} · ${parts.join(' · ')}${busy}`;
 }
 
 /** After the turn's Stop: what kept running (the turn's Stop spares it), and where to stop it. */
 export function stopNote(s: BgSession | undefined): string | null {
   const n = (s?.tasks ?? []).filter((t) => running(t) && (t.backgrounded || t.kind === 'workflow')).length;
-  return n ? `后台还有 ${n} 个任务在跑，在「${BG_TITLE}」里停` : null;
+  return n ? tr('后台还有 {n} 个任务在跑，在「{BG_TITLE}」里停', { n, BG_TITLE }) : null;
 }
 
 export function agentStateText(a: BgAgent): string {
   switch (a.state) {
-    case 'queued': return '排队';
-    case 'running': return '在跑';
-    case 'done': return a.cached ? '用了上次的结果' : '完成';
-    case 'failed': return '失败';
-    case 'stopped': return '已停止';
+    case 'queued': return tr('排队');
+    case 'running': return tr('在跑');
+    case 'done': return a.cached ? tr('用了上次的结果') : tr('完成');
+    case 'failed': return tr('失败');
+    case 'stopped': return tr('已停止');
   }
 }
 
 export function taskStateText(t: BgTask): string {
   switch (t.status) {
-    case 'running': return '运行中';
-    case 'completed': return '完成';
-    case 'failed': return '失败';
-    case 'stopped': return t.reason ? `已停止 · ${t.reason}` : '已停止';
+    case 'running': return tr('运行中');
+    case 'completed': return tr('完成');
+    case 'failed': return tr('失败');
+    case 'stopped': return t.reason ? tr('已停止 · {reason}', { reason: t.reason }) : tr('已停止');
   }
 }
 
 export function taskTitle(t: BgTask): string {
-  if (t.kind === 'workflow') return t.name || t.description || '工作流';
-  if (t.kind === 'agent') return t.agents[0]?.label || t.description || '子代理';
-  return t.description || (t.kind === 'shell' ? '后台命令' : '后台任务');
+  if (t.kind === 'workflow') return t.name || t.description || tr('工作流');
+  if (t.kind === 'agent') return t.agents[0]?.label || t.description || tr('子代理');
+  return t.description || (t.kind === 'shell' ? tr('后台命令') : tr('后台任务'));
 }
 
 /** What kind of thing it is, in a word. */
-export const KIND_LABEL: Record<BgTask['kind'], string> = { workflow: '工作流', agent: '子代理', shell: '后台命令', other: '后台任务' };
+export const KIND_LABEL: Record<BgTask['kind'], string> = { workflow: tr('工作流'), agent: tr('子代理'), shell: tr('后台命令'), other: tr('后台任务') };
 
 export const agentColor = (n: number) => `var(--agent-${((Math.max(1, n) - 1) % 10) + 1})`;
 

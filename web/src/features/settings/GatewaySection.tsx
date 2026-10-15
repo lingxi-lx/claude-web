@@ -5,6 +5,7 @@ import { ago, clsx } from '@/util';
 import { dlg } from '@/ui/dialog';
 import { Icon } from '@/ui/icons';
 import type { GatewayGroup, GatewayMember, GatewayMemberState, GatewayProtocol, GatewayStatus, GatewayTestResult, Provider } from '@shared';
+import { tr } from '@/i18n';
 
 const PROTOCOLS: { id: GatewayProtocol; l: string }[] = [
   { id: 'anthropic', l: 'Anthropic' },
@@ -20,7 +21,7 @@ function left(until?: number) {
   return s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${s}s`;
 }
 
-const since = (t: number) => { const a = ago(t); return a === '刚刚' ? a : `${a}前`; };
+const since = (t: number) => { const a = ago(t); return a === tr('刚刚') ? a : tr('{a}前', { a }); };
 
 /** Settings → 模型网关: switch, endpoint + key, failover groups with live member health. */
 export function GatewaySection() {
@@ -38,16 +39,16 @@ export function GatewaySection() {
     const i = setInterval(() => tick((x) => x + 1), 1000); // cooldown countdowns
     return () => { off(); clearInterval(i); };
   }, []);
-  if (!st) return <div className="section"><div className="empty">读取中…</div></div>;
+  if (!st) return <div className="section"><div className="empty">{tr('读取中…')}</div></div>;
 
   const setEnabled = async (on: boolean) => { setBusy(true); try { setSt(await ws.request<GatewayStatus>({ kind: 'gateway.set', enabled: on })); } catch (e: any) { toast(e.message); } finally { setBusy(false); } };
-  const copyKey = async () => { try { const k = await ws.request<string>({ kind: 'gateway.revealKey' }); await navigator.clipboard.writeText(k); toast('已复制网关密钥', true); } catch (e: any) { toast(e.message); } };
+  const copyKey = async () => { try { const k = await ws.request<string>({ kind: 'gateway.revealKey' }); await navigator.clipboard.writeText(k); toast(tr('已复制网关密钥'), true); } catch (e: any) { toast(e.message); } };
   const regen = async () => {
-    if (!(await dlg.confirm('重新生成网关密钥？', { message: '旧密钥立即失效。已经在跑的对话要重开才会拿到新密钥；手动配置过的外部工具需要换成新的。', danger: true, okLabel: '重新生成' }))) return;
-    try { setSt(await ws.request<GatewayStatus>({ kind: 'gateway.regenerateKey' })); toast('已生成新密钥。运行中的对话还拿着旧密钥，需要重开才能继续走网关', true); } catch (e: any) { toast(e.message); }
+    if (!(await dlg.confirm(tr('重新生成网关密钥？'), { message: tr('旧密钥立即失效。已经在跑的对话要重开才会拿到新密钥；手动配置过的外部工具需要换成新的。'), danger: true, okLabel: tr('重新生成') }))) return;
+    try { setSt(await ws.request<GatewayStatus>({ kind: 'gateway.regenerateKey' })); toast(tr('已生成新密钥。运行中的对话还拿着旧密钥，需要重开才能继续走网关'), true); } catch (e: any) { toast(e.message); }
   };
   const addGroup = async () => {
-    const name = await dlg.prompt('组名称', '默认组');
+    const name = await dlg.prompt(tr('组名称'), tr('默认组'));
     if (!name) return;
     try { await ws.request({ kind: 'gateway.groups.upsert', group: { name, strategy: 'failover', members: [] } }); } catch (e: any) { toast(e.message); }
   };
@@ -56,31 +57,30 @@ export function GatewaySection() {
   return (
     <div className="section gateway">
       <div className="row" style={{ alignItems: 'center', gap: 12 }}>
-        <label className="chip"><input type="checkbox" checked={st.enabled} disabled={busy} onChange={(e) => setEnabled(e.target.checked)} /> 启用本机模型网关</label>
-        <span className={clsx('badge', st.enabled && 'ok')}>{st.enabled ? '运行中' : '关闭'}</span>
+        <label className="chip"><input type="checkbox" checked={st.enabled} disabled={busy} onChange={(e) => setEnabled(e.target.checked)} /> {tr('启用本机模型网关')}</label>
+        <span className={clsx('badge', st.enabled && 'ok')}>{st.enabled ? tr('运行中') : tr('关闭')}</span>
       </div>
       <div className="sub" style={{ marginTop: 6 }}>
-        在本机对各个 Agent 同时提供 Anthropic / OpenAI / Gemini 三种接口，后面接你自己的供应商：同协议原样透传（中转的指纹检查照样通过），跨协议自动转换；一个组里的成员按顺序故障转移，额度用尽或限流的成员自动冷却。只接受本机回环连接，局域网监听器上不可见。
-        不转发任何订阅登录（claude.ai / ChatGPT / Google 账号）—— 只用你配置的供应商。
+        {tr('在本机对各个 Agent 同时提供 Anthropic / OpenAI / Gemini 三种接口，后面接你自己的供应商：同协议原样透传（中转的指纹检查照样通过），跨协议自动转换；一个组里的成员按顺序故障转移，额度用尽或限流的成员自动冷却。只接受本机回环连接，局域网监听器上不可见。 不转发任何订阅登录（claude.ai / ChatGPT / Google 账号）—— 只用你配置的供应商。')}
       </div>
       {st.enabled && (
         <div className="gw-endpoint">
-          <div className="gw-kv"><span className="muted">地址</span><code>{st.baseUrl}/&lt;组 id&gt;</code></div>
+          <div className="gw-kv"><span className="muted">{tr('地址')}</span><code>{tr('{baseUrl}/<组 id>', { baseUrl: st.baseUrl })}</code></div>
           <div className="gw-kv">
-            <span className="muted">密钥</span><code>{st.keyMasked}</code>
-            <button className="btn sm ghost" onClick={copyKey}><Icon name="copy" size={12} /> 复制</button>
-            <button className="btn sm ghost danger" onClick={regen}>重新生成</button>
+            <span className="muted">{tr('密钥')}</span><code>{st.keyMasked}</code>
+            <button className="btn sm ghost" onClick={copyKey}><Icon name="copy" size={12} /> {tr('复制')}</button>
+            <button className="btn sm ghost danger" onClick={regen}>{tr('重新生成')}</button>
           </div>
-          <div className="sub">对话里用：在「设置 → 供应商」新建一个类型为「模型网关」的供应商并选组，Claude / Codex / Gemini 的对话开始时自动拿到地址和密钥（桌面版端口每次启动会变，所以别手抄地址）。</div>
+          <div className="sub">{tr('对话里用：在「设置 → 供应商」新建一个类型为「模型网关」的供应商并选组，Claude / Codex / Gemini 的对话开始时自动拿到地址和密钥（桌面版端口每次启动会变，所以别手抄地址）。')}</div>
         </div>
       )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16, marginBottom: 6 }}>
-        <h5 style={{ margin: 0 }}>故障转移组</h5>
+        <h5 style={{ margin: 0 }}>{tr('故障转移组')}</h5>
         <span className="grow" />
-        <button className="btn sm ghost" onClick={addGroup}><Icon name="plus" size={12} /> 新建组</button>
+        <button className="btn sm ghost" onClick={addGroup}><Icon name="plus" size={12} /> {tr('新建组')}</button>
       </div>
-      {!st.groups.length && <div className="empty">还没有组。新建一个，把几个供应商按优先级拖进去。</div>}
+      {!st.groups.length && <div className="empty">{tr('还没有组。新建一个，把几个供应商按优先级拖进去。')}</div>}
       {st.groups.map((g) => <GroupCard key={g.id} group={g} states={st.states[g.id] ?? []} providers={members} enabled={st.enabled} baseUrl={st.baseUrl} />)}
     </div>
   );
@@ -106,11 +106,11 @@ function GroupCard({ group, states, providers, enabled, baseUrl }: { group: Gate
       const modelMap = Object.fromEntries(mapRows.filter(([k, v]) => k.trim() && v.trim()));
       await ws.request({ kind: 'gateway.groups.upsert', group: { ...draft, modelMap } });
       setDirty(false);
-      toast(`已保存「${draft.name}」`, true);
+      toast(tr('已保存「{name}」', { name: draft.name }), true);
     } catch (e: any) { toast(e.message); }
   };
   const remove = async () => {
-    if (!(await dlg.confirm(`删除组「${group.name}」？`, { message: '引用它的「模型网关」供应商会失效，用它的新对话会报错。', danger: true, okLabel: '删除' }))) return;
+    if (!(await dlg.confirm(tr('删除组「{name}」？', { name: group.name }), { message: tr('引用它的「模型网关」供应商会失效，用它的新对话会报错。'), danger: true, okLabel: tr('删除') }))) return;
     await ws.request({ kind: 'gateway.groups.remove', id: group.id }).catch((e) => toast(e.message));
   };
   const runTest = async () => {
@@ -130,17 +130,17 @@ function GroupCard({ group, states, providers, enabled, baseUrl }: { group: Gate
   return (
     <div className="gw-group">
       <div className="gw-group-head">
-        <input className="field" style={{ width: 180 }} value={draft.name} onChange={(e) => edit({ name: e.target.value })} aria-label="组名称" />
-        <select className="field" value={draft.strategy} onChange={(e) => edit({ strategy: e.target.value as GatewayGroup['strategy'] })} aria-label="策略">
-          <option value="failover">按顺序故障转移</option>
-          <option value="round-robin">加权轮询</option>
+        <input className="field" style={{ width: 180 }} value={draft.name} onChange={(e) => edit({ name: e.target.value })} aria-label={tr('组名称')} />
+        <select className="field" value={draft.strategy} onChange={(e) => edit({ strategy: e.target.value as GatewayGroup['strategy'] })} aria-label={tr('策略')}>
+          <option value="failover">{tr('按顺序故障转移')}</option>
+          <option value="round-robin">{tr('加权轮询')}</option>
         </select>
-        <label className="muted" style={{ fontSize: 13, display: 'flex', gap: 4, alignItems: 'center' }} title="请求转成 Anthropic 发给成员时，缓存断点用 1 小时 TTL（写入 2× 基础价；默认 5 分钟 1.25×）">
-          <input type="checkbox" checked={!!draft.cache1h} onChange={(e) => edit({ cache1h: e.target.checked })} /> 1 小时缓存
+        <label className="muted" style={{ fontSize: 13, display: 'flex', gap: 4, alignItems: 'center' }} title={tr('请求转成 Anthropic 发给成员时，缓存断点用 1 小时 TTL（写入 2× 基础价；默认 5 分钟 1.25×）')}>
+          <input type="checkbox" checked={!!draft.cache1h} onChange={(e) => edit({ cache1h: e.target.checked })} /> {tr('1 小时缓存')}
         </label>
-        <code className="muted" title="这个组的入口地址">{baseUrl}/{group.id}</code>
+        <code className="muted" title={tr('这个组的入口地址')}>{baseUrl}/{group.id}</code>
         <span className="grow" />
-        <button className="btn sm ghost danger" onClick={remove}>删除</button>
+        <button className="btn sm ghost danger" onClick={remove}>{tr('删除')}</button>
       </div>
 
       <div className="gw-members">
@@ -150,55 +150,55 @@ function GroupCard({ group, states, providers, enabled, baseUrl }: { group: Gate
           const health = !p ? 'disabled' : s?.health ?? 'unknown';
           return (
             <div key={m.providerId} className={clsx('gw-member', dragFrom === i && 'dragging')} draggable onDragStart={() => setDragFrom(i)} onDragEnd={() => setDragFrom(null)} onDragOver={(e) => e.preventDefault()} onDrop={() => drop(i)}>
-              <span className="gw-grip" title="拖动调整顺序"><Icon name="grip" size={14} /></span>
+              <span className="gw-grip" title={tr('拖动调整顺序')}><Icon name="grip" size={14} /></span>
               <span className="gw-order">{i + 1}</span>
               <span className={clsx('dot', health === 'ok' ? 'running' : health === 'cooling' ? 'waiting' : health === 'disabled' ? 'error' : 'idle')} />
               <div className="grow">
-                <div>{p?.name ?? '（供应商已删除）'} <span className="muted" style={{ fontSize: 12 }}>{p ? TYPE_LABEL[p.type] ?? p.type : ''}</span></div>
+                <div>{p?.name ?? tr('（供应商已删除）')} <span className="muted" style={{ fontSize: 12 }}>{p ? TYPE_LABEL[p.type] ?? p.type : ''}</span></div>
                 <div className="sub">
-                  {health === 'cooling' ? `冷却中 · 还剩 ${left(s?.cooldownUntil)}` : health === 'disabled' ? '已停用' : health === 'ok' ? `正常${s?.lastOkAt ? ` · ${since(s.lastOkAt)}` : ''}` : '未使用'}
+                  {health === 'cooling' ? tr('冷却中 · 还剩 {left}', { left: left(s?.cooldownUntil) }) : health === 'disabled' ? tr('已停用') : health === 'ok' ? tr('正常{v}', { v: s?.lastOkAt ? ` · ${since(s.lastOkAt)}` : '' }) : tr('未使用')}
                   {s?.lastError ? ` · ${s.lastError}` : ''}
                 </div>
               </div>
-              <input className="field" style={{ width: 150 }} placeholder="固定模型（可选）" value={m.model ?? ''} onChange={(e) => setMember(i, { model: e.target.value })} list={`gw-models-${m.providerId}`} aria-label="固定模型" />
+              <input className="field" style={{ width: 150 }} placeholder={tr('固定模型（可选）')} value={m.model ?? ''} onChange={(e) => setMember(i, { model: e.target.value })} list={`gw-models-${m.providerId}`} aria-label={tr('固定模型')} />
               <datalist id={`gw-models-${m.providerId}`}>{(p?.models ?? []).map((x) => <option key={x} value={x} />)}</datalist>
-              {draft.strategy === 'round-robin' && <input className="field" style={{ width: 52 }} type="number" min={1} value={m.weight ?? 1} onChange={(e) => setMember(i, { weight: Math.max(1, Number(e.target.value) || 1) })} title="权重" aria-label="权重" />}
-              {(health === 'cooling' || health === 'disabled') && p && <button className="btn sm ghost" onClick={() => ws.request({ kind: 'gateway.reset', groupId: group.id, providerId: m.providerId }).catch((e) => toast(e.message))}>恢复</button>}
-              <button className="icon-btn xs" onClick={() => edit({ members: draft.members.filter((_, j) => j !== i) })} aria-label="移出组"><Icon name="close" size={12} /></button>
+              {draft.strategy === 'round-robin' && <input className="field" style={{ width: 52 }} type="number" min={1} value={m.weight ?? 1} onChange={(e) => setMember(i, { weight: Math.max(1, Number(e.target.value) || 1) })} title={tr('权重')} aria-label={tr('权重')} />}
+              {(health === 'cooling' || health === 'disabled') && p && <button className="btn sm ghost" onClick={() => ws.request({ kind: 'gateway.reset', groupId: group.id, providerId: m.providerId }).catch((e) => toast(e.message))}>{tr('恢复')}</button>}
+              <button className="icon-btn xs" onClick={() => edit({ members: draft.members.filter((_, j) => j !== i) })} aria-label={tr('移出组')}><Icon name="close" size={12} /></button>
             </div>
           );
         })}
-        {!draft.members.length && <div className="empty">组里还没有成员</div>}
+        {!draft.members.length && <div className="empty">{tr('组里还没有成员')}</div>}
         {addable.length > 0 && (
           <select className="field gw-add" value="" onChange={(e) => { if (e.target.value) edit({ members: [...draft.members, { providerId: e.target.value }] }); }}>
-            <option value="">＋ 添加供应商…</option>
+            <option value="">{tr('＋ 添加供应商…')}</option>
             {addable.map((p) => <option key={p.id} value={p.id}>{p.name}（{TYPE_LABEL[p.type] ?? p.type}）</option>)}
           </select>
         )}
       </div>
 
       <div className="gw-map">
-        <div className="muted" style={{ fontSize: 13, marginBottom: 4 }}>模型映射（入口模型 → 出口模型，支持 <code>*</code> 通配；成员的「固定模型」优先）</div>
+        <div className="muted" style={{ fontSize: 13, marginBottom: 4 }}>{tr('模型映射（入口模型 → 出口模型，支持')} <code>*</code> {tr('通配；成员的「固定模型」优先）')}</div>
         {mapRows.map(([k, v], i) => (
           <div key={i} className="gw-map-row">
-            <input className="field" value={k} placeholder="claude-*sonnet*" onChange={(e) => { setMapRows(mapRows.map((r, j) => (j === i ? [e.target.value, r[1]] : r))); setDirty(true); }} aria-label="入口模型" />
+            <input className="field" value={k} placeholder="claude-*sonnet*" onChange={(e) => { setMapRows(mapRows.map((r, j) => (j === i ? [e.target.value, r[1]] : r))); setDirty(true); }} aria-label={tr('入口模型')} />
             <Icon name="arrowRight" size={12} />
-            <input className="field" value={v} placeholder="gpt-4.1" onChange={(e) => { setMapRows(mapRows.map((r, j) => (j === i ? [r[0], e.target.value] : r))); setDirty(true); }} aria-label="出口模型" />
-            <button className="icon-btn xs" onClick={() => { setMapRows(mapRows.filter((_, j) => j !== i)); setDirty(true); }} aria-label="删除映射"><Icon name="close" size={12} /></button>
+            <input className="field" value={v} placeholder="gpt-4.1" onChange={(e) => { setMapRows(mapRows.map((r, j) => (j === i ? [r[0], e.target.value] : r))); setDirty(true); }} aria-label={tr('出口模型')} />
+            <button className="icon-btn xs" onClick={() => { setMapRows(mapRows.filter((_, j) => j !== i)); setDirty(true); }} aria-label={tr('删除映射')}><Icon name="close" size={12} /></button>
           </div>
         ))}
-        <button className="btn sm ghost" onClick={() => setMapRows([...mapRows, ['', '']])}><Icon name="plus" size={12} /> 添加映射</button>
+        <button className="btn sm ghost" onClick={() => setMapRows([...mapRows, ['', '']])}><Icon name="plus" size={12} /> {tr('添加映射')}</button>
       </div>
 
       <div className="gw-actions">
-        <button className="btn sm primary" disabled={!dirty} onClick={save}>{dirty ? '保存' : '已保存'}</button>
+        <button className="btn sm primary" disabled={!dirty} onClick={save}>{dirty ? tr('保存') : tr('已保存')}</button>
         <span className="grow" />
-        <select className="field" value={proto} onChange={(e) => setProto(e.target.value as GatewayProtocol)} aria-label="测试入口协议">{PROTOCOLS.map((p) => <option key={p.id} value={p.id}>{p.l} 入口</option>)}</select>
-        <button className="btn sm" disabled={!enabled || !draft.members.length || test === 'running'} onClick={runTest}>{test === 'running' ? '测试中…' : '测试'}</button>
+        <select className="field" value={proto} onChange={(e) => setProto(e.target.value as GatewayProtocol)} aria-label={tr('测试入口协议')}>{PROTOCOLS.map((p) => <option key={p.id} value={p.id}>{tr('{l} 入口', { l: p.l })}</option>)}</select>
+        <button className="btn sm" disabled={!enabled || !draft.members.length || test === 'running'} onClick={runTest}>{test === 'running' ? tr('测试中…') : tr('测试')}</button>
       </div>
       {test && test !== 'running' && (
         <div className={clsx('gw-test', test.ok ? 'ok' : 'err')}>
-          {test.ok ? `通过 · 走了「${test.member}」${test.switches ? `（切换 ${test.switches} 次）` : ''} · ${(test.ms / 1000).toFixed(1)}s · 回复：${test.text}` : `失败${test.status ? ` HTTP ${test.status}` : ''}：${test.error}${test.member ? `（最后尝试「${test.member}」）` : ''}`}
+          {test.ok ? tr('通过 · 走了「{member}」{v} · {ms}s · 回复：{text}', { member: test.member, v: test.switches ? tr('（切换 {switches} 次）', { switches: test.switches }) : '', ms: (test.ms / 1000).toFixed(1), text: test.text }) : tr('失败{v}：{error}{v2}', { v: test.status ? ` HTTP ${test.status}` : '', error: test.error, v2: test.member ? tr('（最后尝试「{member}」）', { member: test.member }) : '' })}
           {test.note && <div className="sub" style={{ marginTop: 4 }}>{test.note}</div>}
         </div>
       )}

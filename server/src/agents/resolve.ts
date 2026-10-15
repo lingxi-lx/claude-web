@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { guardNodeArgs } from '../runtime/spawn-guard.js';
+import { tr } from '../i18n/index.js';
 
 const isWin = process.platform === 'win32';
 
@@ -70,10 +71,10 @@ export function resolveSpawn(command: string, args: string[]): { command: string
   // generic .cmd/.bat: run through cmd.exe with proper quoting. cmd.exe expands `%VAR%` even inside quotes
   // and ends the command at a newline — no quoting fixes either, so refuse rather than run something else
   // the message names the argument (position + the `--key` before `=`), never its value — it may be a secret
-  const which = (a: string, i: number) => { const k = /^(-{1,2}[\w.-]+)=/.exec(a)?.[1]; return `第 ${i + 1} 个参数${k ? `（${k}=…）` : ''}`; };
+  const which = (a: string, i: number) => { const k = /^(-{1,2}[\w.-]+)=/.exec(a)?.[1]; return tr('第 {i} 个参数{v}', { i: i + 1, v: k ? `（${k}=…）` : '' }); };
   args.forEach((a, i) => {
-    if (a.includes('%')) throw new Error(`${which(a, i)}含 %，经 cmd.exe 运行 ${path.basename(found)} 时会被当成环境变量展开；请改用不含 % 的值`);
-    if (/[\r\n]/.test(a)) throw new Error(`${which(a, i)}含换行，经 cmd.exe 运行 ${path.basename(found)} 时会被截断`);
+    if (a.includes('%')) throw new Error(tr('{which}含 %，经 cmd.exe 运行 {basename} 时会被当成环境变量展开；请改用不含 % 的值', { which: which(a, i), basename: path.basename(found) }));
+    if (/[\r\n]/.test(a)) throw new Error(tr('{which}含换行，经 cmd.exe 运行 {basename} 时会被截断', { which: which(a, i), basename: path.basename(found) }));
   });
   const q = (s: string) => (/[\s"&|<>^]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
   return { command: process.env.ComSpec ?? 'cmd.exe', args: ['/d', '/s', '/c', `"${[found, ...args].map(q).join(' ')}"`], env: {}, via: 'cmd' };

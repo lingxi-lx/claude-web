@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef } from 'react';
 import { useStore } from '@/store';
 import { SHORTCUTS, keyLabel } from './shortcuts';
+import { tr } from '@/i18n';
 
 /**
  * The shortcut sheet (`?` / F1). It can open over the settings page (final review M1): `.shortcuts-bg` is one of the
@@ -30,10 +31,10 @@ function Sheet() {
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
-        aria-label="键盘快捷键"
+        aria-label={tr('键盘快捷键')}
         onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } }}
       >
-        <h3>键盘快捷键</h3>
+        <h3>{tr('键盘快捷键')}</h3>
         <div className="shortcut-groups">
           {groups.map((g) => (
             <div key={g} className="sc-group">
@@ -44,7 +45,7 @@ function Sheet() {
             </div>
           ))}
         </div>
-        <div className="actions"><button className="btn" onClick={close}>关闭</button></div>
+        <div className="actions"><button className="btn" onClick={close}>{tr('关闭')}</button></div>
       </div>
     </div>
   );

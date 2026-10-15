@@ -11,6 +11,7 @@ import type { AgentTranscripts } from './transcript.js';
 import { CODEX_KEY_ENV } from '../gateway/agents.js';
 import { CodexUsageMeter } from './codex-usage.js';
 import type { AgentDriver } from './types.js';
+import { tr } from '../i18n/index.js';
 
 interface PendingPerm { event: PermissionRequestEvent; resolve: (r: any) => void; kind: 'command' | 'file' | 'permissions' }
 
@@ -105,7 +106,7 @@ export class CodexDriver extends EventEmitter implements AgentDriver {
       const args = insertWebCodexConfig(insertCodexConfig(this.launch.args, { cwd: this.cwd, sessionId: this.sessionId, agent: this.kind }), { sessionId: this.sessionId });
       const rpc = new JsonRpcProcess(this.launch.command, args, { cwd: this.cwd, env: this.launch.env });
       this.rpc = rpc;
-      rpc.on('exit', (code, err) => { if (!this.closed) this.setState('error', `Codex 退出（${code}）${err ? ` ${err}` : ''}\n${rpc.stderrTail.slice(-800)}`); });
+      rpc.on('exit', (code, err) => { if (!this.closed) this.setState('error', tr("Codex 退出（{code}）{v}\n{stderrTail}", { code, v: err ? ` ${err}` : '', stderrTail: rpc.stderrTail.slice(-800) })); });
       rpc.on('notification', (m, p) => this.onNotification(m, p));
       rpc.onRequest('item/commandExecution/requestApproval', (p) => this.onApproval('command', p));
       rpc.onRequest('item/fileChange/requestApproval', (p) => this.onApproval('file', p));
@@ -122,7 +123,7 @@ export class CodexDriver extends EventEmitter implements AgentDriver {
         await synced;
         let resumed: any = null;
         try { resumed = await rpc.request('thread/resume', { threadId: head.nativeSessionId, cwd: this.cwd, model: this.model ?? null, approvalPolicy: pol.approvalPolicy, sandbox: pol.sandbox }, 120_000); thread = resumed.thread; } catch { thread = null; }
-        if (!thread) this.push(this.synth.systemNote('Codex 线程无法恢复，已新开线程；上面的历史仅供查看。', 'warning'));
+        if (!thread) this.push(this.synth.systemNote(tr('Codex 线程无法恢复，已新开线程；上面的历史仅供查看。'), 'warning'));
         // reopened without a model: the one the thread runs on (the chip and the ledger had none — model "")
         else if (!this.model) {
           const m = resumed?.model ?? head.model;
@@ -149,7 +150,7 @@ export class CodexDriver extends EventEmitter implements AgentDriver {
       const viaGateway = !!this.launch.env?.[CODEX_KEY_ENV];
       if (listed.length && this.model && !listed.some((m) => m.value === this.model) && !this.launch.model && !viaGateway) {
         const pick = rawModels.find((m: any) => m.isDefault && !m.hidden)?.model ?? listed[0].value;
-        this.push(this.synth.systemNote(`Codex 配置里的模型 ${this.model} 不在可用列表，这个对话改用 ${pick}（可在模型菜单切换）。`, 'warning'));
+        this.push(this.synth.systemNote(tr('Codex 配置里的模型 {model} 不在可用列表，这个对话改用 {pick}（可在模型菜单切换）。', { model: this.model, pick }), 'warning'));
         this.model = pick; this.synth.setModel(pick); this.info.model = pick;
         await this.transcripts.patchHead(this.sessionId, { model: pick });
       }
@@ -158,7 +159,7 @@ export class CodexDriver extends EventEmitter implements AgentDriver {
       this.emit('info', this.info);
       this.flush();
     } catch (e: any) {
-      this.setState('error', `Codex 启动失败：${e.message}${this.rpc?.stderrTail ? `\n${this.rpc.stderrTail.slice(-800)}` : ''}`);
+      this.setState('error', tr('Codex 启动失败：{message}{v}', { message: e.message, v: this.rpc?.stderrTail ? `\n${this.rpc.stderrTail.slice(-800)}` : '' }));
     }
   }
 
@@ -177,14 +178,14 @@ export class CodexDriver extends EventEmitter implements AgentDriver {
         break;
       }
       case 'warning': this.push(this.synth.systemNote(`Codex：${p.message ?? ''}`, 'warning')); break;
-      case 'mcpServer/startupStatus/updated': if (p.status === 'failed') this.push(this.synth.systemNote(`Codex MCP「${p.name}」启动失败：${p.error ?? ''}`, 'warning')); break;
+      case 'mcpServer/startupStatus/updated': if (p.status === 'failed') this.push(this.synth.systemNote(tr('Codex MCP「{name}」启动失败：{error}', { name: p.name, error: p.error ?? '' }), 'warning')); break;
       case 'item/reasoning/textDelta': case 'item/reasoning/summaryTextDelta': this.pushAll(this.synth.delta('thinking', p.delta ?? '')); break;
       case 'item/started': this.onItem(p.item, false); break;
       case 'item/completed': this.onItem(p.item, true); break;
       case 'item/commandExecution/outputDelta': { const it = this.items.get(p.itemId); if (it) it.output += p.delta ?? ''; break; }
       // only this thread's: sub-agent threads report their own cumulative totals on the same connection
       case 'thread/tokenUsage/updated': if (!p?.threadId || p.threadId === this.threadId) this.usage.update(p?.tokenUsage); break;
-      case 'error': if (!p?.willRetry) this.push(this.synth.systemNote(`Codex 错误：${p?.error?.message ?? ''}`, 'error')); break;
+      case 'error': if (!p?.willRetry) this.push(this.synth.systemNote(tr('Codex 错误：{message}', { message: p?.error?.message ?? '' }), 'error')); break;
       case 'turn/completed': this.onTurnCompleted(p?.turn); break;
       case 'thread/name/updated': if (p?.name) void this.transcripts.patchHead(this.sessionId, { title: p.name }); break;
       default: break;
