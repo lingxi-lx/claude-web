@@ -52,7 +52,7 @@ export function GatewaySection() {
     if (!name) return;
     try { await ws.request({ kind: 'gateway.groups.upsert', group: { name, strategy: 'failover', members: [] } }); } catch (e: any) { toast(e.message); }
   };
-  const members = providers.filter((p) => p.type !== 'gateway');
+  const members = providers.filter((p) => p.type !== 'gateway' && p.type !== 'claude-account');
 
   return (
     <div className="section gateway">
@@ -99,7 +99,7 @@ function GroupCard({ group, states, providers, enabled, baseUrl }: { group: Gate
   const setMember = (i: number, patch: Partial<GatewayMember>) => edit({ members: draft.members.map((m, j) => (j === i ? { ...m, ...patch } : m)) });
   const byId = useMemo(() => new Map(providers.map((p) => [p.id, p])), [providers]);
   const stateOf = (pid: string) => states.find((s) => s.providerId === pid);
-  const addable = providers.filter((p) => !draft.members.some((m) => m.providerId === p.id));
+  const addable = providers.filter((p) => p.type !== 'gateway' && p.type !== 'claude-account' && !draft.members.some((m) => m.providerId === p.id));
 
   const save = async () => {
     try {

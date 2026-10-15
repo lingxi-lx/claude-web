@@ -89,6 +89,35 @@ describe('SessionRunner', () => {
     }
   });
 
+  it('another Claude account: the account path (its aliases on ccb, its own model list) with that account\'s token, nothing of a relay in between', async () => {
+    eng.kind = 'ccb';
+    process.env.ANTHROPIC_AUTH_TOKEN = 'sk-relay-from-the-environment';
+    process.env.ANTHROPIC_BASE_URL = 'https://relay.invalid';
+    try {
+      queries.length = 0;
+      const acct = { id: 'acc2', name: '工作号', type: 'claude-account', baseUrl: '', apiKey: 'sk-ant-oat01-' + 'x'.repeat(60), models: ['claude-opus-5-5'] } as any;
+      const r = new SessionRunner({ sessionId: 'acc-1', cwd: '/x', model: 'fable' } as any, acct);
+      await tick();
+      const env = queries[0].options.env;
+      expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe(acct.apiKey);
+      expect(env.ANTHROPIC_AUTH_TOKEN).toBe('');
+      expect(env.ANTHROPIC_BASE_URL).toBe('');
+      // the account's own alias table on ccb, as for the ~/.claude login
+      expect(env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe('claude-opus-5-5');
+      expect(queries[0].options.model).toBe('claude-fable-5-1');
+      // the chip names the account it runs on
+      expect(r.info).toMatchObject({ providerId: 'acc2', providerName: '工作号' });
+      // no relay windows / caps tables for it: the account's are the CLI's own
+      expect(env.CLAUDE_WEB_CONTEXT_WINDOWS).toBeUndefined();
+      expect(env.CLAUDE_WEB_MODEL_CAPS).toBeUndefined();
+      await r.close();
+    } finally {
+      eng.kind = 'claude';
+      delete process.env.ANTHROPIC_AUTH_TOKEN;
+      delete process.env.ANTHROPIC_BASE_URL;
+    }
+  });
+
   it('respawn keeps the session alive and re-applies feature flags / worktree', async () => {
     queries.length = 0;
     const r = new SessionRunner({ sessionId: 'a', cwd: '/x', features: { chrome: true }, worktree: 'wt' } as any);

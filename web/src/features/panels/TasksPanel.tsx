@@ -4,7 +4,7 @@ import { walkTools, type ToolUseBlock } from '@/model/conversation';
 import { workbenchOn } from '@/model/layout';
 import { clsx, toolSummary } from '@/util';
 import { SchedulesView } from '@/features/automation/SchedulesView';
-import { TodoBody } from '@/features/chat/tools/AgentTool';
+import { TodoBody, planItems, planProgress } from '@/features/chat/tools/AgentTool';
 import { openSchedules } from '@/features/workbench/right-panel';
 import { CommandGraph } from '@/features/background/CommandGraph';
 import { CharacterIcon } from '@/features/background/Character';
@@ -96,6 +96,7 @@ export function TasksPanel(_: { inDock?: boolean }) {
     );
   }
   const hasBg = !!bg?.tasks.length;
+  const prog = plan ? planProgress(planItems(plan)) : null;
   const inspect = (id: string) => useStore.setState({ inspect: { sessionId: active.sessionId, toolUseId: id } });
 
   return (
@@ -103,9 +104,14 @@ export function TasksPanel(_: { inDock?: boolean }) {
       {workbench && <SchedulesView compact />}
       <Background sessionId={active.sessionId} />
       {plan && (
-        <div className="section tasks-plan" style={{ padding: '0 4px' }}>
-          <h5>{tr('计划')}</h5>
-          <TodoBody t={plan} />
+        <div className="section tasks-plan" style={{ padding: '0 4px' }} data-done={prog?.done} data-total={prog?.total}>
+          {/* GitHub issue #2: 「3/7 完成」 alone did not show at a glance how far a long plan is — a bar like a goal's */}
+          <h5 className="plan-head" {...(prog?.attrs as any)}>
+            {tr('计划')}
+            {prog && prog.total > 0 && <span className="plan-count">{prog.done}/{prog.total}</span>}
+            {prog && prog.total > 0 && <span className="plan-prog" role="progressbar" aria-label={tr('计划进度')} aria-valuemin={0} aria-valuemax={prog.total} aria-valuenow={prog.done}><i style={{ width: `${prog.pct}%` }} /></span>}
+          </h5>
+          <TodoBody t={plan} count={false} />
         </div>
       )}
       {!hasBg && agents.length > 0 && (

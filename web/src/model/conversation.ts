@@ -88,6 +88,12 @@ export interface ResultItem {
   apiStatus?: number | null;
   userMessageUuid?: string;
   queuedTurnCount?: number;
+  /** made from the transcript and the ledger for a turn that did not run in this window (server sessions/history.ts) */
+  fromHistory?: boolean;
+  /** …from the answers' usage alone: no price at all — the line leaves the cost out (totals count it as unknown) */
+  costAbsent?: boolean;
+  /** how long the conversation sat between the previous turn's end and this one's start (a cache that went cold) */
+  idleBeforeMs?: number;
 }
 export type Item = UserItem | AssistantItem | SystemItem | ResultItem;
 
@@ -117,7 +123,7 @@ export function contextUsageOf(u: any): ContextUsage {
   const over = u.overLimit ?? u.over_limit;
   return { percentage: u.percentage ?? Math.round((total / Math.max(1, max)) * 100), totalTokens: total, maxTokens: max, model: u.model, overLimit: over ? { tokensOver: over.tokensOver ?? over.tokens_over, kind: over.kind } : undefined };
 }
-export interface ContextUsage { percentage: number; totalTokens: number; maxTokens: number; model?: string; overLimit?: { tokensOver: number; kind: string } }
+export interface ContextUsage { percentage: number; totalTokens: number; maxTokens: number; model?: string; overLimit?: { tokensOver: number; kind: string }; /** read off the last answer's usage (a conversation not running here), not reported by the process */ estimated?: boolean }
 export interface RateLimitState { status: 'allowed' | 'allowed_warning' | 'rejected'; resetsAt?: number; type?: string; utilization?: number; errorCode?: string; at: number }
 
 export interface Conversation {
@@ -562,12 +568,27 @@ export function shownErrors(errors: unknown): string | undefined {
   return list.length ? list.join('; ') : undefined;
 }
 
+/** When the turn a result ends started: its prompt's time (history, a send of this window), else the turn clock. */
+function turnBeganAt(c: Conversation): number | undefined {
+  for (let i = c.items.length - 1; i >= 0; i--) {
+    const it = c.items[i];
+    if (it.kind === 'result') break;
+    if (it.kind !== 'user' || it.meta) continue;
+    const t = it.ts ? Date.parse(it.ts) : NaN;
+    return Number.isNaN(t) ? c.turnStartedAt : t;
+  }
+  return c.turnStartedAt;
+}
+
 function applyResult(c: Conversation, m: any) {
   const errText = m.is_error ? m.result ?? shownErrors(m.errors) : undefined;
+  const prevEnd = c.lastResult?.ts ? Date.parse(c.lastResult.ts) : NaN;
+  const start = turnBeganAt(c);
+  const idle = start !== undefined && !Number.isNaN(prevEnd) ? start - prevEnd : NaN;
   const r: ResultItem = {
     kind: 'result',
     id: m.uuid,
-    ts: new Date(clock()).toISOString(),
+    ts: typeof m.timestamp === 'string' ? m.timestamp : new Date(clock()).toISOString(),
     subtype: m.subtype,
     durationMs: m.duration_ms,
     apiMs: m.duration_api_ms,
@@ -581,6 +602,9 @@ function applyResult(c: Conversation, m: any) {
     apiStatus: m.api_error_status,
     userMessageUuid: m.user_message_uuid,
     queuedTurnCount: m.queued_turn_count,
+    ...(m.cw_history ? { fromHistory: true } : {}),
+    ...(m.cw_cost_absent ? { costAbsent: true } : {}),
+    ...(idle > 0 ? { idleBeforeMs: idle } : {}),
   };
   if (r.isError || (m.terminal_reason && !['completed', 'max_turns', 'tool_deferred', 'background_requested'].includes(m.terminal_reason))) {
     r.errorKind = classifyError({ status: m.api_error_status, terminalReason: m.terminal_reason, text: errText ?? m.result, rateLimitStatus: c.rateLimit?.status, rateLimitErrorCode: c.rateLimit?.errorCode });

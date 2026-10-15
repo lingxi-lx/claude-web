@@ -513,3 +513,21 @@ describe('contextUsageOf: both spellings', () => {
     expect(contextUsageOf({ totalTokens: 1, rawMaxTokens: 2, overLimit: { tokensOver: 5, kind: 'k' } }).overLimit).toEqual({ tokensOver: 5, kind: 'k' });
   });
 });
+
+describe('a result made from the record (server sessions/history.ts)', () => {
+  it('keeps its own time, says where it came from and how long the conversation sat before the turn', () => {
+    const c = createConversation();
+    const at = (min: number) => new Date(Date.UTC(2026, 9, 14, 10, min)).toISOString();
+    applyTranscript(c, [
+      { type: 'user', uuid: 'u1', timestamp: at(0), message: { role: 'user', content: 'a' } },
+      { type: 'assistant', uuid: 'a1', timestamp: at(1), message: { id: 'm1', role: 'assistant', content: [{ type: 'text', text: 'x' }] } },
+      { type: 'result', subtype: 'success', uuid: 'cw-turn-u1', timestamp: at(1), duration_ms: 60_000, num_turns: 1, total_cost_usd: 0, cost_unknown: true, cw_cost_absent: true, cw_history: true, usage: {} },
+      { type: 'user', uuid: 'u2', timestamp: at(13), message: { role: 'user', content: 'b' } },
+      { type: 'assistant', uuid: 'a2', timestamp: at(14), message: { id: 'm2', role: 'assistant', content: [{ type: 'text', text: 'y' }] } },
+      { type: 'result', subtype: 'success', uuid: 'cw-turn-u2', timestamp: at(14), duration_ms: 60_000, num_turns: 1, total_cost_usd: 1.09, cw_history: true, usage: {} },
+    ]);
+    const results = c.items.filter((i) => i.kind === 'result') as any[];
+    expect(results.map((r) => [r.ts, r.fromHistory, !!r.costAbsent, r.idleBeforeMs])).toEqual([[at(1), true, true, undefined], [at(14), true, false, 12 * 60_000]]);
+    expect(groupTurns(c.items).map((t) => [t.user?.id, t.result?.id])).toEqual([['u1', 'cw-turn-u1'], ['u2', 'cw-turn-u2']]);
+  });
+});

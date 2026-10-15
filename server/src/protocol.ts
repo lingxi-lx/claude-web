@@ -130,7 +130,8 @@ export interface EngineInfo {
   computerUse?: boolean;
 }
 
-export type ProviderType = 'anthropic' | 'openai' | 'gemini' | 'grok' | 'gateway';
+/** `claude-account`: another Claude (Pro / Max) account — its long-lived token from `claude setup-token` in `apiKey` */
+export type ProviderType = 'anthropic' | 'openai' | 'gemini' | 'grok' | 'gateway' | 'claude-account';
 /** A third-party API endpoint profile. Stored in ~/.claude-web/meta.json; the key is injected into the session process env only. */
 export interface Provider {
   id: string;
@@ -298,7 +299,7 @@ export interface AttachmentRef { kind: 'image' | 'text' | 'file' | 'folder'; nam
 export interface MessageFeedback { rating: 'up' | 'down' | null; note?: string; at: number }
 
 export interface Workspace { id: string; path: string; name: string; addedAt: number; order: number }
-export interface SessionMeta { pinned?: boolean; archived?: boolean; workspaceId?: string; tags?: string[]; providerId?: string; /** sidebar grouping directory when it differs from the cwd (orchestration worktrees) */ groupCwd?: string; /** prompt-cache route key when it is not the session's own id (forks keep their root's) */ cacheKey?: string; /** the model its subagents run on, picked for this provider ('' = the main model) */ subagent?: { providerId: string; model: string } }
+export interface SessionMeta { pinned?: boolean; archived?: boolean; workspaceId?: string; tags?: string[]; providerId?: string; /** sidebar grouping directory when it differs from the cwd (orchestration worktrees) */ groupCwd?: string; /** prompt-cache route key when it is not the session's own id (forks keep their root's) */ cacheKey?: string; /** the model its subagents run on, picked for this provider ('' = the main model) */ subagent?: { providerId: string; model: string }; /** the permission mode it last ran with: a resume without a pick comes back in it (the SDK never says it) */ permissionMode?: PermissionMode }
 export interface Schedule { id: string; name: string; cwd: string; prompt: string; everyMinutes: number; cron?: string; enabled: boolean; lastRunAt?: number; nextRunAt?: number; sessionId?: string; model?: string; permissionMode?: string; freshSession?: boolean; lastError?: string; runs?: number }
 export interface LimitWindow { label: string; percent: number; resetsAt: string | null; active: boolean; severity?: string }
 // ---- remote access / phones / IM (phase 6) ----
@@ -388,7 +389,8 @@ export interface SessionInfoSnapshot {
 export type ClientRequest =
   | { kind: 'sessions.list'; limit?: number }
   | { kind: 'sessions.projects' }
-  | { kind: 'transcript.load'; sessionId: string }
+  /** `page`: answer `{ messages, next? }` — the newest page (or the one before `cursor`) instead of the whole array */
+  | { kind: 'transcript.load'; sessionId: string; page?: boolean; cursor?: string }
   | { kind: 'transcript.subagent'; sessionId: string; agentId: string }
   | { kind: 'transcript.subagents'; sessionId: string }
   | { kind: 'session.open'; params: OpenSessionParams }
@@ -447,6 +449,9 @@ export type ClientRequest =
   | { kind: 'network.proxy'; refresh?: boolean }
   | { kind: 'sessions.search'; query: string; limit?: number }
   | { kind: 'shell.open'; path: string; app?: 'explorer' | 'code' | 'cursor' }
+  /** the user's custom.css (appearance/custom-css.ts): its text, and making it with the template */
+  | { kind: 'ui.customCss' }
+  | { kind: 'ui.customCss.create' }
   | { kind: 'config.overview' }
   | { kind: 'config.plugins' }
   | { kind: 'config.plugin.toggle'; name: string; enable: boolean }
@@ -623,6 +628,8 @@ export type ServerEvent =
   | { kind: 'sessions.changed' }
   /** conversations whose record changed on disk (a CLI in a terminal, Codex): an open one that is not running here re-reads it */
   | { kind: 'transcripts.changed'; sessionIds: string[] }
+  /** ~/.claude-web/custom.css was written / made / removed: windows read it again (ui.customCss) */
+  | { kind: 'customCss.changed' }
   | { kind: 'meta.changed' }
   | { kind: 'remote.changed' }
   | { kind: 'im.changed' }

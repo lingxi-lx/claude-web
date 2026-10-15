@@ -28,7 +28,7 @@ export type BodyId =
   | 'account' | 'engine' | 'models' | 'providers' | 'proxy' | 'gateway'
   | 'mcp' | 'mcpCatalog' | 'mcpJson' | 'plugins' | 'skills' | 'skillsBackup' | 'agents' | 'subagents' | 'memory'
   | 'remote' | 'anywhere' | 'peers' | 'hosts' | 'im' | 'web' | 'library' | 'secrets'
-  | 'hooks' | 'env' | 'tools' | 'diagnostics' | 'update' | 'raw';
+  | 'hooks' | 'env' | 'tools' | 'diagnostics' | 'update' | 'raw' | 'customCss';
 
 export interface EntryMeta {
   id: EntryId;
@@ -94,6 +94,7 @@ export const BODY_INFO: Record<BodyId, { l: string; keywords: string }> = {
   diagnostics: { l: tr('诊断包'), keywords: tr('diagnostic log bundle 日志 诊断包 导出') },
   update: { l: tr('应用更新'), keywords: tr('update version release 更新 版本 检查更新') },
   raw: { l: tr('settings.json 原文'), keywords: tr('settings json raw 原文 user project local 编辑') },
+  customCss: { l: tr('自定义样式'), keywords: tr('custom css 自定义样式 样式表 皮肤 美化 stylesheet userstyle 进度条') },
 };
 
 const GENERAL: EntryMeta[] = [
@@ -128,7 +129,7 @@ const APPEARANCE: EntryMeta[] = [
 export const SETTINGS_SECTIONS: SectionMeta[] = [
   // 常用
   { id: 'general', l: tr('通用'), ic: 'settings', group: 'common', desc: tr('新对话的默认行为、提醒方式，以及界面要显示多少工具。'), keywords: tr('界面 会话 interface session'), entries: GENERAL },
-  { id: 'appearance', l: tr('外观'), ic: 'sun', group: 'common', desc: tr('主题、字号和界面密度。'), keywords: tr('appearance theme 主题'), entries: APPEARANCE },
+  { id: 'appearance', l: tr('外观'), ic: 'sun', group: 'common', desc: tr('主题、字号和界面密度。'), keywords: tr('appearance theme 主题'), entries: APPEARANCE, bodies: ['customCss'] },
   { id: 'account', l: tr('账号与登录'), ic: 'user', group: 'common', desc: tr('Claude 账号的登录状态。用第三方接口或中转站请去「供应商」。'), keywords: tr('引擎与账号 engine account login 登录 账号'), bodies: ['account'], more: ['engine'] },
   // 模型
   { id: 'models', l: tr('模型与智能程度'), ic: 'artifact', group: 'model', desc: tr('模型菜单里出现哪些模型、哪些置顶，以及每个模型能调的智能程度。'), keywords: tr('model 模型 effort'), bodies: ['models'] },

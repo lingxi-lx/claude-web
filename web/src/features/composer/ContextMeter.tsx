@@ -4,7 +4,8 @@ import { useStore } from '@/store';
 import { usePaneCtx } from '@/store/paneContext';
 import { clsx } from '@/util';
 import { useDropdown } from '@/ui/menus';
-import { meterMode, ringLevel, sessionTotals, usageLines } from './stats';
+import { estimateContext, meterMode, ringLevel, sessionTotals, usageLines } from './stats';
+import { resumeView } from '@/store/reopen';
 import { BAR_ID } from './ids';
 import { tr } from '@/i18n';
 
@@ -40,13 +41,24 @@ export function ContextMeter({ sessionId }: { sessionId: string }) {
     return () => window.removeEventListener(USAGE_CARD_EVENT, on);
   }, [pane?.tileId]);
   const totals = useMemo(() => (o ? sessionTotals(o.conv.items) : null), [o?.version]);
-  const cu = o ? o.contextUsage ?? o.conv.contextUsage : undefined;
+  const providers = useStore((s) => s.providers);
+  const recorded = useStore((s) => s.sessionMeta[sessionId]);
+  const notRunning = !o || o.state === 'history' || o.state === 'closed' || o.state === 'error';
+  // not running here: what the next send starts from, read off the last answer (the process reports it otherwise)
+  const estimate = useMemo(() => {
+    if (!o || !notRunning || o.contextUsage || o.conv.contextUsage) return undefined;
+    const v = resumeView(o, recorded);
+    // another Claude account is the account: its windows are the account's (200K, 1M for a [1m] pick)
+    const p = v.providerId !== 'claude' ? providers.find((x) => x.id === v.providerId) : undefined;
+    return estimateContext(o.conv.items, { provider: p?.type === 'claude-account' ? undefined : p, model: v.model });
+  }, [o?.version, notRunning, providers, recorded]);
+  const cu = o ? o.contextUsage ?? o.conv.contextUsage ?? estimate : undefined;
   const pct = cu?.percentage;
   const level = ringLevel(pct);
   if (!o || !totals) return null;
   const ring = meterMode(pct) === 'ring';
   const tasks = [...o.conv.tasks.values()].filter((t) => t.status === 'running').length;
-  const lines = usageLines(totals, { lastMs: o.conv.lastResult?.durationMs, context: cu ? { percentage: cu.percentage, totalTokens: cu.totalTokens, maxTokens: cu.maxTokens } : undefined, tasks });
+  const lines = usageLines(totals, { lastMs: o.conv.lastResult?.durationMs, context: cu ? { percentage: cu.percentage, totalTokens: cu.totalTokens, maxTokens: cu.maxTokens, estimated: cu.estimated } : undefined, tasks });
   const show = pinned || hover || asked;
   const r = 6, c = 2 * Math.PI * r, p = Math.min(100, Math.max(0, pct ?? 0));
   // the ring when there is one; else the right-hand group of the row (the card's corner is the same)
@@ -61,7 +73,7 @@ export function ContextMeter({ sessionId }: { sessionId: string }) {
             <circle cx="8" cy="8" r={r} fill="none" stroke="var(--edge-strong)" strokeWidth="2" />
             <circle cx="8" cy="8" r={r} fill="none" stroke="currentColor" strokeWidth={level === 'quiet' || level === 'note' ? 2 : 2.6} strokeDasharray={`${(p / 100) * c} ${c}`} strokeLinecap="round" transform="rotate(-90 8 8)" />
           </svg>
-          <span className="pct">{pct}%</span>
+          {level !== 'quiet' && <span className="pct">{pct}%</span>}
         </button>
       )}
       {show && rect && createPortal(

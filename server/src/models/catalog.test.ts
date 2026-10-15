@@ -3,7 +3,7 @@ import { OFFICIAL_ALIAS_TARGETS, ccbAccountEnv, ccbModel, modelCaps, modelLabel,
 
 describe('which profile types can drive an agent', () => {
   it('per agent', () => {
-    expect(providerTypesFor('claude').sort()).toEqual(['anthropic', 'gateway', 'gemini', 'grok', 'openai']);
+    expect(providerTypesFor('claude').sort()).toEqual(['anthropic', 'claude-account', 'gateway', 'gemini', 'grok', 'openai']);
     expect(providerTypesFor('codex')).toEqual(['openai', 'gateway']);
     expect(providerTypesFor('gemini')).toEqual(['gemini', 'gateway']);
     expect(providerTypesFor('qwen')).toEqual(['openai', 'gateway']);

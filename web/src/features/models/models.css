@@ -115,3 +115,8 @@
 @container (max-width: 560px) {
   .cb .sub-anchor .mm-chip-label { display: none; }
 }
+/* the main model menu's last row: the subagents' model, opens the 子代理 menu */
+.mm-subrow { flex: none; display: flex; align-items: center; gap: 8px; margin-top: 6px; padding: 7px 8px; border: 0; border-top: 1px solid var(--edge-subtle); background: none; font: inherit; font-size: var(--fs-sm); color: var(--ink-2); cursor: pointer; text-align: left; border-radius: 0; }
+.mm-subrow:hover, .mm-subrow:focus-visible { background: var(--layer-hover); color: var(--fg-1); }
+.mm-subrow .l { flex: none; }
+.mm-subrow .v { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-4); text-align: right; }

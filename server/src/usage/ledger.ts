@@ -11,6 +11,14 @@ import { inputIncludesCacheRead, trustsCliCost } from './pricing.js';
  * ~/.claude-web/ledger.jsonl. Independent of the transcripts so it survives session deletion and captures
  * latency (duration_api_ms), cache hit sizes and failures that never reach a transcript.
  */
+const rowKey = (e: LedgerEntry) => `${e.ts}|${e.sessionId}|${e.durationMs}|${e.output}`;
+function add(map: Map<string, LedgerEntry[]>, e: LedgerEntry) {
+  if (!e.sessionId) return;
+  const l = map.get(e.sessionId);
+  if (l) l.push(e);
+  else map.set(e.sessionId, [e]);
+}
+
 export class LedgerService {
   private file = path.join(dataDir(), 'ledger.jsonl');
   private queue: string[] = [];
@@ -35,6 +43,29 @@ export class LedgerService {
   record(e: LedgerEntry) {
     this.queue.push(JSON.stringify(e) + '\n');
     void this.flush();
+    if (e.kind !== 'gateway') {
+      if (this.bySession) add(this.bySession, e);
+      else if (this.indexing) this.late.push(e);
+    }
+  }
+
+  /** A session's rows (not the gateway's), indexed once and kept up to date: history reads them for every load. */
+  private bySession: Map<string, LedgerEntry[]> | null = null;
+  private indexing: Promise<void> | null = null;
+  private late: LedgerEntry[] = [];
+  async rowsFor(sessionId: string): Promise<LedgerEntry[]> {
+    if (!this.bySession) {
+      this.indexing ??= (async () => {
+        const map = new Map<string, LedgerEntry[]>();
+        const seen = new Set<string>();
+        for (const e of await this.list(36500)) if (e.kind !== 'gateway') { add(map, e); seen.add(rowKey(e)); }
+        for (const e of this.late) if (!seen.has(rowKey(e))) add(map, e);
+        this.late = [];
+        this.bySession = map;
+      })();
+      await this.indexing;
+    }
+    return this.bySession?.get(sessionId) ?? [];
   }
 
   /** Feed raw SDK messages of a session here. */

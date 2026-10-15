@@ -16,6 +16,7 @@ export const DEFAULT_BASE: Record<ProviderType, string> = {
   gemini: 'https://generativelanguage.googleapis.com',
   grok: 'https://api.x.ai',
   gateway: '',
+  'claude-account': '',
 };
 
 /** Wire protocol a provider profile speaks (grok is OpenAI-compatible). Gateway profiles cannot be members. */

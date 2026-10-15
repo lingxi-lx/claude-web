@@ -5,7 +5,7 @@ import { resolveEngine, runClaudeCli } from '../claude-exe.js';
 import type { SecretService } from '../secrets/service.js';
 import { contextWindowFor, listedContext } from '../models/context-window.js';
 import { CODEX_KEY_ENV, codexGatewayArgs, codexProviderArgs, geminiApiKeyEnv } from '../gateway/agents.js';
-import { claudeFamilyMap, isChatModel, pickChatModel, preferredRuntime, profileFitError } from '../models/catalog.js';
+import { claudeFamilyMap, isChatModel, modelsFor, pickChatModel, preferredRuntime, profileFitError } from '../models/catalog.js';
 import { wantsResponses } from '../gateway/shim.js';
 import { settingsOverride } from '../runtime/user-env.js';
 import { writeFlagSettings, type FlagSettings } from '../runtime/flag-settings.js';
@@ -117,6 +117,15 @@ export function providerEnv(p: SessionProvider, agent: 'claude' | 'codex' | 'acp
       for (const [k, v] of Object.entries(fam)) if (v) env[`GEMINI_DEFAULT_${k}_MODEL`] = v;
       break;
     }
+    // another Claude account: the CLI's own way to run on a subscription token, the rest exactly as on the account
+    // (the runner takes the account path for it). A relay's token / base URL in this process's environment would win
+    // over the OAuth token: blanked ('' counts as unset for the CLI)
+    case 'claude-account':
+      env.CLAUDE_CODE_OAUTH_TOKEN = p.apiKey;
+      env.ANTHROPIC_AUTH_TOKEN = '';
+      env.ANTHROPIC_API_KEY = '';
+      env.ANTHROPIC_BASE_URL = '';
+      break;
     case 'grok': {
       env.CLAUDE_CODE_USE_GROK = '1';
       env.GROK_API_KEY = p.shim ? p.shim.key : p.apiKey; // ccb: GROK_API_KEY || XAI_API_KEY
@@ -232,6 +241,15 @@ export function worthOfficialRetry(error: string | undefined): boolean {
   const e = error ?? '';
   return !/超时|timed out|API Error: (?:5\d\d|429)\b|\b(?:5\d\d|429) (?:status code|Too Many|Service|Bad Gateway|Gateway|Internal)|insufficient(?:[_ ]\w+)?[_ ](?:balance|quota|funds|credit)|no available accounts|余额|额度/i.test(e);
 }
+
+/** What a Claude account profile lists: the account's models (the catalog), named as the account names them. */
+export function accountModels(): { models: string[]; modelNames: Record<string, string> } {
+  const list = modelsFor('claude');
+  return { models: list.map((m) => m.value), modelNames: Object.fromEntries(list.map((m) => [m.value, m.displayName])) };
+}
+
+/** A long-lived token from `claude setup-token` (what the account dialog takes, or reads off the terminal). */
+export const OAUTH_TOKEN = /\bsk-ant-oat\d{2}-[A-Za-z0-9_-]{40,}/;
 
 export function chatProbeArgs(model: string): string[] {
   return ['-p', 'Reply with exactly: ok', '--no-session-persistence', '--model', model, '--output-format', 'json', '--max-turns', '1'];
@@ -424,7 +442,7 @@ export class ProviderService {
   /** A gateway member: the profile with its plaintext key, or null when missing / undecryptable / itself a gateway. */
   member(id: string): Provider | null {
     const p = this.meta.provider(id);
-    if (!p || p.type === 'gateway') return null;
+    if (!p || p.type === 'gateway' || p.type === 'claude-account') return null;
     try { return { ...p, apiKey: this.plainKey(p) }; } catch { return null; }
   }
   /**
@@ -479,12 +497,17 @@ export class ProviderService {
       if (typeof t === 'string') return { id: t, name: t, ok: false, count: 0, error: tr('没有这个供应商档案'), ms: 0 };
       const base = { id: t.id, name: t.name };
       if (t.type === 'gateway') return { ...base, ok: false, count: 0, error: tr('模型网关档案的模型来自组成员'), ms: 0 };
+      // a Claude account's models are the account's (the catalog), not a list to pull
+      if (t.type === 'claude-account') {
+        if (!(await this.meta.upsertProvider({ id: t.id, ...accountModels(), modelsAt: Date.now(), modelsError: null as unknown as undefined }, { mustExist: true }))) return { ...base, ok: false, count: 0, error: tr('这个账号已移除'), ms: 0 };
+        return { ...base, ok: true, count: accountModels().models.length, ms: 0 };
+      }
       let key = '';
       try { key = this.plainKey(t); } catch (e) { return { ...base, ok: false, count: 0, error: (e as Error).message, ms: 0 }; }
       if (!key) return { ...base, ok: false, count: 0, error: tr('没有 API Key'), ms: 0 };
       const r = await probeProvider({ type: t.type, baseUrl: t.baseUrl, apiKey: key });
       // the profile may have been deleted while the request was out: write back only onto one that still exists
-      const gone = { ...base, ok: false, count: 0, error: tr('档案已删除'), ms: r.ms };
+      const gone = { ...base, ok: false, count: 0, error: tr('供应商已删除'), ms: r.ms };
       if (!r.ok) {
         const error = r.error || `HTTP ${r.status ?? '?'}`;
         if (!(await this.meta.upsertProvider({ id: t.id, modelsError: error }, { mustExist: true }))) return gone;
@@ -533,6 +556,9 @@ export class ProviderService {
     return profileFitError(agent, p.type, agent === 'claude' && p.type !== 'gateway' ? resolveEngine(preferredRuntime(p)).kind : undefined);
   }
   async upsert(p: Partial<Provider> & { id?: string }) {
+    const type = p.type ?? (p.id ? this.meta.provider(p.id)?.type : undefined);
+    // another Claude account: no endpoint of its own, the account's models
+    if (type === 'claude-account') p = { ...p, baseUrl: '', ...accountModels(), modelsAt: Date.now() };
     return publicProvider(await this.meta.upsertProvider(p));
   }
   async remove(id: string) {
@@ -545,6 +571,7 @@ export class ProviderService {
    */
   async probe(id?: string, draft?: Partial<Provider>, opts: { listOnly?: boolean } = {}): Promise<ProbeResult> {
     const saved = id ? this.meta.provider(id) : undefined;
+    if ((draft?.type ?? saved?.type) === 'claude-account') return this.probeAccount(saved, draft, opts);
     if ((draft?.type ?? saved?.type) === 'gateway') return { ok: false, models: [], error: tr('走模型网关的供应商请在「设置 → 模型网关」里用组的「测试」按钮'), ms: 0 };
     const key = draft?.apiKey && !draft.apiKey.includes('…') ? draft.apiKey : saved ? this.plainKey(saved) : '';
     const p = { type: draft?.type ?? saved?.type ?? 'anthropic', baseUrl: (draft?.baseUrl ?? saved?.baseUrl ?? '').trim(), apiKey: key.trim() } as Pick<Provider, 'type' | 'baseUrl' | 'apiKey'>;
@@ -584,5 +611,20 @@ export class ProviderService {
       } else chat = { ...again, error: tr('ccb: {error} · 官方: {error2}', { error: chat.error, error2: again.error }) };
     }
     return { ...r, ok: chat.ok, chat, error: chat.ok ? undefined : chat.error };
+  }
+
+  /**
+   * Another Claude account: no model list to pull (the account's are the catalog's) — one real turn on haiku with its
+   * token, through the engine a conversation on it would use (`listOnly`: the token's shape only, nothing sent).
+   */
+  private async probeAccount(saved: Provider | undefined, draft: Partial<Provider> | undefined, opts: { listOnly?: boolean }): Promise<ProbeResult> {
+    const key = (draft?.apiKey && !draft.apiKey.includes('…') ? draft.apiKey : saved ? this.plainKey(saved) : '').trim();
+    const { models, modelNames } = accountModels();
+    if (!key) return { ok: false, models: [], error: tr('没有令牌'), ms: 0 };
+    if (!OAUTH_TOKEN.test(key)) return { ok: false, models: [], error: tr('这不像 claude setup-token 打出来的令牌（应该以 sk-ant-oat 开头）'), ms: 0 };
+    if (opts.listOnly) return { ok: true, models, modelNames, ms: 0 };
+    const full: Provider = { id: saved?.id ?? 'draft', name: draft?.name ?? saved?.name ?? 'draft', createdAt: 0, ...saved, type: 'claude-account', baseUrl: '', apiKey: key };
+    const chat = await chatProbe(full, (draft?.runtime ?? saved?.runtime) as RuntimeKind | undefined, 'haiku');
+    return { ok: chat.ok, models, modelNames, ms: chat.ms, chat, error: chat.ok ? undefined : chat.error };
   }
 }

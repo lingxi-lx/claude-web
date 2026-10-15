@@ -115,6 +115,9 @@ export interface RunnerEvents {
  * Re-spawns itself (with resume) when the model changes, since model is fixed per process
  * unless the CLI supports setModel (it does; we use it and fall back to respawn on failure).
  */
+/** What the account path reads instead of the user's own Anthropic env, for another Claude account. */
+const NO_RELAY: ReturnType<typeof userAnthropicEnv> = { env: {}, relay: false };
+
 export class SessionRunner extends EventEmitter {
   readonly id: string; // sessionId (known up front for resume; assigned from init otherwise)
   sessionId: string;
@@ -130,6 +133,11 @@ export class SessionRunner extends EventEmitter {
   private effort?: EffortLevel;
   private permissionMode: PermissionMode;
   private provider?: SessionProvider; // resolved third-party profile (undefined = claude.ai login)
+  /**
+   * Another Claude account (a `claude-account` profile, settings → 账号与登录): the claude.ai-login path — the CLI's
+   * own models, aliases, effort levels and windows — with that account's token instead of the ~/.claude login.
+   */
+  private account?: SessionProvider;
   /** prompt-cache route key: this session's id (a fork keeps its parent's, whose prefix it shares) */
   private cacheKey: string;
   /** the id the shim's ledger rows go under; unset for an SDK fork, whose id only arrives at init */
@@ -162,7 +170,8 @@ export class SessionRunner extends EventEmitter {
   constructor(params: OpenSessionParams, provider?: SessionProvider) {
     super();
     this.cwd = params.cwd;
-    this.provider = provider;
+    if (provider?.type === 'claude-account') this.account = provider;
+    else this.provider = provider;
     this.features = params.features ?? {};
     // a fork gets its own id from the CLI at init; until then use a placeholder so the pool
     // never clobbers the source session's runner
@@ -228,7 +237,8 @@ export class SessionRunner extends EventEmitter {
 
   private featureEnv(): Record<string, string> {
     const f = this.features;
-    const env: Record<string, string> = { ...(this.provider ? providerEnv(this.provider, 'claude', { sessionKey: this.cacheKey, sessionId: this.ledgerId }) : {}), ...(f.env ?? {}) };
+    const routed = this.provider ?? this.account;
+    const env: Record<string, string> = { ...(routed ? providerEnv(routed, 'claude', { sessionKey: this.cacheKey, sessionId: this.ledgerId }) : {}), ...(f.env ?? {}) };
     if (f.coordinator) env.CLAUDE_CODE_COORDINATOR_MODE = '1';
     return env;
   }
@@ -274,11 +284,12 @@ export class SessionRunner extends EventEmitter {
     const ccbOnly = !!(this.features.proactive || this.features.devChannels);
     // the account through a relay of the user's own (settings.json / environment) is an Anthropic-format relay too;
     // claude.ai itself takes the budget ccb sends (the ledger has Opus 5.5 turns on ccb)
-    const own = this.provider ? null : userAnthropicEnv();
+    // another Claude account is claude.ai itself, whatever relay the user's own settings point the ~/.claude login at
+    const own = this.provider ? null : this.account ? NO_RELAY : userAnthropicEnv();
     // …and it runs on the official binary: a relay checking the client (super-nb) refuses ccb's requests, and the
     // account has no 测试连接 that could have found that out and pinned it (2026-10-02, real relays)
     const relay = this.provider ?? (own!.relay ? { type: 'anthropic' as const, runtime: ccbOnly ? undefined : ('claude' as const), defaultModel: own!.env.ANTHROPIC_MODEL, modelMap: { opus: own!.env.ANTHROPIC_DEFAULT_OPUS_MODEL, sonnet: own!.env.ANTHROPIC_DEFAULT_SONNET_MODEL, haiku: own!.env.ANTHROPIC_DEFAULT_HAIKU_MODEL } } : undefined);
-    const engine = resolveEngine(relay ? preferredRuntime(relay, ccbOnly ? undefined : model ?? '') : undefined);
+    const engine = resolveEngine(relay ? preferredRuntime(relay, ccbOnly ? undefined : model ?? '') : ccbOnly ? undefined : this.account?.runtime);
     const anthropicWire = relay?.type === 'anthropic' || relay?.type === 'gateway';
     const noThinking = engine.kind === 'ccb' && anthropicWire && ccbMisthinks(providerModelId(relay!, model ?? ''));
     // the official binary's earlier compaction is an environment variable, read once at start: a model that needs
@@ -330,7 +341,7 @@ export class SessionRunner extends EventEmitter {
     // OFFICIAL_ALIAS_TARGETS) — the CLI's own variables align it with the official one; the user's env / settings win.
     // Not for a relay the user set up in settings.json / the environment: its model list is its own (the injected
     // claude-sonnet-5 default hung 220 s on model_not_found, 2026-10-01)
-    const own = userAnthropicEnv();
+    const own = this.account ? NO_RELAY : userAnthropicEnv();
     if (engine.kind === 'ccb' && !this.provider && !own.relay) for (const [k, v] of Object.entries(ccbAccountEnv())) if (!(k in fenv) && !(own.env as Record<string, string | undefined>)[k]) fenv[k] = v;
     // The engine's own WebSearch tool: its default backend is a hosted Tavily proxy of the upstream project, and the
     // user wants no Tavily — searching is the `web` MCP server's, in the built-in browser. So the engine's tool is
@@ -341,7 +352,7 @@ export class SessionRunner extends EventEmitter {
     // a provider session must not inherit provider-ish env from this process (e.g. a global ANTHROPIC_API_KEY)
     const base = { ...process.env };
     // …including a stray CLAUDE_CODE_USE_* switch, which would route the profile to another ccb provider
-    if (this.provider) for (const k of Object.keys(base)) if (/^((ANTHROPIC|OPENAI|GEMINI|GROK|XAI)_|CLAUDE_CODE_USE_)/.test(k) && !(k in fenv)) delete base[k];
+    if (this.provider || this.account) for (const k of Object.keys(base)) if (/^((ANTHROPIC|OPENAI|GEMINI|GROK|XAI)_|CLAUDE_CODE_USE_)/.test(k) && !(k in fenv)) delete base[k];
     const env = Object.keys(fenv).length ? { ...base, ...fenv } : undefined;
     // the cache shim / model gateway live on 127.0.0.1: an HTTP(S)_PROXY from the user's environment must not carry
     // those requests off to a proxy (a remote one cannot reach our loopback, and the turn just hangs)
@@ -350,7 +361,7 @@ export class SessionRunner extends EventEmitter {
     // through the flag tier (`settingsOverride`)
     this.nextFlag?.dispose();
     this.nextFlag = null;
-    const override = this.provider ? settingsOverride(fenv, this.cwd) : sub ? ownSubagentOverride(sub, this.cwd) : null;
+    const override = this.provider || this.account ? settingsOverride(fenv, this.cwd) : sub ? ownSubagentOverride(sub, this.cwd) : null;
     if (override) {
       try {
         this.nextFlag = writeFlagSettings(override);

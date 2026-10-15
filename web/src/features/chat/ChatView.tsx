@@ -12,7 +12,7 @@ import { usePaneCtx } from '@/store/paneContext';
 import { activeGroup } from '@/model/layout';
 import { clsx, fmtMs, fmtTok } from '@/util';
 import { fmtCost } from '@/model/cost';
-import { usageParts } from '@/model/tokens';
+import { coldCache, usageParts } from '@/model/tokens';
 import { AssistantActions, UserActions, UserEditor } from './MessageActions';
 import { FindBar } from './FindBar';
 import { Markdown } from './Markdown';
@@ -298,11 +298,14 @@ function UserRow({ it, version }: { it: UserItem; version: number }) {
  * tooltip of a folded one.
  */
 function resultStats(r: ResultItem): { text: string; title?: string }[] {
+  const cold = coldCache(r.usage, r.idleBeforeMs);
   return [
     { text: fmtMs(r.durationMs) },
     { text: tr('{numTurns} 步', { numTurns: r.numTurns }) },
-    { text: fmtCost(r.costUsd, r.costUnknown), title: r.costUnknown ? tr('这个模型 / agent 没有可靠的价格（ccb 按 Claude 价表估的数不作数）') : undefined },
+    // a turn of the record with no ledger row (it ran in a terminal, or before the ledger): no price to show
+    ...(r.costAbsent ? [] : [{ text: fmtCost(r.costUsd, r.costUnknown), title: r.costUnknown ? tr('这个模型 / agent 没有可靠的价格（ccb 按 Claude 价表估的数不作数）') : undefined }]),
     ...usageParts(r.usage, fmtTok),
+    ...(cold ? [cold] : []),
   ];
 }
 
@@ -619,7 +622,7 @@ export function ChatView() {
   };
 
   return (
-    <div className="chat" ref={ref} onScroll={onScroll}>
+    <div className="chat" ref={ref} onScroll={onScroll} data-state={active.state}>
       <FindBar open={find} onClose={() => setFind(false)} root={() => ref.current} />
       {!atBottom && <button className="jump-bottom" title={tr('回到底部')} onClick={() => { const el = ref.current!; el.scrollTop = el.scrollHeight; stick.current = true; }} aria-label={tr('回到底部')}><Icon name="chevronDown" size={16} /></button>}
       <div className="chat-inner" data-session-id={active.sessionId}>

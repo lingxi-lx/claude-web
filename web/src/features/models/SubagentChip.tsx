@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Provider } from '@shared';
 import { useStore } from '@/store';
 import { modelsFor } from '@catalog';
@@ -30,8 +30,17 @@ export function SubagentChip(p: {
   builtin?: { value: string; displayName: string; description?: string }[];
   builtinTitle?: string;
   disabled?: boolean;
+  /** bumped by the model menu's 「子代理用的模型」 row: open this menu */
+  openSignal?: number;
 }) {
   const [open, setOpen] = useState(false);
+  // only a bump while mounted opens it: a chip mounted again (resumed from the phone, handed back) keeps it closed
+  const seenSignal = useRef(p.openSignal);
+  useEffect(() => {
+    if (p.openSignal === seenSignal.current) return;
+    seenSignal.current = p.openSignal;
+    if (p.openSignal) setOpen(true);
+  }, [p.openSignal]);
   const anchor = useRef<HTMLSpanElement>(null);
   const providers = useStore((s) => s.providers);
   const defaults = useStore((s) => s.settings[SUBAGENT_DEFAULTS]);

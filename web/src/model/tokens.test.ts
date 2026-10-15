@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fmtTok } from '@/util';
-import { hitRate, usageParts } from './tokens';
+import { coldCache, hitRate, usageParts } from './tokens';
 
 describe('cache hit rate', () => {
   it('reads / (uncached + reads + writes); nothing read = 0', () => {
@@ -24,5 +24,20 @@ describe('the token part of the line under an answer', () => {
     expect(usageParts({ input_tokens: 1200, output_tokens: 50 }, fmtTok).map((p) => p.text)).toEqual(['↑1.2K ↓50']);
     expect(usageParts({ input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 0 }, fmtTok).map((p) => p.text)).toEqual(['↑0 ↓0']);
     expect(usageParts(undefined, fmtTok)).toEqual([]);
+  });
+});
+
+describe('a cache that went cold during a pause', () => {
+  const big = { input_tokens: 3, cache_read_input_tokens: 0, cache_creation_input_tokens: 211_000, output_tokens: 1600 };
+  it('a big turn that read almost nothing after more than the cache lives: says how long it sat', () => {
+    expect(coldCache(big, 12 * 60_000)?.text).toBe('隔了 12 分钟，缓存已过期');
+    expect(coldCache(big, 125 * 60_000)?.text).toBe('隔了 2 小时 5 分，缓存已过期');
+  });
+  it('nothing to explain: a short pause, a small turn, a turn that hit, an endpoint that reports no cache', () => {
+    expect(coldCache(big, 4 * 60_000)).toBeNull();
+    expect(coldCache(big, undefined)).toBeNull();
+    expect(coldCache({ ...big, cache_creation_input_tokens: 2000 }, 12 * 60_000)).toBeNull();
+    expect(coldCache({ ...big, cache_read_input_tokens: 200_000 }, 12 * 60_000)).toBeNull();
+    expect(coldCache({ input_tokens: 211_000, output_tokens: 10 }, 12 * 60_000)).toBeNull();
   });
 });

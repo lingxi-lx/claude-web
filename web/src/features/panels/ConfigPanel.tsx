@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useScopedSession, useStore } from '@/store';
 import { ws } from '@/ws/client';
 import { clsx } from '@/util';
@@ -272,7 +272,10 @@ const emptyDraft = (): Draft => ({ name: '', type: 'anthropic', baseUrl: '', api
 
 /** Third-party endpoint profiles. Keys live in ~/.claude-web/meta.json and are injected per session — settings.json is never touched. */
 export function ProviderProfiles() {
-  const providers = useStore((s) => s.providers);
+  const all = useStore((s) => s.providers);
+  // other Claude accounts are kept on 账号与登录 (their own dialog: a token, no endpoint, no model list)
+  const providers = useMemo(() => all.filter((p) => p.type !== 'claude-account'), [all]);
+  const accounts = all.length - providers.length;
   const loadProviders = useStore((s) => s.loadProviders);
   const settings = useStore((s) => s.settings);
   const setSetting = useStore((s) => s.setSetting);
@@ -367,6 +370,13 @@ export function ProviderProfiles() {
           <div className="grow"><div>{tr('Claude 账号')}</div><div className="sub">{tr('claude.ai 登录（终端里运行 claude auth login）· 订阅额度')}</div></div>
           <button className={clsx('btn sm', !def && 'primary')} onClick={() => setSetting('defaultProviderId', undefined)}>{!def ? tr('默认') : tr('设为默认')}</button>
         </div>
+        {accounts > 0 && (
+          <div className="row">
+            <span className="dot idle" />
+            <div className="grow"><div>{tr('其它 Claude 账号')}</div><div className="sub">{tr('{accounts} 个，在「账号与登录」里管理', { accounts })}</div></div>
+            <button className="btn sm ghost" onClick={() => useStore.getState().openSettings({ section: 'account' })}>{tr('管理')}</button>
+          </div>
+        )}
         {providers.map((p) => (
           <div key={p.id} className="row">
             <span className={clsx('dot', p.models?.length ? 'idle' : 'waiting')} title={p.models?.length ? tr('已测试 · {modelsCount} 个模型', { modelsCount: p.models.length }) : tr('未测试连接')} />

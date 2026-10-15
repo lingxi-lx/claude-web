@@ -137,6 +137,9 @@ interface State {
   dirtyDocs: Record<string, boolean>; // doc tile id -> unsaved
   setDocDirty(tileId: string, dirty: boolean): void;
   loadMeta(): Promise<void>;
+  /** ~/.claude-web/custom.css (GitHub issue #2): read on connect and whenever it is saved */
+  customCss: { path: string; exists: boolean; css: string; size: number; mtime: number; error?: string } | null;
+  loadCustomCss(): Promise<void>;
   addWorkspace(path: string): Promise<void>;
   /** Put the projects in this order (the sidebar's drag, 上移 / 下移): shown at once, saved on the server. */
   reorderWorkspaces(ids: string[]): Promise<void>;
@@ -209,6 +212,42 @@ const extInflight = new Set<string>();
 const extAgain = new Set<string>();
 const extLast = new Map<string, { start: number; ms: number }>();
 const extSettle = new Map<string, ReturnType<typeof setTimeout>>();
+/**
+ * What the last read of a conversation held (message count + newest uuid). A change on disk only counts as a turn
+ * written elsewhere when the next read holds more: the CLI's own bookkeeping lines (last-prompt, cost-state, a title)
+ * written as a process of ours exits used to light 「正在别处更新」 for nothing (2026-10-14, a user's friend).
+ */
+const extSeen = new Map<string, string>();
+const seenOf = (msgs: any[]) => `${msgs.length}:${msgs[msgs.length - 1]?.uuid ?? ''}`;
+
+/**
+ * The newest page of a conversation: imported ones page through library.read; ours through transcript.load
+ * `page: true` — a long conversation comes in the size the connection can take (a phone on the slow relay waited
+ * minutes on 「加载历史…」 for one of several MB), the rest behind 「加载更早的记录」. A server that does not page
+ * answers with the whole array.
+ */
+async function firstPage(sessionId: string): Promise<{ msgs: any[]; cursor?: string }> {
+  if (isImportedSessionId(sessionId)) {
+    const r = await ws.request<{ messages: any[]; next?: string }>({ kind: 'library.read', sessionId });
+    return { msgs: r?.messages ?? [], cursor: r?.next || undefined };
+  }
+  const r = await ws.request<any[] | { messages: any[]; next?: string }>({ kind: 'transcript.load', sessionId, page: true });
+  return Array.isArray(r) ? { msgs: r } : { msgs: r?.messages ?? [], cursor: r?.next ? `${TL_CURSOR}${r.next}` : undefined };
+}
+/** A cursor of ours (transcript.load), told apart from the library's. */
+const TL_CURSOR = 'tl:';
+/** This window's own process just stopped: the next read is a starting point, not a turn written elsewhere. */
+const extRebase = new Set<string>();
+/**
+ * Everything on disk is what ran here when our own process stops — read it as the starting point, so neither a
+ * conversation started in this window nor the turns that ran here light 「正在别处更新」 once the CLI writes its
+ * bookkeeping at exit (the verification of 2026-10-15 caught both). A read that fails leaves the mark: the next read
+ * is the starting point then.
+ */
+function rebaseExt(sessionId: string) {
+  extRebase.add(sessionId);
+  void firstPage(sessionId).then(({ msgs }) => { if (extRebase.delete(sessionId)) extSeen.set(sessionId, seenOf(msgs)); }, () => {});
+}
 const draftTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const autoTimers = new Map<string, ReturnType<typeof setTimeout>>();
 export const autoContinueAt = new Map<string, number>(); // sessionId -> epoch ms (for the status strip countdown)
@@ -374,6 +413,7 @@ export const useStore = create<State>((set, get) => ({
   shortcutsOpen: false,
   configTab: null,
   viewer: null,
+  customCss: null,
   openViewer(images, index = 0) {
     if (images.length) set({ viewer: { images, index } });
   },
@@ -404,6 +444,12 @@ export const useStore = create<State>((set, get) => ({
     // the language is read when the page loads: the page loads again in the new one
     if (key === LANGUAGE_KEY) reconcileLanguage(value);
   },
+  async loadCustomCss() {
+    try {
+      set({ customCss: await ws.request({ kind: 'ui.customCss' }) });
+    } catch { /* an older server: no custom.css */ }
+  },
+
   async loadMeta() {
     const [workspaces, sessionMeta, schedules, settings] = await Promise.all([
       ws.request<Workspace[]>({ kind: 'workspaces.list' }),
@@ -492,6 +538,7 @@ export const useStore = create<State>((set, get) => ({
         void get().loadProviders().catch(() => {});
         void get().loadAgents().catch(() => {});
         void get().loadLibrarySources().catch(() => {});
+        void get().loadCustomCss();
         void ws.request<Limits>({ kind: 'limits.get' }).then((limits) => set({ limits })).catch(() => {});
         // a failed check keeps the last answer (a reconnect must not turn a signed-in account into 「未登录」); with
         // none yet the row stops waiting and shows what it can
@@ -553,6 +600,9 @@ export const useStore = create<State>((set, get) => ({
         case 'meta.changed':
           void get().loadMeta();
           void get().loadProviders().catch(() => {});
+          break;
+        case 'customCss.changed':
+          void get().loadCustomCss();
           break;
         case 'limits':
           set({ limits: e.limits });
@@ -748,14 +798,8 @@ export const useStore = create<State>((set, get) => ({
     void get().loadFeedback(sessionId);
     if (!cur) void get().loadDraft(sessionId).then((d) => d && set((s) => bump(s, sessionId, (o) => { if (!o.draft) o.draft = d; })));
     try {
-      // imported sessions page through library.read (transcript.load would give the newest page but no cursor)
-      let msgs: any[];
-      let cursor: string | undefined;
-      if (isImportedSessionId(sessionId)) {
-        const r = await ws.request<{ messages: any[]; next?: string }>({ kind: 'library.read', sessionId });
-        msgs = r?.messages ?? [];
-        cursor = r?.next || undefined;
-      } else msgs = await ws.request<any[]>({ kind: 'transcript.load', sessionId });
+      const { msgs, cursor } = await firstPage(sessionId);
+      extSeen.set(sessionId, seenOf(msgs));
       set((s) => bump(s, sessionId, (o) => {
         o.historyCursor = cursor;
         const conv = createConversation();
@@ -773,7 +817,6 @@ export const useStore = create<State>((set, get) => ({
 
   externalChanged(sessionIds) {
     const shown = shownSessions(get().layout);
-    const now = Date.now();
     const schedule = (id: string) => {
       if (extTimers.has(id)) return;
       const last = extLast.get(id);
@@ -784,7 +827,8 @@ export const useStore = create<State>((set, get) => ({
       const o = get().open[id];
       if (!o || !readsFromOutside(o)) continue;
       const on = shown.has(id);
-      set((s) => bump(s, id, (x) => { x.externalAt = now; if (!on) x.staleHistory = true; }));
+      // live (externalAt) only once a read shows it holds more (refreshExternal)
+      if (!on) set((s) => bump(s, id, (x) => { x.staleHistory = true; }));
       if (on) schedule(id);
       // once it has been quiet for the live window: one more read, so a finished turn stops looking like it runs
       const t = extSettle.get(id);
@@ -806,17 +850,17 @@ export const useStore = create<State>((set, get) => ({
     extInflight.add(sessionId);
     const start = Date.now();
     try {
-      let msgs: any[];
-      let cursor: string | undefined;
-      if (isImportedSessionId(sessionId)) {
-        const r = await ws.request<{ messages: any[]; next?: string }>({ kind: 'library.read', sessionId });
-        msgs = r?.messages ?? [];
-        cursor = r?.next || undefined;
-      } else msgs = await ws.request<any[]>({ kind: 'transcript.load', sessionId });
+      const { msgs, cursor } = await firstPage(sessionId);
       // started here meanwhile: its own events own the view now
       const cur = get().open[sessionId];
       if (!cur || !readsFromOutside(cur) || cur.loading) return;
+      const seen = seenOf(msgs);
+      // no starting point yet, or our own process just stopped: this read is the starting point
+      const base = extRebase.delete(sessionId) ? undefined : extSeen.get(sessionId);
+      const grew = base !== undefined && base !== seen;
+      extSeen.set(sessionId, seen);
       set((s) => bump(s, sessionId, (x) => {
+        if (grew) x.externalAt = Date.now();
         const conv = createConversation();
         applyTranscript(conv, msgs, { live: externalLive(x) });
         x.conv = conv;
@@ -840,8 +884,11 @@ export const useStore = create<State>((set, get) => ({
     if (!cursor) return false;
     const p = (async () => {
       try {
-        const r = await ws.request<{ messages: any[]; next?: string }>({ kind: 'library.read', sessionId, cursor });
-        const next = r?.next || undefined;
+        const ours = cursor.startsWith(TL_CURSOR);
+        const r = ours
+          ? await ws.request<{ messages: any[]; next?: string }>({ kind: 'transcript.load', sessionId, page: true, cursor: cursor.slice(TL_CURSOR.length) })
+          : await ws.request<{ messages: any[]; next?: string }>({ kind: 'library.read', sessionId, cursor });
+        const next = r?.next ? (ours ? `${TL_CURSOR}${r.next}` : r.next) : undefined;
         set((s) => bump(s, sessionId, (o) => {
           if (o.historyCursor !== cursor) return; // history was reloaded meanwhile — this page belongs to the old one
           prependTranscript(o.conv, r?.messages ?? []);
@@ -1025,6 +1072,21 @@ export const useStore = create<State>((set, get) => ({
     await get().openSession({ sessionId, cwd: o.cwd, resumeAt: messageUuid, ...forkCarry(sessionId) });
   },
 }));
+
+// whichever way our own process ends — its event, a resync after a reconnect, a send that wasn't taken — from then on
+// the disk is read for outside writes, starting from what ran here. The states seen last are kept here: bump() changes
+// the entry in place, so the previous snapshot already holds the new state.
+const lastState = new Map<string, string>();
+useStore.subscribe((s, prev) => {
+  if (s.open === prev.open) return;
+  for (const id in s.open) {
+    const now = s.open[id].state, was = lastState.get(id);
+    if (was === now) continue;
+    lastState.set(id, now);
+    if (was && !readsFromOutside({ state: was }) && readsFromOutside({ state: now })) rebaseExt(id);
+  }
+  for (const id of lastState.keys()) if (!s.open[id]) lastState.delete(id);
+});
 
 /** Whether `userItemId` is the conversation's last prompt (no message typed after it). */
 export function isLastPrompt(items: readonly { kind: string; id: string; meta?: boolean }[], userItemId: string): boolean {

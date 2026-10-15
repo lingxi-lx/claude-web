@@ -38,6 +38,7 @@ import { NumberSelect, Row, Seg, Select, Toggle } from './controls';
 import { coverApp } from './cover';
 import { WebSettings } from '@/features/browser/WebSettings';
 import { tr, trAs } from '@/i18n';
+import { CustomCssSection } from './CustomCssSection';
 
 export { Row } from './controls';
 
@@ -102,6 +103,7 @@ const BODIES: Record<BodyId, () => ReactNode> = {
   diagnostics: () => <DiagnosticsSection />,
   update: () => <UpdateSection />,
   raw: () => <Settings />,
+  customCss: () => <CustomCssSection />,
 };
 
 /** Is the key event aimed at something you type into? ('/' focuses the search only when it is not.) */

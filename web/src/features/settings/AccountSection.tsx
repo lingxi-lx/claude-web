@@ -4,6 +4,7 @@ import { clsx } from '@/util';
 import { Row } from './controls';
 import { connectModel, loginInTerminal } from '@/features/providers/ConnectModel';
 import { tr } from '@/i18n';
+import { ClaudeAccounts } from './ClaudeAccounts';
 
 /** `claude auth status` (the server shares one run for 30 s; 重新检查 forces a fresh one). */
 interface AuthStatus { loggedIn?: boolean; authMethod?: string; email?: string; orgName?: string; apiProvider?: string; error?: boolean }
@@ -13,7 +14,7 @@ interface AuthStatus { loggedIn?: boolean; authMethod?: string; email?: string; 
  * doctor) are the page's 更多选项 (`Overview part="engine"`).
  */
 export function AccountSection() {
-  const providers = useStore((s) => s.providers.length);
+  const providers = useStore((s) => s.providers.filter((p) => p.type !== 'claude-account').length);
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const check = (force = false) => {
@@ -40,6 +41,7 @@ export function AccountSection() {
         </Row>
         {auth?.apiProvider && <Row label={tr('API 提供方')} hint={tr('Claude 账号的请求发往哪里。')}>{auth.apiProvider}</Row>}
       </div>
+      <ClaudeAccounts />
       <div className="sp-blk-h">{tr('第三方接口')}</div>
       <div className="sp-card">
         <Row label={tr('供应商')} hint={providers ? tr('已添加 {providers} 个。每个对话可以在模型菜单里换用。', { providers }) : tr('还没有。用中转站、DeepSeek、Kimi 等的 API Key 时，在这里接。')}>

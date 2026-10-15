@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { meterMode, ringLevel, sessionTotals, usageLines } from './stats';
+import { estimateContext, meterMode, ringLevel, sessionTotals, usageLines } from './stats';
 
 const items = [
   { kind: 'user' },
@@ -32,13 +32,30 @@ describe('the old stats bar, now behind the usage ring', () => {
     expect(ringLevel(94)).toBe('strong');
     expect(ringLevel(95)).toBe('err');
   });
-  it('the corner: the ring only once the context is filling up (≥ 60 %, spec §5.4; final review I3) — desktop and phone alike', () => {
-    expect(meterMode(undefined)).toBeNull(); // no occupancy reported (ACP, history): nothing — the card is ··· 本对话用量
-    expect(meterMode(0)).toBeNull();
-    expect(meterMode(40)).toBeNull();
-    expect(meterMode(59)).toBeNull();
+  it('the corner: the ring whenever the occupancy is known (a faint one under 60 %) — desktop and phone alike', () => {
+    expect(meterMode(undefined)).toBeNull(); // nothing known (ACP, a conversation with no answer yet): the card is ··· 本对话用量
+    expect(meterMode(0)).toBe('ring');
+    expect(meterMode(40)).toBe('ring');
     expect(meterMode(60)).toBe('ring');
     expect(meterMode(97)).toBe('ring');
+  });
+  it('a conversation not running here: the context read off its last top-level answer, against the model window', () => {
+    const answer = (usage: any, model = 'claude-sonnet-5-5', parentToolUseId: string | null = null) => ({ kind: 'assistant', id: Math.random().toString(), model, parentToolUseId, blocks: [], usage }) as any;
+    const u = { input: 3, cacheRead: 600_000, cacheWrite: 99_000, output: 1000 };
+    // the account: 200K unless the pick is [1m] — or it already holds more
+    expect(estimateContext([answer(u)], { model: 'claude-sonnet-5-5[1m]' })).toEqual({ percentage: 70, totalTokens: 700_003, maxTokens: 1_000_000, estimated: true });
+    expect(estimateContext([answer({ input: 1, cacheRead: 99_999, cacheWrite: 0, output: 0 })], {})).toMatchObject({ percentage: 50, maxTokens: 200_000 });
+    expect(estimateContext([answer(u)], {})).toMatchObject({ maxTokens: 1_000_000 });
+    // under 200K: only a `[1m]` pick is measured against 1M — not an id that merely ends in 1 or m
+    const tenth = answer({ input: 1, cacheRead: 99_999, cacheWrite: 0, output: 0 });
+    expect(estimateContext([tenth], { model: 'sonnet[1m]' })).toMatchObject({ percentage: 10, maxTokens: 1_000_000 });
+    expect(estimateContext([tenth], { model: 'claude-opus-4-1' })).toMatchObject({ percentage: 50, maxTokens: 200_000 });
+    expect(estimateContext([tenth], { model: 'opusplan' })).toMatchObject({ percentage: 50, maxTokens: 200_000 });
+    // a provider: its own window for the model (what the user set wins)
+    expect(estimateContext([answer({ input: 1, cacheRead: 135_999, cacheWrite: 0, output: 0 }, 'gpt-6')], { provider: { contextWindows: { 'gpt-6': 272_000 } } })).toMatchObject({ percentage: 50, maxTokens: 272_000 });
+    // a subagent's answer is not the conversation's context; nothing answered yet = unknown
+    expect(estimateContext([answer(u), answer({ input: 1, cacheRead: 0, cacheWrite: 0, output: 0 }, 'm', 'toolu_1')], { model: 'x[1m]' })).toMatchObject({ totalTokens: 700_003 });
+    expect(estimateContext([], {})).toBeUndefined();
   });
   it('the lines the hover card shows (every field of the old bar)', () => {
     const lines = usageLines(sessionTotals(items), { lastMs: 4200, context: { percentage: 72, totalTokens: 145_000, maxTokens: 200_000 }, tasks: 2 });

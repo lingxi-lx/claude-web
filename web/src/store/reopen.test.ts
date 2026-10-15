@@ -42,6 +42,13 @@ describe('what a conversation that is not running will continue with (final revi
       .toMatchObject({ providerId: 'claude', model: 'claude-haiku-4-5', permissionMode: 'plan', effort: 'max', ultracode: false });
     expect(resumeView({ conv, info: info({ model: 'claude-opus-5' }), resume: { model: '' } }, undefined).model).toBeUndefined();
   });
+  it('the permission mode with no pick and no live info: the one the server recorded for it, else the default for new conversations (what the server resumes it in)', () => {
+    const conv = { items: items('claude-sonnet-5') };
+    expect(resumeView({ conv }, { permissionMode: 'bypassPermissions' }, 'acceptEdits').permissionMode).toBe('bypassPermissions');
+    expect(resumeView({ conv }, {}, 'acceptEdits').permissionMode).toBe('acceptEdits');
+    expect(resumeView({ conv, info: info({ permissionMode: 'plan' }) }, { permissionMode: 'bypassPermissions' }, 'acceptEdits').permissionMode).toBe('plan');
+    expect(resumeView({ conv, resume: { permissionMode: 'default' } }, { permissionMode: 'bypassPermissions' }).permissionMode).toBe('default');
+  });
   it('nothing picked and no live info: the resume params are exactly reopenSettings(undefined) — the server / CLI choose', () => {
     const conv = { items: items('claude-sonnet-5') };
     expect(resumeParams({ conv })).toEqual({});

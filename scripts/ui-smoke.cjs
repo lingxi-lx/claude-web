@@ -1167,21 +1167,20 @@ function driver() {
         phase = 'session-composer';
         check('no stats bar under the composer', !(await js('!!document.querySelector(".pane .composer .statusbar")')));
         const sidJs = JSON.stringify(E.SMOKE_SID);
-        // final review I3: nothing in the corner until the context is filling up (≥ 60 %, spec §5.4) — no ring without an
-        // occupancy, none at 40 % — and the numbers of the old stats bar are one menu away: ··· 本对话用量
+        // no ring without an occupancy; below 60 % a quiet ring without the number (2026-10-15: users asked why some
+        // conversations had a ring and others none) — and the numbers of the old stats bar are one menu away: ··· 本对话用量
         const setCu = (cu) => js(`(() => { const st = window.__store; const o = st.getState().open[${sidJs}]; st.setState({ open: { ...st.getState().open, [${sidJs}]: { ...o, contextUsage: ${JSON.stringify(cu)}, version: o.version + 1 } } }); })()`);
-        const noMeter = await js(`!document.querySelector('.pane .composer .ctx-meter')`);
         await setCu({ percentage: 40, totalTokens: 80_000, maxTokens: 200_000 });
         await sleep(200);
-        const noMeter40 = await js(`!document.querySelector('.pane .composer .ctx-meter')`);
+        const quiet40 = await js(`(() => { const m = document.querySelector('.pane .composer .ctx-meter'); return m ? { cls: m.className, pct: !!m.querySelector('.pct') } : null; })()`);
         await click('.pane.focused .sess-head .sh-more > button');
         await waitFor(`!!document.querySelector('.menu.sess-menu [data-act="usage"]')`, 3000);
         await click('.menu.sess-menu [data-act="usage"]');
         await waitFor(`!!document.querySelector('.ctx-card')`, 3000);
-        const usageCard = await js(`(() => { const c = document.querySelector('.ctx-card'); if (!c) return null; const r = c.getBoundingClientRect(); const bar = document.querySelector('.pane.focused .composer .composer-bar').getBoundingClientRect(); return { text: c.innerText, above: r.bottom <= bar.top + 1, right: Math.abs(r.right - bar.right) < 60 }; })()`);
+        const usageCard = await js(`(() => { const c = document.querySelector('.ctx-card'); if (!c) return null; const r = c.getBoundingClientRect(); const bar = document.querySelector('.pane.focused .composer .composer-bar').getBoundingClientRect(); const m = document.querySelector('.pane.focused .composer .ctx-meter')?.getBoundingClientRect(); return { text: c.innerText, above: r.bottom <= bar.top + 1, byRing: !!m && Math.abs(r.right - m.right) < 2 }; })()`);
         await key('Escape');
         const cardGone = await waitFor(`!document.querySelector('.ctx-card')`, 2000);
-        check('below 60 % the corner is empty; ··· 本对话用量 opens the old stats (轮数 / 输入 / 上下文) above the composer, Esc closes it', noMeter40 && !!usageCard && /轮数/.test(usageCard.text) && /输入/.test(usageCard.text) && /40%/.test(usageCard.text) && usageCard.above && usageCard.right && cardGone, JSON.stringify({ noMeter, noMeter40, usageCard, cardGone }));
+        check('40 %: a quiet ring without the number; ··· 本对话用量 opens the old stats (轮数 / 输入 / 上下文) above the composer at the ring, Esc closes it', !!quiet40 && /quiet/.test(quiet40.cls) && !quiet40.pct && !!usageCard && /轮数/.test(usageCard.text) && /输入/.test(usageCard.text) && /40%/.test(usageCard.text) && usageCard.above && usageCard.byRing && cardGone, JSON.stringify({ quiet40, usageCard, cardGone }));
         await setCu({ percentage: 83, totalTokens: 166_000, maxTokens: 200_000 });
         const ring = await waitFor('!!document.querySelector(".pane .composer .ctx-meter circle")', 2000);
         const ringLook = await js(`(() => { const m = document.querySelector('.pane .composer .ctx-meter'); if (!m) return null; const cs = getComputedStyle(m); return { cls: m.className, pct: m.textContent, weight: cs.fontWeight, chip: !!document.querySelector('.pane .status-strip .ctx-full') }; })()`);

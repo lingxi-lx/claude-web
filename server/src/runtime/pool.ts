@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { SessionRunner } from './session-runner.js';
-import type { AgentKind, OpenSessionParams, Provider, RunnerState } from '../protocol.js';
+import type { AgentKind, OpenSessionParams, PermissionMode, Provider, RunnerState } from '../protocol.js';
 import { loopbackNoProxy, type ProviderService } from '../providers/service.js';
 import type { AgentRegistry, AgentDriver } from '../agents/types.js';
 import type { AgentTranscripts } from '../agents/transcript.js';
@@ -11,6 +11,10 @@ import { CodexDriver } from '../agents/codex-driver.js';
 import { proxy } from '../net/proxy.js';
 import { withExplanation } from '../errors/explain.js';
 import { SUBAGENT_DEFAULTS, providerKey, subagentModelFor } from '../models/subagent.js';
+
+const MODES: readonly PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk', 'auto'];
+/** A permission mode, or undefined for anything else (a stored setting is not trusted to be one). */
+export const asMode = (v: unknown): PermissionMode | undefined => (MODES as readonly unknown[]).includes(v) ? (v as PermissionMode) : undefined;
 
 const IDLE_TTL_MS = 30 * 60 * 1000;
 /** an idle Codex conversation lets go of its thread after this (the Codex CLI cannot resume it while we hold it) */
@@ -73,6 +77,14 @@ export class RunnerPool extends EventEmitter {
     // without going through the hub, and used to start on the account whatever the user had set up
     const chosen = this.resolveProvider(params);
     if (chosen.byPool) params = { ...params, providerId: chosen.providerId };
+    // the permission mode, when the caller did not say (a window that never had it live — after a restart, on the
+    // phone — IM, schedules, goals): what this conversation last ran with, else the default for new conversations.
+    // It used to fall back to 每步询问 (2026-10-14, a user's friend: 完全放开 came back as 每步询问 after a few turns)
+    if (params.permissionMode === undefined && this.providers.meta) {
+      const recorded = params.sessionId && !params.fork ? this.providers.meta.sessionMeta(params.sessionId).permissionMode : undefined;
+      const mode = recorded ?? asMode(this.providers.meta.settings()['ui.defaultMode']);
+      if (mode) params = { ...params, permissionMode: mode };
+    }
     let r: AgentDriver;
     if (kind === 'claude' || !this.agents || !this.transcripts) {
       // a fork routes its prompt cache under its root's key; every reopen (goals, IM, schedules, hot switch) keeps it
@@ -122,6 +134,8 @@ export class RunnerPool extends EventEmitter {
       void meta.setSessionMeta(r.sessionId, { providerId: chosen.providerId }).catch(() => { /* in memory; the next save persists it */ });
     }
     this.runners.set(r.id, r);
+    // a fork runs under a made-up id until the CLI gives it its own at init: nothing is recorded under that one
+    const placeholder = params.sessionId && (params.fork || params.resumeAt) ? r.id : undefined;
     r.on('message', (m) => this.emit('message', r.sessionId, m));
     // the user message a send accepted, from whichever window, IM, schedule or goal sent it (AgentDriver 'sent'). Its
     // own event, not 'message': the canonical mirror records sends itself, the ledger / IM / goals read the agent's stream
@@ -140,6 +154,11 @@ export class RunnerPool extends EventEmitter {
       if (i.sessionId !== r.id && this.runners.get(r.id) === r) {
         this.runners.delete(r.id);
         this.runners.set(i.sessionId, r);
+      }
+      // the mode it runs in now (picked in a window, or the CLI's own move out of plan mode) is what it comes back in
+      const mode = asMode(i.permissionMode);
+      if (mode && meta && i.sessionId && i.sessionId !== placeholder && meta.sessionMeta(i.sessionId).permissionMode !== mode) {
+        void meta.setSessionMeta(i.sessionId, { permissionMode: mode }).catch(() => { /* in memory; the next save persists it */ });
       }
       this.emit('info', i);
     });

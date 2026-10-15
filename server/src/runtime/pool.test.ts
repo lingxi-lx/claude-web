@@ -186,6 +186,42 @@ describe('RunnerPool: the subagents model', () => {
   });
 });
 
+describe('RunnerPool: the permission mode a conversation comes back in', () => {
+  const setup = (recorded: Record<string, any>, settings: Record<string, unknown>) => {
+    const writes: [string, any][] = [];
+    const meta = { sessionMeta: (id: string) => recorded[id] ?? {}, settings: () => settings, setSessionMeta: async (id: string, patch: any) => { writes.push([id, patch]); recorded[id] = { ...recorded[id], ...patch }; } };
+    return { p: new RunnerPool({ forSession: () => undefined, meta } as any), writes };
+  };
+  it('not said: what it last ran with, else the default for new conversations, else nothing (the CLI default)', () => {
+    const { p } = setup({ a: { permissionMode: 'bypassPermissions' } }, { 'ui.defaultMode': 'acceptEdits' });
+    expect((p.open({ sessionId: 'a', cwd: 'C:/x' }) as any).params.permissionMode).toBe('bypassPermissions');
+    expect((p.open({ sessionId: 'b', cwd: 'C:/x' }) as any).params.permissionMode).toBe('acceptEdits');
+    expect((p.open({ sessionId: 'c', cwd: 'C:/x', permissionMode: 'plan' }) as any).params.permissionMode).toBe('plan');
+    expect((setup({}, { 'ui.defaultMode': 'nonsense' }).p.open({ sessionId: 'd', cwd: 'C:/x' }) as any).params.permissionMode).toBeUndefined();
+  });
+  it('a fork starts from the default, not from its source record', () => {
+    const { p } = setup({ src: { permissionMode: 'plan' } }, {});
+    expect((p.open({ sessionId: 'src', cwd: 'C:/x', fork: true }) as any).params.permissionMode).toBeUndefined();
+  });
+  it('the mode it runs in is recorded when it changes (a pick, the CLI leaving plan mode)', () => {
+    const { p, writes } = setup({}, {});
+    const r: any = p.open({ sessionId: 'a', cwd: 'C:/x', permissionMode: 'default' });
+    r.emit('info', { sessionId: 'a', permissionMode: 'bypassPermissions' });
+    r.emit('info', { sessionId: 'a', permissionMode: 'bypassPermissions' });
+    r.emit('info', { sessionId: 'a', permissionMode: 'acceptEdits' });
+    r.emit('info', { sessionId: 'a' });
+    expect(writes).toEqual([['a', { permissionMode: 'bypassPermissions' }], ['a', { permissionMode: 'acceptEdits' }]]);
+  });
+  it('a fork records nothing under its made-up id — under its own once the CLI gives it one', () => {
+    const { p, writes } = setup({}, {});
+    const r: any = p.open({ sessionId: 'src', cwd: 'C:/x', fork: true, permissionMode: 'acceptEdits' });
+    r.emit('info', { sessionId: r.id, permissionMode: 'acceptEdits' });
+    expect(writes).toEqual([]);
+    r.emit('info', { sessionId: 'forked', permissionMode: 'acceptEdits' });
+    expect(writes).toEqual([['forked', { permissionMode: 'acceptEdits' }]]);
+  });
+});
+
 describe('RunnerPool: the provider when the caller does not name one (IM, schedules, goals, hand-overs)', () => {
   const setup = (o: { recorded?: Record<string, any>; settings?: Record<string, unknown>; agents?: Record<string, any>; providers?: Record<string, { type: string }> } = {}) => {
     const recorded: Record<string, any> = { ...(o.recorded ?? {}) };

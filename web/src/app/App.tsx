@@ -43,6 +43,8 @@ import { pushBackLayer } from '@/ui/back-layer';
 import { installPhoneSheet, sheetEnter, sheetTakesEscape, toggleSheetDetent, useSheetLeaving } from '@/ui/phone-sheet';
 import { drawerEnter, installPhoneDrawer, usePhoneDrawer } from '@/ui/phone-drawer';
 import { tr } from '@/i18n';
+import { CustomCss } from './custom-css';
+import { AddAccountHost } from '@/features/settings/ClaudeAccounts';
 
 /** Width of the right panel minimized to its icon rail. */
 const MIN_RAIL = 36;
@@ -278,6 +280,8 @@ export function App() {
       <ErrorBoundary area={tr('应用更新')} floating><UpdatePrompt /></ErrorBoundary>
       <ErrorBoundary area={tr('角色库')} floating><CharacterLibrary /></ErrorBoundary>
       <ErrorBoundary area={tr('对话框')} floating><DialogHost /></ErrorBoundary>
+      <ErrorBoundary area={tr('添加 Claude 账号')} floating><AddAccountHost /></ErrorBoundary>
+      <CustomCss />
     </div>
   );
 }

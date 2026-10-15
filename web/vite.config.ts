@@ -25,5 +25,7 @@ export default defineConfig({
     proxy: { '/ws': { target: 'ws://127.0.0.1:3090', ws: true }, '/api': 'http://127.0.0.1:3090' },
   },
   build: { outDir: 'dist', sourcemap: false },
-  test: { environment: 'node' },
+  // the source-scanning tests (i18n coverage, wording) read every file: seconds each, more next to a full parallel run;
+  // the store tests import the whole store in beforeAll — same budget for the hooks
+  test: { environment: 'node', testTimeout: 30_000, hookTimeout: 30_000 },
 } as any);

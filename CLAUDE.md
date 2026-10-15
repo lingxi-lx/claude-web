@@ -34,7 +34,7 @@ npm run dev          # 开发：server tsx watch + vite :5173（代理 /ws 到 3
 - 停靠面板 / 右侧面板 / 分区页**不卸载**，只 `hidden`（终端 pty、xterm 缓冲、表单状态）。
 - 改文件用 Edit / Write，或把脚本写成文件再跑：bash 里 `node -e "…"` 的反引号会被当命令替换，heredoc 会吃反斜杠。仓库是 LF（`.gitattributes`）。
 - 测试：`npm run typecheck`、`npm test`、`npm run build:all`、`npm run e2e`（自带临时 HOME，不花 token）、`node scripts/ui-smoke.cjs`（Electron，任何 console 错误都算失败）。真机验证用临时 `CLAUDE_WEB_DIR` / HOME，别碰用户自己的 `~/.claude-web`。
-- 本机开发 shell 继承了 `CLAUDE_CODE_ENTRYPOINT=sdk-cli` 和已装桌面版的 `CLAUDE_WEB_DIST`，测指纹 / 自己起 server 时 `env -u` 掉。
+- 本机开发 shell 继承了 `CLAUDE_CODE_ENTRYPOINT=sdk-cli`、已装桌面版的 `CLAUDE_WEB_DIST` 和 `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`，测指纹 / 自己起 server / 跑 `npm test`（`session-runner.test.ts` 会挂三条）时 `env -u` 掉。
 - 提交身份固定 `ypyik0669`；引擎（ccb fork）发版、应用发版的步骤在 `engine-providers` / `macos-ci` 两篇里。
 
 ## 笔记索引
@@ -81,6 +81,8 @@ npm run dev          # 开发：server tsx watch + vite :5173（代理 /ws 到 3
 | [robustness](docs/notes/robustness.md) | 子进程窗口 / 前端健壮性（2026-09-28） | 停止、终端是 shell、spawn guard、错误边界、zustand 选择器、ui-smoke 用法 |
 | [ui-refresh](docs/notes/ui-refresh.md) | 界面换新（2026-10-10） | 样式文件顺序、令牌、外壳、字体、图标、标题栏、动效、手机交互 |
 | [i18n](docs/notes/i18n.md) | 界面语言：中文和英文（2026-10-15，用户要求） | tr() 约定、语言怎么定、四份英文目录、加一句字的流程、i18n-smoke、README 截图脚本、坑 |
+| [claude-accounts](docs/notes/claude-accounts.md) | 其它 Claude 账号（2026-10-15，用户要求） | claude-account 档案、setup-token 令牌、runner 走账号那条路、添加对话框、真机验证 |
+| [custom-css](docs/notes/custom-css.md) | 自定义样式 custom.css 与 DOM 钩子（2026-10-15，GitHub issue #2） | custom.css 加载 / 热更新、钩子约定、计划进度条 |
 | [zoom](docs/notes/zoom.md) | 界面缩放（2026-10-10 用户要求：台式机分辨率高，界面看着小） | 桌面版页面缩放 |
 | [rail-sections-web](docs/notes/rail-sections-web.md) | 图标栏 / 分区 / 联网（2026-10-10，界面第二轮） | 图标栏、分区页、扩展页、强度按钮、浏览器标签、web MCP |
 | [search-computer](docs/notes/search-computer.md) | 搜索在内置浏览器里 / 网页上的鼠标键盘 / 操控电脑（2026-10-10，用户要求） | 浏览器里搜索、browser_computer、操控电脑（computer MCP） |

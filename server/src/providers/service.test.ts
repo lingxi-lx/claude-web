@@ -177,3 +177,41 @@ describe('worthOfficialRetry (测试连接 after ccb failed)', () => {
     expect(worthOfficialRetry('超时：120 秒内没有收到回答')).toBe(false);
   });
 });
+
+describe('another Claude account (claude-account)', () => {
+  const token = 'sk-ant-oat01-' + 'A'.repeat(70);
+  it('its env: the token the CLI takes for a subscription, and nothing of a relay that would win over it', () => {
+    const env = providerEnv({ id: 'a', name: 'w', type: 'claude-account', baseUrl: '', apiKey: token, createdAt: 0 } as Provider);
+    expect(env).toMatchObject({ CLAUDE_CODE_OAUTH_TOKEN: token, ANTHROPIC_AUTH_TOKEN: '', ANTHROPIC_API_KEY: '', ANTHROPIC_BASE_URL: '' });
+    expect(env.ANTHROPIC_MODEL).toBeUndefined();
+  });
+  it('saved with the account models; refreshing keeps them; the token is checked for its shape; never a gateway member; only Claude takes it', async () => {
+    const fs = await import('node:fs/promises');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const { MetaStore } = await import('../meta/store.js');
+    const { ProviderService, accountModels } = await import('./service.js');
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'cw-acct-'));
+    const prev = process.env.CLAUDE_WEB_DIR;
+    process.env.CLAUDE_WEB_DIR = dir;
+    try {
+      const meta = new MetaStore(path.join(dir, 'meta.json'));
+      const svc = new ProviderService(meta);
+      const p = await svc.upsert({ name: '工作号', type: 'claude-account', apiKey: token, baseUrl: 'https://ignored' });
+      const { models, modelNames } = accountModels();
+      expect(models).toContain('claude-opus-5-5');
+      expect(meta.provider(p.id)).toMatchObject({ baseUrl: '', models, modelNames });
+      expect(p.apiKey).not.toContain('AAAAAAAAAA');
+      expect((await svc.refreshModels([p.id]))[0]).toMatchObject({ ok: true, count: models.length });
+      expect(await svc.probe(p.id, undefined, { listOnly: true })).toMatchObject({ ok: true, models });
+      expect(await svc.probe(undefined, { type: 'claude-account', apiKey: 'sk-relay-123' }, { listOnly: true })).toMatchObject({ ok: false });
+      expect(svc.member(p.id)).toBeNull();
+      expect(svc.fitError(p.id, 'claude')).toBeNull();
+      expect(svc.fitError(p.id, 'codex')).toMatch(/Codex/);
+      expect(svc.forSession(p.id)).toMatchObject({ type: 'claude-account', apiKey: token });
+    } finally {
+      if (prev === undefined) delete process.env.CLAUDE_WEB_DIR; else process.env.CLAUDE_WEB_DIR = prev;
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+});

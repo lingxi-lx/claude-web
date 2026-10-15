@@ -38,6 +38,7 @@ The same program comes in two forms: a **desktop app** (Windows / macOS) and a *
   - [14. Automation: scheduled tasks, goals, multi-agent orchestration](#14-automation-scheduled-tasks-goals-multi-agent-orchestration)
   - [15. Background: watch subagents work in the café](#15-background-watch-subagents-work-in-the-café)
 - [Interface language](#interface-language)
+- [Custom styles (custom.css)](#custom-styles-customcss)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Where your data lives](#where-your-data-lives)
 - [FAQ](#faq)
@@ -250,7 +251,9 @@ The key is only injected into that conversation's own process and is never writt
 - In a conversation, picking another model of the same provider just switches the model; picking another provider restarts the conversation's process invisibly (the history is kept) and uses the model you picked; picking another agent's model hands the conversation over to it to continue. Conversations on other computers can only change the model;
 - If you chat a lot on a model with a big window and then switch to one with a smaller window, and the conversation is already past 80% of the new model's window, it is first compacted with the current model before switching, and the conversation gets a line saying so.
 
-**Choosing a separate model for subagents**: the **Subagent** button next to the model in the input box opens the same kind of model menu, limited to the current provider, with "Same as main model" as the top row. The main task keeps using the main model and subagents (the ones sent out by Task and workflows) use the one you picked; for example, Sonnet for the main task and Haiku for subagents saves quite a bit of quota. Tick "New conversations on this provider all do this" at the bottom of the menu, and every new conversation you start on this provider from then on (including IM bots and scheduled tasks) uses it. When you change it on a running conversation, it restarts invisibly once the current turn finishes and then switches; subagents already sent out aren't affected.
+**Choosing a separate model for subagents**: the **Subagent** button next to the model in the input box (or "Subagent model" at the bottom of the model menu) opens the same kind of model menu, limited to the current provider, with "Same as main model" as the top row. The main task keeps using the main model and subagents (the ones sent out by Task and workflows) use the one you picked; for example, Sonnet for the main task and Haiku for subagents saves quite a bit of quota. Tick "New conversations on this provider all do this" at the bottom of the menu, and every new conversation you start on this provider from then on (including IM bots and scheduled tasks) uses it. When you change it on a running conversation, it restarts invisibly once the current turn finishes and then switches; subagents already sent out aren't affected.
+
+**Several Claude accounts**: under **Settings → Account and login → Other Claude accounts**, click **Add account**. A terminal opens and runs `claude setup-token`; sign in to the account you want to add in the browser (sign out of the other one first, or use a private window) and authorize, and the token it prints at the end fills in by itself. Name it and save (saving sends one very short message as a test). Each account then has its own section in the model menu ("Work / Opus 5.5"), so every conversation can run on a different account; when one runs out of quota, pick a model of another and the conversation carries on. An account can be made the default for new conversations, and IM bots and scheduled tasks can use it too. The login in `~/.claude` stays the "Claude account".
 
 ![The Subagent menu: Same as main model, or one of the current provider's models](docs/images/en/subagent.png)
 
@@ -440,6 +443,17 @@ The whole interface comes in **Chinese** and **English**, and **by default it fo
 - The web version follows the browser's language and the desktop app follows the system language; the language you pick is stored on this computer (`~/.claude-web/meta.json`), and all windows on the computer and the phone page switch together.
 - The desktop app's menus, tray and update prompts, and a small part of the server's text (fixed at startup), only change after you restart the app.
 - Which language Claude replies in within a conversation is up to you and the model and has nothing to do with the interface language; exported HTML follows the interface language at the time of export.
+
+## Custom styles (custom.css)
+
+Put your own CSS in `~/.claude-web/custom.css`. It's loaded after the built-in styles in every window (desktop app, browser, phone), a save shows up at once without a restart, and the desktop app's updates never overwrite it. **Settings → Appearance → Custom styles** creates the file (with a list of the hooks you can rely on), opens it in the editor, and switches it off if something breaks.
+
+The hooks stay the same in later versions: `html[data-theme]` and `html[lang]`, `.chat[data-state]` (starting / running / waiting / idle / history / closed / error), every plan's `data-done` / `data-total` and `--progress`, each plan item's `data-status`, the plan's title row `.tasks-plan .plan-head` and its bar `.plan-prog`, and the colour / radius variables (`--accent`, `--ink-1`…`--ink-4`, `--surface-0`…`--surface-3`, `--r-sm` / `--r-md` / `--r-lg`). For example, a thicker plan progress bar:
+
+```css
+.tasks-plan .plan-prog { height: 6px; }
+.tasks-plan .plan-prog > i { background: var(--accent); }
+```
 
 ## Keyboard shortcuts
 

@@ -29,6 +29,8 @@ import type { VcsService } from '../vcs/service.js';
 import type { GoalService } from '../goals/service.js';
 import type { AndroidService } from '../android/service.js';
 import type { LedgerService } from '../usage/ledger.js';
+import type { CustomCssService } from '../appearance/custom-css.js';
+import { LOCAL_PAGE_BYTES, REMOTE_PAGE_BYTES, pageOf, withTurnStats } from '../sessions/history.js';
 import { SCHEDULE_TEMPLATES } from '../schedules/service.js';
 import { nextCron } from '../schedules/cron.js';
 import type { AgentRegistry } from '../agents/types.js';
@@ -81,6 +83,7 @@ export interface Services {
   mcp: McpService;
   diag: DiagService;
   ledger: LedgerService;
+  customCss: CustomCssService;
   agents: AgentRegistry;
   transcripts: AgentTranscripts;
   canonical: CanonicalLog;
@@ -178,6 +181,7 @@ export class Hub {
     s.orchestra.on('workflows', () => this.broadcast({ kind: 'orchestra.workflows.changed' }));
     s.background.on('changed', (session) => this.broadcast({ kind: 'background.changed', session }));
     s.characters.on('changed', () => this.broadcast({ kind: 'characters.changed' }));
+    s.customCss.on('changed', () => this.broadcast({ kind: 'customCss.changed' }));
   }
 
   /** `fromPeer`: re-broadcast of another machine's event — local clients only (two machines peering each other would echo forever). */
@@ -317,7 +321,10 @@ export class Hub {
         // ours (the mirror) — the library first brings in turns the agent's own CLI added since (Codex)
         if (head && !head.imported) return (await s.library.read(req.sessionId)).messages;
         if (head?.imported || (await s.library.kindOf(req.sessionId)) !== 'claude') return (await s.library.read(req.sessionId)).messages;
-        return s.sessions.transcript(req.sessionId);
+        const state = s.pool.stateOf(req.sessionId);
+        const msgs = withTurnStats(await s.sessions.transcript(req.sessionId), await s.ledger.rowsFor(req.sessionId), { live: state === 'running' || state === 'waiting' || state === 'starting' });
+        if (!req.page) return msgs;
+        return pageOf(msgs, req.cursor, this.remoteConns.has(ws) || this.peerConns.has(ws) ? REMOTE_PAGE_BYTES : LOCAL_PAGE_BYTES);
       }
       case 'transcript.subagents':
         return s.sessions.subagents(req.sessionId);
@@ -486,6 +493,10 @@ export class Hub {
       case 'shell.open':
         openPath(req.path, req.app);
         return null;
+      case 'ui.customCss':
+        return s.customCss.read();
+      case 'ui.customCss.create':
+        return { path: s.customCss.create() };
       case 'session.interrupt': {
         // no process (closed, crashed, the server restarted): nothing is running here — the client says so and ends
         // the turn it still shows, instead of a Stop button that errors in silence

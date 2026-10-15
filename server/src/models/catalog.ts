@@ -190,7 +190,7 @@ export function supportsUltracode(agent: AgentKind): boolean {
  * Shared by the model menu (web) and session.setProvider (server), so both refuse the same things.
  */
 export function providerTypesFor(agent: AgentKind): ProviderType[] {
-  if (agent === 'claude') return ['anthropic', 'openai', 'gemini', 'grok', 'gateway'];
+  if (agent === 'claude') return ['anthropic', 'openai', 'gemini', 'grok', 'gateway', 'claude-account'];
   if (agent === 'gemini') return ['gemini', 'gateway'];
   return ['openai', 'gateway']; // codex, qwen, kimi, opencode, custom ACP agents: OpenAI-compatible endpoints
 }
@@ -317,7 +317,7 @@ export function modelCaps(p: CapsProvider | undefined, model: string): ModelCaps
   let native: boolean;
   // a Claude-format endpoint: Claude by version, another model that reasons gets a thinking budget (DeepSeek /anthropic…);
   // the model gateway turns other models' requests into another format and drops the parameter
-  if (type === 'anthropic') native = isClaude || reasoning;
+  if (type === 'anthropic' || type === 'claude-account') native = isClaude || reasoning;
   else if (type === 'gateway') native = isClaude;
   else if (type === 'openai') native = !!declared?.levels?.length || openAIReasons(id);
   else if (type === 'gemini') native = lower.includes('gemini-3') || lower.includes('gemini-2.5');

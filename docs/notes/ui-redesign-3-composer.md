@@ -13,3 +13,10 @@ spec §5.4、§5.5（定案 1：模型菜单保持平铺）、mock-composer.png�
 - **弹层**：`composer/Popover.tsx`（`+` / 权限 / 分支共用）= portal + `placeMenu`（含 `need`）+ 外点关闭（`dlg` 弹出的对话框不算外点）+ ↑↓ Home End；输入框也可以是一行（`data-mi`），在输入框里只有 ↑↓ / Tab / Esc 归菜单，Home / End / 打字归输入框；输入框里 Tab 当 ↓（Shift+Tab 当 ↑），不是行的搜索框（「筛选分支…」「搜索对话…」）按 ↓ / Tab 落到它**后面**的第一行（`dir-menu.ts` 的 `fieldStep`，不会先落到前面的「返回」）；行上 Esc / Tab 关菜单、焦点还给 chip。行是 `button[data-mi]`；通用 `.menu button{width:100%;padding…}` 用 `.menu.cm .cm-it` 覆盖。菜单开关用现成的 `.toggle` 做纯视觉（`span`，行本身是 `menuitemcheckbox`）。portal 到 body 的弹层（`.menu.cm / .dirmenu / .mm`、`.ctx-card`、`body > .menu`）在桌面版显式 `-webkit-app-region: no-drag`：窗口很矮时菜单会压到 52px 的标题行，底下的拖动区会吞点击。
 - RunCard 贴在输入框上沿（`.composer .run-card`：同宽内缩、无下边框、顶部圆角），顺手修了它的 `.grow` 从没生效（计时和「停止」现在靠右）。
 - 截运行中的输入框（RunCard、插话、停止）用 `server/ws-demo-running.mjs`，要停得久一点就 `MOCK_SLOW_MS=300000`；有正文的 Claude 对话可以直接在临时 HOME 的 `.claude/projects/<目录>/` 里写一份带 Read / Edit / Bash 的 transcript，再 `openSession({sessionId, cwd})` 让它变成活的（引擎起来、不发消息，不花 token）。
+
+## 2026-10-15（用户的朋友报告 + 用户要求）
+
+- **权限模式记在对话上**：「完全放开」几轮后变回「每步询问」——进程闲置回收、应用重启、手机上接着聊时，重开的窗口没有 live info，`resumeView()` 退回 `'default'`，服务端 runner 也是 `params.permissionMode ?? 'default'`。现在 `RunnerPool.open` 没给模式时用 `SessionMeta.permissionMode`（runner 每次 `info` 里模式变了就记，包括 CLI 自己退出 plan 模式），再没有就用 `ui.defaultMode`；fork 不继承记录。`resumeView(o, meta, defaultMode)` 同样的顺序，chip 显示的就是重开后真的模式。IM / 定时任务 / 目标都走 pool，一起修好。测试：`pool.test.ts`、`reopen.test.ts`、`server/ws-phase29.mjs` 第一段。
+- **上下文小环一直在**（朋友：只有一个对话有，其它没有——以前 < 60% 不显示）：`meterMode()` 只要知道占用就出环，< 60% 是淡的一圈、不带数字；没在运行的对话没有进程报占用，`stats.ts estimateContext()` 按最后一条顶层回答的 usage（input + 缓存读写 + output）对模型窗口估（供应商：`contextWindowFor`；账号 / 其它 Claude 账号：`[1m]` 才 1M，否则 200K，已经超过 200K 就算 1M），卡片里写「上下文（按上一轮估）」。欢迎页照旧没有环。
+- **输入框里的图片**：以前点一下就删掉；现在点击打开全屏查看器（`store.viewer`，滚轮缩放、← →），悬停右上角出 ×（触屏一直显示）才是删除。
+- **模型菜单最后一行「子代理用的模型」**（用户在模型菜单里找子代理的设置）：`ModelMenu` 的 `subagentRow`，Composer 用 `cloneElement` 给模型 chip 加上它、给子代理 chip 加 `openSignal`；点它关掉模型菜单、打开子代理菜单。id 在 `SUBAGENT_MENU_ID.open`（放 `MODEL_MENU_ID` 会被可达性表要求列出来）。

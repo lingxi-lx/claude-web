@@ -51,19 +51,21 @@ export function lastAssistantModel(items: readonly unknown[]): string | undefine
  * What the model / permission chips of a conversation that is not running show — and so what a send will resume
  * it with (final review §9 #1: every conversation after a restart is one of these): the user's pick on the chips,
  * else what it last had live in this window, else what the resume will really get — no model (the provider's /
- * account's / agent's default, which the chip names) and 每步询问. The transcript's last model is only a hint
- * (`lastModel`, the chip's tooltip): the answer names what the API ran (`claude-sonnet-5` for a `sonnet[1m]` pick,
- * a relay's upstream name), and resuming on it would pin the conversation to it (re-review I-1). The permission
- * mode is not read from the transcript at all: the SDK does not return it (re-review M-2).
+ * account's / agent's default, which the chip names) and the permission mode the server resumes it in: the one it
+ * last ran with (SessionMeta.permissionMode, the pool records it), else the default for new conversations. The
+ * transcript's last model is only a hint (`lastModel`, the chip's tooltip): the answer names what the API ran
+ * (`claude-sonnet-5` for a `sonnet[1m]` pick, a relay's upstream name), and resuming on it would pin the
+ * conversation to it (re-review I-1). The permission mode is not read from the transcript at all: the SDK does not
+ * return it (re-review M-2).
  */
-export function resumeView(o: ResumeSource, meta: { providerId?: string } | undefined): { providerId: string; model?: string; permissionMode: PermissionMode; effort?: EffortLevel; ultracode: boolean; lastModel?: string } {
+export function resumeView(o: ResumeSource, meta: { providerId?: string; permissionMode?: PermissionMode } | undefined, defaultMode?: PermissionMode): { providerId: string; model?: string; permissionMode: PermissionMode; effort?: EffortLevel; ultracode: boolean; lastModel?: string } {
   const r = o.resume ?? {};
   return {
     // live info knows the provider it ran on (none = the agent's own login); before that, the recorded one
     providerId: r.providerId ?? (o.info ? o.info.providerId || 'claude' : meta?.providerId ?? 'claude'),
     // '' = a picked default: shown by name like no model
     model: r.model !== undefined ? r.model || undefined : o.info?.model ?? undefined,
-    permissionMode: r.permissionMode ?? o.info?.permissionMode ?? 'default',
+    permissionMode: r.permissionMode ?? o.info?.permissionMode ?? meta?.permissionMode ?? defaultMode ?? 'default',
     effort: r.effort ?? o.info?.effort ?? undefined,
     ultracode: r.ultracode ?? !!o.info?.ultracode,
     lastModel: lastAssistantModel(o.conv.items),

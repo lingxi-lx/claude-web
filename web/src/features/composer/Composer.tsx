@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { cloneElement, isValidElement, useEffect, useMemo, useRef, useState } from 'react';
 import { useScopedSession, useStore } from '@/store';
 import { ws } from '@/ws/client';
 import { desktop } from '@/desktop';
@@ -104,6 +104,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   const ta = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState(welcome ? '' : active?.draft ?? '');
   const [imgs, setImgs] = useState<PendingImage[]>([]);
+  const [subOpen, setSubOpen] = useState(0);
   const [atts, setAtts] = useState<AttachmentRef[]>([]); // inline text attachments
   const [files, setFiles] = useState<DroppedFile[]>([]); // uploaded on send
   const [refs, setRefs] = useState<{ id: string; title: string }[]>([]); // referenced sessions → <session-ref /> markers on send
@@ -805,7 +806,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   } else if (active && !disabled && active.state !== 'starting') {
     // not running (history, reaped, crashed — every conversation after a restart): the chips show what the next
     // send resumes it with, and a pick there changes that (final review §9 #1)
-    const v = resumeView(active, sessionMeta[active.sessionId]);
+    const v = resumeView(active, sessionMeta[active.sessionId], remote ? undefined : defaultMode);
     const rAgent = sessionAgent;
     const rProvider = remote ? 'claude' : v.providerId;
     const rP = providers.find((p) => p.id === rProvider);
@@ -848,6 +849,12 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     status = <span className="cb-status">{disabled ? tr('对话已删除') : tr('启动中…')}</span>;
   }
   if (!welcome && active) meter = <ContextMeter sessionId={active.sessionId} />;
+  // the model menu's last row opens the 子代理 menu (the chip is right there, but people look in the model menu)
+  if (isValidElement<{ providerId: string; value: string; builtin?: { value: string; displayName: string }[] }>(subagent) && isValidElement(model)) {
+    const sp = subagent.props;
+    model = cloneElement(model as React.ReactElement<{ subagentRow?: { label: string; onOpen: () => void } }>, { subagentRow: { label: sp.value ? subagentLabel({ providers, providerId: sp.providerId, model: sp.value, builtin: sp.builtin }) : tr('跟主模型一样'), onOpen: () => setSubOpen((n) => n + 1) } });
+    subagent = cloneElement(subagent as React.ReactElement<{ openSignal?: number }>, { openSignal: subOpen });
+  }
 
   // the light around the box while this conversation runs (the stop button also shows while it waits or starts)
   const glow = glowing({ welcome, state: active?.state, visible });
@@ -895,8 +902,14 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
               {refs.map((r) => (
                 <SessionRefChip key={`r${r.id}`} a={{ kind: 'session', name: r.title, sessionId: r.id }} onRemove={() => setRefs((s) => s.filter((x) => x.id !== r.id))} />
               ))}
+              {/* click: the big viewer (wheel zoom, ← →); hover: the × that removes it (it used to remove on click) */}
               {imgs.map((im, i) => (
-                <img key={i} src={im.url} alt="" onClick={() => setImgs((s) => s.filter((_, j) => j !== i))} title={tr('{name} · 点击移除', { name: im.name ?? tr('图片') })} />
+                <span key={i} className="att-img">
+                  <button type="button" className="att-img-open" onClick={() => useStore.setState({ viewer: { images: imgs.map((x) => x.url), index: i } })} title={tr('{name} · 点击放大', { name: im.name ?? tr('图片') })} aria-label={tr('放大 {name}', { name: im.name ?? tr('图片') })}>
+                    <img src={im.url} alt="" />
+                  </button>
+                  <button type="button" className="att-img-x" onClick={() => setImgs((s) => s.filter((_, j) => j !== i))} title={tr('移除')} aria-label={tr('移除 {name}', { name: im.name ?? tr('图片') })}><Icon name="close" size={10} /></button>
+                </span>
               ))}
               {atts.map((a, i) => (
                 <span key={`a${i}`} className="att-chip" title={a.text?.slice(0, 300)}><Icon name="read" size={12} /> {a.name} <span className="sz">{fmtSize(a.size)}</span><button aria-label={tr('移除')} onClick={() => setAtts((s) => s.filter((_, j) => j !== i))}><Icon name="close" size={10} /></button></span>

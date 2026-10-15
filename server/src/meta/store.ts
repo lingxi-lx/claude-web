@@ -2,14 +2,14 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { EventEmitter } from 'node:events';
-import type { GatewayGroup, Goal, ImBinding, ImGatewayConfig, MessageFeedback, Provider, RemoteHost, Schedule, ScheduleRun, Workflow } from '../protocol.js';
+import type { GatewayGroup, Goal, ImBinding, ImGatewayConfig, MessageFeedback, PermissionMode, Provider, RemoteHost, Schedule, ScheduleRun, Workflow } from '../protocol.js';
 import type { DeviceRecord } from '../remote/service.js';
 import type { PeerRecord } from '../federation/types.js';
 import { randomBytes } from 'node:crypto';
 export type { Schedule } from '../protocol.js';
 
 export interface Workspace { id: string; path: string; name: string; addedAt: number; order: number }
-export interface SessionMeta { pinned?: boolean; archived?: boolean; workspaceId?: string; tags?: string[]; providerId?: string; /** sidebar grouping directory when it differs from the cwd (orchestration worktrees) */ groupCwd?: string; /** prompt-cache route key when it is not the session's own id (forks keep their root's) */ cacheKey?: string; /** the model its subagents run on, picked for this provider ('' = the main model) */ subagent?: { providerId: string; model: string } }
+export interface SessionMeta { pinned?: boolean; archived?: boolean; workspaceId?: string; tags?: string[]; providerId?: string; /** sidebar grouping directory when it differs from the cwd (orchestration worktrees) */ groupCwd?: string; /** prompt-cache route key when it is not the session's own id (forks keep their root's) */ cacheKey?: string; /** the model its subagents run on, picked for this provider ('' = the main model) */ subagent?: { providerId: string; model: string }; /** the permission mode it last ran with: a resume without a pick comes back in it (the SDK never says it) */ permissionMode?: PermissionMode }
 
 interface Data {
   version: 1;

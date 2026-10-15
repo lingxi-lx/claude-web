@@ -418,6 +418,14 @@ button.link:hover { text-decoration: underline; }
 .queue { font-size: 13px; color: var(--ink-3); padding: 4px 6px; display: flex; gap: 8px; align-items: center; }
 .attach { display: flex; gap: 6px; margin-bottom: 8px; }
 .attach img { height: 56px; border-radius: var(--r-lg); border: 1px solid var(--edge-strong); cursor: pointer; }
+.attach .att-img { position: relative; display: inline-flex; flex: none; }
+.attach .att-img-open { padding: 0; border: 0; background: none; border-radius: var(--r-lg); cursor: zoom-in; display: block; }
+.attach .att-img-open img { display: block; cursor: zoom-in; }
+.attach .att-img-open:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.attach .att-img-x { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 1px solid var(--edge-strong); background: var(--surface-1); color: var(--ink-2); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transition: opacity var(--dur-fast); box-shadow: var(--shadow); }
+.attach .att-img:hover .att-img-x, .attach .att-img:focus-within .att-img-x { opacity: 1; }
+.attach .att-img-x:hover { background: var(--err); color: #fff; border-color: var(--err); }
+@media (hover: none) { .attach .att-img-x { opacity: 1; } }
 .palette { position: absolute; bottom: 100%; left: 0; right: 0; margin-bottom: 8px; background: var(--surface-elev); border-radius: var(--r-xl); max-height: 320px; overflow: auto; box-shadow: var(--elev-2); padding: 6px; }
 .palette .it { display: flex; gap: 12px; padding: 7px 10px; cursor: pointer; font-size: 14px; border-radius: var(--r-row); align-items: baseline; }
 .palette .it.sel, .palette .it:hover { background: var(--layer-selected); }
@@ -1086,6 +1094,10 @@ html[data-reduce-motion='1'] * { animation: none !important; transition: none !i
 .goal-h .m { font-size: 12px; color: var(--ink-4); margin-top: 2px; }
 .goal-h .prog { width: 64px; height: 6px; background: var(--surface-2); border-radius: var(--r-sm); overflow: hidden; flex: none; }
 .goal-h .prog > div { height: 100%; background: var(--ok); }
+.tasks-plan .plan-head { display: flex; align-items: center; gap: 8px; }
+.tasks-plan .plan-count { font-weight: 400; color: var(--ink-4); font-variant-numeric: tabular-nums; }
+.tasks-plan .plan-prog { flex: 1; min-width: 40px; max-width: 160px; height: 4px; margin-left: auto; background: var(--surface-2); border-radius: var(--r-sm); overflow: hidden; }
+.tasks-plan .plan-prog > i { display: block; height: 100%; background: var(--ok); border-radius: inherit; transition: width var(--dur-base); }
 .goal-b { border-top: 1px solid var(--edge-subtle); padding: 8px 10px; display: flex; flex-direction: column; gap: 8px; }
 .goal-b .actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .goal-graph { display: flex; flex-direction: column; gap: 0; }
@@ -2241,6 +2253,22 @@ html.desktop.mac .app.no-sidebar .workbench:not(.gb) .over-head { padding-left: 
 .qc-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-top: var(--sp-4); }
 .qc-foot .grow { flex: 1; }
 .modal.connect-model { width: min(600px, 94vw); max-height: 92vh; overflow-y: auto; }
+/* settings → 账号与登录 → 添加 Claude 账号 (features/settings/ClaudeAccounts.tsx) */
+.modal.add-account { width: min(560px, 94vw); max-height: 92vh; overflow-y: auto; display: flex; flex-direction: column; gap: var(--sp-2); }
+.modal.add-account h3 { margin: 0; }
+.add-account-steps { margin: 0; padding-left: 20px; color: var(--ink-2); line-height: var(--lh-base); display: flex; flex-direction: column; gap: 4px; }
+.modal.add-account > .btn { align-self: flex-start; }
+.modal.add-account .field-row { display: flex; align-items: center; gap: var(--sp-2); }
+.modal.add-account .field-row > span { flex: none; width: 4em; color: var(--ink-3); }
+.modal.add-account .field-row > .field { flex: 1; min-width: 0; }
+.modal.add-account .sub.ok { color: var(--ok); }
+.modal.add-account .sub.err { color: var(--err); white-space: pre-wrap; }
+.modal.add-account .row-btns { display: flex; gap: var(--sp-2); margin-top: var(--sp-1); }
+.claude-accounts .sp-row .ctl { flex-wrap: wrap; justify-content: flex-end; }
+/* …while the terminal runs claude setup-token: a card out of its way */
+.add-account-wait { position: fixed; right: 16px; bottom: 16px; z-index: 900; width: min(360px, calc(100vw - 32px)); padding: var(--sp-3); border-radius: var(--r-lg); background: var(--surface-elev); border: 1px solid var(--edge); box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 6px; }
+.add-account-wait .t { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.add-account-wait .row-btns { display: flex; gap: 6px; justify-content: flex-end; }
 .modal.connect-model > .sub { color: var(--ink-2); font-size: var(--fs-base); line-height: var(--lh-base); margin: 0 0 var(--sp-2); }
 .modal.onboarding .qc { margin-bottom: var(--sp-2); }
 .ob-actions button.link { display: inline-flex; align-items: center; gap: 4px; }

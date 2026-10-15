@@ -56,24 +56,41 @@ export function AgentBody({ t }: { t: ToolUseBlock }) {
   );
 }
 
-export function TodoBody({ t }: { t: ToolUseBlock }) {
-  const inp = t.input as any;
+/** A plan's items as the call left them (its result's new list, else what it was given). */
+export function planItems(t: ToolUseBlock): any[] {
   const st = t.result?.structured as any;
-  const todos: any[] = Array.isArray(st?.newTodos) ? st.newTodos : inp.todos ?? [];
+  return Array.isArray(st?.newTodos) ? st.newTodos : (t.input as any)?.todos ?? [];
+}
+
+/**
+ * How far a plan is, for the page and for custom.css (GitHub issue #2): data-done / data-total and --progress on its
+ * element. These names are promised to stay (the custom.css template lists them).
+ */
+export function planProgress(todos: readonly { status?: string }[]): { done: number; total: number; pct: number; attrs: { 'data-done': number; 'data-total': number; style: Record<string, string> } } {
+  const total = todos.length;
+  const done = todos.filter((x) => x.status === 'completed').length;
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  return { done, total, pct, attrs: { 'data-done': done, 'data-total': total, style: { '--progress': `${pct}%` } } };
+}
+
+/** `count={false}`: without the 「3/7 完成」 line (the 任务 panel has the count in the plan's head, next to its bar). */
+export function TodoBody({ t, count = true }: { t: ToolUseBlock; count?: boolean }) {
+  const st = t.result?.structured as any;
+  const todos = planItems(t);
   const old: any[] = Array.isArray(st?.oldTodos) ? st.oldTodos : [];
   const oldDone = old.filter((x) => x.status === 'completed').length;
-  const done = todos.filter((x) => x.status === 'completed').length;
+  const { done, attrs } = planProgress(todos);
   return (
     <>
-      <ul className="todos">
+      <ul className="todos" {...(attrs as any)}>
         {todos.map((td, i) => (
-          <li key={i} className={td.status}>
+          <li key={i} className={td.status} data-status={td.status}>
             <span className="tick"><Icon name={td.status === 'completed' ? 'checkCircle' : td.status === 'in_progress' ? 'dot' : 'circle'} size={13} /></span>
             <span>{td.status === 'in_progress' && td.activeForm ? td.activeForm : td.content}</span>
           </li>
         ))}
       </ul>
-      <div className="tool-meta">{tr('{done}/{todosCount} 完成{v}', { done, todosCount: todos.length, v: st && done > oldDone ? tr(' · 本次完成 {done}', { done: done - oldDone }) : '' })}</div>
+      {count && <div className="tool-meta">{tr('{done}/{todosCount} 完成{v}', { done, todosCount: todos.length, v: st && done > oldDone ? tr(' · 本次完成 {done}', { done: done - oldDone }) : '' })}</div>}
     </>
   );
 }

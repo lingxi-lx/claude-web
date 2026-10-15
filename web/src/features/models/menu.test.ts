@@ -19,7 +19,7 @@ const sectionIds = (m: ReturnType<typeof menu>) => m.sections.map((s) => s.id);
 
 describe('compatibility by agent', () => {
   it('claude: its login models + every profile type', () => {
-    expect(compatibleTypes('claude').sort()).toEqual(['anthropic', 'gateway', 'gemini', 'grok', 'openai']);
+    expect(compatibleTypes('claude').sort()).toEqual(['anthropic', 'claude-account', 'gateway', 'gemini', 'grok', 'openai']);
     expect(sectionIds(menu())).toEqual(['builtin', 'gkey', 'snbchr', 'gem', 'xai', 'empty', 'gw']);
   });
   it('codex: its own models + openai / gateway profiles only', () => {

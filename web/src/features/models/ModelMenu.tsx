@@ -48,6 +48,11 @@ export interface ModelMenuProps {
    * favourites / recents / default entries, and at the bottom whether new conversations on this provider take it.
    */
   subagent?: SubagentMenuOptions;
+  /**
+   * The main menu of a Claude conversation: a row at the bottom with the subagents' model that opens the 子代理 menu
+   * (2026-10-15: the user looked for it here, in the model menu, and did not see the chip next to it).
+   */
+  subagentRow?: { label: string; onOpen: () => void };
 }
 
 export interface SubagentMenuOptions {
@@ -217,9 +222,9 @@ export function ModelMenu(p: ModelMenuProps) {
           <div key={s.id} className={clsx('mm-sec', s.kind === 'agent' && 'agent')} data-sec={s.id}>
             {s.kind === 'agent' && shown.sections[si - 1]?.kind !== 'agent' && <div className="mm-group">{TERMS.agents}</div>}
             <div className="mm-head">
-              <Icon name={s.kind === 'favorites' ? 'star' : s.kind === 'recent' ? 'refresh' : s.kind === 'builtin' ? AGENT_ICONS[p.agent] ?? 'agent' : s.kind === 'agent' ? AGENT_ICONS[s.agent ?? ''] ?? 'agent' : s.providerType === 'gateway' ? 'gateway' : 'cloud'} size={11} />
+              <Icon name={s.kind === 'favorites' ? 'star' : s.kind === 'recent' ? 'refresh' : s.kind === 'builtin' ? AGENT_ICONS[p.agent] ?? 'agent' : s.kind === 'agent' ? AGENT_ICONS[s.agent ?? ''] ?? 'agent' : s.providerType === 'gateway' ? 'gateway' : s.providerType === 'claude-account' ? AGENT_ICONS.claude ?? 'cloud' : 'cloud'} size={11} />
               <span className="t">{s.title}</span>
-              {s.providerType && <span className="ty">{s.providerType}</span>}
+              {s.providerType && <span className="ty">{s.providerType === 'claude-account' ? tr('Claude 账号') : s.providerType}</span>}
               {s.unavailable && <span className="err off" title={s.unavailable}>{s.unavailable}</span>}
               {s.kind === 'provider' && !s.error && !s.unavailable && <span className="meta">{s.count ? tr('{count} 个模型', { count: s.count }) : tr('未拉取')}{s.modelsAt ? ` · ${agoText(s.modelsAt)}` : ''}</span>}
               {s.error && !s.unavailable && <span className="err" title={s.error}>{tr('拉取失败：{error}', { error: s.error })}</span>}
@@ -267,6 +272,14 @@ export function ModelMenu(p: ModelMenuProps) {
           <input type="checkbox" checked={p.subagent.isDefault} disabled={p.subagent.same && p.subagent.isDefault} onChange={() => p.subagent!.onToggleDefault()} />
           <span>{tr('这个供应商的新对话都这样')}</span>
         </label>
+      )}
+      {p.subagentRow && !p.subagent && (
+        <button type="button" className="mm-subrow" data-id={SUBAGENT_MENU_ID.open} onClick={() => { p.onClose(); p.subagentRow!.onOpen(); }} title={tr('主任务用主模型，子代理（Task / 工作流）用这里选的，可以选个便宜的省额度')}>
+          <Icon name="agent" size={13} />
+          <span className="l">{tr('子代理用的模型')}</span>
+          <span className="v">{p.subagentRow.label}</span>
+          <Icon name="chevronRight" size={12} />
+        </button>
       )}
       <div className="mm-foot">
         <button data-id={MODEL_MENU_ID.refresh} onClick={() => void refreshAllModels()} disabled={refresh.running} title={tr('拉取每个供应商的模型列表（/v1/models，只列模型，不花 token）')}>
