@@ -604,6 +604,9 @@ export const useStore = create<State>((set, get) => ({
         case 'customCss.changed':
           void get().loadCustomCss();
           break;
+        case 'agents.changed':
+          void get().loadAgents().catch(() => {});
+          break;
         case 'limits':
           set({ limits: e.limits });
           break;

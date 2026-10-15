@@ -22,7 +22,7 @@ const meta = { settings: () => ({}) } as any;
 // every command "is on PATH" (the probes above then decide installed / not) — independent of this machine
 const everywhere = { onPath: (c: string) => `/fake/bin/${c}`, bundled: () => null, refreshPath: async () => [] };
 const Reg = AgentRegistry;
-class TestRegistry extends Reg { constructor(m: any, loc: any = everywhere) { super(m, loc); } }
+class TestRegistry extends Reg { constructor(m: any, loc: any = everywhere, ask: any = async () => []) { super(m, loc, ask); } }
 const codex = (list: { kind: string; installed: boolean; version: string }[]) => list.find((x) => x.kind === 'codex')!;
 const isCodex = (cmd: string) => /codex/.test(cmd);
 
@@ -158,5 +158,74 @@ describe('the reason a found agent did not answer --version', () => {
     ].join('\n');
     expect(versionError(Object.assign(new Error('Command failed'), { stderr, stdout: '' }), 'codex')).toMatch(/失败：Error: Cannot find module/);
     expect(versionError(Object.assign(new Error('x'), { killed: true, signal: 'SIGTERM' }), 'opencode')).toMatch(/没有回答/);
+  });
+});
+
+describe('what Codex says it offers (model/list), kept and handed on', () => {
+  const store = () => { const s: Record<string, unknown> = {}; return { settings: () => s, setSetting: async (k: string, v: unknown) => { s[k] = v; } } as any; };
+  const list = [{ value: 'gpt-6-luna', displayName: 'GPT-6-Luna', isDefault: true }, { value: 'gpt-5.6-terra', displayName: 'GPT-5.6-Terra' }];
+  const flush = () => new Promise((r) => setTimeout(r, 80));
+  const was = process.env.CW_NO_MODEL_REFRESH;
+  afterEach(() => { if (was === undefined) delete process.env.CW_NO_MODEL_REFRESH; else process.env.CW_NO_MODEL_REFRESH = was; });
+
+  it('an installed Codex is asked once; its answer is in the next list and announced', async () => {
+    delete process.env.CW_NO_MODEL_REFRESH;
+    const m = store();
+    const asked: string[] = [];
+    const reg = new TestRegistry(m, everywhere, async (l: { command: string }) => { asked.push(l.command); return list; });
+    const seen: string[] = [];
+    reg.events.on('reported', (k: string) => seen.push(k));
+    expect((codex(await reg.list()) as any).reportedModels).toBeUndefined();
+    await flush();
+    expect(asked).toEqual(['codex']);
+    expect(seen).toEqual(['codex']);
+    expect((codex(await reg.list()) as any).reportedModels).toEqual(list);
+    await flush();
+    expect(asked.length).toBe(1); // kept for hours: not asked on every list
+    await reg.list(true);
+    await flush();
+    expect(asked.length).toBe(2); // a refresh asks again
+    expect(seen).toEqual(['codex']); // the same answer is not announced again
+  });
+
+  it('an empty or failed answer keeps the list it had', async () => {
+    delete process.env.CW_NO_MODEL_REFRESH;
+    const m = store();
+    let answerWith: () => Promise<any> = async () => list;
+    const reg = new TestRegistry(m, everywhere, () => answerWith());
+    await reg.askModels('codex', true);
+    answerWith = async () => [];
+    await reg.askModels('codex', true);
+    answerWith = async () => { throw new Error('not logged in'); };
+    await reg.askModels('codex', true);
+    expect(reg.reported('codex')?.models).toEqual(list);
+  });
+
+  it('a Codex that cannot answer (not logged in) is not started again on every list — a refresh still asks', async () => {
+    delete process.env.CW_NO_MODEL_REFRESH;
+    let spawns = 0;
+    const reg = new TestRegistry(store(), everywhere, async () => { spawns++; throw new Error('not logged in'); });
+    for (let i = 0; i < 4; i++) await reg.askModels('codex');
+    expect(spawns).toBe(1);
+    await reg.askModels('codex', true);
+    expect(spawns).toBe(2);
+    let empty = 0;
+    const quiet = new TestRegistry(store(), everywhere, async () => { empty++; return []; });
+    for (let i = 0; i < 3; i++) await quiet.askModels('codex');
+    expect(empty).toBe(1);
+  });
+
+  it('not on its own login (a provider), not another protocol, not behind the caller\'s back in e2e', async () => {
+    delete process.env.CW_NO_MODEL_REFRESH;
+    const asked: string[] = [];
+    const ask = async (l: { command: string }) => { asked.push(l.command); return list; };
+    const onProvider = { settings: () => ({ agents: { codex: { providerId: 'p1' } } }), setSetting: async () => {} } as any;
+    await new TestRegistry(onProvider, everywhere, ask).askModels('codex', true);
+    await new TestRegistry(store(), everywhere, ask).askModels('gemini', true);
+    process.env.CW_NO_MODEL_REFRESH = '1';
+    await new TestRegistry(store(), everywhere, ask).askModels('codex');
+    expect(asked).toEqual([]);
+    await new TestRegistry(store(), everywhere, ask).askModels('codex', true); // a refresh still asks
+    expect(asked).toEqual(['codex']);
   });
 });

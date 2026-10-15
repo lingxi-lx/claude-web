@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { SessionRunner } from './session-runner.js';
-import type { AgentKind, OpenSessionParams, PermissionMode, Provider, RunnerState } from '../protocol.js';
+import type { AgentKind, OpenSessionParams, PermissionMode, Provider, ReportedModel, RunnerState } from '../protocol.js';
 import { loopbackNoProxy, type ProviderService } from '../providers/service.js';
 import type { AgentRegistry, AgentDriver } from '../agents/types.js';
 import type { AgentTranscripts } from '../agents/transcript.js';
@@ -121,7 +121,10 @@ export class RunnerPool extends EventEmitter {
       // before Codex resumes a thread, turns the Codex CLI added to it go into the mirror (library.syncMirror)
       const sid = params.sessionId;
       const beforeResume = sid && this.syncMirror ? () => this.syncMirror!(sid) : undefined;
-      r = l.def.protocol === 'codex' ? new CodexDriver(kind, launch, params, this.transcripts, { beforeResume }) : new AcpDriver(kind, launch, params, this.transcripts, resumeHistory);
+      // on its own login, what Codex lists for the account is kept for the menus (not a provider's: that list is the provider's)
+      const agents = this.agents;
+      const onModels = params.providerId ? undefined : (m: ReportedModel[]) => agents.setReported(kind, m);
+      r = l.def.protocol === 'codex' ? new CodexDriver(kind, launch, params, this.transcripts, { beforeResume, onModels }) : new AcpDriver(kind, launch, params, this.transcripts, resumeHistory);
       // an idle Codex holds its thread: `codex exec resume` in a terminal fails "already has an active writer" until it goes
       if (l.def.protocol === 'codex') this.ttl.set(r, CODEX_IDLE_TTL_MS);
       // the composer's model chip reads the profile off the info (`档案 / 模型`); Claude's runner sets it itself

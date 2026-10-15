@@ -35,6 +35,7 @@ export function ModelsSection() {
   const favorites = useStore((s) => (s.settings['ui.favoriteModels'] as string[] | undefined) ?? NONE);
   const setSetting = useStore((s) => s.setSetting);
   const providers = useStore((s) => s.providers);
+  const agents = useStore((s) => s.agents);
   const toast = useStore((s) => s.toast);
   const groups = useGatewayGroups();
   const refresh = useRefreshRun();
@@ -130,10 +131,14 @@ export function ModelsSection() {
         <>
           {AGENTS.map(({ kind, name }) => {
             const c = CATALOG[kind];
-            const models = modelsFor(kind);
+            // what the agent said it offers this account (Codex's model/list) before the built-in list, which goes stale
+            const a = agents.find((x) => x.kind === kind);
+            const reported = kind !== 'claude' && a?.reportedModels?.length ? a.reportedModels : undefined;
+            const models = reported ?? modelsFor(kind);
             return (
               <div key={kind} className="section">
                 <h5><Icon name={AGENT_ICONS[kind] ?? 'agent'} size={13} /> {name}</h5>
+                {reported && a?.reportedAt && <div className="sub" style={{ padding: '0 4px 4px' }}>{tr('{name} 自己报的列表（这个账号能用的）· {ago}', { name, ago: agoText(a.reportedAt) })}</div>}
                 <div className="list">
                   {models.map((m) => row(kind === 'claude' ? m.value : `${kind}:${m.value}`, m.displayName, m.description || undefined))}
                   {!models.length && <div className="empty">{c?.unverified ? tr('模型表未核实') : tr('没有内置模型')}</div>}

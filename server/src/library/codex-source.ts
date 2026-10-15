@@ -1,6 +1,7 @@
 // Codex session source: lists/reads/manages `codex app-server` threads over its official JSON-RPC
 // API (no direct file access — constraints.md). See task-3-brief.md for the wire shapes.
-import { existsSync, promises as fsp } from 'node:fs';
+import { existsSync, readdirSync, statSync, promises as fsp } from 'node:fs';
+import path from 'node:path';
 import { codexTurnsToMessages } from '../agents/codex-items.js';
 import { JsonRpcProcess } from '../agents/jsonrpc.js';
 import type { AgentKind, SessionSummary, SourceCaps, SourceStatus } from '../protocol.js';
@@ -25,6 +26,34 @@ const CAPS: SourceCaps = { resume: true, rename: true, archive: true, delete: tr
 const GONE = /thread not loaded|before first user message|ephemeral thread/i;
 /** Older app-servers page nothing (0.130: `thread/turns/list requires experimentalApi capability`); thread/read has it all. */
 const NO_PAGING = /experimentalApi|not supported|unknown method|method not found/i;
+/**
+ * A thread in the storage newer Codex writes ("paginated"), refused by an older one (user report 2026-10-16:
+ * 「paginated_threads is not supported yet」 — the desktop app updates itself, a `codex` on PATH does not). Its
+ * whole-thread read is refused too, so this is not a NO_PAGING case.
+ */
+export const PAGINATED = /paginated/i;
+
+/**
+ * The Codex desktop app's own CLI — as new as the app that wrote the threads. Windows:
+ * %LOCALAPPDATA%\OpenAI\Codex\bin\<build>\codex.exe (the newest build); macOS: inside Codex.app.
+ */
+export function desktopCodexBin(env: NodeJS.ProcessEnv = process.env, platform = process.platform): string | undefined {
+  if (platform === 'darwin') {
+    const app = '/Applications/Codex.app/Contents/Resources/codex';
+    return existsSync(app) ? app : undefined;
+  }
+  if (platform !== 'win32' || !env.LOCALAPPDATA) return undefined;
+  const root = path.join(env.LOCALAPPDATA, 'OpenAI', 'Codex', 'bin');
+  let best: { file: string; at: number } | undefined;
+  try {
+    for (const d of readdirSync(root, { withFileTypes: true })) {
+      if (!d.isDirectory()) continue;
+      const file = path.join(root, d.name, 'codex.exe');
+      try { const at = statSync(file).mtimeMs; if (!best || at > best.at) best = { file, at }; } catch { /* not a build */ }
+    }
+  } catch { return undefined; }
+  return best?.file;
+}
 /** How long a thread that could not be read stays out of the list (a thread that was about to get its first message comes back). */
 export const GONE_HIDE_MS = 10 * 60_000;
 export const THREAD_GONE = 'THREAD_GONE';
@@ -107,20 +136,48 @@ export class CodexSource implements SessionSource {
   readonly caps: SourceCaps = CAPS;
   private readonly rpc: LazyRpc;
   private version: string | undefined;
+  /** the desktop app's Codex, only started for threads the configured one cannot read (PAGINATED) */
+  private newer: { rpc: LazyRpc; command: string } | undefined;
 
-  constructor(private readonly getLaunch: () => { command: string; args: string[]; env: Record<string, string> }) {
-    this.rpc = new LazyRpc(
+  constructor(
+    private readonly getLaunch: () => { command: string; args: string[]; env: Record<string, string> },
+    private readonly getNewer: () => { command: string; args: string[]; env: Record<string, string> } | undefined = () => {
+      const bin = desktopCodexBin();
+      return bin ? { command: bin, args: ['app-server'], env: this.getLaunch().env } : undefined;
+    },
+  ) {
+    this.rpc = this.lazy(() => this.getLaunch(), (v) => { this.version = v ?? this.version; });
+  }
+
+  private lazy(launch: () => { command: string; args: string[]; env: Record<string, string> }, onVersion?: (v: string | undefined) => void): LazyRpc {
+    return new LazyRpc(
       () => {
-        const l = this.getLaunch();
+        const l = launch();
         return new JsonRpcProcess(l.command, l.args, { env: l.env });
       },
       async (rpc) => {
         const r = await rpc.request<any>('initialize', { clientInfo: { name: 'claude-web', title: 'Claude Web', version: '0.1.0' }, capabilities: null }, 30_000);
-        this.version = r?.userAgent ?? r?.version ?? this.version;
+        onVersion?.(r?.userAgent ?? r?.version);
         rpc.notify('initialized', {});
       },
       300_000,
     );
+  }
+
+  /** The newer Codex to read a PAGINATED thread with — none, or the very launch that just failed: undefined. */
+  private newerRpc(): LazyRpc | undefined {
+    const l = this.getNewer();
+    const key = (x: { command: string; args: string[]; env: Record<string, string> }) => JSON.stringify([x.command, x.args, x.env]);
+    if (!l || key(l) === key(this.getLaunch())) return undefined;
+    if (this.newer?.command !== key(l)) {
+      void this.newer?.rpc.close().catch(() => {});
+      this.newer = { rpc: this.lazy(() => l), command: key(l) };
+    }
+    return this.newer.rpc;
+  }
+
+  private tooOld(): Error {
+    return new Error(tr('这个对话是新版 Codex 存的，本机的 codex 命令（{version}）太旧、读不了。把 Codex 命令行更新到最新（npm i -g @openai/codex@latest），或在 设置 → Agents 里把 Codex 的命令换成 Codex 应用自带的那个。', { version: this.version ?? 'codex' }));
   }
 
   async status(): Promise<SourceStatus> {
@@ -155,21 +212,36 @@ export class CodexSource implements SessionSource {
   }
 
   async read(nativeId: string, o: { cursor?: string; limit: number }): Promise<{ messages: any[]; next?: string }> {
+    try {
+      return await this.readVia(this.rpc, nativeId, o);
+    } catch (e: any) {
+      if (!PAGINATED.test(String(e?.message ?? ''))) throw e;
+      // stored by a newer Codex than the configured one: read it with the desktop app's own, else say what to do
+      const newer = this.newerRpc();
+      if (!newer) throw this.tooOld();
+      // the desktop app's Codex gone since, or too old as well: the same advice, never an empty history
+      return this.readVia(newer, nativeId, o, true).catch((e2: any) => { throw isNotInstalled(e2) || PAGINATED.test(String(e2?.message ?? '')) ? this.tooOld() : e2; });
+    }
+  }
+
+  /** `strict`: a Codex that is not there is an error, not an empty history (the fallback reader). */
+  private async readVia(rpc: LazyRpc, nativeId: string, o: { cursor?: string; limit: number }, strict = false): Promise<{ messages: any[]; next?: string }> {
     const id = libraryId('codex', nativeId);
     try {
       const limit = o.limit ?? 20;
-      const r = await this.rpc.request<any>('thread/turns/list', { threadId: nativeId, itemsView: 'full', sortDirection: 'desc', limit, cursor: o.cursor }, 30_000);
+      const r = await rpc.request<any>('thread/turns/list', { threadId: nativeId, itemsView: 'full', sortDirection: 'desc', limit, cursor: o.cursor }, 30_000);
       const turns = (r?.data ?? []).slice().reverse();
       // the newest page: is its last turn still going in Codex's own app / CLI?
-      const running = !o.cursor && await this.threadPath(nativeId).then(rolloutOpen);
+      const running = !o.cursor && await this.threadPath(nativeId, rpc).then(rolloutOpen);
       return { messages: codexTurnsToMessages(id, turns, undefined, running), next: r?.nextCursor ?? undefined };
     } catch (e: any) {
-      if (isNotInstalled(e)) return { messages: [] };
+      if (isNotInstalled(e)) { if (strict) throw e; return { messages: [] }; }
       const msg = String(e?.message ?? e);
+      if (PAGINATED.test(msg)) throw e;
       // the first page: the whole thread in one read when the paged one is unavailable or says "not loaded"
       if (!o.cursor && (e?.code === -32601 || NO_PAGING.test(msg) || GONE.test(msg))) {
         try {
-          const r = await this.rpc.request<any>('thread/read', { threadId: nativeId, includeTurns: true }, 60_000);
+          const r = await rpc.request<any>('thread/read', { threadId: nativeId, includeTurns: true }, 60_000);
           return { messages: codexTurnsToMessages(id, r?.thread?.turns ?? [], undefined, await rolloutOpen(r?.thread?.path)) };
         } catch (e2: any) {
           if (GONE.test(msg) || GONE.test(String(e2?.message ?? ''))) throw this.markGone(nativeId);
@@ -183,9 +255,9 @@ export class CodexSource implements SessionSource {
   }
 
   /** The thread's rollout file (undefined when the app-server does not say). */
-  private async threadPath(nativeId: string): Promise<string | undefined> {
+  private async threadPath(nativeId: string, rpc: LazyRpc = this.rpc): Promise<string | undefined> {
     try {
-      const r = await this.rpc.request<any>('thread/read', { threadId: nativeId, includeTurns: false }, 15_000);
+      const r = await rpc.request<any>('thread/read', { threadId: nativeId, includeTurns: false }, 15_000);
       const p = r?.thread?.path;
       return typeof p === 'string' && p ? p : undefined;
     } catch {
@@ -219,23 +291,35 @@ export class CodexSource implements SessionSource {
 
   /** All turns, oldest first — a full backup before delete (constraints.md). */
   async exportAll(nativeId: string): Promise<unknown> {
+    try {
+      return await this.exportVia(this.rpc, nativeId);
+    } catch (e: any) {
+      if (!PAGINATED.test(String(e?.message ?? ''))) throw e;
+      const newer = this.newerRpc();
+      if (!newer) throw this.tooOld();
+      return this.exportVia(newer, nativeId).catch((e2: any) => { throw isNotInstalled(e2) || PAGINATED.test(String(e2?.message ?? '')) ? this.tooOld() : e2; });
+    }
+  }
+
+  private async exportVia(rpc: LazyRpc, nativeId: string): Promise<unknown> {
     const out: any[] = [];
     let cursor: string | undefined;
     try {
       do {
-        const r = await this.rpc.request<any>('thread/turns/list', { threadId: nativeId, itemsView: 'full', sortDirection: 'desc', limit: 100, cursor }, 30_000);
+        const r = await rpc.request<any>('thread/turns/list', { threadId: nativeId, itemsView: 'full', sortDirection: 'desc', limit: 100, cursor }, 30_000);
         out.push(...(r?.data ?? []));
         cursor = r?.nextCursor ?? undefined;
       } while (cursor);
     } catch (e: any) {
       // an app-server without the paged read: the whole thread (a failure here keeps the delete from happening)
-      if (cursor || !(e?.code === -32601 || NO_PAGING.test(String(e?.message ?? '')))) throw e;
-      return (await this.rpc.request<any>('thread/read', { threadId: nativeId, includeTurns: true }, 60_000))?.thread?.turns ?? [];
+      const msg = String(e?.message ?? '');
+      if (cursor || PAGINATED.test(msg) || !(e?.code === -32601 || NO_PAGING.test(msg))) throw e;
+      return (await rpc.request<any>('thread/read', { threadId: nativeId, includeTurns: true }, 60_000))?.thread?.turns ?? [];
     }
     return out.reverse();
   }
 
   async close(): Promise<void> {
-    await this.rpc.close();
+    await Promise.all([this.rpc.close(), this.newer?.rpc.close()]);
   }
 }

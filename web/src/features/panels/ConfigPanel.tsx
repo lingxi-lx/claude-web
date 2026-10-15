@@ -6,6 +6,7 @@ import type { GatewayGroup, GatewayStatus, Provider, ProviderType } from '@share
 import { dlg } from '@/ui/dialog';
 import { Icon } from '@/ui/icons';
 import { EnvEditor } from '@/features/settings/EnvEditor';
+import { ModelPicker, pickedOf, withPicked } from '@/features/settings/ModelPicker';
 import { connectModel } from '@/features/providers/ConnectModel';
 import { REGION_BLOCKED, REGION_RE } from '@/features/providers/quick';
 import { contextWindowFor, contextWindowSource } from '../../../../server/src/models/context-window';
@@ -285,6 +286,11 @@ export function ProviderProfiles() {
   const [probe, setProbe] = useState<{ ok: boolean; models: string[]; modelNames?: Record<string, string>; modelEfforts?: Provider['modelEfforts']; modelContext?: Provider['modelContext']; error?: string; ms: number; status?: number; chat?: ChatCheck; responses?: ChatCheck } | null>(null);
   const [busy, setBusy] = useState(false);
   const [showKey, setShowKey] = useState(false);
+  // 「用哪些模型」: picked in this draft (null = untouched — what Settings → Models has), written on 保存
+  const [picked, setPicked] = useState<Set<string> | null>(null);
+  const [picking, setPicking] = useState(false);
+  // opened by itself once per new provider: a 取消 there means 「all of them」, not 「ask again after every test」
+  const autoPicked = useRef(false);
   const def = settings.defaultProviderId as string | undefined;
   // gateway groups, for profiles of type 'gateway' (and to name the group in the list)
   const [gwGroups, setGwGroups] = useState<GatewayGroup[]>([]);
@@ -296,13 +302,15 @@ export function ProviderProfiles() {
   }, []);
   const isGw = editing?.type === 'gateway';
 
-  const startEdit = (p?: Provider) => { setEditing(p ? { ...p, modelMap: { ...(p.modelMap ?? {}) } } : emptyDraft()); setProbe(p?.models?.length ? { ok: true, models: p.models, modelNames: p.modelNames, modelEfforts: p.modelEfforts, modelContext: p.modelContext, ms: 0 } : null); setShowKey(false); };
+  const startEdit = (p?: Provider) => { setEditing(p ? { ...p, modelMap: { ...(p.modelMap ?? {}) } } : emptyDraft()); setProbe(p?.models?.length ? { ok: true, models: p.models, modelNames: p.modelNames, modelEfforts: p.modelEfforts, modelContext: p.modelContext, ms: 0 } : null); setShowKey(false); setPicked(null); setPicking(false); autoPicked.current = false; };
   const test = async () => {
     if (!editing) return;
     setBusy(true);
     try {
       const r: any = await ws.request({ kind: 'providers.probe', id: editing.id, provider: { type: editing.type, baseUrl: editing.baseUrl, apiKey: editing.apiKey, defaultModel: editing.defaultModel, modelMap: editing.modelMap, runtime: editing.runtime, cacheShim: editing.cacheShim, responsesApi: editing.responsesApi } });
       setProbe(r);
+      // a new service's list just came in: pick the ones to use, then save (忍冬 2026-10-14)
+      if (!editing.id && r.ok && (r.models?.length ?? 0) > 3 && !picked && !autoPicked.current) { autoPicked.current = true; setPicking(true); }
       if (r.chat?.switched) setEditing((e) => (e ? { ...e, runtime: 'claude' } : e));
       // the server already recorded what the /v1/responses check proved on the saved profile; keep the draft in step
       const rs = r.responses;
@@ -332,6 +340,10 @@ export function ProviderProfiles() {
       // before a format change goes (user report: it greyed out every GPT model)
       const pinOk = editing.type === 'anthropic' || editing.type === 'gateway';
       const saved = await ws.request<Provider>({ kind: 'providers.upsert', provider: { ...editing, models, modelNames, modelEfforts, modelContext, contextWindows: editing.contextWindows && Object.keys(editing.contextWindows).length ? editing.contextWindows : (null as any), ...(pinOk ? {} : { runtime: null as any }) } });
+      if (picked && models?.length) {
+        const hidden = (useStore.getState().settings['ui.disabledModels'] as string[] | undefined) ?? [];
+        await setSetting('ui.disabledModels', withPicked(hidden, saved.id, models, picked));
+      }
       // the first provider of someone without a Claude login is what they will send with: the default for new
       // conversations (a default already set, or a logged-in account, stays)
       const st = useStore.getState();
@@ -349,6 +361,8 @@ export function ProviderProfiles() {
     await loadProviders();
   };
   const models = probe?.ok ? probe.models : editing?.models ?? [];
+  const shownModels = picked ?? pickedOf((settings['ui.disabledModels'] as string[] | undefined) ?? [], editing?.id, models);
+  const shownCount = models.filter((m) => shownModels.has(m)).length;
   const modelPick = (label: string, key: 'defaultModel' | 'haiku' | 'sonnet' | 'opus') => {
     const val = key === 'defaultModel' ? editing!.defaultModel ?? '' : editing!.modelMap?.[key] ?? '';
     const set = (v: string) => setEditing(key === 'defaultModel' ? { ...editing!, defaultModel: v } : { ...editing!, modelMap: { ...(editing!.modelMap ?? {}), [key]: v } });
@@ -426,6 +440,14 @@ export function ProviderProfiles() {
                 : <div style={{ color: 'var(--yellow)' }}>{tr('/v1/responses 不可用：{error}{v}', { error: probe.responses.error, v: [404, 405, 501].includes(probe.responses.status ?? 0) && !/model/i.test(probe.responses.error ?? '') ? tr('（已记下，gpt-* 改走 chat/completions）') : tr('（没有记下：可能是模型或临时错误，对话里仍会先试 /v1/responses，失败这一次退回 chat/completions）') })}</div>)}
             </div>
           )}
+          {!isGw && models.length > 1 && (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+              <span style={{ minWidth: 110, fontSize: 13, color: 'var(--fg-2)' }}>{tr('用哪些模型')}</span>
+              <span className="sub" style={{ flex: 1 }}>{shownCount === models.length ? tr('全部 {count} 个都在模型菜单里', { count: models.length }) : tr('{n} / {count} 个在模型菜单里', { n: shownCount, count: models.length })}</span>
+              <button className="btn sm" data-act="pick-models" onClick={() => setPicking(true)}>{tr('选择…')}</button>
+            </div>
+          )}
+          {picking && <ModelPicker name={editing.name?.trim() || tr('新供应商')} models={models} names={probe?.ok ? probe.modelNames : editing.modelNames} initial={shownModels} onDone={(p) => { setPicking(false); if (p) setPicked(p); }} />}
           {modelPick(tr('默认模型'), 'defaultModel')}
           {modelPick('haiku →', 'haiku')}
           {modelPick('sonnet →', 'sonnet')}

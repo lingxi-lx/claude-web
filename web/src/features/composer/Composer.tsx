@@ -26,7 +26,7 @@ import { ModelChip } from '@/features/models/ModelMenu';
 import { EffortChip } from '@/features/models/EffortChip';
 import { SubagentChip, subagentLabel } from '@/features/models/SubagentChip';
 import { SUBAGENT_DEFAULTS, subagentDefault, subagentModelFor } from '../../../../server/src/models/subagent';
-import { OWN_PROVIDER, effectiveRuntime, usableProfile, type AgentSource, type ModelMenuItem } from '@/features/models/menu';
+import { OWN_PROVIDER, agentModels, effectiveRuntime, usableProfile, type AgentSource, type ModelMenuItem } from '@/features/models/menu';
 import { mergeResume, resumeView } from '@/store/reopen';
 import { routePick, switchedNote } from '@/features/models/route';
 import { claudeEffortView, modelChipText } from '@/features/models/intelligence';
@@ -150,7 +150,8 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   // the agent's own model list: the catalog, or what the agent registry probed when the catalog has none
   const wProviderId = provider ? provider.id : 'claude';
   const wSubModel = wSub && wSub.providerId === wProviderId ? wSub.model : subagentDefault(settings[SUBAGENT_DEFAULTS], wProviderId);
-  const wBuiltin = agent && !modelsFor(agent.kind).length ? agent.models.map((m) => ({ value: m, displayName: m })) : undefined;
+  // (what the agent said it offers this account comes first: the catalog goes stale with every release)
+  const wBuiltin = agent && (agent.reportedModels?.length || !modelsFor(agent.kind).length) ? agentModels(agent) : undefined;
   // providers a Claude conversation could use right now (the model menu's own check)
   const usableIds = useMemo(() => providers.filter((p) => usableProfile(providers, p.id, { agent: 'claude', engine, gatewayGroups: gatewayView.groups, gatewayEnabled: gatewayView.enabled })).map((p) => p.id), [providers, engine, gatewayView.groups, gatewayView.enabled]);
   const usableKey = usableIds.join(',');
@@ -694,7 +695,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
       // Claude's is the new-conversation default (settings → 供应商), the others' their own 「新对话用」
       const pid = a.kind === 'claude' ? (settings.defaultProviderId as string | undefined) : a.providerId;
       const via = usableProfile(providers, pid, { agent: a.kind, engine, gatewayGroups: gatewayView.groups, gatewayEnabled: gatewayView.enabled });
-      return { kind: a.kind, name: a.name, installed: a.installed !== false, models: a.models, defaultModel: a.model || undefined, ...(via ? { provider: via } : {}) };
+      return { kind: a.kind, name: a.name, installed: a.installed !== false, models: a.models, reportedModels: a.reportedModels, defaultModel: a.model || undefined, ...(via ? { provider: via } : {}) };
     });
     if (!list.some((a) => a.kind === 'claude')) list.unshift({ kind: 'claude', name: 'Claude Code', installed: true });
     return list;

@@ -45,7 +45,7 @@ npm run dev          # 开发：server tsx watch + vite :5173（代理 /ws 到 3
 | [mirasim](docs/notes/mirasim.md) | 从 Mirasim 借鉴的功能（2026-09-02） | 额度环、meta.json、分叉、插话、worktree 会话 |
 | [engine-providers](docs/notes/engine-providers.md) | 引擎（单运行时）与供应商档案 | 运行内核（ccb fork / 官方二进制）、引擎发版、供应商档案的 env 映射、中转指纹、settings.json 的 env 覆盖 |
 | [phase01-render](docs/notes/phase01-render.md) | 渲染与对话交互（阶段 1，2026-09-03） | reducer、uuid 锚点、工具卡片注册表、健康信号、附件、代码块 |
-| [phase02-layout](docs/notes/phase02-layout.md) | 工作台布局（阶段 2，2026-09-03） | 分组 / 窗格 / 标签、拖放、多窗口 |
+| [phase02-layout](docs/notes/phase02-layout.md) | 工作台布局（阶段 2，2026-09-03） | 分组 / 窗格 / 标签、拖放、多窗口、＋菜单被裁、组名、标题栏留空 |
 | [phase03-files-git](docs/notes/phase03-files-git.md) | 文件 / Git / 编辑器（阶段 3，2026-09-03） | 文件 / 搜索 / Git 服务、Monaco、Doc tile |
 | [phase04-config](docs/notes/phase04-config.md) | 配置中心 / 自动化 / 打磨（阶段 4，2026-09-03） | 设置、对话框、密钥、Skills、MCP、定时任务、账本、诊断 |
 | [phase05-agents](docs/notes/phase05-agents.md) | 多 agent（阶段 5，2026-09-03） | AgentDriver、Codex / ACP 协议、归一成 SDK 消息、Windows 垫片、shot.cjs 用法 |
@@ -62,7 +62,7 @@ npm run dev          # 开发：server tsx watch + vite :5173（代理 /ws 到 3
 | [agent-config](docs/notes/agent-config.md) | 其它 agent 的配置中心（2026-09-28） | Codex/Gemini/Qwen/OpenCode 配置编辑、备份、CLI 的坑 |
 | [federation](docs/notes/federation.md) | 跨机器会话 / 联邦（2026-09-28） | peer 连接、id 前缀、路由表、防环、远端文件保护 |
 | [orchestra](docs/notes/orchestra.md) | 多 agent 编排（2026-09-28） | 编排引擎、worktree / 比选、不毁用户的东西、竞态 |
-| [models](docs/notes/models.md) | 多模型管理（2026-09-28） | 拉模型列表、统一菜单、会话内切换路由 |
+| [models](docs/notes/models.md) | 多模型管理（2026-09-28） | 拉模型列表、统一菜单、会话内切换路由、子代理模型、挑要用的模型、Codex 报的列表 |
 | [ui-redesign-0-1](docs/notes/ui-redesign-0-1.md) | 界面改版 阶段 0–1：令牌 / 文案 / 外框按需出现（2026-09-28） | 令牌 / 对比度测试、术语表、外框按需出现、会话头、桌面标题栏、外框控件计数 |
 | [ui-redesign-2-right-panel](docs/notes/ui-redesign-2-right-panel.md) | 界面改版 阶段 2：右侧面板（2026-09-28） | 右侧面板：固定标签、审阅、文件、标签行、ui-smoke 段 |
 | [ui-redesign-3-composer](docs/notes/ui-redesign-3-composer.md) | 界面改版 阶段 3：输入框 + 模型 / 权限菜单（2026-09-28） | 输入框一行、+ 菜单、项目 / 分支 / 权限 chip、模型菜单、上下文小环、没在跑的对话的 chip |

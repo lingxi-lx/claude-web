@@ -182,6 +182,7 @@ export class Hub {
     s.background.on('changed', (session) => this.broadcast({ kind: 'background.changed', session }));
     s.characters.on('changed', () => this.broadcast({ kind: 'characters.changed' }));
     s.customCss.on('changed', () => this.broadcast({ kind: 'customCss.changed' }));
+    s.agents.events.on('reported', () => this.broadcast({ kind: 'agents.changed' }));
   }
 
   /** `fromPeer`: re-broadcast of another machine's event — local clients only (two machines peering each other would echo forever). */

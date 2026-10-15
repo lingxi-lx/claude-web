@@ -24,3 +24,11 @@
   - **大目录树别用 chokidar 监听**（2026-09-29 实测，桌面版从开始菜单点开后一分多钟没有窗口的根因）：chokidar 在 Windows 上对**每个文件**单独 `fs.watch`，库对 `~/.claude/projects` 深度 4 的监听是 4468 个文件 + 168 个目录（Codex 再加 720 个），server 开始监听后事件循环整整堵了 ~18 s（CPU profile 里 `createFsWatchInstance` → 原生 `start`），打包版里连着 Codex 列表一起是 ~65 s，而桌面窗口要等页面画出来才显示。现在 `SessionService` 和库的监听都走 `runtime/watch-tree.ts` 的 `watchTree(dir, onChange)`：一个 `fs.watch(dir, {recursive:true})` 句柄（Windows ReadDirectoryChangesW / macOS FSEvents / Linux 按目录 inotify，Node ≥ 20），回调拿到相对路径；目录还不存在就每 30 s 找一次、出现后再挂；句柄出错（整棵树被删，Windows 上是 EPERM）回到寻找。`SessionService` 只认 `transcriptEvent(rel)`：项目目录、项目下的 `<id>.jsonl` / `<id>` 目录（子代理日志、tool-results、memory 不算）。同样条件下 profile 里 55 s 内零卡顿。chokidar 只留给小目标（git 的 HEAD / index / refs、编辑器里打开的单个文件）。
 - `server/ws-phase13.mjs`：mock Codex（`agents/__mocks__/codex-server.mjs`，`CW_MOCK_RPC_LOG` 记录收到的请求）+ `MOCK_ACP_LIST=1` 的 mock ACP，端到端验证加入前不列、加入后列出并折叠子线程、分页读、搜索、改名、删除备份、`codex-` 会话续聊走 `thread/resume`、`library.sources` 状态。
 - 真机验证（2026-09-27，只读 + 一个自建的测试线程）：Codex 717 条（`~/.codex/sessions` 721 个 jsonl + archived 42，部分没有线程记录）、OpenCode 11 条、Claude 119 条；首轮全量索引约 150 秒（约 850 个会话），之后中文搜索 ~150 ms。测真机时用临时 `CLAUDE_WEB_DIR` 起一个独立 server，别碰用户自己的 `~/.claude-web`。
+
+## Codex 的「分页存储」线程（2026-10-16 用户报告）
+
+另一台电脑上打开 Codex 对话报「加载历史失败：paginated_threads is not supported yet」。新版 Codex（桌面版自己会更新）把线程存成 `history_mode = 'paginated'`（`~/.codex/state_5.sqlite` 的 `threads` 表；本机 766 条都是），旧一些的 `codex` 命令行认得这种格式但读不了，**分页读和整条读都拒**，所以不能走 `NO_PAGING` 那条 `thread/read` 退路（以前退过去，用户看到的就是 Codex 的原话）。
+
+- `codex-source.ts`：`PAGINATED` 命中时 `read()` / `exportAll()` 换「Codex 桌面版自带的 codex」再读一次（`desktopCodexBin()`：Windows `%LOCALAPPDATA%\OpenAI\Codex\bin\<build>\codex.exe` 取最新的，macOS `Codex.app/Contents/Resources/codex`；`newerRpc()` 按 command+args+env 判断是不是同一个，懒启动、和主进程一起关）。没有桌面版就报一句能照做的话（更新 Codex 命令行，或在 设置 → Agents 把命令换成桌面版那个）。
+- 本机复现不了原话：0.159.2 / 0.162.1（npm 包解到临时目录，`CODEX_HOME` 指到 `~/.codex` 的**拷贝**）和桌面版 0.162-alpha 读本机的分页线程都正常（turns/list full / summary / notLoaded、`thread/read includeTurns`、`thread/items/list` 全通）；原话在二进制里只出现在 `thread_processor.rs` 的 fork / resume 一带。所以「旧命令行 + 新桌面版写的线程」是推断，测试用 mock 的 `MOCK_CODEX_NO_PAGINATED=1`（分页读和整条读都拒）覆盖。
+- 拷贝的 `CODEX_HOME` 上 `thread/resume` / `thread/fork` 测不了：线程记着当时的 model provider（`cwgw`，我们的网关）、rollout 路径指向真的 `~/.codex`（「must be in Codex home directory」）。

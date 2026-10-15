@@ -425,7 +425,11 @@ export function layoutReducer(s: LayoutState, a: LayoutAction): LayoutState {
 function reduceLayout(s: LayoutState, a: LayoutAction): LayoutState {
   switch (a.t) {
     case 'group.new': {
-      const g = newGroup(a.name ?? tr('组 {groupsCount}', { groupsCount: s.groups.length + 1 }), a.tile);
+      // the first number no group still has: after closing some, the count says 2 while a 「组 4」 is still there
+      const taken = new Set(s.groups.map((g) => g.name));
+      let n = 2;
+      while (taken.has(tr('组 {groupsCount}', { groupsCount: n }))) n++;
+      const g = newGroup(a.name ?? tr('组 {groupsCount}', { groupsCount: n }), a.tile);
       return { ...s, groups: [...s.groups, g], activeGroupId: g.id };
     }
     case 'group.add':

@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { CodexSource, rolloutTurnOpen } from './codex-source.js';
+import { CodexSource, desktopCodexBin, rolloutTurnOpen } from './codex-source.js';
 import { libraryId } from './ids.js';
 import { LazyRpc } from './lazy-rpc.js';
 import { JsonRpcProcess } from '../agents/jsonrpc.js';
@@ -14,6 +14,61 @@ const mock = path.join(here, '..', 'agents', '__mocks__', 'codex-server.mjs');
 function launch() {
   return { command: process.execPath, args: [mock], env: {} };
 }
+
+describe('a thread stored by a newer Codex than the configured one (「paginated_threads is not supported yet」)', () => {
+  const old = () => ({ ...launch(), env: { MOCK_CODEX_NO_PAGINATED: '1' } });
+  it('is read with the desktop app\'s own Codex — pages and the delete backup alike', async () => {
+    const src = new CodexSource(old, launch);
+    try {
+      const page = await src.read('thr-b', { limit: 20 });
+      expect(page.messages.length).toBeGreaterThan(0);
+      expect(page.next).toBeTruthy();
+      expect(((await src.exportAll('thr-b')) as unknown[]).length).toBeGreaterThan(0);
+    } finally {
+      await src.close();
+    }
+  });
+  it('without a newer Codex on the machine: says what to do instead of Codex\'s own words', async () => {
+    const src = new CodexSource(old, () => undefined);
+    try {
+      await expect(src.read('thr-b', { limit: 20 })).rejects.toThrow(/npm i -g @openai\/codex@latest/);
+      await expect(src.exportAll('thr-b')).rejects.toThrow(/npm i -g @openai\/codex@latest/);
+    } finally {
+      await src.close();
+    }
+  });
+  it('the desktop app\'s Codex gone since, or too old as well: the same advice — never an empty history', async () => {
+    const alsoOld = () => ({ ...launch(), env: { MOCK_CODEX_NO_PAGINATED: '1', CW_SECOND: '1' } });
+    for (const newer of [() => ({ command: 'definitely-not-a-real-codex-binary-xyz', args: [], env: {} }), alsoOld]) {
+      const src = new CodexSource(old, newer);
+      try {
+        await expect(src.read('thr-b', { limit: 20 })).rejects.toThrow(/npm i -g @openai\/codex@latest/);
+        await expect(src.exportAll('thr-b')).rejects.toThrow(/npm i -g @openai\/codex@latest/);
+      } finally {
+        await src.close();
+      }
+    }
+  });
+  it('the desktop app\'s Codex: the newest build under %LOCALAPPDATA%\\OpenAI\\Codex\\bin', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'codexbin-'));
+    try {
+      const bin = path.join(root, 'OpenAI', 'Codex', 'bin');
+      for (const [b, ago] of [['aaa', 3000], ['bbb', 1000], ['ccc', 2000]] as const) {
+        await fs.mkdir(path.join(bin, b), { recursive: true });
+        const f = path.join(bin, b, 'codex.exe');
+        await fs.writeFile(f, '');
+        const t = new Date(Date.now() - ago * 1000);
+        await fs.utimes(f, t, t);
+      }
+      await fs.mkdir(path.join(bin, 'empty'), { recursive: true });
+      expect(desktopCodexBin({ LOCALAPPDATA: root }, 'win32')).toBe(path.join(bin, 'bbb', 'codex.exe'));
+      expect(desktopCodexBin({ LOCALAPPDATA: path.join(root, 'nope') }, 'win32')).toBeUndefined();
+      expect(desktopCodexBin({}, 'linux')).toBeUndefined();
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+});
 
 describe('CodexSource (mock app-server)', () => {
   it('lists threads newest-first, paginates, and maps a subAgent thread parentId', async () => {

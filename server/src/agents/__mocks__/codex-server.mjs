@@ -134,6 +134,8 @@ rl.on('line', async (line) => {
       if (process.env.CW_FAIL_LIST === '1') { fail(-32000, 'mock thread/turns/list failure'); break; }
       // MOCK_CODEX_OLD=1: an app-server from before the paged read (0.130 answers exactly this)
       if (process.env.MOCK_CODEX_OLD === '1') { fail(-32600, 'thread/turns/list requires experimentalApi capability'); break; }
+      // MOCK_CODEX_NO_PAGINATED=1: a Codex too old for the threads its desktop app now stores (user report 2026-10-16)
+      if (process.env.MOCK_CODEX_NO_PAGINATED === '1') { fail(-32600, 'paginated_threads is not supported yet'); break; }
       const { threadId, limit = 20, cursor, sortDirection = 'desc' } = m.params ?? {};
       const t = threads.get(threadId);
       // the real app-server's answer for an id it has no stored history for (codex 0.158)
@@ -149,6 +151,7 @@ rl.on('line', async (line) => {
     case 'thread/read': {
       const t = threads.get(m.params?.threadId);
       if (!t || t.gone) { fail(-32600, `thread not loaded: ${m.params?.threadId}`); break; }
+      if (process.env.MOCK_CODEX_NO_PAGINATED === '1' && m.params?.includeTurns) { fail(-32600, 'paginated_threads is not supported yet'); break; }
       reply({ thread: { ...threadSummary(t), ...(m.params?.includeTurns ? { turns: t.turns } : {}) } });
       break;
     }

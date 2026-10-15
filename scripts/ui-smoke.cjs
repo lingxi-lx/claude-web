@@ -1194,6 +1194,11 @@ function driver() {
         const card = await js(`document.querySelector('.ctx-card')?.innerText ?? null`);
         check('the context ring shows the old stats (轮数 / 输入 / 输出 / 上下文) on click', !!card && /轮数/.test(card) && /输入/.test(card) && /上下文/.test(card), JSON.stringify(card));
         await click('.pane .composer .ctx-meter');
+        // a second click unpins: once the pointer is away the card is gone (verification 2026-10-16 caught it staying)
+        const [rx, ry] = await js(`(() => { const r = document.querySelector('.pane .composer .ctx-meter').getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; })()`);
+        wc.sendInputEvent({ type: 'mouseMove', x: Math.max(5, rx - 300), y: Math.max(5, ry - 200) });
+        const unpinned = await waitFor(`!document.querySelector('.ctx-card')`, 1500);
+        check('a second click on the context ring closes its card', unpinned);
         await setCu({ percentage: 97, totalTokens: 194_000, maxTokens: 200_000 });
         const full = await waitFor('!!document.querySelector(".pane .status-strip .ctx-full")', 2000);
         const fullText = await js(`document.querySelector('.pane .status-strip .ctx-full')?.textContent ?? null`);
@@ -1271,6 +1276,12 @@ function driver() {
           const on = await waitFor('!!document.querySelector(".groupbar") && !document.querySelector(".dock-rail") && document.querySelectorAll(".pane .tabstrip").length === 1', 4000);
           check('workbench tools on: group bar and tab strip (no row of panel icons: they are behind the rail\'s ···)', on);
           await shot('workbench');
+          // the tab strip's ＋ menu is not clipped by the sideways-scrolling tab row (Enroll 2026-10-14: the ＋ looked dead)
+          await click('.pane .tabstrip .tab-add');
+          await waitFor(`!!document.querySelector('.pane .tabstrip .menu')`, 2000);
+          const addMenu = await js(`(() => { const m = document.querySelector('.pane .tabstrip .menu'); if (!m) return null; const items = [...m.querySelectorAll('button')]; const last = items[items.length - 1].getBoundingClientRect(); const first = items[0].getBoundingClientRect(); const at = (r) => { const h = document.elementFromPoint(r.left + r.width / 2, r.top + Math.min(r.height / 2, 6)); return !!h && m.contains(h); }; const over = document.elementFromPoint(last.left + last.width / 2, last.top + Math.min(last.height / 2, 6)); return { items: items.length, first: at(first), lastReachable: at(last) || (m.scrollHeight > m.clientHeight && last.top >= m.getBoundingClientRect().bottom - 1), lastAt: Math.round(last.top), vh: innerHeight, over: over && !m.contains(over) ? over.tagName + '.' + String(over.className).slice(0, 40) : null, card: document.querySelector('.ctx-card')?.getAttribute('role') ?? null, ringExpanded: [...document.querySelectorAll('.ctx-meter')].map((b) => b.getAttribute('aria-expanded')), active: document.activeElement ? document.activeElement.tagName + '.' + String(document.activeElement.className).slice(0, 30) : null }; })()`);
+          await key('Escape');
+          check('tab strip ＋: its menu shows below the ＋ and every item can be reached', !!addMenu && addMenu.first && addMenu.lastReachable && addMenu.items >= 3, JSON.stringify(addMenu));
           await js('window.__store.getState().setSetting("ui.workbench", false)');
           const off = await waitFor('!document.querySelector(".groupbar") && !document.querySelector(".dock-rail") && !document.querySelector(".pane .tabstrip")', 4000);
           check('workbench tools off: back to one row', off);
@@ -1740,6 +1751,9 @@ function driver() {
           const r1440 = await js(rowProbe);
           check('desktop · Windows, 1440 wide, default panel, 审阅 with files, a temporary tab open: the row is not moved below the caption buttons', counted && r1440.rp === 432 /* the 440 column less the shell gap */ && !r1440.stacked && r1440.fixedOk && r1440.bodyTop <= 61 /* 8 gap + the 52px row */, JSON.stringify(r1440));
           check('…and the temporary tab is reachable: its own tab, or 「更多」 counting it (and marked while it is in front)', r1440.strip || (r1440.badge === '1' && r1440.moreActive), JSON.stringify(r1440));
+          // 忍冬 2026-10-14: the row's last button sat 4px from − and a click meant for one landed on the other
+          const air = await js(`(() => { const bs = [...document.querySelectorAll('.dock .dock-tabs button')].filter((b) => b.getClientRects().length && b.getBoundingClientRect().top < 40); const right = Math.max(...bs.map((b) => b.getBoundingClientRect().right)); return { right: Math.round(right), air: Math.round(innerWidth - 138 - right) }; })()`);
+          check('desktop · Windows: at least 16px between the right panel\'s last button and the caption buttons', air.air >= 16, JSON.stringify(air));
           // five names do not fit beside the caption buttons of the default panel: only the tab in front keeps its name
           // (a temporary panel is in front here, so none does); the others are their icons, each with its name as tooltip
           const shortTips = await js(`[...document.querySelectorAll('.dock .dock-fixed .tab')].map((t) => t.title).join(',')`);
@@ -2793,6 +2807,10 @@ function driver() {
             if (!(await js(`!!document.querySelector(':is(.rail, .sidebar) [data-id="automation"]')`)) && await js(`!!document.querySelector('.rail .sb-reveal')`)) await click('.rail .sb-reveal');
             await click(':is(.rail, .sidebar) [data-id="automation"]');
             await waitFor(`(() => { const p = document.querySelector('.auto-page'); return !!p && !p.hidden; })()`, 3000);
+            // the section page's header and the Windows caption buttons (138px): 20px of air as on the other rows (the
+            // verification of 2026-10-16 found 12 — rail.css kept the old reserve); measured with the desktop class on
+            const capAir = await js(`(() => { const de = document.documentElement; const had = de.classList.contains('desktop'); de.classList.add('desktop'); const app = document.querySelector('.app'); const wb = document.querySelector('.workbench'); const h = [...document.querySelectorAll('.auto-page .over-head')].find((x) => x.getClientRects().length); let res; if (h && !app.classList.contains('dock-open') && !wb.classList.contains('gb')) { const bs = [...h.querySelectorAll('button')].filter((b) => b.getClientRects().length && getComputedStyle(b).visibility !== 'hidden' && getComputedStyle(b).display !== 'none' && b.getBoundingClientRect().top < 60); const right = Math.max(...bs.map((b) => b.getBoundingClientRect().right)); res = { air: Math.round(innerWidth - 138 - right), vw: innerWidth, buttons: bs.length }; } else res = { notApplicable: { dockOpen: app.classList.contains('dock-open'), groupBar: wb.classList.contains('gb'), head: !!h } }; if (!had) de.classList.remove('desktop'); return res; })()`);
+            check('desktop · Windows: the automation page header keeps 16px+ before the caption buttons', capAir.notApplicable ? true : capAir.buttons > 0 && capAir.air >= 16, JSON.stringify(capAir));
           } else if (cover === 'settings') {
             await js('window.__store.getState().openSettings()');
             await waitFor(`!!document.querySelector('.modal.settings.sp')`, 3000);

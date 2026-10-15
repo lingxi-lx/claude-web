@@ -18,3 +18,9 @@
 - **请求**：`session.setSubagentModel { sessionId, model, providerId }`（进了联邦路由表）。在跑：校验 providerId 还是它跑的那个（别的窗口刚换了供应商就报错），再 `runner.setSubagentModel()`；没在跑：只记 SessionMeta，下次启动用。
 - **布局**：这个按钮让输入框那一行变挤了。宽的行（> 560px）里主模型按钮先缩（`flex-shrink: 100`，`.cb-right` 也是），「proj」「深入」这些短的保持完整；没选时「子代理」三个字不缩。窄的行（分屏、手机）只剩图标，选了模型时图标是强调色。
 - **测试**：`server/src/models/subagent.test.ts`、`runtime/session-runner.test.ts`（环境变量、换了重启、`[1m]`）、`runtime/pool.test.ts`（解析和记录）；e2e `server/ws-phase28.mjs`（假上游，两个内核：主对话请求用主模型、子代理请求用选的；改回跟主模型一样后子代理用主模型；供应商默认）；ui-smoke `subagent-chip` 段。真中转 super-nb（官方二进制）实测：Sonnet 5.5 主模型 + Haiku 4.5 子代理，子代理的 transcript 和 modelUsage 都是 Haiku；改回后子代理是 Sonnet 5.5。super-nb 拒收 ccb 的请求，ccb 这条路只有假上游的 e2e。
+
+## 挑要用的模型 / Codex 报的列表（2026-10-15，忍冬的反馈）
+
+- **挑模型**：`web/src/features/settings/ModelPicker.tsx`（搜索、全选 / 全不选、勾选；`withPicked` / `pickedOf` 是纯函数，`model-picker.test.ts`）。写的是现成的 `ui.disabledModels`（`<providerId>:<model>`，和 设置 → 模型 的开关同一份），不另起一份允许名单——所以以后刷新多出来的模型默认是显示的。入口在供应商编辑页「用哪些模型」（`ConfigPanel.tsx`，网关档案没有）；**新加的供应商**「测试连接」成功且模型多于 3 个时自动弹一次。新供应商还没有 id：挑的结果先放在表单里，保存拿到 id 再写。`probe.ok` 为假（对话测试没过）时表单本来就不存列表，所以也不弹。
+- **Codex 报的列表**：目录里写死的 Codex 模型会过时（2026-10-15 本机 0.162 报的是 gpt-6-luna / gpt-5.6-terra / gpt-5.6-luna，目录里还是 5.6 Sol / Pro）。`server/src/agents/reported-models.ts`：`askCodexModels` 起一个短命的 `codex app-server`（initialize → model/list 翻页 → kill，不开 thread），`codexReported` 去掉 hidden。`AgentRegistry`（`agents/types.ts`）：存在设置 `agents.reportedModels`（`{ codex: { at, models } }`，空列表不覆盖），`list()` 时装了且超过 6 小时（或 `refresh`）就后台问一次，变了发 `agents.changed`，前端重拉 `agents.list`；Codex 对话启动时 driver 自己的 model/list 也经 `onModels` 写进去（走网关 / 供应商时不写——那是供应商的列表）。`AgentInfo.reportedModels` → `menu.ts agentModels()` 先用它，再目录；`Composer.tsx` 的 `wBuiltin`、设置 → 模型「按供应商」也一样。`CW_NO_MODEL_REFRESH` 时不自动问。
+- **真机验证的坑**：本机的 `codex.cmd` 启动的是 `%USERPROFILE%\.codex\cli-app-sync\launch.cjs`，临时 HOME 里 Codex 根本起不来（`codex --version` 也失败）——验证 Codex 列表得用真的用户目录 + 临时 `CLAUDE_WEB_DIR`。

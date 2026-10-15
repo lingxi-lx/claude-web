@@ -92,8 +92,10 @@ export interface AgentSource {
   kind: AgentKind;
   name: string;
   installed: boolean;
-  /** what the agent reported / the registry knows, used when the catalog has no list for it */
+  /** what the registry knows, used when the catalog has no list for it */
   models?: string[];
+  /** what the agent itself said it offers this account (AgentInfo.reportedModels): first */
+  reportedModels?: { value: string; displayName: string; description?: string }[];
   /** its configured default model (settings → Agents 与子代理) */
   defaultModel?: string;
   /**
@@ -103,8 +105,13 @@ export interface AgentSource {
   provider?: Pick<Provider, 'id' | 'name' | 'models' | 'modelNames' | 'defaultModel'>;
 }
 
-/** An agent's own model list: the catalog, else what it reported. */
-export function agentModels(a: Pick<AgentSource, 'kind' | 'models'>): { value: string; displayName: string; description?: string }[] {
+/**
+ * An agent's own model list: what it said it offers this account (Codex's model/list) — the built-in catalog goes
+ * stale with every release (忍冬 2026-10-14: Codex is at 6 while the catalog still said 5.6) — else the catalog, else
+ * the ids it was configured with.
+ */
+export function agentModels(a: Pick<AgentSource, 'kind' | 'models' | 'reportedModels'>): { value: string; displayName: string; description?: string }[] {
+  if (a.reportedModels?.length) return a.reportedModels.map((m) => ({ value: m.value, displayName: m.displayName, description: m.description }));
   const cat = modelsFor(a.kind);
   return cat.length ? cat.map((m) => ({ value: m.value, displayName: m.displayName, description: m.description })) : (a.models ?? []).map((m) => ({ value: m, displayName: m }));
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GatewayGroup, Provider } from '@shared';
-import { buildModelMenu, chipLabel, compatibleTypes, filterMenu, gatewayModels, modelKey, modelTable, pushRecent, recentKey, usableProfile, type AgentSource } from './menu';
+import { agentModels, buildModelMenu, chipLabel, compatibleTypes, filterMenu, gatewayModels, modelKey, modelTable, pushRecent, recentKey, usableProfile, type AgentSource } from './menu';
 
 const prov = (id: string, o: Partial<Provider> = {}): Provider => ({ id, name: id, type: 'anthropic', baseUrl: 'https://x', apiKey: '…', createdAt: 0, ...o });
 const PROVIDERS: Provider[] = [
@@ -234,6 +234,15 @@ describe('other agents as sources in the same flat list (the old agent picker, s
     expect(codex).toMatchObject({ kind: 'agent', title: 'Codex', agent: 'codex' });
     expect(codex.items[0]).toMatchObject({ agent: 'codex', providerId: 'claude', model: '', isDefault: true, label: 'Codex · 默认模型' });
     expect(codex.items.find((i) => i.model === 'gpt-5.6-sol')).toMatchObject({ label: 'Codex · 5.6 Sol', key: 'codex:gpt-5.6-sol', current: false });
+  });
+  it('what Codex said this account offers (model/list) replaces the built-in list (忍冬: 「都到 6 了」)', () => {
+    const reportedModels = [{ value: 'gpt-6-luna', displayName: 'GPT-6-Luna', description: 'Fast and affordable model for easier tasks.' }, { value: 'gpt-5.6-terra', displayName: 'GPT-5.6-Terra' }];
+    const cx = menu({ otherAgents: [{ kind: 'codex', name: 'Codex', installed: true, reportedModels }] }).sections.find((s) => s.id === 'agent:codex')!;
+    expect(cx.items.map((i) => i.model)).toEqual(['', 'gpt-6-luna', 'gpt-5.6-terra']);
+    expect(cx.items[1]).toMatchObject({ label: 'Codex · GPT-6-Luna', key: 'codex:gpt-6-luna' });
+    expect(agentModels({ kind: 'codex', reportedModels })).toEqual(reportedModels);
+    // nothing reported yet: the built-in list
+    expect(agentModels({ kind: 'codex' }).map((m) => m.value)).toContain('gpt-5.6-sol');
   });
   it('an agent without a catalog lists the models it reported; its configured default is named', () => {
     const oc = withAgents().sections.find((s) => s.id === 'agent:opencode')!;

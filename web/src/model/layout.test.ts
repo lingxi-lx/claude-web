@@ -401,6 +401,16 @@ describe('chrome visibility (spec §5.10)', () => {
     expect(vis(s).tabStrip[p]).toBe(true);
   });
 
+  it('a new group takes the first free number — never a name another group still has (Enroll: two 「组 4」)', () => {
+    const names = (s: LayoutState) => s.groups.map((g) => g.name);
+    let s = initialLayout();
+    for (let i = 0; i < 3; i++) s = layoutReducer(s, { t: 'group.new' });
+    expect(names(s)).toEqual(['主工作区', '组 2', '组 3', '组 4']);
+    for (const n of ['主工作区', '组 2', '组 3']) s = layoutReducer(s, { t: 'group.close', id: s.groups.find((g) => g.name === n)!.id });
+    for (let i = 0; i < 3; i++) s = layoutReducer(s, { t: 'group.new' });
+    expect(names(s)).toEqual(['组 4', '组 2', '组 3', '组 5']);
+  });
+
   it('a second group brings the group bar', () => {
     const s = layoutReducer(initialLayout(), { t: 'group.new' });
     expect(vis(s).groupBar).toBe(true);

@@ -241,6 +241,14 @@ export interface WebSearchResult { title: string; url: string; snippet: string }
 /** What `web.search` answers (the settings page's 「试一下」). `weak`: the results match little of the query (Bing answering a program) and nothing better was to be had. */
 export interface WebSearchAnswer { engine: string; results: WebSearchResult[]; weak?: boolean }
 
+/** A model as an agent reported it (Codex `model/list`). */
+export interface ReportedModel {
+  value: string;
+  displayName: string;
+  description?: string;
+  isDefault?: boolean;
+}
+
 export interface AgentInfo {
   kind: AgentKind;
   name: string;
@@ -253,6 +261,13 @@ export interface AgentInfo {
   env: Record<string, string>;
   model: string; // default model override ('' = agent default)
   models: string[]; // known model ids
+  /**
+   * What the agent itself said it offers this account (Codex: `model/list`), newest first-hand list — preferred over
+   * the built-in catalog, which goes stale as soon as a new model ships (忍冬, 2026-10-14: 「都到 6 了」)
+   */
+  reportedModels?: ReportedModel[];
+  /** when `reportedModels` was asked (ms) */
+  reportedAt?: number;
   install: string; // install command
   login: string; // login command (run in a terminal tile)
   docs: string;
@@ -630,6 +645,8 @@ export type ServerEvent =
   | { kind: 'transcripts.changed'; sessionIds: string[] }
   /** ~/.claude-web/custom.css was written / made / removed: windows read it again (ui.customCss) */
   | { kind: 'customCss.changed' }
+  /** an agent said what it offers and that changed (AgentInfo.reportedModels): ask agents.list again */
+  | { kind: 'agents.changed' }
   | { kind: 'meta.changed' }
   | { kind: 'remote.changed' }
   | { kind: 'im.changed' }

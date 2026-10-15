@@ -35,6 +35,20 @@ export function ContextMeter({ sessionId }: { sessionId: string }) {
   const anchor = useRef<HTMLSpanElement>(null);
   const card = useRef<HTMLDivElement>(null);
   useDropdown(asked, () => setAsked(false), card);
+  // the ring's card (hovered or clicked open) is a tooltip: a press anywhere but the ring and the card closes it — a
+  // mouseleave / blur that never came (the ring moved or remounted under a still pointer) left it over the menu the
+  // press opened next (the tab strip's ＋, ui-smoke 2026-10-16). The ring's own press is its click's: it toggles.
+  useEffect(() => {
+    if (!(hover || pinned) || asked) return;
+    const down = (e: MouseEvent) => {
+      const t = e.target as Node | null;
+      if (t && (btn.current?.contains(t) || card.current?.contains(t))) return;
+      setHover(false);
+      setPinned(false);
+    };
+    document.addEventListener('mousedown', down, true);
+    return () => document.removeEventListener('mousedown', down, true);
+  }, [hover, pinned, asked]);
   useEffect(() => {
     const on = (e: Event) => { if (pane && (e as CustomEvent<UsageCardDetail>).detail.tileId === pane.tileId) setAsked(true); };
     window.addEventListener(USAGE_CARD_EVENT, on);

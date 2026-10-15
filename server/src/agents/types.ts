@@ -3,10 +3,11 @@ import { findOnPath, resolveSpawn } from './resolve.js';
 import { findBundled, installTool, refreshProcessPath } from './locate.js';
 import { promisify } from 'node:util';
 import { EventEmitter } from 'node:events';
-import type { AgentKind, AgentInfo, EffortLevel, OpenSessionParams, PermissionMode, PermissionRequestEvent, PermissionResponse, RunnerState, SessionInfoSnapshot, AttachmentRef } from '../protocol.js';
+import type { AgentKind, AgentInfo, EffortLevel, OpenSessionParams, PermissionMode, PermissionRequestEvent, PermissionResponse, RunnerState, SessionInfoSnapshot, AttachmentRef, ReportedModel } from '../protocol.js';
 import type { MetaStore } from '../meta/store.js';
 import { modelsFor } from '../models/catalog.js';
 import { tr } from '../i18n/index.js';
+import { askCodexModels } from './reported-models.js';
 
 const catalogIds = (k: AgentKind) => modelsFor(k).map((m) => m.value);
 
@@ -94,7 +95,53 @@ export function versionError(e: any, shown: string): string {
 
 /** Detect installed agents and merge user overrides (meta settings `agents.<kind>`). */
 export class AgentRegistry {
-  constructor(private meta: MetaStore, private loc: AgentLocator = realLocator) {}
+  /** 'reported' (kind): what an agent says it offers changed — the hub tells the windows (`agents.changed`) */
+  readonly events = new EventEmitter();
+  constructor(private meta: MetaStore, private loc: AgentLocator = realLocator, private askCodex: (launch: { command: string; args: string[]; env: Record<string, string> }) => Promise<ReportedModel[]> = askCodexModels) {}
+
+  /** What each agent last said it offers (`agents.reportedModels` in meta.json): Codex's `model/list`. */
+  reported(kind: AgentKind): { at: number; models: ReportedModel[] } | undefined {
+    const r = (this.meta.settings()['agents.reportedModels'] as Record<string, { at: number; models: ReportedModel[] }> | undefined)?.[kind];
+    return r && Array.isArray(r.models) && r.models.length ? r : undefined;
+  }
+
+  /** An empty answer is not kept: a list that once worked beats none (a login that lapsed, a flaky start). */
+  async setReported(kind: AgentKind, models: ReportedModel[]) {
+    if (!models.length) return;
+    const all = { ...((this.meta.settings()['agents.reportedModels'] as Record<string, unknown> | undefined) ?? {}) };
+    const before = JSON.stringify((all[kind] as { models?: unknown } | undefined)?.models ?? null);
+    all[kind] = { at: Date.now(), models };
+    await this.meta.setSetting('agents.reportedModels', all);
+    if (before !== JSON.stringify(models)) this.events.emit('reported', kind);
+  }
+
+  static REPORTED_TTL_MS = 6 * 3600_000;
+  /** after an ask that failed or said nothing (not logged in, a flaky start): no new process before this */
+  static REPORTED_RETRY_MS = 10 * 60_000;
+  private asking = new Map<AgentKind, Promise<void>>();
+  private failedAt = new Map<AgentKind, number>();
+  /**
+   * Asks a Codex what it offers this account, in the background — its own short app-server (initialize → model/list
+   * → close; no thread, nothing spent). Only on its own login: on a provider the menu lists the provider's models.
+   */
+  askModels(kind: AgentKind, force = false): Promise<void> {
+    const d = this.defs().find((x) => x.kind === kind);
+    if (!d || d.protocol !== 'codex' || this.config(kind).providerId) return Promise.resolve();
+    const have = this.reported(kind);
+    // CW_NO_MODEL_REFRESH (e2e): no list asked behind the caller's back — a refresh still asks
+    if (!force && (process.env.CW_NO_MODEL_REFRESH || (have && Date.now() - have.at < AgentRegistry.REPORTED_TTL_MS))) return Promise.resolve();
+    // every agents.list asks when nothing is kept: one that just failed is not asked again for a while
+    if (!force && Date.now() - (this.failedAt.get(kind) ?? 0) < AgentRegistry.REPORTED_RETRY_MS) return Promise.resolve();
+    const running = this.asking.get(kind);
+    if (running) return running;
+    const l = this.launch(kind);
+    const failed = () => { this.failedAt.set(kind, Date.now()); };
+    const p = this.askCodex(l)
+      .then((models) => { if (models.length) { this.failedAt.delete(kind); return this.setReported(kind, models); } failed(); }, failed)
+      .finally(() => this.asking.delete(kind));
+    this.asking.set(kind, p);
+    return p;
+  }
 
   config(kind: AgentKind): AgentConfig {
     return ((this.meta.settings().agents as Record<string, AgentConfig> | undefined)?.[kind]) ?? {};
@@ -207,8 +254,12 @@ export class AgentRegistry {
       // the 安装 button types `npm i -g …` / `uv tool install …` into a terminal: say so when that tool is missing
       const tool = !r.ok && d.install ? installTool(d.install) : null;
       const installNeeds = tool && !this.loc.onPath(tool.tool) ? { name: tool.name, url: tool.url } : undefined;
+      const reported = this.reported(d.kind);
+      // installed: ask what it offers (kept for hours; a refresh asks again) — the answer comes as agents.changed
+      if (r.ok) void this.askModels(d.kind, refresh);
       return {
         kind: d.kind, name: d.name, icon: d.icon, protocol: d.protocol, installed: r.ok, version: r.version, command, args: c.args ?? d.args, env: c.env ?? {}, model: c.model ?? '', models: d.models, install: d.install, login, docs: d.docs, label: c.label ?? '', enabled: c.enabled !== false, builtin: !!d.builtin, providerId: c.providerId ?? '',
+        ...(reported ? { reportedModels: reported.models, reportedAt: reported.at } : {}),
         ...(r.path ? { path: r.path } : {}), ...(r.from ? { from: r.from } : {}), ...(r.error ? { probeError: r.error } : {}), ...(installNeeds ? { installNeeds } : {}),
       };
     }));

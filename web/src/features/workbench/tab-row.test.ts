@@ -21,10 +21,13 @@ describe('right panel tab row', () => {
 
   it('1440 wide, default panel: the row stays beside the caption buttons (the reported 280 > 277 is gone)', () => {
     const m = at(1440);
-    expect(m.row - m.padLeft - CAPTION_W).toBe(278); // 440 − 8 (the card's gap) − 12 − 142
-    expect(rowStacked(false, m, true)).toBe(false);
+    // 440 − 8 (the card's gap) − 12 − 158 (20px of air before −: 忍冬 hit − for the panel's ×) — the names alone no
+    // longer fit (201 + 62 + 4), the short form does, so the row stays up
+    expect(m.row - m.padLeft - CAPTION_W).toBe(262);
+    const short = { ...m, fixedShort: shortFixedWidth(m.fixed, [61, 46, 46, 44]) };
+    expect(rowStacked(false, short, true)).toBe(false);
     // and a row that was down (a narrower window a moment ago) comes back up: it fits with the hysteresis to spare
-    expect(rowStacked(true, m, true)).toBe(false);
+    expect(rowStacked(true, short, true)).toBe(false);
   });
 
   it('temporary tabs never move the row: they are not in the measure at all; with no room for a strip they fold into 更多', () => {

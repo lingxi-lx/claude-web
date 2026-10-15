@@ -8,3 +8,9 @@
 - 拖放是原生 HTML5：侧栏会话行 `application/x-cw-session`、标签 `application/x-cw-tile`、停靠标签 `application/x-cw-panel`；`dnd.ts` 的 `zoneAt()` 用边缘 25% 判定分屏方向。
 - 多窗口：Electron `wins: Map<winId, BrowserWindow>`，`window-state.json` v2 存每个窗口的 bounds；**分组迁移不走 IPC**，同源 `BroadcastChannel('cw.workbench')`（`workbench/windows.ts`）offer/ack，源窗口收到 ack 才删；通知点击广播 `desktop:focusSession`，持有该会话的窗口响应，都没有时 main 窗口 claim。
 - `scripts/shot.cjs` 的 argv 里任何带冒号的 token（比如 `'cw.layout.v2:main'`）都会让 Electron 当成 URL 直接退出 127，JS 里别写冒号字面量。
+
+## 标签栏 ＋ / 组名 / 标题栏留空（2026-10-15，Enroll / 忍冬的反馈）
+
+- 标签栏的 ＋ 菜单以前 `position: absolute` 放在 `.tabstrip .tabs` 里，而它是 `overflow-x: auto`——**一个方向 auto，另一个方向也会裁**，菜单被裁成一行高，看起来 ＋ 没反应。现在 `position: fixed` + `sidebar/place.ts placeFixed()`（放不下往上翻、给 maxHeight）。ui-smoke 有一条查第一项、最后一项点得到。
+- 新组的名字：`layout.ts group.new` 取第一个没人用的「组 N」（以前是 `groups.length + 1`，删掉中间几个后会和留下的重名）。
+- Windows 标题栏右上角三个按钮 138px，上面一排给它们留的空从 142 改成 158（`styles.css` 那条 `padding-right` 和 `tab-row.ts CAPTION_W` 要一起改；查看器的 `.viewer-bar` 也是 158）：4px 时最右的按钮（面板开关 / ··· / 面板的 ×）和「最小化」挨着，常点错。

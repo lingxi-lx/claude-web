@@ -434,7 +434,10 @@ button.link:hover { text-decoration: underline; }
 .hint { text-align: center; font-size: 12px; color: var(--ink-4); padding: 6px 0 0; }
 
 /* ---------- welcome (the start page; its parts are in 「redesign phase 7」 at the end) ---------- */
-.welcome { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable both-edges; display: flex; flex-direction: column; align-items: center; padding: clamp(var(--sp-4), 11vh, 118px) var(--sp-6) var(--sp-8); animation: fadein 0.25s; }
+/* the top padding is a share of the height, not centring: the recent list under the composer grows as it loads and a
+   centred block would jump. 11vh left the bottom half of a 900px window empty (忍冬, 2026-10-14) — now the greeting
+   and the composer sit around the upper third */
+.welcome { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable both-edges; display: flex; flex-direction: column; align-items: center; padding: clamp(var(--sp-4), 22vh, 240px) var(--sp-6) var(--sp-8); animation: fadein 0.25s; }
 .welcome .greet { font-family: var(--display); font-size: var(--fs-display); line-height: 40px; font-weight: 600; color: var(--ink-1); margin: 0 0 26px; display: flex; align-items: center; justify-content: center; gap: 12px; letter-spacing: 0.02em; text-wrap: balance; }
 .welcome .greet .spark { color: var(--accent); display: inline-flex; }
 .welcome .composer { width: 100%; padding: 0; }
@@ -1266,7 +1269,8 @@ html[data-reduce-motion='1'] * { animation: none !important; transition: none !i
 
 /* ===== desktop title bar (改版阶段 1): no global top bar — the top row of each column is the title bar =====
    Windows / Linux: caption buttons are an overlay 40px high over the top-right 138px (three 46px buttons), transparent on
-   Windows — they float over the top-right card. The rows under them leave 142px.
+   Windows — they float over the top-right card. The rows under them leave 158px: 20px of air between the row's last
+   button and −, so a click meant for one does not land on the other (tab-row.ts CAPTION_W).
    macOS: traffic lights at the top-left. The row that touches each corner makes room; every top row drags,
    its controls do not. Pane edges come from PaneLayer (data-top / data-left / data-right, `.tabs` = strip shown). */
 html.desktop .app::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: var(--shell-gap); -webkit-app-region: drag; z-index: 1; }
@@ -1296,12 +1300,12 @@ html.desktop:not(.mac) .app:not(.dock-open) .groupbar,
 html.desktop:not(.mac) .app:not(.dock-open) .workbench:not(.gb) .pane[data-top][data-right] > .tabstrip,
 html.desktop:not(.mac) .app:not(.dock-open) .workbench:not(.gb) .pane[data-top][data-right]:not(.tabs) .sess-head,
 html.desktop:not(.mac) .app:not(.dock-open) .workbench:not(.gb) .pane[data-top][data-right]:not(.tabs) .welcome-top,
-html.desktop:not(.mac) .app.dock-open .dock:not(.min) .dock-tabs { padding-right: calc(142px / var(--zoom, 1)); }
+html.desktop:not(.mac) .app.dock-open .dock:not(.min) .dock-tabs { padding-right: calc(158px / var(--zoom, 1)); }
 /* minimized to its 36px icon strip, the right panel is under the caption buttons: its icons start below them
    (and the workbench's top-right row makes room, since the app is not `.dock-open` then) */
 html.desktop:not(.mac) .dock.min .dock-tabs { padding-top: var(--h-head); }
 /* the image viewer covers the window: its bar keeps clear of the caption buttons / the traffic lights */
-html.desktop:not(.mac) .viewer-bar { padding-right: calc(150px / var(--zoom, 1)); }
+html.desktop:not(.mac) .viewer-bar { padding-right: calc(158px / var(--zoom, 1)); }
 html.desktop.mac .viewer-bar { padding-left: calc(84px / var(--zoom, 1)); }
 html.desktop.mac .sb-top { padding-left: max(0px, calc(84px / var(--zoom, 1) - var(--rail, 0px))); }
 html.desktop.mac .app.no-sidebar .groupbar,
@@ -1432,6 +1436,9 @@ html[data-density='compact'] .sb-row.sess { height: 28px; padding: 0 10px 0 var(
 
 /* the sidebar's menus (filter / 自动化 / project / account): fixed next to their anchor */
 .menu.sb-menu { position: fixed; z-index: 1000; min-width: 200px; overflow: auto; }
+/* the tab strip's ＋ (TabStrip.tsx): fixed like the other placed menus — inside the sideways-scrolling tab row it was
+   cut to the row's height, and at the default 30 the pane's own layers covered its lower items */
+.menu.tab-add-menu { position: fixed; z-index: 1000; overflow-y: auto; }
 .menu.sb-menu button .n, .menu.sb-menu button .k { margin-left: auto; padding-left: 8px; font-size: 12px; color: var(--ink-4); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .menu.sb-menu button .n.need { color: var(--warn); }
 .menu.sb-filter { width: 252px; }
@@ -2044,7 +2051,7 @@ html.desktop.mac .sp-nav-top { min-height: 40px; padding-left: calc(76px / var(-
 .over-body[data-body='orchestra'] .orch { border: 1px solid var(--edge-subtle); border-radius: var(--r-lg); overflow: hidden; }
 html.desktop .workbench:not(.gb) .over-head { -webkit-app-region: drag; }
 html.desktop .over-head button, html.desktop .over-head [title] { -webkit-app-region: no-drag; }
-html.desktop:not(.mac) .app:not(.dock-open) .workbench:not(.gb) .over-head { padding-right: calc(142px / var(--zoom, 1)); }
+html.desktop:not(.mac) .app:not(.dock-open) .workbench:not(.gb) .over-head { padding-right: calc(158px / var(--zoom, 1)); }
 html.desktop.mac .app.no-sidebar .workbench:not(.gb) .over-head { padding-left: max(0px, calc(84px / var(--zoom, 1) - var(--rail, 0px))); }
 
 /* 「连接断开，正在重连…」 at the top of the main area */
@@ -2269,6 +2276,21 @@ html.desktop.mac .app.no-sidebar .workbench:not(.gb) .over-head { padding-left: 
 .add-account-wait { position: fixed; right: 16px; bottom: 16px; z-index: 900; width: min(360px, calc(100vw - 32px)); padding: var(--sp-3); border-radius: var(--r-lg); background: var(--surface-elev); border: 1px solid var(--edge); box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 6px; }
 .add-account-wait .t { display: flex; align-items: center; gap: 8px; font-weight: 600; }
 .add-account-wait .row-btns { display: flex; gap: 6px; justify-content: flex-end; }
+/* settings → 供应商 → 用哪些模型 (features/settings/ModelPicker.tsx) */
+.modal.model-picker { width: min(520px, 94vw); max-height: 86vh; display: flex; flex-direction: column; gap: var(--sp-2); }
+.modal.model-picker h3 { margin: 0; }
+.model-picker .mp-bar { display: flex; gap: var(--sp-2); align-items: center; }
+.model-picker .mp-bar .field { flex: 1; min-width: 0; }
+.model-picker .mp-list { flex: 1; min-height: 120px; overflow-y: auto; border: 1px solid var(--edge); border-radius: var(--r-md); padding: 4px; }
+/* (`.modal label` is a block with margins and `.modal input` is 100% wide: not for these rows' checkboxes) */
+.modal .model-picker .mp-row, .modal.model-picker label.mp-row { display: flex; align-items: center; gap: var(--sp-2); margin: 0; padding: 5px 8px; border-radius: var(--r-sm); cursor: pointer; font-size: var(--fs-base); color: var(--ink-1); }
+.modal.model-picker .mp-row input[type='checkbox'] { width: auto; flex: none; margin: 0; padding: 0; background: none; }
+.model-picker .mp-row:hover { background: var(--surface-2); }
+.model-picker .mp-row .mono { flex: 1; min-width: 0; text-align: left; font-size: 12.5px; overflow-wrap: anywhere; }
+.model-picker .mp-row .sub { margin-left: auto; flex: none; }
+.model-picker .mp-empty { padding: 8px; }
+.model-picker .row-btns { display: flex; gap: var(--sp-2); align-items: center; }
+.model-picker .row-btns .grow { flex: 1; }
 .modal.connect-model > .sub { color: var(--ink-2); font-size: var(--fs-base); line-height: var(--lh-base); margin: 0 0 var(--sp-2); }
 .modal.onboarding .qc { margin-bottom: var(--sp-2); }
 .ob-actions button.link { display: inline-flex; align-items: center; gap: 4px; }

@@ -58,7 +58,7 @@ let quitting = false;
 /**
  * The caption buttons' area is as tall as the row under them, from the window's top edge: the 8px shell gap + a 52px
  * head row until the page says otherwise (a 40px bar with the workbench tools; no gap on Linux) — so the glyphs line up
- * with that row's own icons. The page keeps its right end clear (styles.css, 142px).
+ * with that row's own icons. The page keeps its right end clear (styles.css, 158px: 20px of air before −).
  */
 const CAPTION_H = process.platform === 'linux' ? 52 : 60;
 // the page reports the height in the window's pixels (its row × the zoom factor): 50% of a bar … 300% of a head row

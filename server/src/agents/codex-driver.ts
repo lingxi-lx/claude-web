@@ -1,7 +1,8 @@
 import { EventEmitter } from 'node:events';
 import { modelLabel, modelsFor } from '../models/catalog.js';
 import { randomUUID } from 'node:crypto';
-import type { AgentKind, AttachmentRef, EffortLevel, OpenSessionParams, PermissionMode, PermissionRequestEvent, PermissionResponse, RunnerState, SessionInfoSnapshot } from '../protocol.js';
+import type { AgentKind, AttachmentRef, EffortLevel, OpenSessionParams, PermissionMode, PermissionRequestEvent, PermissionResponse, ReportedModel, RunnerState, SessionInfoSnapshot } from '../protocol.js';
+import { codexReported } from './reported-models.js';
 import { JsonRpcProcess } from './jsonrpc.js';
 import { insertCodexConfig } from '../memory/launcher.js';
 import { insertWebCodexConfig } from '../web/launcher.js';
@@ -56,7 +57,7 @@ export class CodexDriver extends EventEmitter implements AgentDriver {
    * `hooks.beforeResume`: runs before a thread is resumed — the library brings the turns the Codex CLI added to the
    * thread into the mirror, so the prompt this driver records next lands after them, not in front.
    */
-  constructor(private kind: AgentKind, private launch: { command: string; args: string[]; env: Record<string, string>; model?: string; name: string }, params: OpenSessionParams, private transcripts: AgentTranscripts, private hooks: { beforeResume?: () => Promise<unknown> } = {}) {
+  constructor(private kind: AgentKind, private launch: { command: string; args: string[]; env: Record<string, string>; model?: string; name: string }, params: OpenSessionParams, private transcripts: AgentTranscripts, private hooks: { beforeResume?: () => Promise<unknown>; onModels?: (models: ReportedModel[]) => unknown } = {}) {
     super();
     this.mirrorReady = new Promise<void>((res) => { this.markMirrorReady = () => { this.mirrorIsReady = true; res(); }; });
     this.cwd = params.cwd;
@@ -144,10 +145,12 @@ export class CodexDriver extends EventEmitter implements AgentDriver {
         const reported = (ml?.data ?? []).filter((m: any) => !m.hidden).map((m: any) => ({ value: m.model, displayName: m.displayName ?? modelLabel('codex', m.model), description: m.description ?? '', supportsEffort: (m.supportedReasoningEfforts ?? []).length > 0, supportedEffortLevels: (m.supportedReasoningEfforts ?? []).map((e: any) => e.reasoningEffort ?? e).filter((e: any) => typeof e === 'string') }));
         this.info.models = reported.length ? reported : modelsFor('codex');
       } catch { /* optional */ }
-      // config.toml may name a model this account cannot use (ChatGPT plans reject some ids) — prefer a listed one
-      const listed = this.info.models ?? [];
       // (not for a gateway profile: the models behind the gateway are never in the ChatGPT account's list)
       const viaGateway = !!this.launch.env?.[CODEX_KEY_ENV];
+      // what this account offers, for the menus and settings before the next Codex conversation starts
+      if (!viaGateway && rawModels.length) void Promise.resolve(this.hooks.onModels?.(codexReported(rawModels))).catch(() => {});
+      // config.toml may name a model this account cannot use (ChatGPT plans reject some ids) — prefer a listed one
+      const listed = this.info.models ?? [];
       if (listed.length && this.model && !listed.some((m) => m.value === this.model) && !this.launch.model && !viaGateway) {
         const pick = rawModels.find((m: any) => m.isDefault && !m.hidden)?.model ?? listed[0].value;
         this.push(this.synth.systemNote(tr('Codex 配置里的模型 {model} 不在可用列表，这个对话改用 {pick}（可在模型菜单切换）。', { model: this.model, pick }), 'warning'));
