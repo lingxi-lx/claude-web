@@ -110,6 +110,33 @@
   .cb .cchip, .cb .dirpick { padding: 0 8px; }
   .cb .mm-chip-label { max-width: 220px; }
 }
+/* English words are longer: the row gives up its words at 700px where Chinese does at 560px */
+@container (max-width: 700px) {
+  html[lang="en"] .cb .opt { display: none; }
+  html[lang="en"] .cb .cchip, html[lang="en"] .cb .dirpick { padding: 0 8px; }
+  html[lang="en"] .cb .mm-chip-label { max-width: 220px; }
+  html[lang="en"] .cb .sub-anchor .mm-chip-label { display: none; }
+}
+/* a full row (the 子代理 chip and English words make it longer): the project and branch chips give way first, the model
+   keeps a readable name, the 「发送后继续」 note goes before any chip does. Narrower rows keep the even give-and-take above */
+@container (min-width: 561px) {
+  html:not([lang="en"]) .cb > .cb-left { flex-shrink: 6; }
+  html:not([lang="en"]) .cb .cb-left .dirpick { min-width: 112px; flex-shrink: 2; }
+  html:not([lang="en"]) .cb .cb-left .branch-chip { flex-shrink: 8; min-width: 52px; overflow: hidden; }
+  html:not([lang="en"]) .cb .cb-right .mm-anchor:not(.sub-anchor) { min-width: 132px; }
+  html:not([lang="en"]) .cb .cb-right .mm-anchor:not(.sub-anchor) .mm-chip-label { max-width: 200px; }
+  html:not([lang="en"]) .cb .cb-right .depth-chip { flex-shrink: 0; }
+  html:not([lang="en"]) .cb .cb-right .cb-status { flex-shrink: 30; }
+}
+@container (min-width: 701px) {
+  html[lang="en"] .cb > .cb-left { flex-shrink: 6; }
+  html[lang="en"] .cb .cb-left .dirpick { min-width: 112px; flex-shrink: 2; }
+  html[lang="en"] .cb .cb-left .branch-chip { flex-shrink: 8; min-width: 52px; overflow: hidden; }
+  html[lang="en"] .cb .cb-right .mm-anchor:not(.sub-anchor) { min-width: 132px; }
+  html[lang="en"] .cb .cb-right .mm-anchor:not(.sub-anchor) .mm-chip-label { max-width: 200px; }
+  html[lang="en"] .cb .cb-right .depth-chip { flex-shrink: 0; }
+  html[lang="en"] .cb .cb-right .cb-status { flex-shrink: 30; }
+}
 @container (max-width: 400px) {
   .cb .mm-chip-suffix { display: none; }
   .cb .mm-anchor > .chip .caret { display: none; }

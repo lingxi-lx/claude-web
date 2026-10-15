@@ -37,7 +37,7 @@ import {
 import { NumberSelect, Row, Seg, Select, Toggle } from './controls';
 import { coverApp } from './cover';
 import { WebSettings } from '@/features/browser/WebSettings';
-import { tr } from '@/i18n';
+import { tr, trAs } from '@/i18n';
 
 export { Row } from './controls';
 
@@ -297,7 +297,7 @@ function VersionLine({ onOpen }: { onOpen: () => void }) {
   }, []);
   const note = st?.status === 'none' ? tr('已是最新') : st?.status === 'available' ? tr('有新版本 {version}', { version: st.version ?? '' }) : st?.status === 'downloaded' ? tr('重启即可更新') : st?.status === 'downloading' ? tr('下载更新中') : '';
   return (
-    <button className="sp-ver" onClick={onOpen} title={tr('更新')}>
+    <button className="sp-ver" onClick={onOpen} title={trAs('更新', 'Updates')}>
       <span className={clsx('dot', st?.status === 'none' && 'ok', (st?.status === 'available' || st?.status === 'downloaded') && 'new')} />
       {desktop ? `Claude Web ${desktop.version}` : tr('Claude Web · 网页版')}{note && ` · ${note}`}
     </button>

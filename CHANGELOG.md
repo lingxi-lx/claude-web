@@ -1,284 +1,287 @@
-# 更新日志
+# Changelog
 
-每个版本的变化都记在这里；安装包在 [Releases](https://github.com/ypyik0669/claude-web/releases) 下载。版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
+**English** · [简体中文](CHANGELOG.zh-CN.md)
 
-## [未发布]
+Every version's changes are recorded here; installers are on the [Releases](https://github.com/ypyik0669/claude-web/releases) page. Versions follow [semantic versioning](https://semver.org/).
 
-### 新增
+## [Unreleased]
 
-- **子代理可以用别的模型了。** 输入框里模型按钮旁边多了一个「子代理」按钮：主任务还是用主模型，子代理（Task、工作流派出去的）用这里选的，可以选个便宜的省额度。默认「跟主模型一样」。每个对话单独记；菜单底下勾上「这个供应商的新对话都这样」，以后在这个供应商上新开的对话（包括 IM 和定时任务）都用它。正在跑的对话改了以后会在后台无感重启一下，这一轮跑完再换。
+### Added
+
+- **The interface now comes in English.** The whole interface (the web app, the desktop menus and tray, the phone page, the pairing page, exported HTML, error explanations) is available in both Chinese and English, and **by default it follows this computer's language**: an English computer gets English, a Chinese computer gets Chinese. To change it: **Settings → Appearance → Language** (Follow system / 中文 / English). The interface reloads once after you change it; the desktop menus and tray need an app restart. The language Claude replies in inside a conversation is not affected.
+- **Subagents can use a different model.** Next to the model button in the input box there is now a "Subagent" button. The main task still uses the main model, while subagents (the ones launched by Task or by workflows) use whatever you pick here, so you can choose a cheaper model to save quota. The default is "Same as main model". Each conversation remembers its own choice; tick "New conversations on this provider all do this" at the bottom of the menu and every conversation you start on that provider from now on (including IM and scheduled-task ones) uses it. If you change it in a running conversation, the process restarts quietly in the background and the new setting takes over once the current turn finishes.
 
 ## [0.2.5] — 2026-10-14
 
-### 新增
+### Added
 
-- **项目可以调整顺序了。** 侧栏里拖动项目名那一行，就能把它放到别的项目前面或后面；项目的 ··· 菜单里也有「移到最上面 / 上移 / 下移」（手机上用这个）。新加的项目放在最上面，不再落到最底下。顺序存在本机，所有窗口一起变。
-- **换模型时，对话装不下就先压缩再换。** 在大窗口的模型上聊了很多（比如 Claude 用到 40 万），再换到小窗口的模型时，新模型连读完整段对话都做不到，压缩也会失败。现在换之前会先看一下：对话超过新模型窗口的 80%，就先用现在的模型把对话压缩好，再换过去，对话里会写一行说明。
+- **Projects can be reordered.** Drag a project's name row in the sidebar to put it before or after another project; the project's ··· menu also has "Move to top / Move up / Move down" (use this on a phone). A newly added project goes to the top instead of landing at the bottom. The order is stored on this computer and changes in all windows at once.
+- **When a conversation won't fit the model you switch to, it is compacted first.** If you've chatted a lot on a large-window model (say Claude at 400K) and then switch to a small-window model, the new model can't even read the whole conversation, and compacting fails too. Now, before switching, the app checks: if the conversation is over 80% of the new model's window, it is compacted with the current model first and then switched over, with a line in the conversation explaining what happened.
 
-### 修复
+### Fixed
 
-- **要确认的工具（改文件、跑命令…）点了「允许」还是失败**，模型说「工具层直接拒收、少了 updatedInput」。用我们自带的运行内核跑的对话都有这个问题（OpenAI / Gemini 格式的中转、没有限定只用官方 Claude Code 的中转），读文件这类不用确认的工具不受影响。现在点「允许」就能用了，手机和 IM 机器人上的「允许」也一样。
-- **同一个对话里换模型，上下文窗口没跟着变。** 用官方 Claude Code 运行时，提前压缩的设置只在对话开始时读一次；换到窗口不同的模型时，现在会在后台重启一下、接着原来的对话。
-- 输入框旁边的上下文小环，鼠标停上去显示的「已用 / 一共」以前是 0 / 0，现在是真实的数。
+- **Clicking "Allow" on a tool that needs confirmation (editing files, running commands…) still failed**, with the model saying the tool layer rejected it for lacking `updatedInput`. Every conversation running on our built-in runtime had this problem (relays in OpenAI / Gemini format, and relays that aren't restricted to the official Claude Code); tools that need no confirmation, such as reading files, were not affected. "Allow" works now, including the "Allow" buttons on the phone and in IM bots.
+- **Switching models inside one conversation didn't change the context window.** With the official Claude Code runtime, the early-compaction setting is read only once when the conversation starts. When you switch to a model with a different window, the process now restarts in the background and picks up the same conversation.
+- The little context ring next to the input box used to show 0 / 0 for "used / total" on hover; it now shows the real numbers.
 
 ## [0.2.4] — 2026-10-14
 
-### 新增
+### Added
 
-- **每个模型的上下文窗口，默认拉满。** 以前中转上的 Claude 一律按 20 万算，用到 175K 左右就自动压缩；GPT 中转实际只有 27.2 万，引擎却当成 105 万，到不了压缩就先报错。现在 **设置 → 供应商 → 编辑** 里多了「上下文窗口」，每个模型一行，空着就用默认：中转的 Claude 是 100 万（Haiku 20 万），GPT 27.2 万，Gemini 约 105 万，中转的模型列表里写了大小的就按它写的，不认识的模型还是 20 万。想改就直接填（272000、272k、1m 都行）。Codex 用这个供应商时也按默认模型的窗口来。正在跑的对话要重新开始才用得上。
-- **插件按状态筛选**：扩展 → 插件的「已安装」右上角多了「全部 / 已启用 / 已停用」，启用的排在前面。
+- **Each model's context window now defaults to the full size.** Before, Claude on a relay was always treated as 200K and auto-compacted at around 175K; a GPT relay really has only 272K, but the engine assumed 1.05M and errored out before compaction could kick in. Now **Settings → Providers → Edit** has a "Context window" section with one row per model; leave a row empty to use the default: Claude on a relay is 1M (Haiku 200K), GPT is 272K, Gemini is about 1.05M, a size written in the relay's model list is used as written, and unknown models stay at 200K. To change one, just type it (272000, 272k and 1m all work). When Codex uses this provider, it also follows the default model's window. Conversations that are already running need to be restarted to pick this up.
+- **Filter plugins by status**: under Extensions → Plugins, "Installed" now has "All / Enabled / Disabled" at the top right, and enabled plugins come first.
 
-### 改动
+### Changed
 
-- 内置的运行内核升到 2.8.4-cw.4：按供应商设置里的上下文窗口来压缩（见上）。
-- **侧栏里每个文件夹单独一组**，和 Claude 官方应用一样。以前把一个上层文件夹（比如用户目录）设为项目，它下面所有文件夹里的对话都会归到它名下；现在项目只放它自己这个文件夹里开的对话。项目下面是「文件夹」：每个有对话的文件夹一组、平铺、最近用过的在上面，组上可以直接「在这里新建对话」或「设为项目」（钉到上面）；超过 10 个时更早的收在「更早的文件夹」里。两个文件夹同名时，名字后面带上一级目录（`app · shop`、`app · blog`）。
-- **「深度编排」说清楚了怎么用**：菜单里写明是给大任务用的（先拆成几块，分给几个子代理同时做，在「后台」看进度）；打开时提示一句，输入框里给一个例子。
+- The built-in runtime is now 2.8.4-cw.4: it compacts according to the context window in the provider settings (see above).
+- **Every folder in the sidebar is its own group**, like the official Claude app. Before, if you made a parent folder (say your user directory) a project, the conversations from every folder under it were filed under it; now a project holds only the conversations started in that exact folder. Below the projects comes "Folders": one flat group for each folder that has conversations, most recently used on top. On a group you can directly choose "New conversation here" or "Make a project" (pins it to the top); once there are more than 10, older ones are tucked into "Earlier folders". When two folders have the same name, the name is followed by its parent folder (`app · shop`, `app · blog`).
+- **"Deep orchestration" now explains how to use it**: the menu says it is for big tasks (the model splits the work into pieces, hands them to several subagents to do at the same time, and you watch progress in "Background"); turning it on shows a one-line hint, and the input box gives an example.
 
-### 修复
+### Fixed
 
-- **点自己消息下面的「重跑」会新开一个对话。** 现在重跑最后一条消息（比如刚刚报错的那条）就在原对话里再问一次；重跑更早的消息仍然从那里分叉出新对话，按钮提示写清楚了。
-- **在 Codex 里还没做完的一轮，这边显示成已经做完。** 用 Codex 桌面版 / 命令行接着聊同一个对话时，这边会把做到一半的一轮当成结束（「0s · 3 步 · 费用未知」）。现在会显示「这一轮还在 Codex 里进行」，做完自动更新。在这里开的 Codex 对话，以前做到一半的那一轮还可能被提前记下来，后半截之后就再也看不到；现在要等它做完才记。
-- **「在资源管理器打开」没反应**（Windows）：资源管理器其实打开了，但窗口是隐藏的。「在 VS Code 打开」在 Windows 上也一直没反应，现在都好了；文件夹已经不在时会提示。
-- **设置 → settings.json 不能用鼠标滚轮滚动**，只能用键盘上下翻。
+- **Clicking "Rerun" under your own message opened a new conversation.** Now rerunning the last message (say, the one that just errored) asks again in the original conversation; rerunning an earlier message still forks a new conversation from that point, and the button tooltip now says so.
+- **A turn that wasn't finished in Codex showed up here as finished.** When you carried on with the same conversation in the Codex desktop app or command line, a half-done turn was shown here as over ("0s · 3 steps · cost unknown"). It now says "This turn is still running in Codex" and updates by itself when it finishes. For Codex conversations started here, a half-done turn could also be recorded too early, and its second half was then never visible; now it is recorded only once it's done.
+- **"Open in File Explorer" did nothing** (Windows): Explorer did open, but its window was hidden. "Open in VS Code" also never worked on Windows. Both work now, and you get a message if the folder no longer exists.
+- **Settings → settings.json couldn't be scrolled with the mouse wheel**, only with the keyboard.
 
 ## [0.2.2] — 2026-10-13
 
-### 新增
+### Added
 
-- **后台：看得见在跑的子代理和工作流。** 图标栏多了「后台」：对话派出的子代理、跑的工作流、后台命令，在这里一页看全。上面一排卡片，每个子代理一张（名字、所在阶段、在跑 / 排队 / 完成 / 失败、它正在做什么、用了多少 token）；页面顶上是一间像素网吧：主对话是前台的网管，每个子代理是一位客人——进门到前台开机、坐到自己的座位上敲键盘（屏幕上滚着代码，头顶冒出它刚做的那一步），空下来就去吃泡面、喝饮料、打一局游戏、上厕所、去吸烟区、借充电宝，一有活马上回座位；做完了走到前台结账，弹一张小票（上机多久、网费、用了多少 token、大概多少钱），出门。失败的会蓝屏，被停掉的网管会喊「被叫下机」。座位牌上是网费（纯属好玩，设置 → 通用里能改单价），鼠标停上去能看到真实的 token 和估算费用。下面是卡片、今日账单、关系图和动态。点一个客人，旁边打开它自己的对话：它读了什么、跑了什么命令、改了什么。右侧面板「更多」里也有一个小的网吧，跟着当前对话。左边列出所有有后台活动的对话，还能回看这个对话以前跑完的工作流。
-- **捏角色。** 网吧右上角的「角色库」里有默认的小章鱼和网管，点「捏个角色」，给一张照片或者说说想要什么样子（「戴黑框眼镜、蓝色卫衣的程序员」），Claude 会画一个像素角色给你看，可以接着说「眼睛大一点」改，满意了存下来，指定给网管、所有客人、某一类子代理（比如 Explore）或者某个名字的子代理。在任何对话里直接说「帮我做个像这张照片的网吧角色」也行。
-- 输入框上方多了一个「后台」小胶囊：这一轮结束了、后台还有东西在跑时它一直在，点它直接打开「后台」。对话里的 Workflow 卡片会实时显示每个子代理的状态；右侧面板「任务」里是缩小的关系图和每个任务的停止按钮。
+- **Background: see the subagents and workflows that are running.** The icon bar has a new "Background" entry: subagents a conversation has launched, workflows that are running and background commands, all on one page. There is a row of cards at the top, one per subagent (name, stage, running / queued / done / failed, what it is doing right now, how many tokens it has used). Above them sits a pixel internet café: the main conversation is the admin at the front desk, and every subagent is a customer. They come in, check in at the desk, sit at their own seat and type away (code scrolls on the screen and the step they just took pops up over their head); when they have nothing to do they go eat instant noodles, have a drink, play a round of a game, use the restroom, visit the smoking area or borrow a power bank, and the moment there's work they head straight back to the seat. When they finish they walk to the desk to pay and get a little receipt (how long they were on, the fee, how many tokens, roughly how much money) and leave. A failed one gets a blue screen, and one that was stopped hears the admin shout "called off". The seat plate shows the café fee (purely for fun; you can change the price in Settings → General), and hovering shows the real tokens and estimated cost. Below are the cards, today's bill, the relationship graph and the activity feed. Click a customer and its own conversation opens next to it: what it read, which commands it ran, what it changed. The side panel's "More" also has a small café that follows the current conversation. The left side lists every conversation with background activity, and you can look back at workflows this conversation ran before.
+- **Make a character.** In the "Character library" at the top right of the café you'll find the default little octopus and the admin. Click "Make a character", give it a photo or describe what you want ("a programmer in black-framed glasses and a blue hoodie"), and Claude draws a pixel character for you to see. Keep talking to adjust it ("bigger eyes"), save it when you're happy, and assign it to the admin, to all customers, to one kind of subagent (say Explore) or to a subagent with a particular name. You can also just say "make me a café character that looks like this photo" in any conversation.
+- A small "Background" pill now sits above the input box: when a turn has ended but things are still running in the background it stays there, and clicking it opens "Background" directly. The Workflow card in a conversation shows each subagent's status live; the side panel's "Task" has a shrunken relationship graph and a stop button for each task.
 
-### 改动
+### Changed
 
-- **「停止」只停这一轮。** 以前按输入框的停止，后台的工作流、后台子代理、后台命令会被一起杀掉；现在它们继续跑，要停就在「后台」页、右侧面板「任务」或卡片上单独停（工作流整个停）。按停止时如果后台还有东西在跑，会提示一句。
-- 一个对话的这一轮结束了、后台还有工作流或子代理在跑时，闲置回收不再把它的进程关掉（以前闲置 30 分钟后会连同后台工作一起关掉，工作流的结果永远等不到）。
-- 内置的运行内核升到 2.8.4-cw.3：开了工作流之后，这一轮说完就结束，输入框不再整段工作流都卡在「运行中」（以前这时按停止，等不到回应就会重开进程，后台的工作流也跟着没了）；工作流跑完，它的结果会自己开一轮告诉你。
+- **"Stop" now stops only this turn.** Before, pressing stop in the input box also killed background workflows, background subagents and background commands; now they keep running, and to stop them you do it individually on the "Background" page, in the side panel's "Task" or on the card (a workflow is stopped as a whole). If something is still running in the background when you press stop, you get a note about it.
+- When a conversation's turn has ended but a workflow or subagent is still running in the background, idle reclaim no longer shuts its process down (before, after 30 minutes idle it closed the process together with the background work, and the workflow's result never arrived).
+- The built-in runtime is now 2.8.4-cw.3: after a workflow starts, the turn ends once it has said its piece, and the input box no longer stays stuck on "Running" for the whole workflow (before, pressing stop at that point got no response and reopened the process, taking the background workflow with it); when the workflow finishes, its result starts a turn by itself to tell you.
 
 ## [0.2.1] — 2026-10-11
 
-### 新增
+### Added
 
-- **搜索改在内置浏览器里做，不再用 Tavily。** Agent 搜索时，内置浏览器在一个你看不见的页面里打开搜索网站的结果页，把结果读出来——和你自己在浏览器里搜是同一种请求，所以不用密钥，也不经过任何第三方的搜索代理。默认依次试 DuckDuckGo、Bing、Yahoo、百度，哪个给出对题的结果就用哪个；**设置 → 联网** 里可以指定一家（多了 Google、Yahoo、百度），「试一下」能看到你的网络下哪家能用。某家要求验证时，在右侧面板的浏览器里打开它验证一次即可。实测（挂着代理的网络）DuckDuckGo 三个查询都在 1–4 秒内给出对题的结果；上一版由电脑直接去取结果页，Bing 四次里只有一次对题。几个搜索可以同时进行。网页版和手机上（没有桌面窗口）仍由电脑去取 Bing / DuckDuckGo 的结果页。
-- **在网页上按位置用鼠标键盘。** 画布、地图、拖动、悬停菜单、滑块这类「列不出元素」的东西，Agent 现在可以看着内置浏览器的截图按位置操作：点击、双击、右键、拖动、滚轮、打字、按键。只作用在它自己的那个标签页上，和其它网页操作一样走权限审批。
-- **操控电脑（Windows）。** `+` 里的「操控电脑」能用了：Agent 看屏幕截图，用鼠标键盘操作你允许的应用（记事本、资源管理器、桌面软件……）。要用哪些应用，每次都先弹一张卡片问你，写着应用名和它说要做的事；**只有点卡片上的「允许操控」才算同意**，回车不算，「完全放开」「自动判断」也不会替你同意。允许后它能看到整个主屏幕的截图，但键盘鼠标只在你允许的应用位于最前面时才发得出去；Claude Web 自己的窗口永远不能被它操作。只对这一个对话开，下一个新对话要用得再开一次；授权随对话结束收回。macOS、Linux 上这一行仍是「暂不可用」。
+- **Search now happens in the built-in browser; Tavily is gone.** When an agent searches, the built-in browser opens a search site's results page in a page you can't see and reads the results out, which is the same kind of request as searching in a browser yourself, so no key is needed and no third-party search proxy is involved. By default it tries DuckDuckGo, Bing, Yahoo and Baidu in turn and uses whichever gives relevant results; in **Settings → Web access** you can pick one (Google, Yahoo and Baidu were added), and "Try it" shows which ones work on your network. When a site asks for verification, open it in the browser in the side panel and verify once. In testing (on a network behind a proxy) DuckDuckGo gave relevant results for all three queries within 1–4 seconds; the previous version fetched results pages straight from the computer, and Bing was relevant only once in four tries. Several searches can run at the same time. The web version and the phone (which have no desktop window) still have the computer fetch Bing / DuckDuckGo results pages.
+- **Mouse and keyboard on a web page, by position.** For things that can't be listed as elements (a canvas, a map, dragging, hover menus, sliders), the agent can now look at a screenshot of the built-in browser and act by position: click, double-click, right-click, drag, scroll wheel, type, press keys. It only acts on its own tab and goes through permission approval like every other web action.
+- **Computer control (Windows).** "Computer control" in the `+` menu now works: the agent looks at screenshots of the screen and uses the mouse and keyboard on the apps you allow (Notepad, File Explorer, desktop software…). Which apps it may use is asked every time with a card that shows the app name and what it says it wants to do; **only clicking "Allow control" on the card counts as consent**, Enter doesn't, and neither "Allow everything" nor "Auto" will consent for you. Once allowed, it can see a screenshot of the whole main screen, but the keyboard and mouse only go out while an app you allowed is in front; Claude Web's own window can never be operated by it. It is on for this one conversation only, and the next new conversation needs it turned on again; the permission is withdrawn when the conversation ends. On macOS and Linux this row still says "Not available right now".
 
-### 改动
+### Changed
 
-- 模型手里只有一个搜索工具了。运行内核自带的那个默认经过上游项目托管的一个 Tavily 代理（搜索词会经过别人的服务器），在我们的运行内核上不再提供；你自己给它选过后端的（`WEB_SEARCH_ADAPTER` 或 `/web-tools`）照旧。跑在官方 Claude Code 上的对话不受影响。
-- 设置 → 联网 里没有 Tavily 了；以前存的 Tavily 密钥在启动时删除。Brave Search 的密钥仍可填。
-- 搜索结果的摘要不再以网址和机器格式的日期开头。
+- The model now has only one search tool. The one that ships with the runtime used to go through a Tavily proxy hosted by an upstream project by default (your search terms passed through someone else's server); on our runtime it is no longer offered. If you chose a backend for it yourself (`WEB_SEARCH_ADAPTER` or `/web-tools`), that keeps working as before. Conversations running on the official Claude Code are not affected.
+- Tavily is gone from Settings → Web access; a Tavily key stored earlier is deleted on startup. A Brave Search key can still be entered.
+- Search result summaries no longer start with the URL and a machine-format date.
 
-### 修复
+### Fixed
 
-- 一个一直转圈、加载不完的网页（比如某张图片永远不返回），Agent 以前读它会报超时、什么都读不到；现在等不到就停止加载，读已经出来的内容，并说明「还在加载」。
-- 内置浏览器向网站报出的浏览器标识里不再带 `Electron` 和应用名（有的网站看到它就给验证页）。
+- For a page that keeps spinning and never finishes loading (say an image that never returns), the agent used to time out when reading it and get nothing; now, if it can't wait any longer, it stops the loading, reads what has already appeared, and says "still loading".
+- The browser identification the built-in browser reports to websites no longer contains `Electron` or the app name (some sites showed a verification page on seeing it).
 
 ## [0.2.0] — 2026-10-10
 
-### 新增
+### Added
 
-- **联网：搜索和内置浏览器。** 每个对话里的 Agent（Claude、Codex、Gemini 等）都能搜索网页，也能用内置浏览器打开网页、读内容、点击、填表、截图——直接跟它说「搜一下……」「打开这个地址看看」。它打开的网页在右侧面板新的「浏览器」标签里，每个对话的 Agent 用自己的一个标签页，你看得到它在做什么；你自己也可以拿它上网（网页里要开新窗口的链接开成它的一个新标签页），并把页面地址和选中的文字「发给对话」。这里的搜索默认不用密钥（Bing，不行换 DuckDuckGo），只能当兜底：它们在不少网络下会限流或给出不相干的结果，Agent 会优先用自带的搜索；要稳就在 **设置 → 联网** 填 Tavily 或 Brave 的密钥。点击、填表、截图要桌面版；网页版和手机上只能搜索和读文字。打开网页和操作网页走权限审批，搜索不问。
-- **图标栏和分区。** 窗口最左边多了一条图标栏：对话 · 自动化 · 扩展 · ···，下面是设置和账户（头像外面一圈是额度）。点「自动化」或「扩展」，侧栏换成那个分区自己的内容，主区域是它的页面。原来「显示工作台工具」后出现的那排没有文字的面板图标没有了：那些面板在 ··· 里，每个都有名字和一句说明，常用的可以钉到图标栏上。
-- **扩展页。** 连接器（MCP 服务器）是一个目录：每个服务有自己的标志、一句话和一个「添加」；Skills 和插件也在这里。设置里原来的页面都还在。
-- **「想多深」单独一个按钮。** 模型和智能程度拆成了两个按钮：模型菜单只管选模型；旁边的按钮一行一个档位，各有一句说明，「深度编排」是最后一行的开关。
-- **自动化 → 定时任务** 还没有任务时不再是一行灰字，而是说明 + 六张带图标的模板卡。
-- **界面缩放**（桌面版）：屏幕分辨率高、界面看着小的时候，可以把整个界面一起放大（或缩小），50% 到 300%。<kbd>Ctrl</kbd>+<kbd>=</kbd> 放大、<kbd>Ctrl</kbd>+<kbd>-</kbd> 缩小、<kbd>Ctrl</kbd>+<kbd>0</kbd> 还原（macOS 是 <kbd>⌘</kbd>；小键盘的 + − 0 也行），或者在 **设置 → 外观 → 界面缩放** 里选；命令面板里也有。所有窗口一起变，**重启后记得**（以前按 Ctrl+Shift+= 也能放大，但每次启动都回到 100%）。放大后窗口的最小尺寸跟着变大，界面不会被挤成手机布局；能放到多大取决于屏幕（窗口得放得进去）。右上角的 − □ × 和它旁边的按钮在任何比例下都不会互相压住。网页版请用浏览器自己的缩放。
+- **Web access: search and the built-in browser.** The agent in every conversation (Claude, Codex, Gemini and so on) can search the web, and can use the built-in browser to open pages, read content, click, fill in forms and take screenshots; just tell it "search for…" or "open this address and take a look". The pages it opens appear in the new "Browser" tab of the side panel, with each conversation's agent using its own tab, so you can see what it is doing; you can also use it to browse yourself (links that want a new window open as a new tab of it), and "send to conversation" the page address and the text you've selected. Search here needs no key by default (Bing, or DuckDuckGo if that fails), and is only a fallback: on many networks they rate-limit or return unrelated results, and the agent prefers its own built-in search first. For something dependable, enter a Tavily or Brave key in **Settings → Web access**. Click, form filling and screenshots need the desktop app; the web version and the phone can only search and read text. Opening and operating pages goes through permission approval; searching doesn't ask.
+- **Icon bar and sections.** A new icon bar runs down the far left of the window: Conversation · Automation · Extensions · ···, with Settings and your account below (the ring around the avatar is your quota). Click "Automation" or "Extensions" and the sidebar switches to that section's own content, with its page in the main area. The row of unlabeled panel icons that used to appear after "Show workbench tools" is gone: those panels are now in ···, each with a name and a one-line description, and the ones you use often can be pinned to the icon bar.
+- **Extensions page.** Connectors (MCP servers) are a directory: each service has its own logo, a one-line description and an "Add" button; Skills and plugins are here too. The old pages in Settings are all still there.
+- **"How deep to think" is its own button.** Model and thinking effort are now two buttons: the model menu only picks the model; the button next to it has one level per row, each with a one-line explanation, and "Deep orchestration" is the switch on the last row.
+- **Automation → Scheduled tasks**, when you have no tasks yet, is no longer a line of grey text but an explanation plus six template cards with icons.
+- **Interface zoom** (desktop app): when your screen resolution is high and the interface looks small, you can scale the whole interface up (or down), from 50% to 300%. <kbd>Ctrl</kbd>+<kbd>=</kbd> zooms in, <kbd>Ctrl</kbd>+<kbd>-</kbd> zooms out, <kbd>Ctrl</kbd>+<kbd>0</kbd> resets (on macOS it's <kbd>⌘</kbd>; the numpad + − 0 work too), or choose it in **Settings → Appearance → Interface zoom**; it's in the command palette as well. All windows change together and **it is remembered after a restart** (Ctrl+Shift+= used to zoom in too, but every launch went back to 100%). When zoomed in, the window's minimum size grows with it, so the interface won't get squeezed into the phone layout; how far you can go depends on the screen (the window has to fit). The − □ × at the top right and the button next to them never overlap at any scale. For the web version, use your browser's own zoom.
 
-### 改动
+### Changed
 
-- 右侧面板有五个固定标签（多了浏览器）。面板窄的时候只有当前那个带名字，其它是图标；从「更多」打开的面板，名字放不下时不再被切掉半个字，而是收进「更多」（按钮上一个数字，面板顶上写着它的名字）。
-- `+` 里的「控制浏览器」改叫「控制 Chrome」：它用的是你自己的 Chrome（要装 Claude 扩展）；内置浏览器每个对话都有，不用开关。
+- The side panel has five fixed tabs (the Browser was added). When the panel is narrow only the current tab keeps its name and the others are icons; for a panel opened from "More", a name that doesn't fit is no longer cut off in the middle of a character but folded into "More" (a number on the button, and the panel's name written at the top of the panel).
+- "Control browser" in the `+` menu is now called "Control Chrome": it uses your own Chrome (the Claude extension must be installed); the built-in browser is there for every conversation and needs no switch.
 
-### 修复
+### Fixed
 
-- **「操控电脑」一开，对话就起不来。** `+` 里的这个开关给运行内核传了一个它不认识的参数，进程在第一条消息之前就退出了。运行内核只在它自己的终端界面里支持操控电脑，所以现在不再传这个参数，那一行标成「暂不可用」并写明原因；上网（搜索、打开网页、点击、截图）用上面的内置浏览器。
-- 对话顶上的项目和分支放不下时，以前会被挤成「m…」这样看不懂的半截；现在放不下的那一项整个不显示，项目名自己才会缩短。
+- **Turning on "Computer control" meant the conversation wouldn't start.** This switch in `+` passed the runtime an argument it doesn't recognize, and the process exited before the first message. The runtime supports computer control only in its own terminal interface, so the argument is no longer passed, that row is marked "Not available right now" with the reason given; for going online (search, opening pages, clicking, screenshots) use the built-in browser above.
+- When the project and branch at the top of a conversation didn't fit, they used to be squeezed into an unreadable stub like "m…"; now the item that doesn't fit is hidden entirely, and only the project name itself gets shortened.
 
-### 界面换新
+### Interface refresh
 
-整个界面重做了一遍外观和交互（设计说明在 `docs/superpowers/specs/2026-10-10-ui-refresh/`）。功能和入口都没有少；位置上的变化就是上面「新增」和「改动」里写的那几处。
+The whole interface got a new look and feel (the design notes are in `docs/superpowers/specs/2026-10-10-ui-refresh/`). No features or entry points were removed; the only changes in position are the ones listed above under "Added" and "Changed".
 
-- **不再四四方方。** 侧栏直接坐在暖色的底上，对话区、右侧面板、设置页是浮在上面的圆角卡片，中间留一道缝；原来到处都是的分隔线和描边换成了很淡的阴影圈。输入框、菜单、对话框、卡片的圆角按一套尺寸统一了。
-- **颜色**：浅色是暖纸白，深色是暖黑，强调色是亮橙（只用在品牌、焦点、运行中的光）。其它四个主题（纸张、Dracula、Nord、Tokyo Night）跟着一起调过。
-- **字体**：界面文字用 Inter，代码用 JetBrains Mono（都随应用一起带，不用另装），中文仍用系统字体；首页问候语和各页标题用宋体。字号统一成整数的一套。
-- **图标**全部换成 Lucide 的线条图标，粗细随大小调整。
-- **输入框**：发送键是一个会变的圆（没内容时发灰、有内容变实、运行中变成停止方块）；运行中输入框边上有一圈走动的光，上沿贴一个状态页签，写着正在做什么、第几步、用了多久。
-- **对话**：一轮里的步骤是一行一行的，连续的同类步骤（连着读几个文件）合成一行；新的步骤滑进来，结束后收成一句摘要，用时和数字滚上去；回答的字淡入。代码块、改动文件卡、表格都重画了。
-- **菜单、分段选择、提示**：菜单从点的地方长出来；设置里两三个选项的几选一是带滑块的分段控件；提示（「已复制」之类）从右下角挪到主区域顶上，是墨色的小药丸，最多叠三条，不会再挡住输入框和审批按钮。
-- **审批卡**（Claude 想运行命令 / 改文件时那张）圆角更大，命令单独一块，按钮是药丸形。
-- **手机**：头部是悬浮的圆按钮（有改动时多一个 `+N −M`，点了看改动），内容从下面滚过去；右侧面板是能拖的底部抽屉（两档高度，下拉关闭）；在对话上右滑拉出侧栏，左滑收回；所有菜单在手机上是从底部滑上来的操作单，长按对话行也能打开；系统的返回手势先关掉最上面那层（菜单、抽屉、侧栏），不会直接退出页面；点对话里的一步，详情在抽屉里打开；审批卡的按钮各占一行；终端上方多一排 Esc / Tab / Ctrl / Alt / 方向键 / Ctrl+C / 粘贴；审阅里可以切换换行和横向滚动，提交收成一个按钮；点得到的东西点击区都至少 44px。这些手势只在电脑上用手机宽度的窗口和模拟触摸试过，**还没有在真手机上验证**，遇到不顺手的地方请提 issue。
-- 手机壳（在外面连回来时的那个页面）和局域网配对页换了同一套颜色。
-- 运行中又发出去的消息，现在是输入框上方的一张小卡「已排队，这一轮结束后发送」，可以编辑、立即发送或删除。
-- 设置 → 外观多了「触感反馈」（支持震动的手机上，发送、批准、长按出菜单时轻震一下）。
-- 打开了系统的「减少动态效果」或设置里的「减少动画」时，上面这些动效都不出现（转圈的加载标记除外）。
-- 桌面版（Windows）：右上角的 − □ × 浮在卡片上，和那一行自己的按钮基本在一条线上（以前高出一截）；看图片时工具栏右边的按钮不再被 − □ × 盖住。
+- **No longer all squares and boxes.** The sidebar sits directly on the warm background, while the conversation area, the side panel and the settings pages are rounded cards floating above it with a gap between them; the dividers and outlines that used to be everywhere are replaced by a very faint shadow ring. The corner radii of the input box, menus, dialogs and cards follow one unified set of sizes.
+- **Color**: light is a warm paper white, dark is a warm black, and the accent is a bright orange (used only for the brand, focus and the glow of things that are running). The other four themes (Paper, Dracula, Nord, Tokyo Night) were adjusted to match.
+- **Fonts**: interface text is Inter and code is JetBrains Mono (both ship with the app, nothing to install), Chinese still uses the system font; the home greeting and page titles use a serif. Font sizes are unified into one set of whole numbers.
+- **Icons** are all replaced with Lucide line icons, with stroke weight adjusted to size.
+- **Input box**: the send button is a circle that changes (grey when empty, solid when there's content, a stop square while running); while running, a travelling glow runs around the input box, and a status tab on the top edge says what it is doing, which step it's on and how long it's taken.
+- **Conversation**: the steps of a turn are one line each, and consecutive steps of the same kind (several files read in a row) merge into one line; new steps slide in and collapse into a one-sentence summary at the end, with times and numbers rolling up; the reply text fades in. Code blocks, the changed-files card and tables were redrawn.
+- **Menus, segmented controls, notices**: menus grow from where you clicked; a pick-one-of-two-or-three choice in Settings is a segmented control with a slider; notices ("Copied" and the like) moved from the bottom right to the top of the main area as small ink-colored pills, at most three stacked, so they no longer cover the input box and the approval buttons.
+- **Approval card** (the one for when Claude wants to run a command or change a file) has larger corners, the command in a block of its own, and pill-shaped buttons.
+- **Phone**: the header is floating round buttons (with an extra `+N −M` when there are changes, which you tap to see them) and the content scrolls underneath; the side panel is a draggable bottom sheet (two heights, pull down to close); swipe right on a conversation to pull out the sidebar and left to put it away; on a phone every menu slides up from the bottom as an action sheet, and long-pressing a conversation row opens one too; the system back gesture closes the topmost layer first (menu, sheet, sidebar) instead of leaving the page; tap a step in the conversation and its details open in the sheet; the approval card's buttons each take a row; above the terminal there is a new row of Esc / Tab / Ctrl / Alt / arrow keys / Ctrl+C / Paste; in Review you can toggle word wrap and horizontal scrolling, and commit is folded into one button; everything tappable has a tap target of at least 44px. These gestures have only been tried on a computer with a phone-width window and simulated touch, **and have not yet been verified on a real phone**; if something feels off, please open an issue.
+- The phone shell (the page you get when connecting back from outside) and the LAN pairing page use the same colors now.
+- A message sent while a turn is running is now a small card above the input box saying "Queued; it will be sent when this turn ends", and you can edit it, send it now or delete it.
+- Settings → Appearance has a new "Haptic feedback" (on phones that support vibration, a light buzz on send, on approve and when a long press opens a menu).
+- With the system's "reduce motion" on, or "Reduce motion" on in Settings, none of the animations above appear (except the spinning loading mark).
+- Desktop app (Windows): the − □ × at the top right float over the cards and sit roughly in line with that row's own buttons (they used to sit a bit higher); when viewing an image, the buttons on the right of the toolbar are no longer covered by − □ ×.
 
 ## [0.1.10] — 2026-10-09
 
-### 修复
+### Fixed
 
-- **自己发的消息那排按钮（复制、编辑、重跑、分叉、分享）总是点不到。**（[#1](https://github.com/ypyik0669/claude-web/issues/1)）它们以前浮在消息上方的空白里，鼠标从消息往上移，一离开消息按钮就消失了。现在按钮放在消息下面，和回答下面的按钮一样，鼠标移过去一直都在。
+- **The row of buttons on your own messages (Copy, Edit, Rerun, Fork, Share) was always hard to click.** ([#1](https://github.com/ypyik0669/claude-web/issues/1)) They used to float in the empty space above the message, and when you moved the mouse up from the message, the buttons vanished the moment it left the message. Now the buttons sit below the message, like the ones under a reply, and stay there as you move the mouse over to them.
 
 ## [0.1.9] — 2026-10-09
 
-### 修复
+### Fixed
 
-- **代码块有时只显示「12 行」、下面一片空白。** 我们这边复现不出来，看起来是浏览器扩展或网页翻译改动了页面。现在代码块会自己检查：有内容却显示为空、不占位置、或者字和底色一样看不见时，先重画一次，还不行就改成不带高亮的纯文本，并在日志里记下当时的情况（只记行数、语言、浏览器这类信息，不记代码本身），下次遇到就能查到原因。
-- **OpenAI 格式的中转上选了带 sonnet / opus / haiku 字样的模型（比如 `claude-sonnet-5`），发出去的却是默认模型。** 现在中转自己列出的模型原样发出去。运行内核随之更新到 2.8.4-cw.2。
-- 运行内核自带的 `update` 命令以前会去 npm 安装一个 npm 上没有的包，现在只说明内核跟着 Claude Web 一起更新。
+- **A code block sometimes showed only "12 lines" with blank space below.** We couldn't reproduce it here; it looks like a browser extension or page translation altering the page. Now a code block checks itself: when it has content but displays as empty, takes up no space, or has text the same color as the background so it can't be seen, it redraws once first, and if that still doesn't work it falls back to plain text without highlighting and writes the circumstances to the log (only things like line count, language and browser, never the code itself), so next time it can be traced.
+- **On an OpenAI-format relay, choosing a model with sonnet / opus / haiku in its name (such as `claude-sonnet-5`) actually sent the default model.** Now the models the relay lists itself are sent as they are. The runtime is updated to 2.8.4-cw.2 with this.
+- The runtime's built-in `update` command used to go and install from npm a package that doesn't exist on npm; now it just says the runtime updates together with Claude Web.
 
 ## [0.1.8] — 2026-10-09
 
-### 新增
+### Added
 
-- 每条回答下面那一行多了缓存命中率（「缓存 92%」），鼠标停上去能看到输入里从缓存读了多少、写进缓存多少、没走缓存多少。输入（↑）现在也把写进缓存的那部分算进去了，和「本对话用量」、账本是同一个算法。
-- 模型菜单和输入框下面的模型名，改用供应商模型列表里自带的名字：官方 DeepSeek 的 `deepseek-flash` 显示成「DeepSeek-V4.1-Flash」（菜单里那一行下面仍写着真实的 id）。已经添加的供应商，点一次「刷新全部模型」就会更新。
-- **每个供应商、每个模型都能选「智能程度」了。** 以前只有 Claude 能选，OpenAI / Gemini / Grok 格式的供应商根本不发这个设置。现在模型自己支持的就用它自己的参数（DeepSeek 的 `reasoning_effort`、Gemini 的思考等级……，档位按供应商模型列表里写的来），不支持的就把要求写进每一轮的提示里；中转不收这个参数时会自动去掉重发、这一轮照样回答，并记住这个模型以后走提示的方式。换档不用重开对话。
-- **「深度编排」所有模型都能用了**：打开后模型会为大一点的任务写工作流、分给多个子任务去做（会多花 token）。在欢迎页打开再发送也生效。
-- 运行内核换成了我们自己维护的 claude-web-engine（在 claude-code-best 2.8.4 上改的），跟着 Claude Web 一起发版，不再单独更新。
+- The row under every reply now shows the cache hit rate ("Cache 92%"), and hovering shows how much of the input was read from the cache, how much was written to it and how much didn't go through the cache. Input (↑) now also counts the part written to the cache, using the same calculation as "This conversation's usage" and the ledger.
+- The model menu and the model name below the input box now use the names that come with the provider's model list: the official DeepSeek's `deepseek-flash` shows as "DeepSeek-V4.1-Flash" (the real id is still written under that row in the menu). For providers you've already added, click "Refresh all models" once to update.
+- **Every provider and every model can now pick a "Thinking effort".** Before, only Claude could; providers in OpenAI / Gemini / Grok format never sent this setting at all. Now a model that supports it uses its own parameter (DeepSeek's `reasoning_effort`, Gemini's thinking level…, with the levels taken from the provider's model list), and one that doesn't has the request written into every turn's prompt; if a relay doesn't accept the parameter, it is removed and re-sent automatically, the turn is still answered, and the app remembers to use the prompt approach for that model from then on. Changing the level doesn't require reopening the conversation.
+- **"Deep orchestration" now works on every model**: once it's on, the model writes a workflow for bigger tasks and hands the pieces to several subtasks (this uses more tokens). Turning it on in the welcome page and then sending works too.
+- The runtime is now claude-web-engine, which we maintain ourselves (a modification of claude-code-best 2.8.4); it ships together with Claude Web and is no longer updated separately.
 
-### 修复
+### Fixed
 
-- **「自动判断」的判断规则以前根本没有加载。** 原来的运行内核打包时把判断用的规则文本丢了，判断全靠模型自己猜；现在用的是完整的规则。
-- **官方 DeepSeek 上「自动判断」不再每条命令都来问你。** 「自动判断」在执行命令前会先让模型判断一下安不安全，这一步要求模型必须调用一个判断工具；DeepSeek 在思考模式下拒绝这种请求（「Thinking mode does not support this tool_choice」），于是每次判断都失败，只好每次都问你。现在这一步遇到这种拒绝会自动关掉思考再问一次，之后就直接这样问。模型网关里的 DeepSeek 成员也一样。
-- **在手机（或另一个窗口）上问的问题，电脑上也显示了。** 以前只显示回答，问题要重开对话才看得到；钉钉等机器人、定时任务、目标自动发的「继续」也一样。
-- 「Claude 账号」的对话因为 Key 被拒或连不上而失败、而你已经添加了供应商时，会说明这个对话没有经过你的供应商，并给一个「改用「供应商名」重试」按钮。
-- 连不上服务器时，重试那一行不再只写「(unknown)」：写「连不上服务器」，并说明具体原因要等重试走完才显示、想马上知道可以点「测试连接」。
-- 电脑名很长（超过 64 个字）时，手机上配对前后显示的电脑名一致了。
-- Codex 用供应商（中转）时，账本不再把正常答完的调用记成失败（「客户端已断开」）：Codex 收到回答就先断开了连接，以前这些调用都被算成了失败。发给中转的会话标识也和 Codex 自己的保持一致。
+- **The rules behind "Auto" were never actually loaded.** The previous runtime dropped the rule text used for the judgement when it was packaged, so the judging was left to the model's guesswork; now the complete rules are used.
+- **On the official DeepSeek, "Auto" no longer asks you about every single command.** Before running a command, "Auto" first has the model judge whether it's safe, and this step requires the model to call a judging tool; DeepSeek rejects that kind of request in thinking mode ("Thinking mode does not support this tool_choice"), so every judgement failed and it had to ask you every time. Now when this step meets that rejection, it turns thinking off and asks again automatically, and does it that way from then on. The DeepSeek member in the model gateway is the same.
+- **A question asked on the phone (or in another window) is now shown on the computer too.** Before, only the reply showed up and you had to reopen the conversation to see the question; the same went for bots like DingTalk, scheduled tasks, and the "continue" that goals send automatically.
+- When a "Claude account" conversation fails because the key was rejected or it couldn't connect, and you have already added a provider, it now says this conversation didn't go through your provider, and offers a "Retry with “provider name”" button.
+- When the server can't be reached, the retry line no longer says just "(unknown)": it says "Can't reach the server", and explains that the specific reason is shown only after the retries finish, and that you can click "Test connection" to find out right away.
+- When the computer's name is very long (over 64 characters), the name shown on the phone before and after pairing is now the same.
+- When Codex uses a provider (relay), the ledger no longer records calls that were answered normally as failed ("client disconnected"): Codex disconnects as soon as it has the answer, and these calls used to be counted as failures. The conversation identifier sent to the relay is also now consistent with Codex's own.
 
 ## [0.1.7] — 2026-10-07
 
-0.1.6 没有单独发布，下面 0.1.6 的内容也都在这个版本里。
+0.1.6 was never published on its own; everything under 0.1.6 below is in this version too.
 
-### 修复
+### Fixed
 
-- **用供应商（中转）开的对话不再被 `~/.claude/settings.json` 里的旧配置顶掉。** 以前用 cc-switch 之类的工具、或者手动在 `settings.json` 的 `env` 里写过中转地址和 Key 的人，在这里添加了新的供应商以后：模型列表能拉到（那是这里用新 Key 拉的），可是一发消息就「API 重试 1/10（authentication_failed HTTP 401）」，要等好几分钟才失败。原因是 Claude Code 会用 `settings.json` 里的旧 Key（甚至旧地址）盖掉这里给它的。现在对话和「测试连接」都以供应商里填的为准；`settings.json` 里别的设置照常生效，用 Claude 账号开的对话也照旧读它。
-- Key 被拒（401）时，第一次重试下面就直接写明该检查什么，不用等十次重试走完。
+- **Conversations opened with a provider (relay) are no longer overridden by old settings in `~/.claude/settings.json`.** Before, people who had used a tool like cc-switch, or had written a relay address and key into the `env` of `settings.json` by hand, ran into this after adding a new provider here: the model list could be fetched (that was done here with the new key), but sending a message got "API retry 1/10 (authentication_failed HTTP 401)" and took several minutes to fail. The cause was that Claude Code used the old key (even the old address) from `settings.json` over the one given by this app. Now conversations and "Test connection" both go by what's entered in the provider; the other settings in `settings.json` still apply as usual, and conversations opened with a Claude account still read it as before.
+- When a key is rejected (401), the first retry now says right away what to check, without waiting for all ten retries to run.
 
 ## [0.1.6] — 2026-10-03
 
-### 新增
+### Added
 
-- **手机不在家里 Wi-Fi 时也能连上电脑。** **设置 → 手机与其它电脑** 新增「在外面也能用」（打开远程访问时默认开）。配对二维码默认换成「在哪都能用」的那张：手机扫码打开一个网页，配对一次，以后在哪都能连，不用装 App、不用注册。
-  - 两边经公共的牵线服务器找到对方，消息都加密，牵线服务器只看得到加密后的数据和双方的 IP。
-  - 能直连就直连；手机流量下常常打不通，这时自动改走慢速转发：文字、审批都能用，文件预览和上传不能用，手机上会写明。
-  - 原来的局域网二维码还在（「只在局域网（不用联网）」）。
-  - iPhone：想从主屏幕图标用，要先「添加到主屏幕」再从那里配对（主屏幕和 Safari 的存储是分开的）；手机页面上可以粘贴电脑上「复制配对链接」得到的链接。
-  - 吊销一台设备后，它已经连着的通道立刻断开。
-  - 牵线服务器、STUN 服务器、手机页面地址可以在「更多选项」里改，最近 20 次连接也在那里。改过的列表会写进二维码，手机扫码时拿到；改了之后，已经配对的手机要重新扫码。
-- **远程访问开着时不让电脑睡眠**（桌面版，默认开）。屏幕照样会关，笔记本合盖照样会睡。网页版做不到，设置里有提示。
+- **Reach your computer from your phone even when you're not on the home Wi-Fi.** **Settings → Phone and other computers** has a new "Use it from anywhere" option (on by default when remote access is on). The pairing QR code now defaults to the "works anywhere" one: scan it, the phone opens a web page, you pair once, and from then on you can connect from anywhere, with no app to install and no sign-up.
+  - The two sides find each other through a public rendezvous server, all messages are encrypted, and the rendezvous server only sees the encrypted data and both sides' IPs.
+  - It connects directly when it can; on mobile data that often doesn't work, and then it switches automatically to a slower relay path: text and approvals work, file preview and upload don't, and the phone says so.
+  - The old LAN QR code is still there ("Local network only (no internet needed)").
+  - iPhone: to use it from a Home Screen icon, first "Add to Home Screen" and pair from there (the Home Screen and Safari have separate storage); on the phone page you can paste the link you get from "Copy pairing link" on the computer.
+  - After a device is revoked, any channel it already has open is cut immediately.
+  - The rendezvous server, STUN server and phone page address can be changed under "More options", and the last 20 connections are there too. A changed list is written into the QR code and the phone picks it up when scanning; after a change, phones that are already paired need to scan again.
+- **Keep the computer from sleeping while remote access is on** (desktop app, on by default). The screen still turns off, and a laptop with its lid closed still sleeps. The web version can't do this, and Settings says so.
 
-### 注意
+### Notes
 
-- **已经打开了远程访问的，升级后「在外面也能用」和「不让电脑睡眠」会自动打开**（这两项默认就是开的）。电脑会一直连着公共的牵线服务器等手机来找它，并且远程访问开着时不会自己睡着：台式机和插着电源的笔记本没什么影响，笔记本用电池时会比以前耗电（屏幕照样会关，合盖照样会睡）。不需要的话，在 **设置 → 手机与其它电脑** 把这两个开关关掉，或者直接关掉「允许其它设备访问」。
-- **一台手机配对了好几台电脑时，这些电脑能读到彼此在这台手机上的访问令牌**（「在哪都能用」的手机页面是同一个网址，几台电脑的界面都在它里面运行）。只把互相信任的电脑配对到同一台手机上；用「只在局域网」二维码配对的不受影响。
+- **If you already had remote access on, "Use it from anywhere" and "Keep the computer awake" turn on automatically after upgrading** (both are on by default). The computer stays connected to the public rendezvous server waiting for the phone to look for it, and doesn't fall asleep on its own while remote access is on: this makes little difference on a desktop or a laptop plugged in, but a laptop on battery will use more power than before (the screen still turns off and closing the lid still sleeps). If you don't need them, turn the two switches off in **Settings → Phone and other computers**, or just turn off "Allow other devices to connect".
+- **When one phone is paired with several computers, those computers can read each other's access tokens on that phone** (the "works anywhere" phone page has the same URL, and the interfaces of several computers run inside it). Pair only computers that trust each other to the same phone; pairing with the "Local network only" QR code is not affected.
 
 ## [0.1.5] — 2026-10-02
 
-### 修复
+### Fixed
 
-- **新对话还没发消息时切换供应商，不会再报「No conversation found with session ID」。** 以前在新对话里先在模型菜单换到另一个供应商（中转）的模型，对话立刻变成「出错」，换回来也不行。原因是对话还没有记录文件，切换时却按「接着之前的对话」去重开。现在没发过消息的对话会在同一个对话里重新开始。新对话闲置半小时后再发消息、或者在新对话里换模型触发重启，也是同一个问题，一起修好了。
-- **报错都会先用一句中文说清楚是什么错。** 对话里的红字、弹窗、`server.log` 里，常见的错误（找不到文件夹、连接被拒绝、Key 不对、余额不足、地区限制、限流、对话太长……）都会先说明是什么问题、该怎么办，下面保留「原文：…」，截图或反馈问题时能看到原始错误。弹窗多显示几秒，文字可以选中复制。
-- 对话的项目文件夹被移动或删除后，会直接说「找不到这个对话的项目文件夹」，不再提示去测试供应商。
-- **切换供应商后，别的窗口马上显示新的模型和「启动中」。** 以前要停在「已关闭」和旧模型上十几秒到半分钟，这期间发的消息还会被送回旧供应商。
-- **切换供应商的那一两秒里发的消息不会再被拒或丢掉。** 消息会等新进程起来后再发出去；这时另一个窗口打开同一个对话，也不会再把切换悄悄取消掉。正在回答时切换，这一轮会明确结束，并说明「已切换，这一轮被中断了」。
-- **在官方 Claude Code 和 ccb 之间来回换供应商，不会再丢掉中间几轮。** 以前在 ccb 上跑的几轮，换回官方 Claude Code 之后它就看不到了，下一轮还会从更早的地方岔开。在终端里用 `claude --resume` 接着网页上的对话，也是同一个问题，一起修好了。
-- **Claude Opus 5.5 等新模型在 Claude 格式的中转上能用了。** 以前选它会报 400「requires adaptive thinking」：内置的 ccb 太旧，不认识这些模型。现在这些模型自动改用官方 Claude Code 运行；对话用了只有 ccb 才有的功能时，留在 ccb 上，只是不开思考。
-- **费用不再重复累加。** 以前每一轮都把整个对话至今的总费用又加一遍，一个实际花了 $2.42 的对话会显示 $17.42，账本里每一轮也都记在对话最早用的那个模型名下。现在每一轮只记它自己的费用和模型。
-- **在 ccb 上改「智能程度」真的会生效了。** 以前界面上换了档位，实际发出去的还是原来的。现在会用新档位重新接上对话；正在回答时就等这一轮结束再换。Claude 格式以外的中转（OpenAI / Gemini / Grok 格式）本来就不会把档位发出去，现在不再显示这个选项。
-- **中转报的错能看到原因了。** 余额不足、没有可用账号这类错误，以前只显示「403 status code (no body)」。「Insufficient account balance」现在说成余额不足，不再说成没有权限。
-- **测试连接更快，失败原因说得更清楚。** 中转一直报 5xx 时，以前要等 4 分钟才出一句「exit 1」。现在只重试一次，超时会直接说超时；中转故障、余额不足时，也不再白白换官方 Claude Code 重测一遍。只有画图模型的 Key 会直接说「列表里没有聊天模型」，这些模型也不再出现在模型菜单里。测试连接也不会再在「其它文件夹 › Temp」里留下「Reply with exactly: ok」之类的对话。
-- **切回「Claude 账号」真的会切回去。** 以前界面上写着「Claude 账号」，实际还是原来的供应商在回答，也在扣它的费用。
-- **在 `~/.claude/settings.json` 里自己配了中转的账号，默认模型不会再卡住。** 以前会被换成一个中转上没有的模型名，卡三分多钟才报错。
-- **从 Codex（或其它 Agent）交回 Claude 继续，在 ccb 上不会再一发消息就出错。** 交回之后重新打开，对话也不会再被当成 Codex 对话。
-- **在终端里接着网页上开着的对话聊，网页这边不会再看不到那几轮，也不会再把它们弄丢。** 网页上的对话跑在官方 Claude Code 上、闲置时，终端里的 `claude --resume` 以前会看不到网页最后那个回答，现在也修好了。
-- 余额不足的错误不再说成「额度用尽，等重置」：现在明确说是供应商账户余额不够，去充值或换一个供应商；「到点自动继续」也不会再对它生效。
-- 进程退出时，如果 CLI 输出里有更具体的原因（没登录、不是 git 仓库、Key 不对……），先说这个原因，不再只说「退出码 1」。
-- 换供应商时被打断的那一轮，账本里不再多出一行没有模型、没有用量的空记录。
-- 测试连接时，读模型列表遇到一次连接中断（断线、连接超时），会自动重试一次，不会马上报「地址不对」。
-- 从 Codex 等交回 Claude 之后，侧栏里对话的标题不再显示成「# 会话交接 …」。
-- 中转的 qwen 模型（返回空的 `reasoning_content`）回答不再被截成第一个词。
-- **在网页上开的 Codex 对话，用 Codex 命令行（`codex exec resume`）接着聊的那几轮，现在也会显示在网页上。** 开着这个对话的窗口会自动刷新；之后在网页上接着聊，顺序也是对的。
-- 网页上开着的 Codex 对话闲置两分钟后会松开它的线程，终端里的 `codex exec resume` 不会再报「already has an active writer」。在 Codex 第一次运行之前就加入对话库，之后它的对话也能被看到。
-- 对话进程出错时，错误信息里带上 CLI 自己输出的原因（以前只有「exited with code 1」），`server.log` 也会记下 CLI 的输出。
-- 切换供应商时，旧的 CLI 进程会马上结束。以前在 Windows 上它还会多跑几秒，期间可能替旧供应商答完一轮、扣了费，窗口里却看不到；偶尔还会报「Session ID … already in use」。
-- 重新打开的 Codex 对话会显示它用的模型；分叉的分叉标题只有一个「(分叉)」；还没发过消息的对话改名时，会用中文说明要先发一条消息；默认模型会挑到最新的 GPT（比如 gpt-6.1），同名的大小写重复项优先用小写的那个。
+- **Switching provider in a new conversation before sending a message no longer gives "No conversation found with session ID".** Before, if in a new conversation you first switched in the model menu to a model from another provider (relay), the conversation immediately became "Error" and switching back didn't help. The cause was that the conversation had no record file yet, but switching tried to reopen it as "continue the earlier conversation". Now a conversation that has never had a message restarts within the same conversation. Sending a message after a new conversation has sat idle for half an hour, or switching models in a new conversation and triggering a restart, was the same problem and is fixed too.
+- **Errors now start with a one-sentence plain explanation of what went wrong.** In the red text in conversations, in pop-ups and in `server.log`, common errors (folder not found, connection refused, wrong key, insufficient balance, region restriction, rate limiting, conversation too long…) first say what the problem is and what to do, with "Original: …" kept below so the raw error is visible in screenshots or when reporting a problem. Pop-ups stay a few seconds longer and the text can be selected and copied.
+- When a conversation's project folder has been moved or deleted, it now says outright "Can't find this conversation's project folder" instead of suggesting you test the provider.
+- **After switching provider, other windows immediately show the new model and "Starting".** Before, they sat on "Closed" and the old model for ten-odd seconds up to half a minute, and messages sent in that time were still delivered to the old provider.
+- **Messages sent during the second or two of a provider switch are no longer refused or dropped.** The message waits until the new process is up and then goes out; opening the same conversation in another window at that moment also no longer quietly cancels the switch. If you switch while it is answering, this turn ends clearly with the note "Switched. This turn was interrupted."
+- **Switching provider back and forth between the official Claude Code and ccb no longer loses the turns in between.** Before, turns that ran on ccb were invisible after switching back to the official Claude Code, and the next turn would also fork off from an earlier point. Continuing a web conversation in the terminal with `claude --resume` had the same problem and is fixed too.
+- **New models such as Claude Opus 5.5 work on Claude-format relays.** Before, choosing one gave a 400 "requires adaptive thinking": the built-in ccb was too old to know these models. Now these models automatically run on the official Claude Code; if the conversation uses a feature only ccb has, it stays on ccb, just without thinking.
+- **Cost is no longer added up repeatedly.** Before, each turn added the conversation's whole cost so far again, so a conversation that really cost $2.42 showed $17.42, and every turn in the ledger was recorded under the first model the conversation ever used. Now each turn records only its own cost and model.
+- **Changing "Thinking effort" on ccb really takes effect now.** Before, you changed the level in the interface but what actually went out was still the old one. Now the conversation is reattached with the new level; if it's answering, the change waits until this turn ends. Relays in formats other than Claude (OpenAI / Gemini / Grok) never sent the level anyway, and the option is no longer shown for them.
+- **You can now see the reason for errors reported by a relay.** Errors like insufficient balance or no available account used to show only "403 status code (no body)". "Insufficient account balance" is now described as insufficient balance, no longer as no permission.
+- **Test connection is faster and failure reasons are clearer.** When a relay kept returning 5xx, it used to take 4 minutes to produce just "exit 1". Now it retries only once, a timeout says timeout outright, and for a relay outage or insufficient balance it no longer wastes time re-testing with the official Claude Code. A key that only works for image models now says "No chat models in the list" directly, and those models no longer appear in the model menu. Test connection also no longer leaves conversations like "Reply with exactly: ok" under "Other folder › Temp".
+- **Switching back to "Claude account" really switches back.** Before, the interface said "Claude account" but the old provider was still the one answering, and still being charged.
+- **For accounts that configured a relay by hand in `~/.claude/settings.json`, the default model no longer gets stuck.** Before, it was replaced with a model name the relay doesn't have, and hung for over three minutes before erroring.
+- **Handing back to Claude from Codex (or another agent) no longer errors on the first message on ccb.** After handing back and reopening, the conversation is also no longer treated as a Codex conversation.
+- **Continuing, in the terminal, a conversation that is open on the web no longer makes the web side miss those turns or lose them.** When a web conversation ran on the official Claude Code and was idle, `claude --resume` in the terminal couldn't see the web side's last reply; that is fixed too.
+- An insufficient-balance error is no longer described as "quota used up, wait for the reset": it now says plainly that the provider account's balance is too low, so top up or switch provider; and "auto-continue when the time comes" no longer applies to it.
+- When the process exits and the CLI output contains a more specific reason (not signed in, not a git repository, wrong key…), that reason is stated first instead of just "exit code 1".
+- A turn interrupted by a provider switch no longer leaves an empty ledger row with no model and no usage.
+- During Test connection, if reading the model list hits a dropped connection (disconnect, connection timeout), it retries once automatically instead of immediately reporting "wrong address".
+- After handing back from Codex and the like to Claude, the conversation's title in the sidebar no longer shows as "# Conversation handoff …".
+- A relay's qwen model (which returns an empty `reasoning_content`) no longer has its reply cut down to the first word.
+- **For a Codex conversation opened on the web, turns continued with the Codex command line (`codex exec resume`) now show up on the web too.** The window that has this conversation open refreshes automatically; continuing on the web afterwards also keeps the right order.
+- A Codex conversation open on the web releases its thread after two minutes idle, so `codex exec resume` in the terminal no longer reports "already has an active writer". If it was added to the conversation library before Codex ever ran, its conversations can be seen afterwards as well.
+- When a conversation process errors, the error message now includes the reason the CLI itself printed (before, only "exited with code 1"), and `server.log` records the CLI's output too.
+- When switching provider, the old CLI process ends immediately. Before, on Windows it kept running for a few more seconds, and in that time it could finish a turn for the old provider and charge for it with nothing visible in the window; occasionally it also reported "Session ID … already in use".
+- A reopened Codex conversation shows the model it used; a fork of a fork has just one "(Fork)" in its title; renaming a conversation that has never had a message now explains in plain language that you must send a message first; the default model now picks the newest GPT (such as gpt-6.1), and among same-name entries that differ only in case, the lowercase one is preferred.
 
 ## [0.1.4] — 2026-10-01
 
-### 修复
+### Fixed
 
-- **对话进程出错时，现在会说清楚是什么错。** 以前对话背后的进程一启动就出错退出时，界面一直显示「思考中」，只弹一句英文「session … is error; reopen it to continue」，日志里也没有记录。现在：
-  - 对话里用红字写出出错原因，这一轮直接结束，不再一直转；
-  - 弹窗改成中文，写明原因和该怎么做；
-  - 原因写进日志（`server.log` 里的 `process failed:` 一行），反馈问题时把日志发过来就能看到；
-  - 在出错的对话里再发一次，会自动重新打开它。
+- **When a conversation's process errors, it now says clearly what went wrong.** Before, if the process behind a conversation errored and exited right at startup, the interface kept showing "Thinking" with only an English "session … is error; reopen it to continue" popping up, and nothing was written to the log. Now:
+  - the conversation shows the cause in red and the turn simply ends instead of spinning forever;
+  - the pop-up is in plain language, with the cause and what to do;
+  - the cause is written to the log (a `process failed:` line in `server.log`), so sending the log when you report a problem is enough to see it;
+  - sending again in the errored conversation reopens it automatically.
 
-### 文档
+### Documentation
 
-- README 的「接入第三方 API / 中转」一节加了快速添加供应商和模型菜单的截图。
+- The README section "Connecting a third-party API / relay" gained screenshots of adding a provider quickly and of the model menu.
 
 ## [0.1.3] — 2026-09-30
 
-### 新增
+### Added
 
-- **应用自己检查更新，有新版本就弹窗。** 以前只有打开 **设置 → 高级 → 更新** 点「检查更新」才会发现新版本。现在启动后和每 4 小时会自动检查一次：
-  - **Windows 安装版**：在后台下载好新版本，然后弹窗「立即重启更新 / 稍后」；选「稍后」就在下次退出软件时自动装好。
-  - **macOS 版和 Windows 免安装版**：它们不能自己安装更新（macOS 版没有 Apple 签名），弹窗给出适合这台电脑的下载链接。
-  - 重要的版本会标成「必须更新」，弹窗里就没有「稍后」。
-  - 不想自动检查，可以在 **设置 → 高级 → 更新** 里关掉。
-- 这份更新日志。
+- **The app checks for updates by itself and shows a pop-up when there's a new version.** Before, you only found a new version by opening **Settings → Advanced → Update** and clicking "Check for updates". Now it checks automatically after startup and every 4 hours:
+  - **Windows installed version**: downloads the new version in the background, then pops up "Restart to update / Later"; choose "Later" and it installs by itself the next time you quit the app.
+  - **macOS version and Windows portable version**: they can't install updates themselves (the macOS version has no Apple signature), so the pop-up gives the download link that fits this computer.
+  - Important versions are marked as required, and the pop-up then has no "Later".
+  - If you don't want automatic checks, turn them off in **Settings → Advanced → Update**.
+- This changelog.
 
-注意：自动检查从这一版开始生效；v0.1.2 及更早的版本需要最后一次手动下载安装 v0.1.3。
+Note: automatic checking takes effect from this version; v0.1.2 and earlier need one last manual download and install of v0.1.3.
 
 ## [0.1.2] — 2026-09-30
 
-这一版主要照顾两类人：没有 Claude 账号、只用中转站或国内模型的人，以及开着梯子（规则模式）的人。
+This version mainly looks after two kinds of people: those who have no Claude account and only use relays or domestic Chinese models, and those running a proxy (rule mode).
 
-### 新增
+### Added
 
-- **第一次打开就能接上模型，不用 Claude 账号。** 首次引导的第一步改成「接一个模型」：选中转站、DeepSeek、Kimi、智谱、通义、硅基流动、OpenRouter 或 Gemini，粘贴 API Key，点连接。软件会先读模型列表、自动判断格式和默认模型，再发一条很短的测试。失败时直接说原因（Key 不对、余额不足、地址不对、连不上……）。用 Claude 账号登录仍然可以，放在同一页的次要位置。
-- **网络代理。** 新增 **设置 → 供应商 → 网络代理**。默认「跟随系统」：先看启动时的 `HTTPS_PROXY` 环境变量，再读系统代理（Windows 的系统代理 / PAC、macOS 的网络设置）。梯子只开「系统代理」、不开全局也能用了：测试连接、拉模型列表、所有对话（含 Codex 等其它 Agent）、IM 机器人和内置终端都会走它，本机和局域网地址照样直连。梯子退出后留下的失效代理会被自动跳过。也可以选「不使用」，或自定义一个 HTTP 代理地址。
-- **IM 机器人、定时任务、其它 Agent 都能用你的供应商。** 新对话默认用 **设置 → 供应商** 里设为默认的那个；每个机器人可以单独选「用哪个供应商」，每个 Agent（Codex、Gemini CLI……）的卡片上也可以选「新对话用」哪个供应商。
-- **Codex 能用只有 chat/completions 的中转。** 大多数国内中转 / 厂商没有 Codex 需要的 `/v1/responses` 接口，现在软件会自动转换，并记住这个中转不支持它。
-- **找得到装在别处的 Agent。** Codex 桌面版或 VS Code / Cursor 扩展自带的 codex、fnm / pnpm / Volta / scoop 装的命令都能找到；找到了但运行出错时显示错误，而不是「未安装」。
+- **Connect a model the first time you open the app, no Claude account needed.** The first step of the first-run guide is now "Connect a model": pick a relay, DeepSeek, Kimi, Zhipu, Tongyi, SiliconFlow, OpenRouter or Gemini, paste the API key, and click connect. The app first reads the model list, works out the format and the default model by itself, and then sends one very short test. When it fails it says the reason outright (wrong key, insufficient balance, wrong address, can't connect…). Signing in with a Claude account is still possible and sits in a secondary place on the same page.
+- **Network proxy.** New **Settings → Providers → Network proxy**. The default is "Follow system": it first looks at the `HTTPS_PROXY` environment variable at startup, then reads the system proxy (Windows system proxy / PAC, macOS network settings). A proxy tool that only turns on the "system proxy" and not global mode now works: Test connection, fetching model lists, all conversations (including other agents such as Codex), IM bots and the built-in terminal all go through it, while local and LAN addresses still connect directly. A stale proxy left behind after the proxy tool quits is skipped automatically. You can also choose "Don’t use", or enter a custom HTTP proxy address.
+- **IM bots, scheduled tasks and other agents can all use your providers.** New conversations default to the one set as default in **Settings → Providers**; each bot can pick "which provider to use" on its own, and each agent's (Codex, Gemini CLI…) card also lets you choose which provider "New conversations use".
+- **Codex works with relays that only have chat/completions.** Most Chinese relays and vendors don't have the `/v1/responses` endpoint Codex needs; the app now converts automatically and remembers that this relay doesn't support it.
+- **Agents installed elsewhere are found.** The codex bundled with the Codex desktop app or the VS Code / Cursor extension, and commands installed through fnm / pnpm / Volta / scoop, are all found; if one is found but errors when run, the error is shown instead of "not installed".
 
-### 修复
+### Fixed
 
-- 在终端里用 Claude CLI、或在 Codex 里接着发消息，这里打开着的那个对话现在会实时更新（以前只有重启才补上）。
-- Codex 对话「加载历史失败：thread not loaded」：换一种方式再读；还是读不到就说明原因并从列表里拿掉。在 Codex 里已经删除的对话不再列出来。
-- OpenAI 格式供应商被标记过「只认官方二进制」时，它的模型在菜单里全是灰的；现在忽略这个标记。
-- 测试连接遇到地区限制（「Access from this region…」）时，提示去检查网络代理，而不是「API Key 不对」。
-- 首页一开始就有「把 Codex 的对话列进来」的提示（以前要等入门清单做完或 3 天后）。
-- 「显示工作台工具」的说明里写明：添加供应商、换模型都不需要打开它。
+- When you use the Claude CLI in a terminal, or keep sending messages in Codex, the conversation open here now updates live (before, it only caught up after a restart).
+- Codex conversation "Failed to load history: thread not loaded": it now reads in a different way; if it still can't be read, it says why and removes it from the list. Conversations already deleted in Codex are no longer listed.
+- When an OpenAI-format provider had been marked "only accepts the official binary", all its models were greyed out in the menu; now that mark is ignored.
+- When Test connection hits a region restriction ("Access from this region…"), the hint now tells you to check the network proxy instead of saying "wrong API key".
+- The home page now shows the "List your Codex conversations here" prompt from the start (before, you had to finish the getting-started checklist or wait 3 days).
+- The description of "Show workbench tools" now says outright: adding a provider or switching models doesn't require turning it on.
 
 ## [0.1.1] — 2026-09-30
 
-修复版本，主要解决用 OpenAI 兼容的中转时一直显示「思考中」、点停止也停不下来，以及没有 Claude 账号的用户打开终端就退出的问题。
+A bug-fix release, mainly for the problem of showing "Thinking" forever and not stopping even when you click stop on OpenAI-compatible relays, and for users without a Claude account whose terminal exited as soon as they opened it.
 
-### 修复
+### Fixed
 
-- **停止一定能停下来。** 对话进程已经不在了而界面还显示「运行中」时，点停止会直接结束这一轮；运行内核 8 秒内不响应中断时强制结束它的进程，再接上同一个对话，历史不丢。
-- **上游一直不回时会提示。** 这一轮 3 分钟都没收到模型的任何回复时，提示供应商可能没有响应，并给出「中断」按钮。也修掉了隔 3 分钟以上再发消息时一开始就提示「可能卡住」的误报。
-- **电脑设了系统代理也能用第三方供应商。** 设了 `HTTP_PROXY` / `HTTPS_PROXY` 时，发往本机缓存优化服务（127.0.0.1）的请求会自动绕开代理。
-- **没有 Claude 账号、只用中转也能用终端和「安装」按钮。** 终端面板现在是普通的命令行（Windows 是 cmd，macOS / Linux 是你的默认 shell），里面照样能输入 `claude`；「在终端登录」会运行 `claude auth login`。
-- **OpenAI 兼容的供应商按你选的模型发请求。** 以前菜单里选别的模型、或配 haiku / sonnet / opus 映射都不生效。
+- **Stop always stops.** When the conversation process is already gone but the interface still shows "Running", clicking stop ends the turn directly; when the runtime doesn't respond to an interrupt within 8 seconds, its process is killed and the same conversation is reattached, with no history lost.
+- **A notice when the upstream never answers.** When no reply at all from the model has arrived for 3 minutes in a turn, it says the provider may not be responding and offers an "Interrupt" button. It also fixes a false "may be stuck" warning that appeared right away when you sent a message after more than 3 minutes of silence.
+- **Third-party providers work when the computer has a system proxy set.** When `HTTP_PROXY` / `HTTPS_PROXY` is set, requests to the local cache-optimization service (127.0.0.1) now bypass the proxy automatically.
+- **The terminal and the "Install" button work without a Claude account, with only a relay.** The terminal panel is now an ordinary command line (cmd on Windows, your default shell on macOS / Linux), and you can still type `claude` in it; "Sign in in the terminal" runs `claude auth login`.
+- **OpenAI-compatible providers send requests for the model you chose.** Before, picking another model in the menu, or configuring haiku / sonnet / opus mappings, had no effect.
 
 ## [0.1.0] — 2026-09-29
 
-第一个公开版本：Claude Code 的可视化工作台，桌面应用和浏览器网页两种用法，也能用同一个界面驱动 Codex、Gemini CLI、Qwen Code、Kimi、OpenCode 等 CLI agent。
+The first public release: a visual workbench for Claude Code, usable as a desktop app or in the browser, and the same interface can also drive CLI agents such as Codex, Gemini CLI, Qwen Code, Kimi and OpenCode.
 
-### 主要功能
+### Main features
 
-- **对话**：流式输出；做完的一轮折成一行摘要，末尾是改动文件卡；权限卡片停在输入框上方，空着按 Enter 就是允许一次。
-- **右侧面板**：审阅（逐文件 diff、暂存、还原、提交）、文件树与全文搜索、终端、任务。
-- **工作台**：需要时分屏（最多 6 个）、标签页、分组；内置 Monaco 编辑器和浏览器。
-- **供应商与模型**：官方账号、Anthropic 兼容中转、OpenAI / Gemini / Grok 接口，统一在一个模型菜单里；本机模型网关提供多账号故障转移和协议转换；第三方模型的提示缓存优化。
-- **多 agent**：Codex、Gemini CLI、Qwen、Kimi、OpenCode 和任意 ACP agent；对话可以交接给另一个 agent 继续；也能把它们在本机的历史对话列进同一个侧栏。
-- **自动化**：定时任务、目标（让它一轮轮推进直到完成）、多 agent 编排（并行、独立副本、审批节点、比选）。
-- **远程**：手机扫码配对访问、SSH 隧道、其它电脑上的对话、Telegram / Discord / Slack / 钉钉 / 飞书机器人。
+- **Conversation**: streaming output; a finished turn folds into a one-line summary, ending with a changed-files card; permission cards sit above the input box, and pressing Enter on an empty box means allow once.
+- **Side panel**: Review (per-file diff, stage, revert, commit), file tree and full-text search, terminal, tasks.
+- **Workbench**: split the screen when needed (up to 6), tabs, groups; built-in Monaco editor and browser.
+- **Providers and models**: the official account, Anthropic-compatible relays, OpenAI / Gemini / Grok interfaces, all in one model menu; a local model gateway provides multi-account failover and protocol conversion; prompt-cache optimization for third-party models.
+- **Multi-agent**: Codex, Gemini CLI, Qwen, Kimi, OpenCode and any ACP agent; a conversation can be handed off to another agent to continue; their conversation history on this computer can also be listed in the same sidebar.
+- **Automation**: scheduled tasks, goals (have it advance turn after turn until done), multi-agent orchestration (parallel runs, separate copies, approval nodes, compare).
+- **Remote**: scan-to-pair phone access, SSH tunnels, conversations on other computers, Telegram / Discord / Slack / DingTalk / Feishu bots.
 
 [0.1.7]: https://github.com/ypyik0669/claude-web/releases/tag/v0.1.7
 [0.1.6]: https://github.com/ypyik0669/claude-web/releases/tag/v0.1.6

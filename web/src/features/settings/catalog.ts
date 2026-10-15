@@ -5,7 +5,7 @@
 // contents as the contract: nothing it had may go missing.
 import type { IconName } from '@/ui/icons';
 import { INLINE_DIFFS_LABEL, TERMS } from '@/ui/terms';
-import { tr } from '@/i18n';
+import { tr, trAs } from '@/i18n';
 
 export type SettingsGroupId = 'common' | 'model' | 'ext' | 'connect' | 'data' | 'advanced';
 export const SETTINGS_GROUPS: { id: SettingsGroupId; l: string }[] = [
@@ -132,7 +132,7 @@ export const SETTINGS_SECTIONS: SectionMeta[] = [
   { id: 'account', l: tr('账号与登录'), ic: 'user', group: 'common', desc: tr('Claude 账号的登录状态。用第三方接口或中转站请去「供应商」。'), keywords: tr('引擎与账号 engine account login 登录 账号'), bodies: ['account'], more: ['engine'] },
   // 模型
   { id: 'models', l: tr('模型与智能程度'), ic: 'artifact', group: 'model', desc: tr('模型菜单里出现哪些模型、哪些置顶，以及每个模型能调的智能程度。'), keywords: tr('model 模型 effort'), bodies: ['models'] },
-  { id: 'providers', l: tr('供应商'), ic: 'cloud', group: 'model', desc: tr('第三方接口或中转站：地址、密钥和默认模型。每个对话可以在模型菜单里换用。'), keywords: tr('供应商 / 环境 provider 中转 api key'), bodies: ['providers', 'proxy'] },
+  { id: 'providers', l: trAs('供应商', 'Providers'), ic: 'cloud', group: 'model', desc: tr('第三方接口或中转站：地址、密钥和默认模型。每个对话可以在模型菜单里换用。'), keywords: tr('供应商 / 环境 provider 中转 api key'), bodies: ['providers', 'proxy'] },
   { id: 'gateway', l: tr('模型网关'), ic: 'gateway', group: 'model', desc: tr('把几个供应商组成一个本机入口：一个额度用完自动换下一个，不同协议之间自动转换。'), keywords: tr('gateway 网关'), bodies: ['gateway'] },
   // 扩展
   {
@@ -163,7 +163,7 @@ export const SETTINGS_SECTIONS: SectionMeta[] = [
   { id: 'env', l: tr('环境变量'), ic: 'config', group: 'advanced', advanced: true, desc: tr('写进 ~/.claude/settings.json 的 env，所有对话生效；留空表示不设置。供应商的地址和密钥不在这里。'), keywords: tr('env 环境变量'), bodies: ['env'] },
   { id: 'tools', l: tr('CLI 工具'), ic: 'keyboard', group: 'advanced', advanced: true, desc: tr('本机装了哪些命令行工具（git、gh、node…），Claude 用得上的都在这里检测。'), keywords: tr('tools cli 工具'), bodies: ['tools'] },
   { id: 'diagnostics', l: tr('诊断'), ic: 'info', group: 'advanced', advanced: true, desc: tr('出问题时打一个诊断包：日志尾部和脱敏后的配置。'), keywords: tr('diagnostic 诊断 日志'), bodies: ['diagnostics'] },
-  { id: 'update', l: tr('更新'), ic: 'refresh', group: 'advanced', advanced: true, desc: tr('当前版本与更新。'), keywords: tr('update 更新 版本'), bodies: ['update'] },
+  { id: 'update', l: trAs('更新', 'Updates'), ic: 'refresh', group: 'advanced', advanced: true, desc: tr('当前版本与更新。'), keywords: tr('update 更新 版本'), bodies: ['update'] },
   { id: 'raw', l: 'settings.json', ic: 'copy', group: 'advanced', advanced: true, desc: tr('直接编辑 Claude Code 的 settings.json（用户 / 项目 / 本机）。'), keywords: tr('settings json raw 原文'), bodies: ['raw'] },
 ];
 

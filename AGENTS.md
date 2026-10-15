@@ -1,13 +1,15 @@
 # AGENTS.md
 
-本仓库的项目说明、架构和踩坑记录都在 [CLAUDE.md](CLAUDE.md)。开始任何改动前先完整读一遍它。
+The project notes, architecture and the list of pitfalls are in [CLAUDE.md](CLAUDE.md) (written in Chinese). Read it through before changing anything.
 
-最常用的命令：
+The commands you will use most:
 
 ```
 npm install
 npm run typecheck      # server + web + desktop
-npm test               # vitest（server + web）
+npm test               # vitest (server + web)
 npm run build:all
-npm run e2e            # 用临时 HOME 起 server，跑不花 token 的 WebSocket 端到端检查
+npm run e2e            # starts the server on a temporary HOME and runs the WebSocket end-to-end checks (no tokens spent)
 ```
+
+Anything a user can read in the interface goes through `tr('中文 text')` (the Chinese text is the key; English is in the `en.ts` next to it) — `npm test` fails when an English text is missing.

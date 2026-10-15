@@ -1,102 +1,106 @@
 # Claude Web
 
-**Claude Code CLI 的可视化工作台。** 把命令行里的 Claude Code 搬进一个图形界面：对话、每一轮折叠成一行的工具调用、代码 diff 审阅、权限审批、文件 / Git / 编辑器、分屏、手机远程访问，全部在一个窗口里。
+**English** · [简体中文](README.zh-CN.md)
 
-同一套程序有两种用法：**桌面应用**（Windows / macOS）和**浏览器网页**（本机起一个服务，用浏览器打开）。功能完全一样，数据互通。除了 Claude Code，也能用同一个界面驱动 Codex、Gemini CLI、Qwen Code、Kimi、OpenCode 等 CLI agent。
+**A visual workbench for the Claude Code CLI.** It takes Claude Code out of the command line and puts it in a graphical interface: conversations, tool calls folded into one line per turn, code diff review, permission approvals, files / Git / editor, split view, and remote access from your phone, all in one window.
 
-> **非官方项目。** Claude Web 是社区开发的开源工具，与 Anthropic 没有任何关联，也没有得到 Anthropic 的认可。「Claude」「Claude Code」是 Anthropic 的商标。使用它需要你自己的 Claude Code 登录（Claude 订阅）或第三方 API / 中转的密钥，费用和用量按你自己的账号计算。
+The same program comes in two forms: a **desktop app** (Windows / macOS) and a **web version** (run a local server and open it in your browser). The features are identical and the data is shared. Besides Claude Code, the same interface can drive other CLI agents such as Codex, Gemini CLI, Qwen Code, Kimi and OpenCode. The interface comes in **English and Chinese** and follows your computer's language by default ([how to change it](#interface-language)).
 
-![对话界面：左边侧栏，中间对话（完成的一轮折成一行摘要，末尾是改动文件卡），右边是审阅面板里的 diff](docs/images/chat.png)
+> **Unofficial project.** Claude Web is a community-built open-source tool. It has no affiliation with Anthropic and is not endorsed by Anthropic. "Claude" and "Claude Code" are trademarks of Anthropic. To use it you need your own Claude Code login (a Claude subscription) or a key for a third-party API / relay (a third-party API reseller or proxy service). Costs and usage are billed to your own account.
 
-**子代理和工作流跑起来，在「后台」的像素网吧里看得见**：主对话是前台的网管，每个子代理是一位客人，开机、敲代码、空了去吃泡面打游戏，做完到前台结账（[详细](#15-后台看子代理在网吧里干活)）。
+![The conversation view: sidebar on the left, the conversation in the middle (a finished turn folded into a one-line summary, ending with a changed-files card), and a diff in the Review panel on the right](docs/images/en/chat.png)
 
-![后台的网吧：子代理坐在机位上干活，头顶冒出刚做的那一步，做完的到前台打小票结账](docs/images/cafe.gif)
+**When subagents and workflows run, you can watch them in the pixel-art Internet Café on the "Background" page**: your main conversation is the admin at the front desk, and every subagent is a guest. They boot up a PC, type code, wander off for instant noodles and games when idle, and check out at the front desk when they're done ([details](#15-background-watch-subagents-work-in-the-café)).
 
----
-
-## 目录
-
-- [能做什么](#能做什么)
-- [桌面版还是网页版？](#桌面版还是网页版)
-- [安装](#安装)
-- [上手教程](#上手教程)
-  - [1. 登录 Claude](#1-登录-claude)
-  - [2. 选一个项目，开始第一个对话](#2-选一个项目开始第一个对话)
-  - [3. 权限审批与权限模式](#3-权限审批与权限模式)
-  - [4. 审阅改动、Git、文件：右侧面板](#4-审阅改动git文件右侧面板)
-  - [5. 分屏工作台](#5-分屏工作台)
-  - [6. 接入第三方 API / 中转](#6-接入第三方-api--中转)
-  - [7. 同时管理多个对话](#7-同时管理多个对话)
-  - [8. 用手机访问](#8-用手机访问)
-  - [9. 其它 CLI Agent（Codex / Gemini …）](#9-其它-cli-agentcodex--gemini-)
-  - [10. 本机其它 agent 的对话](#10-本机其它-agent-的对话)
-  - [11. 模型网关（多账号故障转移 / 协议转换）](#11-模型网关多账号故障转移--协议转换)
-  - [12. 其它 agent 的配置（MCP / 说明文件 / 模型）](#12-其它-agent-的配置mcp--说明文件--模型)
-  - [13. 其它机器上的对话](#13-其它机器上的对话)
-  - [14. 自动化：定时任务、目标、多 agent 编排](#14-自动化定时任务目标多-agent-编排)
-  - [15. 后台：看子代理在网吧里干活](#15-后台看子代理在网吧里干活)
-- [快捷键](#快捷键)
-- [数据存在哪里](#数据存在哪里)
-- [常见问题](#常见问题)
-- [工作原理](#工作原理)
-- [安全与隐私](#安全与隐私)
-- [从源码运行与开发](#从源码运行与开发)
-- [参与贡献](#参与贡献)
-- [许可证与致谢](#许可证与致谢)
+![The café on the Background page: subagents sit at their PCs working, the step they just did pops up above their heads, and finished ones get a receipt at the front desk and check out](docs/images/en/cafe.gif)
 
 ---
 
-## 能做什么
+## Table of contents
+
+- [What it does](#what-it-does)
+- [Desktop app or web version?](#desktop-app-or-web-version)
+- [Install](#install)
+- [Walkthrough](#walkthrough)
+  - [1. Sign in to Claude](#1-sign-in-to-claude)
+  - [2. Pick a project and start your first conversation](#2-pick-a-project-and-start-your-first-conversation)
+  - [3. Permission prompts and permission modes](#3-permission-prompts-and-permission-modes)
+  - [4. Review changes, Git, files: the right panel](#4-review-changes-git-files-the-right-panel)
+  - [5. The split-view workbench](#5-the-split-view-workbench)
+  - [6. Connect a third-party API / relay](#6-connect-a-third-party-api--relay)
+  - [7. Manage several conversations at once](#7-manage-several-conversations-at-once)
+  - [8. Use it from your phone](#8-use-it-from-your-phone)
+  - [9. Other CLI agents (Codex / Gemini …)](#9-other-cli-agents-codex--gemini-)
+  - [10. Conversations from other agents on this computer](#10-conversations-from-other-agents-on-this-computer)
+  - [11. Model gateway (multi-account failover / protocol conversion)](#11-model-gateway-multi-account-failover--protocol-conversion)
+  - [12. Config for other agents (MCP / instruction files / models)](#12-config-for-other-agents-mcp--instruction-files--models)
+  - [13. Conversations on other computers](#13-conversations-on-other-computers)
+  - [14. Automation: scheduled tasks, goals, multi-agent orchestration](#14-automation-scheduled-tasks-goals-multi-agent-orchestration)
+  - [15. Background: watch subagents work in the café](#15-background-watch-subagents-work-in-the-café)
+- [Interface language](#interface-language)
+- [Keyboard shortcuts](#keyboard-shortcuts)
+- [Where your data lives](#where-your-data-lives)
+- [FAQ](#faq)
+- [How it works](#how-it-works)
+- [Security and privacy](#security-and-privacy)
+- [Running from source and development](#running-from-source-and-development)
+- [Contributing](#contributing)
+- [License and credits](#license-and-credits)
+
+---
+
+## What it does
 
 | | |
 | --- | --- |
-| **对话** | 流式输出、思考过程；做完的一轮折成一行「已处理 27 秒 · 读了 2 个文件 · 运行 1 条命令」，点开是逐步的时间线；Markdown / 代码高亮 / 公式 / Mermaid 图 |
-| **代码改动** | 每轮末尾「改动了 N 个文件」卡片，右侧面板「审阅」逐文件看 diff（上下或并排）、暂存、还原、提交 |
-| **权限** | 需要授权时卡片停在输入框上方：允许一次（空着按 Enter）/ 拒绝（输入框里的字就是理由）/ 总是允许；提问、计划审批也在这里 |
-| **工作台** | 默认只有侧栏 · 对话 · 右侧面板；需要时 Ctrl+D 分屏（最多 6 个）、开标签页、分组；对话、编辑器（Monaco）、diff、终端、内置浏览器都能放进分屏 |
-| **文件 / Git / 搜索** | 文件树、全文搜索替换（ripgrep）、Git 暂存 / 提交 / 分支 / stash / worktree、Issue 与 PR 看板 |
-| **对话管理** | 置顶、归档、分叉（从任意一条消息开新分支）、编辑重发、插话、导出 HTML |
-| **需要你** | 侧栏顶上列出所有等你确认 / 回答的对话；总览（Mission Control）按「需要你 / 运行中 / 出错 / 空闲」分列 |
-| **后台 / 网吧** | 子代理、工作流、后台命令一页看全：卡片、关系图、动态，外加一间像素网吧——每个子代理是一位客人，做完到前台结账；角色可以用照片或一句话「捏」出来；输入框的停止只停这一轮，后台的照样跑 |
-| **联网** | Agent 在内置浏览器里搜索、打开网页、点击、填表、截图，不用搜索密钥；Windows 上还能在你允许后操控指定的桌面应用 |
-| **自动化** | 定时任务（cron）、目标（给一个目标让它自己多轮推进）、多 agent 编排，在侧栏「自动化」一页里 |
-| **供应商** | 每个对话可选不同的供应商（官方账号 / Anthropic 兼容中转 / OpenAI / Gemini …），模型菜单里「供应商 / 模型」平铺一列；密钥加密保存 |
-| **多 Agent** | 除 Claude 外还能驱动 Codex、Gemini、Qwen、Kimi 等 CLI agent，界面一致 |
-| **远程** | 扫码配对后用手机浏览器访问，不在家里 Wi-Fi 也能连；SSH 隧道连远程机器；Telegram / Discord / Slack / 钉钉 / 飞书机器人 |
-| **用量** | 订阅额度环、每轮耗时与费用账本、上下文占用 |
+| **Conversations** | Streaming output and thinking; a finished turn folds into one line like "Worked for 27 s · Read 2 files · Ran 1 command", and opening it shows a step-by-step timeline; Markdown / code highlighting / math / Mermaid diagrams |
+| **Code changes** | A "Changed N files" card at the end of each turn; the **Review** tab in the right panel shows each file's diff (unified or side by side), and lets you stage, revert and commit |
+| **Permissions** | When approval is needed, a card sits above the input box: Allow once (press Enter with the box empty) / Deny (whatever you've typed in the box becomes the reason) / Always allow; questions and plan approvals show up here too |
+| **Workbench** | By default you only see the sidebar, the conversation and the right panel. When you need more: Ctrl+D to split (up to 6), tabs, groups; conversations, the editor (Monaco), diffs, terminals and the built-in browser can all go into a split |
+| **Files / Git / search** | File tree, project-wide search and replace (ripgrep), Git stage / commit / branches / stash / worktree, Issue and PR boards |
+| **Managing conversations** | Pin, archive, fork (start a new branch from any message), edit and resend, interject, export to HTML |
+| **Needs you** | The top of the sidebar lists every conversation waiting for you to approve or answer; the Overview groups them into "Needs you / Running / Error / Idle" |
+| **Background / Café** | Subagents, workflows and background commands on one page: cards, a relationship graph and an activity feed, plus a pixel-art café where every subagent is a guest who checks out at the front desk when done; characters can be "made" from a photo or a single sentence; the Stop button in the input box only stops the current turn, background work keeps running |
+| **Web access** | The agent searches, opens pages, clicks, fills forms and takes screenshots in the built-in browser, with no search key needed; on Windows it can also operate specific desktop apps once you allow it |
+| **Automation** | Scheduled tasks (cron), goals (give it a goal and it keeps working turn after turn), and multi-agent orchestration, all on the sidebar's "Automation" page |
+| **Providers** | Each conversation can use a different provider (official account / Anthropic-compatible relay / OpenAI / Gemini …), and the model menu lists them flat as "Provider / model"; keys are stored encrypted; each model's context window can be set individually; subagents can use a different (cheaper) model |
+| **Multiple agents** | Besides Claude it can drive CLI agents such as Codex, Gemini, Qwen and Kimi, with the same interface |
+| **Remote** | Pair by scanning a QR code and use it from your phone's browser, even away from your home Wi-Fi; SSH tunnels to remote machines; bots for Telegram / Discord / Slack / DingTalk / Feishu |
+| **Usage** | Subscription quota ring, per-turn time and cost ledger, context usage |
+| **English / 中文** | The whole interface (web, the desktop app's menus and tray, the phone page, exported HTML) comes in English and Chinese; it follows your computer by default and you can change it in settings |
 
-## 桌面版还是网页版？
+## Desktop app or web version?
 
-**两种都可以用，功能一样。** 区别只在外壳：
+**Use either one; the features are the same.** The only difference is the shell:
 
-| | 桌面版 | 网页版 |
+| | Desktop app | Web version |
 | --- | --- | --- |
-| 怎么开 | 安装包，双击打开 | `npm start` 后浏览器打开 `http://127.0.0.1:3090` |
-| 需要 Node.js | 不需要（已内置） | 需要 Node.js 22.13+ |
-| 托盘 / 系统通知 / 开机自启 | ✅ | 浏览器通知 |
-| 多窗口 | ✅ | 多个浏览器标签 |
-| 快捷键 | Ctrl（macOS 为 ⌘）系列 | 部分改用 Alt，避开浏览器占用的组合 |
-| 手机访问 | 在设置里开启后，手机用浏览器访问；开着时不让电脑睡眠 | 同左；睡眠要自己在系统电源设置里关 |
+| How to open it | Installer, double-click | Run `npm start`, then open `http://127.0.0.1:3090` in a browser |
+| Needs Node.js | No (built in) | Yes, Node.js 22.13+ |
+| Tray / system notifications / start at login | ✅ | Browser notifications |
+| Multiple windows | ✅ | Multiple browser tabs |
+| Shortcuts | Ctrl (⌘ on macOS) based | Some use Alt instead, to avoid combinations the browser takes |
+| Phone access | Turn it on in settings, then open it in your phone's browser; the computer is kept awake while it's on | Same; turn off sleep yourself in your system's power settings |
 
-两者读写同一份数据（`~/.claude` 与 `~/.claude-web`），可以混着用。
+Both read and write the same data (`~/.claude` and `~/.claude-web`), so you can mix them.
 
-## 安装
+## Install
 
-### 桌面版（下载安装包）
+### Desktop app (download an installer)
 
-到 [Releases](https://github.com/ypyik0669/claude-web/releases/latest) 下载：
+Download from [Releases](https://github.com/ypyik0669/claude-web/releases/latest):
 
-| 系统 | 文件 |
+| System | File |
 | --- | --- |
-| Windows 10 / 11（x64） | `ClaudeWeb-<版本>-win-x64.exe`（安装版）或 `ClaudeWeb-<版本>-portable.exe`（免安装） |
-| macOS，Apple Silicon（M1 及以后） | `ClaudeWeb-<版本>-mac-arm64.dmg` |
-| macOS，Intel | `ClaudeWeb-<版本>-mac-x64.dmg` |
+| Windows 10 / 11 (x64) | `ClaudeWeb-<version>-win-x64.exe` (installer) or `ClaudeWeb-<version>-portable.exe` (no install needed) |
+| macOS, Apple Silicon (M1 and later) | `ClaudeWeb-<version>-mac-arm64.dmg` |
+| macOS, Intel | `ClaudeWeb-<version>-mac-x64.dmg` |
 
-`.zip`、`.yml`、`.blockmap` 是自动更新用的，不用下载。第一次打开的提示见下面「安装包的提示」。每个版本改了什么见 [更新日志](CHANGELOG.md)。
+The `.zip`, `.yml` and `.blockmap` files are used by auto-update; you don't need to download them. For what to expect the first time you open it, see "About the installer warnings" below. For what changed in each version, see the [changelog](CHANGELOG.md).
 
-### 网页版（从源码）
+### Web version (from source)
 
-需要 [Node.js 22.13+](https://nodejs.org/)（用到内置的 `node:sqlite`）和 Git：
+You need [Node.js 22.13+](https://nodejs.org/) (it uses the built-in `node:sqlite`) and Git:
 
 ```bash
 git clone https://github.com/ypyik0669/claude-web.git
@@ -106,449 +110,471 @@ npm run build
 npm start
 ```
 
-然后浏览器打开 <http://127.0.0.1:3090>。Windows 上也可以直接双击仓库里的 `启动.cmd`。
+Then open <http://127.0.0.1:3090> in your browser. On Windows you can also just double-click `启动.cmd` in the repo (the Windows launcher script; its file name is in Chinese).
 
-### 桌面版（自己打包）
+### Desktop app (build it yourself)
 
 ```bash
 npm install
-npm run build:desktop        # Windows：dist-desktop/ClaudeWeb-<版本>-win-x64.exe（安装版）和 -portable.exe（免安装）
-npm run build:desktop:mac    # macOS：只能在 Mac 上打，arm64 / x64 各在对应芯片的机器上打
+npm run build:desktop        # Windows: dist-desktop/ClaudeWeb-<version>-win-x64.exe (installer) and -portable.exe (no install needed)
+npm run build:desktop:mac    # macOS: can only be built on a Mac; build arm64 and x64 on a machine with the matching chip
 npm run build:desktop:linux  # Linux
 ```
 
-### 安装包的提示
+### About the installer warnings
 
-- **Windows**：安装包没有代码签名，SmartScreen 提示「已保护你的电脑」时点 **更多信息 → 仍要运行**。
-- **macOS**：按芯片选包，Apple Silicon（M1 及以后）是 `mac-arm64.dmg`，Intel 是 `mac-x64.dmg`（左上角  → 关于本机，看「芯片」一栏）。打开 dmg，把 **Claude Web** 拖进「应用程序」。安装包没有 Apple 签名，**第一次打开**需要在「应用程序」里对它 **右键 → 打开 → 打开**；如果提示「已损坏，无法打开」，在终端执行一次：
+- **Windows**: the installer is not code-signed. When SmartScreen says "Windows protected your PC", click **More info → Run anyway**.
+- **macOS**: pick the package for your chip: `mac-arm64.dmg` for Apple Silicon (M1 and later), `mac-x64.dmg` for Intel (Apple menu in the top left → About This Mac, and look at the "Chip" line). Open the dmg and drag **Claude Web** into "Applications". The installer is not signed by Apple, so the **first time you open it** you need to **right-click → Open → Open** it in "Applications"; if you get "is damaged and can't be opened", run this once in a terminal:
 
   ```bash
   xattr -cr "/Applications/Claude Web.app"
   ```
 
-## 上手教程
+## Walkthrough
 
-### 1. 登录 Claude
+### 1. Sign in to Claude
 
-Claude Web 驱动的就是本机的 Claude Code，登录状态和命令行共用（`~/.claude`）。
+Claude Web drives the Claude Code on your computer, and the login is shared with the command line (`~/.claude`).
 
-- **已经在命令行里用过 Claude Code**：什么都不用做，打开就能用。
-- **还没登录**：首次打开的引导只有两步——① 登录（已经登录或已经配了供应商就自动跳过）② 选一个项目文件夹。登录这一步点 **在终端登录**：会开一个终端标签，里面就是 Claude Code，按提示选登录方式（或输入 `/login`），登录好回到引导点 **重新检查**。也可以 **先跳过**，以后首页顶上会提示你还没登录。
-- **没有 Claude 订阅、用 API Key 或中转**：引导里点 **添加供应商**，或跳到 [第 6 步](#6-接入第三方-api--中转)。
+- **Already using Claude Code in the command line**: nothing to do, just open it and go.
+- **Not signed in yet**: the first-run guide has two steps: ① Connect a model (skipped automatically if you're already signed in or already have a provider) ② Choose a project folder. For sign-in, click **Sign in with Claude account** on the first step: it opens a terminal tab running Claude Code; pick a sign-in method when prompted (or type `/login`), and when you're signed in, go back to the guide and click **Already signed in? Check again**. You can also click **Skip for now**, and the top of the home page will remind you that you're not signed in.
+- **No Claude subscription, using an API key or a relay**: fill in the key right there in the guide's Connect a model step, or jump to [step 6](#6-connect-a-third-party-api--relay).
 
-### 2. 选一个项目，开始第一个对话
+### 2. Pick a project and start your first conversation
 
-![首页：今天想做点什么？输入框下面是项目、模型和权限，再往下是起手建议、入门清单和最近任务](docs/images/home.png)
+![The home page: "What do you want to do today?", with project, model and permission controls under the input box, then starter suggestions, the getting-started checklist and recent tasks](docs/images/en/home.png)
 
-1. 首页输入框左下的 **项目** 里选你的项目文件夹（最近用过的列在最上，「打开文件夹…」选别的）。侧栏按项目归类对话；「项目」标题行的 **＋** 也能加项目。
-2. 在输入框里描述任务，<kbd>Enter</kbd> 发送，<kbd>Shift</kbd>+<kbd>Enter</kbd> 换行。之后侧栏 **新对话**（<kbd>Ctrl</kbd>+<kbd>N</kbd>，网页版 <kbd>Alt</kbd>+<kbd>N</kbd>）回到这里。
-3. 输入框是一行：
-   - **＋**：添加文件、文件夹、图片（也可以直接拖进来或粘贴截图），引用另一个对话，设定一个目标，以及控制 Chrome 等能力开关；
-   - **项目 · 分支**（只在新对话里）：切项目、切本地分支，或让它在独立副本（git worktree）里做；
-   - **模型**：全部供应商的模型都在这一个菜单里；
-   - **想多深**（模型旁边那个按钮）：快 / 均衡 / 深入 / 更深 / 极限，每档一句说明；最后一行「深度编排」是把任务拆给多个子任务同时做；
-   - **权限**（见下一步）；右下角的小环是上下文占用，悬停看本对话的用量。
-4. 输入 `/` 会弹出命令列表（`/compact`、`/model`、自定义 skill …），<kbd>Tab</kbd> 补全。
+1. In the **Project** chip at the bottom left of the home page's input box, choose your project folder (recently used ones are listed first; "Open folder…" picks another). The sidebar groups conversations by project; the **+** on the "Projects" title row also adds a project; projects can be dragged to reorder (a project's ··· menu has "Move to top / Move up / Move down", which is what you use on a phone).
+2. Describe the task in the input box. <kbd>Enter</kbd> sends, <kbd>Shift</kbd>+<kbd>Enter</kbd> adds a new line. Afterwards, **New conversation** in the sidebar (<kbd>Ctrl</kbd>+<kbd>N</kbd>, <kbd>Alt</kbd>+<kbd>N</kbd> in the web version) brings you back here.
+3. The input box is a single row:
+   - **＋**: add files, folders and images (you can also drag them in or paste a screenshot), reference another conversation, set a goal, and switch on abilities such as controlling Chrome;
+   - **Project · branch** (new conversations only): switch project, switch local branch, or have it work in a separate copy (git worktree);
+   - **Model**: the models of every provider are in this one menu;
+   - **Subagent** (next to the model; only in Claude conversations): the main task uses the main model, and subagents (the ones sent out by Task and workflows) use the model you pick here. Pick a cheaper one to save quota; the default is "Same as main model" (see [step 6](#6-connect-a-third-party-api--relay));
+   - **Thinking effort** (the button next to the model, which shows the current level): Fast / Balanced / Deep / Deeper / Max, each with a one-line description; the last row, "Deep orchestration", splits a task into subtasks done at the same time by several subagents;
+   - **Permissions** (see the next step); the small ring at the bottom right is context usage, and hovering shows this conversation's usage.
+4. Type `/` to bring up the command list (`/compact`, `/model`, custom skills …), and press <kbd>Tab</kbd> to complete.
 
-回复在进行时逐步展开每个工具调用（读文件、改代码、跑命令）；这一轮做完就折成一行摘要，点开是完整的时间线，改动在末尾的「改动了 N 个文件」卡片里，点文件就在右侧审阅。运行中可以随时 <kbd>Esc</kbd> 中断，或者继续输入**插话**，它会在下一步看到。
+While the reply is in progress, each tool call (reading files, editing code, running commands) unfolds step by step; when the turn is done it folds into a one-line summary, and opening it shows the full timeline. The changes are in the "Changed N files" card at the end, and clicking a file reviews it in the right panel. While it runs you can press <kbd>Esc</kbd> to interrupt at any time, or keep typing to **interject**, and it will see your message at the next step.
 
-### 3. 权限审批与权限模式
+### 3. Permission prompts and permission modes
 
-Claude 要执行命令或改文件时，输入框上方会停一张卡片（消息流里那一步显示「等你确认」）：**允许一次**（输入框空着时按 <kbd>Enter</kbd>）、**拒绝**（在输入框里写原因再按 <kbd>Enter</kbd>，它会换个做法），或者**总是允许**这一类操作。卡片刚出现的一瞬间按下的 <kbd>Enter</kbd> 不算数，免得误批。计划卡要点按钮或 <kbd>Ctrl</kbd>+<kbd>Enter</kbd>。
+When Claude wants to run a command or edit a file, a card sits above the input box (and that step in the message stream shows "Waiting for you"): **Allow once** (press <kbd>Enter</kbd> when the input box is empty), **Deny** (write the reason in the input box and press <kbd>Enter</kbd>, and it will try another way), or **Always allow** this kind of operation. An <kbd>Enter</kbd> pressed in the instant the card appears doesn't count, so you don't approve by accident. A plan card needs a button click or <kbd>Ctrl</kbd>+<kbd>Enter</kbd>.
 
-输入框右下的权限决定多久问你一次（**设置 → 通用 → 默认权限** 设新对话的默认值）：
+The permission control at the bottom right of the input box decides how often you're asked (**Settings → General → Default permissions** sets the default for new conversations):
 
-| 模式 | 说明 |
+| Mode | What it does |
 | --- | --- |
-| 每步询问 | 改文件、运行命令之前都先问你（推荐） |
-| 自动改文件 | 直接改文件；运行命令之前问你 |
-| 只做计划 | 先读代码、写方案，你点头后才动手 |
-| 自动判断 | Claude 自己判断哪些操作需要问你 |
-| 只做已允许的 | 不弹确认；没事先允许的操作一律跳过 |
-| 完全放开 | 什么都不问直接执行，只在可以随便弄坏的环境里用 |
+| Ask first | Asks you before every file edit and every command (recommended) |
+| Accept edits | Edits files directly; asks you before running commands |
+| Plan only | Reads code and writes a plan first, and only acts once you give the go-ahead |
+| Auto | Claude decides for itself which operations need to ask you |
+| Allowed only | No prompts; anything not allowed in advance is skipped |
+| Allow everything | Runs everything without asking; only use it in an environment where it doesn't matter if things break |
 
-### 4. 审阅改动、Git、文件：右侧面板
+### 4. Review changes, Git, files: the right panel
 
-对话顶上一行是标题、项目、分支，右边是 **+N −M**（这个对话改了多少行，点它打开审阅）、终端、右侧面板（<kbd>Ctrl</kbd>+<kbd>J</kbd>）和 **···**。右侧面板有五个固定标签（面板窄的时候只有当前那个带名字，其它是图标）：
+The top row of a conversation has the title, project and branch, and on the right: **+N −M** (how many lines this conversation changed; click it to open Review), the terminal, the right panel (<kbd>Ctrl</kbd>+<kbd>J</kbd>) and **···**. The right panel has five fixed tabs (when the panel is narrow, only the current one shows its name and the others are icons):
 
-- **审阅**：未提交的改动 / 已暂存 / 本次对话改动 / 最近某次提交，逐文件看 diff，暂存、还原、写提交说明并提交；··· 里的 **Git** 是分支、拉取推送、历史、stash、worktree，报错时给出一键修复；
-- **文件**：项目文件树（右键新建 / 重命名 / 移到回收站）和全项目搜索替换（正则、大小写、全词、包含 / 排除），本对话生成的文件列在最上；
-- **终端**：隐藏面板时终端照常在后台运行；
-- **浏览器**：内置的浏览器，自己上网用，Agent 上网也在这里（见下面「联网」）；
-- **任务**：这个对话的后台任务（缩小的关系图，每个任务一个停止按钮）、计划清单和子代理。
+- **Review**: uncommitted changes / staged / changes from this conversation / a recent commit; view diffs file by file, stage, revert, write a commit message and commit. **Git** under ··· has branches, pull and push, history, stash and worktree, and offers a one-click fix when something goes wrong;
+- **File**: the project file tree (right-click to create / rename / move to the trash) and project-wide search and replace (regex, case, whole word, include / exclude); files generated by this conversation are listed at the top;
+- **Terminal**: when the panel is hidden, the terminal keeps running in the background;
+- **Browser**: the built-in browser, for your own browsing, and it's also where the agent browses (see "Web access" below);
+- **Task**: this conversation's background tasks (a shrunken graph, with a stop button for each task), the plan checklist and subagents.
 
-右侧面板的 **＋** 里还有网吧、目标、编排、用量、详情和 **Issue 与 PR**（GitHub / GitLab 看板，需要本机 `gh auth login` 或 `glab auth login`，能直接检出 PR 开一个审查对话）。对话头的 **···** 列出所有视图，命令面板（<kbd>Ctrl</kbd>+<kbd>K</kbd>）也能搜到。
+The **＋** in the right panel also has Café, Goals, Orchestration, Usage, Details and **Issues & PRs** (a GitHub / GitLab board; it needs `gh auth login` or `glab auth login` on this computer, and can check out a PR straight into a review conversation). The **···** in the conversation header lists all the views, and the command palette (<kbd>Ctrl</kbd>+<kbd>K</kbd>) can find them too.
 
-窗口最左边是一条**图标栏**：对话 · 后台（在跑的子代理和工作流，见 [15](#15-后台看子代理在网吧里干活)）· 自动化（定时任务、目标、编排）· 扩展（连接器、Skills、插件）· **···**（总览、网吧、用量与账本、共享记忆、Issue 与 PR、Android、配置中心，常用的可以钉到图标栏上），最下面是设置和账户。点「自动化」或「扩展」，侧栏换成那个分区自己的几行，主区域是它的页面；点「对话」回来。
+On the far left of the window is an **icon bar**: Conversation · Background (running subagents and workflows, see [15](#15-background-watch-subagents-work-in-the-café)) · Automation (scheduled tasks, goals, orchestration) · Extensions (connectors, Skills, plugins) · **···** (Overview, Café, Usage and ledger, Shared memory, Issues & PRs, Android, Config center; the ones you use often can be pinned to the icon bar), and at the very bottom, Settings and your account. Click "Automation" or "Extensions" and the sidebar switches to that section's own few rows, with its page in the main area; click "Conversation" to come back.
 
-#### 联网：搜索和内置浏览器
+#### Web access: search and the built-in browser
 
-每个对话里的 Agent（Claude、Codex、Gemini 都一样）可以**搜索网页**，也可以用**内置浏览器**打开网页、读内容、点击、填表、截图。直接说就行：「搜一下 xxx 的最新用法」「打开这个地址看看报什么错」。
+In every conversation, the agent (Claude, Codex and Gemini alike) can **search the web**, and can use the **built-in browser** to open pages, read content, click, fill forms and take screenshots. Just ask: "search for the latest way to use xxx", "open this address and see what error it shows".
 
-- **搜索就是在内置浏览器里搜**：打开搜索网站的结果页（一个你看不见的页面），把结果读出来——和你自己在浏览器里搜是同一种请求，所以**不用任何密钥**，也不经过第三方的搜索代理。默认依次试 DuckDuckGo、Bing、Yahoo、百度，哪个给出对题的结果就用哪个；也可以在 **设置 → 联网** 里指定一家（还有 Google）。哪一家能用和你的网络有关，同一页的「试一下」能看到。某家要求验证（「请证明你不是机器人」）时：在右侧面板的浏览器里打开它、验证一次，之后就能搜了。想用搜索接口的话，那一页也能填 Brave Search 的密钥。
-- 它打开的网页在右侧面板的「浏览器」里，每个对话的 Agent 用自己的一个标签页（带标记），你看得到它在做什么；它在后面的标签页里干活时不会抢走你正在看的面板，只有第一次打开、要截图、或者面板被收起时才把浏览器带到前面。
-- **在网页上用鼠标键盘**：页面上列得出来的按钮、链接、输入框，Agent 按元素去点、去填；列不出来的（画布、地图、拖动、悬停才出现的菜单、滑块）它会看着截图按位置操作——点击、双击、右键、拖动、滚轮、打字、按键。只作用在内置浏览器里它自己的那个标签页上。
-- 打开网页、点击、输入这些操作和运行命令一样走权限审批（「每步询问」时逐次问你）；只是搜索不问。（这是 Claude 的对话；Codex、Gemini 等按它们自己的审批规则。）
-- 点击、填表、截图、按位置操作要**桌面版**；网页版和手机上 Agent 只能搜索和读网页的文字（这时搜索由电脑直接去取 Bing / DuckDuckGo 的结果页，容易被限流）。
-- 网页上的内容是当作资料交给模型的，并且标明了「不是指令」；但不要让它在你登录着重要账号的网页上随便操作。设置 → 联网 里的「Agent 用单独的浏览器身份」打开后，它看不到你在内置浏览器里登录过的账号。
-- 模型手里只有上面这一个搜索工具（运行内核自带的那个要经过别人托管的搜索代理，这里不用它）。例外：对话跑在官方 Claude Code 上时（供应商勾了「只认官方二进制」等），它自带的搜索是 Anthropic 那边执行的，照旧可用。
+- **Search is done inside the built-in browser**: it opens a search site's results page (a page you can't see) and reads the results. That is the same kind of request as searching in a browser yourself, so **no key of any kind is needed** and it doesn't go through a third-party search proxy. By default it tries DuckDuckGo, Bing, Yahoo and Baidu in turn, and uses whichever gives relevant results; you can also pick one under **Settings → Web access** (Google is available there too). Which one works depends on your network; "Try it" on the same page shows you. When a site asks for verification ("prove you're not a robot"), open it in the browser in the right panel, verify once, and searching will work after that. If you'd rather use a search API, that page also takes a Brave Search key.
+- The pages it opens show up in the right panel's "Browser", and the agent in each conversation uses its own tab (marked), so you can see what it's doing. When it works in a background tab it won't steal the panel you're looking at; the browser only comes to the front the first time it opens, when it needs a screenshot, or when the panel is collapsed.
+- **Mouse and keyboard on web pages**: for buttons, links and inputs that can be listed on the page, the agent clicks and fills by element; for what can't be listed (canvases, maps, dragging, menus that only appear on hover, sliders) it works from screenshots by position: click, double-click, right-click, drag, scroll wheel, typing, key presses. It only acts on its own tab inside the built-in browser.
+- Opening pages, clicking and typing go through permission approval just like running commands (with "Ask first", you're asked each time); only searching doesn't ask. (This is for Claude conversations; Codex, Gemini and the others follow their own approval rules.)
+- Clicking, form filling, screenshots and by-position actions need the **desktop app**; in the web version and on a phone, the agent can only search and read the text of pages (and then the computer fetches the Bing / DuckDuckGo results page directly, which is easy to rate-limit).
+- Web page content is handed to the model as reference material and is marked "not instructions"; but still don't let it act freely on pages where you're signed in to important accounts. With "Agent uses a separate browser identity" turned on under Settings → Web access, it can't see the accounts you've signed in to in the built-in browser.
+- The only search tool the model has is the one above (the one that ships with the runtime goes through someone else's hosted search proxy, so it isn't used here). One exception: when a conversation runs on the official Claude Code (for example the provider has "only accepts the official binary" ticked), its built-in search is executed on Anthropic's side and still works as usual.
 
-#### 操控电脑（Windows）
+#### Computer control (Windows)
 
-要操作的东西不在网页里——记事本、资源管理器、某个桌面软件——用 **操控电脑**：Agent 看屏幕截图，用鼠标键盘操作**你允许的那几个应用**。
+When what you want to operate isn't in a web page (Notepad, File Explorer, some desktop app), use **Computer control**: the agent looks at screenshots and uses the mouse and keyboard on **the apps you allow**.
 
-- 在欢迎页输入框的 **+** 里打开「操控电脑」再发第一条消息（只对这一个 Claude 对话开；下一个新对话要用得再开一次）。
-- 它要用哪些应用，会先弹一张卡片问你：写着应用的名字和它说要做的事。**只有点卡片上的「允许操控」才算同意**——按回车不算；「完全放开」「自动判断」这些权限模式也不会替你同意。不想给就点「不允许」，或者直接在输入框里说为什么。
-- 允许之后：它能看到**整个主屏幕**的截图（别的窗口也在画面里），但键盘鼠标只在你允许的应用位于最前面时才发得出去；别的应用在前面时，动作会被拒绝并告诉它原因。Claude Web 自己的窗口永远不能被它操作。授权只对这一个对话有效，对话结束就收回。
-- 你自己动鼠标键盘时它的动作会被打断或落空，所以它干活时尽量别抢；想让它停，点对话里的停止。
-- 现在只支持 **Windows**（看的是运行 Claude Web 的那台电脑，只看主显示器）；macOS、Linux 上 `+` 里那一行写着「暂不可用」。上网不需要它：搜索、打开网页、点击、截图都在内置浏览器里。
+- Turn on "Computer control" in the **+** next to the input box on the welcome page before sending the first message (it's only on for that one Claude conversation; for the next new conversation, turn it on again if you need it).
+- Before it uses any app, a card asks you: it shows the app's name and what it says it wants to do. **Only clicking "Allow control" on the card counts as consent**; pressing Enter doesn't count, and permission modes like "Allow everything" or "Auto" won't consent for you. If you don't want to allow it, click "Don't allow", or just tell it why in the input box.
+- Once allowed: it can see a screenshot of the **whole main screen** (other windows are in the picture too), but the keyboard and mouse only go through while an app you allowed is in front; when another app is in front, the action is rejected and it's told why. Claude Web's own window can never be operated by it. The authorization is only valid for that one conversation and is taken back when the conversation ends.
+- If you move the mouse or type yourself, its actions get interrupted or miss, so try not to compete with it while it works; to make it stop, click Stop in the conversation.
+- For now only **Windows** is supported (it looks at the computer running Claude Web, and only the main display); on macOS and Linux that row in the `+` menu says "Not available right now". You don't need it for the web: searching, opening pages, clicking and screenshots all happen in the built-in browser.
 
-### 5. 分屏工作台
+### 5. The split-view workbench
 
-![分屏：左右两个对话，右侧面板在审阅](docs/images/split.png)
+![Split view: two conversations side by side, with the right panel showing Review](docs/images/en/split.png)
 
-默认界面只有侧栏 · 对话 · 右侧面板，分屏、标签页、分组这些工作台工具用到时才出现：
+By default the interface is just the sidebar, the conversation and the right panel. Workbench tools such as splits, tabs and groups only appear when you use them:
 
-- <kbd>Ctrl</kbd>+<kbd>D</kbd> 向右分屏，<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> 向下分屏，最多 6 个分屏；分屏后每个分屏顶上出现标签条，关到只剩一个又收起来；
-- 从左侧栏把对话**拖到**分屏边缘，就在那一侧打开；
-- 点对话里的文件路径会在编辑器标签里打开（Monaco，自动保存，<kbd>Ctrl</kbd>+<kbd>S</kbd> 手动保存）；
-- <kbd>Ctrl</kbd>+<kbd>T</kbd> 新建分组，一个分组就是一套独立的分屏布局，适合按任务分开；
-- <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Enter</kbd> 把当前分屏放大，再按一次还原；
-- 想让标签条、分组栏和右侧的面板图标栏一直显示：**设置 → 通用 → 显示工作台工具**。
+- <kbd>Ctrl</kbd>+<kbd>D</kbd> splits to the right, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> splits downward, up to 6 splits; once split, each split gets a tab strip at its top, and it folds away again when you close down to one;
+- **Drag** a conversation from the left sidebar to the edge of a split to open it on that side;
+- Clicking a file path in a conversation opens it in an editor tab (Monaco, autosave, <kbd>Ctrl</kbd>+<kbd>S</kbd> to save manually);
+- <kbd>Ctrl</kbd>+<kbd>T</kbd> creates a group; a group is an independent set of split layouts, handy for keeping tasks apart;
+- <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Enter</kbd> maximizes the current split, and pressing it again restores it;
+- To always show the tab strip, the group bar and the right panel's icon bar: **Settings → General → Show workbench tools**.
 
-### 6. 接入第三方 API / 中转
+### 6. Connect a third-party API / relay
 
-**最快的方法**：设置 → 供应商 → **快速添加**（首次打开时的「接一个模型」也是它）。选来源（中转站 / DeepSeek / Kimi / 智谱 / 通义 / 硅基流动 / OpenRouter / Gemini），中转站再填个地址，粘上 API Key，点 **连接**。模型列表和接口格式会自动读出来，测试通过才保存；Key 不对、余额不足、地址不对都会直接说明。
+**The fastest way**: Settings → Providers → **Quick add** (the "Connect a model" step when you first open the app is the same thing). Pick a source (Relay / DeepSeek / Kimi / Zhipu GLM / Qwen / SiliconFlow / OpenRouter / Gemini), for a relay also enter its address, paste your API key and click **Connect**. The model list and API format are read automatically, and it's only saved once the test passes; a wrong key, insufficient balance or a wrong address is reported directly.
 
-![快速添加供应商：选来源、填地址和 API Key、点连接](docs/images/connect.png)
+![Quick add provider: pick a source, enter the address and API key, click Connect](docs/images/en/connect.png)
 
-需要更多选项（指定模型映射、运行方式、缓存设置）时用完整表单：
+When you need more options (specifying a model mapping, how it runs, cache settings), use the full form:
 
-![设置 → 供应商](docs/images/settings.png)
+![Settings → Providers](docs/images/en/settings.png)
 
-1. 打开 **设置**（<kbd>Ctrl</kbd>+<kbd>,</kbd>）→ **供应商** → **＋ 添加**；
-2. 选类型（Anthropic 兼容 / OpenAI / Gemini …），填 **Base URL** 和 **API Key**，可选指定模型；
-3. 点 **测试连接**：会先拉模型列表，再真实跑一轮对话。如果中转只放行官方 Claude Code 客户端，它会自动让这个供应商改用官方 Claude Code 运行；
-4. 回到输入框，点模型芯片，在菜单里选这个供应商的某个模型（芯片显示为 `供应商 / 模型`）。对话进行中也可以切，历史保留。
+1. Open **Settings** (<kbd>Ctrl</kbd>+<kbd>,</kbd>) → **Providers** → **+ Add**;
+2. Choose a type (Anthropic-compatible / OpenAI / Gemini …), fill in **Base URL** and **API Key**, and optionally specify models;
+3. Click **Test connection**: it first fetches the model list, then really runs one round of conversation. If the relay only lets the official Claude Code client through, it automatically makes this provider run on the official Claude Code;
+4. Back in the input box, click the model chip and pick one of this provider's models from the menu (the chip shows `Provider / model`). You can also switch in the middle of a conversation, and the history is kept.
 
-密钥只注入到该对话自己的进程，不会写进 `~/.claude/settings.json`；本地保存时加密（Windows 用 DPAPI，macOS 用钥匙串）。
+The key is only injected into that conversation's own process and is never written to `~/.claude/settings.json`; it's stored encrypted locally (DPAPI on Windows, Keychain on macOS).
 
-**多个中转 / 账号一起用**：模型芯片是一个统一菜单，所有供应商的所有模型摊平成 `供应商 / 模型` 一列（官方账号的模型直接显示名字，如 `Fable 5.1`），选一项就同时切换供应商和模型：
+**Using several relays / accounts together**: the model chip is one unified menu, with every model of every provider flattened into a single list of `Provider / model` (models of the official account show just their name, like `Fable 5.1`), and picking one switches provider and model at the same time:
 
-![模型菜单：顶部是智能程度和深度编排，下面是 Claude 账号、DeepSeek 供应商和 Codex 等其它 agent 的模型](docs/images/models.png)
+![The model menu: thinking effort and deep orchestration at the top, then the Claude account's models, the DeepSeek provider and other agents such as Codex](docs/images/en/models.png)
 
-- 顶部是智能程度和（支持的模型上）深度编排开关；搜索框按供应商名或模型名过滤，<kbd>↑</kbd> <kbd>↓</kbd> 选择、<kbd>Enter</kbd> 确认、<kbd>Esc</kbd> 关闭；
-- 行尾的星标收藏，收藏的模型置顶；最近用过的 5 个单独一节；
-- 每个供应商一节，节头显示模型数和上次拉取时间，拉取失败时显示错误；其它 agent（Codex、Gemini …）也各是一节；
-- 底部「刷新全部模型」对每个供应商请求一次 `/v1/models`（只列模型，不跑对话、不花 token），启动后也会在后台刷新超过 24 小时的列表；「管理模型与供应商…」打开 **设置 → 模型与智能程度**；
-- 菜单只列当前 agent 能用的供应商：Claude Code 全部类型都行，Codex 和其它 ACP agent 用 OpenAI 兼容 / 模型网关，Gemini CLI 用 Gemini / 模型网关；
-- 对话里选同一供应商的模型直接切模型；选别的供应商会无感重启对话进程（历史保留）并直接用选中的模型；选另一个 agent 的模型就是把对话交给它继续。其它机器上的对话只能换模型。
+- At the top are the thinking effort and (on models that support it) the Deep orchestration switch; the search box filters by provider name or model name, <kbd>↑</kbd> <kbd>↓</kbd> select, <kbd>Enter</kbd> confirms, <kbd>Esc</kbd> closes;
+- The star at the end of a row marks a favorite, and favorites are pinned to the top; the 5 most recently used get a section of their own;
+- Each provider gets a section whose header shows the number of models and the time of the last fetch (or the error if the fetch failed); other agents (Codex, Gemini …) are a section each too;
+- "Refresh all models" at the bottom requests `/v1/models` once per provider (it only lists models, runs no conversation and costs no tokens), and after startup lists older than 24 hours are also refreshed in the background; "Manage models and providers…" opens **Settings → Models and thinking effort**;
+- The menu only lists providers the current agent can use: Claude Code takes every type, Codex and other ACP agents use OpenAI-compatible / the model gateway, and Gemini CLI uses Gemini / the model gateway;
+- In a conversation, picking another model of the same provider just switches the model; picking another provider restarts the conversation's process invisibly (the history is kept) and uses the model you picked; picking another agent's model hands the conversation over to it to continue. Conversations on other computers can only change the model;
+- If you chat a lot on a model with a big window and then switch to one with a smaller window, and the conversation is already past 80% of the new model's window, it is first compacted with the current model before switching, and the conversation gets a line saying so.
 
-**设置 → 模型与智能程度** 有两种视图：「按模型」是一张表，每个模型一行，列出提供它的供应商（点供应商芯片可把它设为该供应商的默认模型）、收藏星标和显示开关；「按供应商」是分组视图。顶部是每个供应商的拉取状态和单独刷新按钮。
+**Choosing a separate model for subagents**: the **Subagent** button next to the model in the input box opens the same kind of model menu, limited to the current provider, with "Same as main model" as the top row. The main task keeps using the main model and subagents (the ones sent out by Task and workflows) use the one you picked; for example, Sonnet for the main task and Haiku for subagents saves quite a bit of quota. Tick "New conversations on this provider all do this" at the bottom of the menu, and every new conversation you start on this provider from then on (including IM bots and scheduled tasks) uses it. When you change it on a running conversation, it restarts invisibly once the current turn finishes and then switches; subagents already sent out aren't affected.
 
-### 7. 同时管理多个对话
+![The Subagent menu: Same as main model, or one of the current provider's models](docs/images/en/subagent.png)
 
-侧栏最上面的 **需要你** 列出所有在等你确认权限、回答问题或审批编排的对话，点一下就过去；每一行对话的末尾是它的状态（待确认 / 运行中 / 出错 / 改了多少行）。
+**Each model's context window**: under **Settings → Providers → Edit**, "Context window" has one row per model. Leave it empty to use the default (Claude on a relay is 1 million, Haiku 200k, GPT 272k, Gemini about 1.05 million; if the relay's model list states a size, that's used, and an unknown model gets 200k). To change it, just type a value (`272000`, `272k` and `1m` all work). Auto-compaction and the small context ring next to the input box both use this number.
 
-![总览（Mission Control）：所有对话按状态分列](docs/images/mission.png)
+**Settings → Models and thinking effort** has two views: "By model" is a table with one row per model, listing the providers that offer it (click a provider chip to make it that provider's default model), the favorite star and the show switch; "By provider" is the grouped view. At the top is each provider's fetch status and its own refresh button.
 
-<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd>（或命令面板里的「总览」）在右侧面板打开总览：所有打开的对话按 **需要你 / 运行中 / 出错 / 空闲** 分列，权限请求可以直接在卡片上批准，点卡片跳到对应对话。
+### 7. Manage several conversations at once
 
-桌面版在窗口不在前台时，对话完成或需要审批会弹系统通知，任务栏 / Dock 图标显示待处理数量。
+**Needs you** at the very top of the sidebar lists every conversation waiting for you to approve a permission, answer a question or approve an orchestration; click one to jump to it. At the end of each conversation row is its status (Needs your answer / Running / Error / how many lines changed).
 
-### 8. 用手机访问
+![Overview: all conversations grouped by status](docs/images/en/mission.png)
 
-<img src="docs/images/mobile.png" alt="手机上的界面：对话标题一行，完成的一轮折成一行摘要" width="280" align="right">
+<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd> (or "Overview" in the command palette) opens the Overview in the right panel: all open conversations grouped into **Needs you / Running / Error / Idle**; permission requests can be approved right on the card, and clicking a card jumps to that conversation.
 
-1. 电脑上打开 **设置 → 手机与其它电脑**，打开「局域网 / 手机访问」（默认端口 3091）；
-2. 点 **生成配对码**，会显示一个 6 位码和二维码（10 分钟内有效）；
-3. 手机连同一个 Wi-Fi，扫码打开页面，输入配对码；
-4. 配对后这台手机就记住了，可以添加到主屏幕当 App 用。已配对设备可以在同一页改名或吊销。
+When the window isn't in the foreground, the desktop app pops a system notification when a conversation finishes or needs approval, and the taskbar / Dock icon shows the number of pending items.
 
-手机上侧栏是左边的抽屉（☰），右侧面板（审阅、终端、任务…）是从底部拉起的抽屉，从对话头的 ··· 打开。
+### 8. Use it from your phone
 
-**在外面也能用**：同一页的「在外面也能用」打开后（远程访问打开时默认开），二维码默认是「在哪都能用」的那张。手机扫码打开一个网页（手机页面），配对一次，以后手机用流量、在别的 Wi-Fi 下也能连上这台电脑，不用装 App、不用注册：
+<img src="docs/images/en/mobile.png" alt="The interface on a phone: one row for the conversation title, with a finished turn folded into a one-line summary" width="280" align="right">
 
-- 两边经公共的牵线服务器（MQTT）找到对方，消息都加密；能直连就直连，打不通（手机流量下常见）就改走慢速转发：文字、审批都能用，文件预览和上传不能用，手机上会写明。
-- 电脑得开着、Claude Web 得在运行。桌面版默认「不让电脑睡眠」，笔记本合盖照样会睡。
-- iPhone 想从主屏幕图标用：先在 Safari 里「添加到主屏幕」，再从主屏幕图标打开配对（主屏幕和 Safari 的存储是分开的）；也可以在电脑上点「复制配对链接」，粘贴到手机页面的「粘贴配对链接」。
-- 原来的局域网二维码还在（「只在局域网（不用联网）」），没联网时照样用。
+1. On your computer, open **Settings → Phone and other computers** and turn on "Local network / phone access" (default port 3091);
+2. Click **Generate pairing code**, which shows a 6-digit code and a QR code (valid for 10 minutes);
+3. With your phone on the same Wi-Fi, scan the code to open the page and enter the pairing code;
+4. After pairing, the phone remembers this computer, and you can add it to your home screen to use it like an app. Paired devices can be renamed or revoked on the same page.
 
-风险见下面「安全与隐私」。也可以配置 Telegram / 飞书等机器人（**设置 → IM 机器人**），在聊天软件里收通知、审批、发指令；连另一台机器上的 Claude Web 可以用 SSH 隧道（同一页的「更多选项」）。
+On a phone the sidebar is a drawer on the left (☰), and the right panel (Review, Terminal, Task …) is a drawer pulled up from the bottom, opened from the conversation header's ···.
+
+**Using it away from home**: once "Use it from anywhere" on the same page is turned on (it's on by default when remote access is on), the QR code is by default the "works anywhere" one. Your phone scans it to open a web page (the phone page) and pairs once; after that the phone can reach this computer on mobile data or another Wi-Fi, with no app to install and no account to register:
+
+- The two sides find each other through a public matchmaking server (MQTT), and all messages are encrypted; if a direct connection works it's used, and if it can't be made (common on mobile data) it falls back to a slower relayed path: text and approvals work, but file preview and upload don't, and the phone says so.
+- Your computer must be on and Claude Web must be running. The desktop app keeps the computer awake by default, but a laptop still sleeps when you close the lid.
+- To use it from an iPhone home screen icon: first "Add to Home Screen" in Safari, then open the pairing from the home screen icon (the home screen and Safari have separate storage); or on the computer click "Copy pairing link" and paste it into "Paste pairing link" on the phone page.
+- The original local-network QR code is still there ("Local network only (no internet needed)") and works without an internet connection.
+
+For the risks, see "Security and privacy" below. You can also set up Telegram / Feishu and other bots (**Settings → IM bots**) to get notifications, approve and give instructions from a chat app; to connect to Claude Web on another machine you can use an SSH tunnel ("More options" on the same page).
 
 <br clear="right">
 
-### 9. 其它 CLI Agent（Codex / Gemini …）
+### 9. Other CLI agents (Codex / Gemini …)
 
-**设置 → Agents 与子代理 → 其它 Agent** 里能看到 Codex、Gemini、Qwen、Kimi 等是否已安装和登录，一键打开终端完成安装 / 登录。之后在模型菜单里选它们的模型即可（每个 agent 一节），对话、工具卡片、权限审批都和 Claude 一样。对话进行中也能把它**交接**给另一个 agent（对话头 ··· →「交给其它 Agent 继续」），已完成的内容会整理成摘要带过去。
+**Settings → Agents and subagents → Other agents** shows whether Codex, Gemini, Qwen, Kimi and others are installed and signed in, and opens a terminal for one-click install / sign-in. After that, just pick their models in the model menu (one section per agent), and conversations, tool cards and permission approvals work just like with Claude. In the middle of a conversation you can also **hand it off** to another agent (conversation header ··· → "Hand off to another agent"), and what's been done so far is condensed into a summary and carried over.
 
-### 10. 本机其它 agent 的对话
+### 10. Conversations from other agents on this computer
 
-如果你在这台电脑上也用过 Codex、OpenCode 等 CLI（或它们的桌面版 / 插件），Claude Web 可以把它们自己的对话记录也放进侧栏，和 Claude 的对话一起浏览、搜索、续聊。
+If you've also used CLIs such as Codex or OpenCode on this computer (or their desktop apps / plugins), Claude Web can put their own conversation records in the sidebar too, so you can browse, search and continue them together with Claude's conversations.
 
-**加入是可选的。** 启动时只做轻量检测（是否安装、数据目录是否存在），不会启动任何进程，也不会读你的记录。检测到后侧栏底部会出一行「把 Codex 里的对话也列在这里？」（首页的入门清单做完或关掉之后才出现，最多等 3 天）：
+**Adding them is optional.** At startup it only does a light check (is it installed, does the data folder exist); it starts no process and reads none of your records. Once something is detected, a line appears at the bottom of the sidebar: "Also list the conversations in Codex here?" (it only appears after the home page's getting-started checklist is finished or dismissed, waiting at most 3 days):
 
-- 点**列出来**：才开始读取这个 agent 的对话列表、建立全文索引；
-- 点 **×**（以后再说）：不再提示；
-- 随时可以在 **设置 → 对话库** 里加入或移出。**移出**只是不在这里显示，不会删除 agent 自己的任何记录。
+- Click **List them**: only then does it start reading that agent's conversation list and building a full-text index;
+- Click **×** (maybe later): you won't be prompted again;
+- You can add or remove them at any time in **Settings → Conversation library**. **Removing** only stops showing them here and doesn't delete any of the agent's own records.
 
-加入之后能做的事：
+Once added, you can:
 
-| 操作 | 说明 |
+| Action | What it does |
 | --- | --- |
-| 浏览 / 续聊 | 点开就能看到完整历史和工具卡片；直接发消息就是在**原来的对话**里继续，新的一轮也写回 agent 自己的记录，回到命令行里照样能接着用 |
-| 搜索 | <kbd>Ctrl+K</kbd> 全文搜索所有来源（中文也可以）；`agent:codex` 只搜某个 agent，`in:<目录片段>` 按工作目录过滤 |
-| 筛选 | 「项目」标题行的漏斗：按来源、机器筛选，显示已归档，选择多个 |
-| 重命名 / 归档 / 删除 / 分叉 | 右键对话（或悬停时行尾的 ···）。只提供 agent 官方接口支持的操作：Codex 全都支持；OpenCode 只能删除；其它 agent 只读 |
-| 子任务 | 子代理、分叉出来的对话折叠在父对话下面（行首的展开箭头） |
-| 引用 / 交给其它 agent | 右键「引用到输入框」把另一个对话的内容带进当前对话；「交给其它 Agent 继续」用另一个 agent 接着做 |
+| Browse / continue | Open one to see the full history and tool cards; sending a message continues in the **original conversation**, and the new turn is also written back to the agent's own record, so you can pick up again in the command line |
+| Search | <kbd>Ctrl+K</kbd> full-text searches all sources (Chinese text works too); `agent:codex` searches only one agent, and `in:<folder fragment>` filters by working folder |
+| Filter | The funnel on the "Projects" title row: filter by source or computer, show archived, select several |
+| Rename / archive / delete / fork | Right-click a conversation (or the ··· at the end of the row when you hover). Only operations the agent's official interface supports are offered: Codex supports them all; OpenCode can only delete; other agents are read-only |
+| Sub-tasks | Subagents and forked conversations are folded under their parent conversation (the expand arrow at the start of the row) |
+| Quote / hand off to another agent | Right-click "Quote in the input box" brings another conversation's content into the current one; "Hand off to another agent" continues with a different agent |
 
-**删除之前会先备份**：完整历史导出到 `~/.claude-web/library-trash/<对话 id>.json`，备份写成功才会真正删除，备份保留 30 天。删除有二次确认；批量操作默认是归档而不是删除。
+**A backup is made before anything is deleted**: the full history is exported to `~/.claude-web/library-trash/<conversation id>.json`, the delete only really happens once the backup is written successfully, and the backup is kept for 30 days. Deleting needs a second confirmation; bulk operations archive by default instead of deleting.
 
-对话 id 的规则：Claude 的对话保持原 UUID，其它来源是 `<agent>-<原生 id>`，例如 `codex-01a0…`、`opencode-ses_…`。
+Conversation id rules: Claude conversations keep their original UUID, and other sources are `<agent>-<native id>`, for example `codex-01a0…`, `opencode-ses_…`.
 
-### 11. 模型网关（多账号故障转移 / 协议转换）
+### 11. Model gateway (multi-account failover / protocol conversion)
 
-本机的一个 HTTP 网关：对 agent 同时提供 **Anthropic**、**OpenAI**（Chat Completions 与 Codex 用的 Responses）和 **Gemini** 三种接口，后面接你在「供应商」里配置的几个供应商。用途：
+A local HTTP gateway: it offers agents the **Anthropic**, **OpenAI** (Chat Completions, and the Responses API that Codex uses) and **Gemini** interfaces at once, with the providers you set up under "Providers" behind it. What it's for:
 
-- **多账号自动切换**：同一个中转的主号、备用号放进一个组，主号限流（429）、额度用尽、报 5xx 或连不上时自动换下一个；限流的号按 `retry-after` 冷却到重置时间，没有提示就从 60 秒开始翻倍（最长 30 分钟）；密钥失效（401/403）的号停用，修好后点「恢复」。
-- **协议转换**：让 Codex 用 Claude、让 Claude Code 用 OpenAI 兼容的模型等。支持的方向：Anthropic 入 → OpenAI / Gemini 出，OpenAI 入 → Anthropic / Gemini 出，Codex（Responses）入 → Anthropic 出，Gemini 入 → Anthropic 出；同协议则原样透传（中转的客户端指纹检查照样通过）。
+- **Automatic multi-account switching**: put a relay's main account and backup account in one group; when the main one is rate-limited (429), out of quota, returns 5xx or can't be reached, it switches to the next automatically. A rate-limited account cools down until the reset time given by `retry-after`, or if there's no hint, starts at 60 seconds and doubles (up to 30 minutes); an account whose key is invalid (401/403) is disabled, and you click "Restore" once it's fixed.
+- **Protocol conversion**: let Codex use Claude, let Claude Code use OpenAI-compatible models, and so on. Supported directions: Anthropic in → OpenAI / Gemini out, OpenAI in → Anthropic / Gemini out, Codex (Responses) in → Anthropic out, Gemini in → Anthropic out; the same protocol is passed through as is (a relay's client fingerprint check still passes).
 
-使用步骤：
+Steps:
 
-1. **设置 → 模型网关**，勾选「启用本机模型网关」（首次启用会生成网关密钥）。
-2. 「新建组」，从下拉里把供应商按优先级加进去（可拖动排序）；可选「按顺序故障转移」或「加权轮询」，可为每个成员固定模型，或写模型映射（如 `claude-*haiku*` → `gpt-4.1-mini`）。点「测试」会发一条最小请求并显示实际走了哪个成员。
-3. **设置 → 供应商** 新建一个，类型选「模型网关」并选组。之后新对话（Claude、Codex、Gemini 等都可以）在模型菜单里选它的模型即可，地址和密钥在开对话时自动注入。
+1. **Settings → Model gateway**, tick "Enable the local model gateway" (the first time, a gateway key is generated).
+2. "New group": add providers from the dropdown in priority order (drag to reorder); choose "Fail over in order" or "Weighted round-robin", and you can pin a model for each member or write a model mapping (such as `claude-*haiku*` → `gpt-4.1-mini`). "Test" sends a minimal request and shows which member it actually went through.
+3. Under **Settings → Providers**, create a new one, choose the type "Model gateway" and pick the group. After that, new conversations (Claude, Codex, Gemini and so on) just pick its models in the model menu, and the address and key are injected automatically when the conversation starts.
 
-说明：
+Notes:
 
-- 网关只接受本机回环连接，局域网 / 手机监听器上访问一律 404；密钥只在「复制」时取出，不出现在日志里。
-- 流式回复一旦开始向 agent 输出就不会再切换成员（半路出错如实报错）。
-- Codex、Gemini CLI 即使登录了自己的账号，用网关开的对话也会强制走网关（不改它们自己的配置文件）；Qwen Code 等其它 ACP agent 只注入环境变量，在 OAuth 登录状态下可能仍走自己的账号。
-- 「测试」按钮发的请求不带 Claude Code 指纹：只认官方客户端的中转可能拒绝测试，但真实的对话能通过。
-- 重新生成网关密钥后，运行中的对话需要重开。
-- 每次请求在账本里记一行（侧栏底部账户行 → **用量与账本** → 账本，「来源」选「网关」可单独看），包括实际成员、切换次数、首字节延迟和 token。
-- 网关**不转发任何订阅登录**（claude.ai / ChatGPT / Google 账号），只用你自己配置的 API 供应商。
-- 暂不支持系统代理（`HTTPS_PROXY`）：需要代理才能访问的上游请改用中转地址。
+- The gateway only accepts loopback connections from this computer; access from the local-network / phone listener always gets a 404; the key is only read out when you click "Copy" and never appears in logs.
+- Once a streaming reply has started flowing to the agent, it won't switch members (an error halfway is reported as is).
+- Even if Codex and Gemini CLI are signed in to their own accounts, conversations opened through the gateway are forced through the gateway (their own config files aren't changed); other ACP agents such as Qwen Code only get environment variables injected, and under an OAuth login they may still use their own account.
+- The request the "Test" button sends doesn't carry the Claude Code fingerprint: a relay that only accepts the official client may reject the test, but real conversations go through.
+- After regenerating the gateway key, running conversations need to be reopened.
+- Every request gets a row in the ledger (the account row at the bottom of the sidebar → **Usage and ledger** → Ledger; choose "Gateway" under "Source" to see just those), including the actual member, the number of switches, time to first byte and tokens.
+- The gateway **doesn't forward any subscription login** (claude.ai / ChatGPT / Google account); it only uses API providers you've configured yourself.
+- System proxies (`HTTPS_PROXY`) aren't supported for now: for an upstream that needs a proxy to reach, use a relay address instead.
 
-### 12. 其它 agent 的配置（MCP / 说明文件 / 模型）
+### 12. Config for other agents (MCP / instruction files / models)
 
-**设置 → Agents 与子代理 → 其它 Agent**，在 Codex、Gemini、Qwen、OpenCode 的卡片上点**配置中心**：
+**Settings → Agents and subagents → Other agents**: on the card for Codex, Gemini, Qwen or OpenCode, click **Config center**:
 
-| 区块 | 能做什么 |
+| Section | What it does |
 | --- | --- |
-| 说明文件 | 全局与当前工作区的 `AGENTS.md` / `GEMINI.md` / `QWEN.md` 以及配置文件本身，点「打开」在编辑器标签里改；不存在的一键创建 |
-| MCP 服务器 | 列出、添加（可从常用目录填入）、删除。Codex / Gemini / Qwen 走它们自己的 `mcp add / remove` 命令（用户级），OpenCode 没有非交互命令，直接改 `opencode.json` 的 `mcp` 键 |
-| 同步到多个 agent | 来源选 Claude Code 里已配置的 MCP 服务器或常用目录里的条目，勾选要同步到的 agent，逐个报告成功 / 失败原因；同名默认不覆盖，勾「覆盖同名」才替换 |
-| 设置 | 只开放实测存在的键：Codex 的模型 / 推理强度 / 审批策略 / 沙箱，Gemini 的模型 / 默认审批模式，Qwen 与 OpenCode 的模型。改完立即写入，只改这一个键，注释和其它内容保持原样 |
-| 备份 | 每次写入前都会把原文件备份到 `~/.claude-web/config-backups/<agent>/`，这里可以一键恢复 |
+| Instruction files | The global and current-workspace `AGENTS.md` / `GEMINI.md` / `QWEN.md` and the config file itself; click "Open" to edit in an editor tab; ones that don't exist can be created in one click |
+| MCP servers | List, add (you can fill in from the common catalog) and delete. Codex / Gemini / Qwen use their own `mcp add / remove` commands (user level); OpenCode has no non-interactive command, so the `mcp` key of `opencode.json` is edited directly |
+| Sync to multiple agents | The source is either an MCP server already configured in Claude Code or an entry in the common catalog; tick the agents to sync to, and success / failure reasons are reported one by one; same names aren't overwritten by default, and ticking "Overwrite same name" replaces them |
+| Settings | Only keys verified to exist are exposed: Codex's model / reasoning effort / approval policy / sandbox, Gemini's model / default approval mode, and Qwen's and OpenCode's model. Changes are written immediately, touching only that one key, and comments and everything else stay as they were |
+| Backups | Before every write, the original file is backed up to `~/.claude-web/config-backups/<agent>/`, and you can restore from there in one click |
 
-列表里 env / header 的值一律显示为 `••••••`；从 Claude 同步时，密钥由服务端直接读原配置写过去，不经过浏览器。Codex 只支持 stdio 与 HTTP（不支持 SSE），自定义 header 会在 `codex mcp add` 之后写进 `[mcp_servers.<名字>.http_headers]`。
+Values of env / header entries are always shown as `••••••` in lists; when syncing from Claude, the server reads the original config and writes the secrets over directly, without going through the browser. Codex only supports stdio and HTTP (not SSE), and custom headers are written to `[mcp_servers.<name>.http_headers]` after `codex mcp add`.
 
-### 13. 其它机器上的对话
+### 13. Conversations on other computers
 
-家里、办公室、服务器上各跑着一个 Claude Web 时，可以在任意一台的侧栏里看到**所有机器**的对话（带机器名），直接打开、续聊、审批权限、中断；也可以把另一台机器上的对话「交给本机 agent 继续」。
+If you have a Claude Web running at home, at the office and on a server, you can see the conversations of **all computers** in the sidebar of any one of them (with the computer's name), open them, continue them, approve permissions and interrupt them directly; you can also "hand off to a local agent" a conversation from another computer.
 
-**加入一台机器**（设置 → 手机与其它电脑 → 其它机器 → 加入一台机器），两种方式：
+**Adding a computer** (Settings → Phone and other computers → Other computers → Add a computer), in one of two ways:
 
-1. **地址 + 配对码**（同一局域网或任何能直连的地址）：在**那台**机器上打开「局域网 / 手机访问」并点「生成配对码」，然后在**这台**填它显示的地址（如 `http://192.168.1.20:3091`）和 6 位码。这台机器会代为配对，拿到一个设备令牌（加密保存，界面上不显示）。
-2. **SSH 主机**：先在同一页「更多选项」里的 SSH 隧道添加主机并填好远端令牌，然后在「其它机器」里选它。连接走 SSH 隧道，隧道断了会自动重开。
+1. **Address + pairing code** (same local network or any address you can reach directly): on **that** computer, turn on "Local network / phone access" and click "Generate pairing code", then on **this** one enter the address it shows (such as `http://192.168.1.20:3091`) and the 6-digit code. This computer pairs on your behalf and receives a device token (stored encrypted, never shown in the interface).
+2. **SSH host**: first add the host under SSH tunnels in "More options" on the same page and fill in the remote token, then pick it under "Other computers". The connection goes through an SSH tunnel, and if the tunnel drops it's reopened automatically.
 
-加入之后：
+Once added:
 
-| 在哪 | 看到什么 |
+| Where | What you see |
 | --- | --- |
-| 侧栏 | 其它机器的对话在「其它电脑」一节里按机器分组；漏斗菜单里多一项按机器筛选（「所有机器 / 本机 / 办公室台式机 …」） |
-| 对话 | 打开、发消息、审批、中断、改名、归档、删除都在那台机器上执行；··· 里只有「生成的文件」这一个视图，文件 / Git / 搜索请在那台机器上看 |
-| 对话菜单 | 「交给本机 agent 继续」：读那台机器上的完整历史，在**本机**新建一个对话并带上交接说明（问你本机的工作目录，因为那台机器的路径在这里多半不存在）；原对话不变 |
-| 总览（Mission Control） | 「其它机器上运行中」一栏，点开就能接管 |
-| 离线 | 那台机器关机 / 断网时，它的对话显示上次的列表并置灰（只读），本机的列表不受影响；恢复后自动重连 |
+| Sidebar | Conversations from other computers are grouped by computer in the "Other computers" section; the funnel menu gets an extra item for filtering by computer ("All computers / This computer / Office desktop …") |
+| Conversation | Opening, sending messages, approving, interrupting, renaming, archiving and deleting all happen on that computer; the ··· only has the "Generated files" view, so check files / Git / search on that computer |
+| Conversation menu | "Hand off to a local agent": reads the full history on that computer and creates a new conversation on **this** computer with a handoff note (it asks you for a local working folder, since that computer's path most likely doesn't exist here); the original conversation is unchanged |
+| Overview | A "Running on other computers" column; open one to take over |
+| Offline | When that computer is shut down / offline, its conversations show the last list greyed out (read-only), and this computer's own list isn't affected; it reconnects automatically when it's back |
 
-在「其它机器」列表里可以看状态（在线 / 离线 / 令牌失效）、延迟、对话数，改名、停用、移除。那台机器在「已配对设备」里吊销了本机后，这里会显示「令牌失效」，点「重新配对」填一个新配对码即可，对话 id 不变。
+In the "Other computers" list you can see the status (Online / Offline / Token expired), latency and conversation count, and rename, disable and remove. If that computer revokes this one under "Paired devices", it shows "Token expired" here; click "Re-pair" and enter a new pairing code, and the conversation ids don't change.
 
-说明：连接是本机主动发起的；本机对外只多了一处：`/api/health` 会多返回一个服务器 id 的哈希（用来识别「加的是不是自己」），不含令牌或对话内容。两台机器可以互相加入，但不做多跳（A 看不到 B 加入的 C）。附件（文件 / 文件夹）存在本机，发给另一台机器上的对话时对方读不到，请直接粘贴内容。
+Notes: the connection is initiated by this computer; the only addition to what this computer exposes is that `/api/health` also returns a hash of a server id (used to recognize "did I just add myself"), and it contains no token or conversation content. Two computers can add each other, but there are no multiple hops (A can't see the C that B added). Attachments (files / folders) live on this computer, so the other computer can't read them when you send them to a conversation there; paste the content directly instead.
 
-### 14. 自动化：定时任务、目标、多 agent 编排
+### 14. Automation: scheduled tasks, goals, multi-agent orchestration
 
-![自动化页：定时任务 / 目标 / 编排三个标签，定时任务下面是列表和「从模板开始」](docs/images/automation.png)
+![The Automation page: Scheduled tasks / Goals / Orchestration in the sidebar, with the task list and "Start from a template" below](docs/images/en/automation.png)
 
-侧栏的 **自动化** 打开一页（盖在对话上，点侧栏里的对话或按 <kbd>Esc</kbd> 回去）：
+**Automation** in the sidebar opens a page (it covers the conversation; click a conversation in the sidebar or press <kbd>Esc</kbd> to go back):
 
-- **定时任务**：按 cron 或间隔自动开对话、发提示词（「工作日 09:00」这样显示）；右上角「新建定时任务」，或从下面的模板开始；「运行记录」看每次的结果和它的对话；
-- **目标**：给一句话目标，让它一轮接一轮做下去，直到完成或卡住（输入框里 `/goal <目标>` 也行）；对话头下面会出现「目标：… · 第 N 轮」细条；
-- **编排**：见下。
+- **Scheduled tasks**: automatically open a conversation and send a prompt on a cron schedule or interval (shown as "Weekdays at 09:00" and the like); "New scheduled task" at the top right, or start from a template below; "Run history" shows each run's result and its conversation;
+- **Goals**: give it a one-sentence goal and it keeps going, turn after turn, until it's done or stuck (`/goal <goal>` in the input box works too); a thin strip "Goal: … · Turn N" appears below the conversation header;
+- **Orchestration**: see below.
 
-**多 agent 编排**：把一件事拆成几步，每一步交给你选的 agent（Claude / Codex / Gemini / OpenCode / 任意 ACP agent），没有依赖关系的步骤并行跑，关键节点停下来等你审批。在自动化页的 **编排** 标签里（也可以从右侧面板的 ＋ 打开，或命令面板里的「新建编排」「运行编排…」）。
+**Multi-agent orchestration**: split a job into steps, hand each step to the agent you choose (Claude / Codex / Gemini / OpenCode / any ACP agent), run steps with no dependencies in parallel, and stop at key points to wait for your approval. It lives on the **Orchestration** tab of the Automation page (you can also open it from the right panel's ＋, or from the command palette's "New orchestration" and "Run orchestration…").
 
-1. **建一个工作流**：点 + 新建，或从模板开始（「计划 → 实现 → 审查」「三方比选」「修 bug + 测试」）。每个节点有三种：
-   - **任务**：选 agent、权限、工作区（共享工作目录，或独立 git worktree，完成后自动合并回来），勾「一直做到完成」就按目标协议一轮轮推进直到 agent 报告完成；
-   - **比选**：同一个提示词分给几个 agent，各自在自己的 worktree 里做，可以再指定一个「裁判」agent 先给推荐；
-   - **审批**：停下来等你通过或驳回（可以写意见）。
-   选好依赖关系，上方的执行图会实时预览。提示词里可以用 `{{input}}`（运行时填的输入）、`{{nodes.<id>.output}}`（上游节点的最后回复）、`{{nodes.<id>.approval}}`（审批意见），点提示词下方的变量就能插入。
-2. **运行**：点 ▶，填这次的输入。每个任务节点都是一个普通对话，侧栏、总览（Mission Control）、权限审批里照常出现，随时可以点进去插话或中断。
-3. **等你的时候**：审批和比选完成时，节点会变成黄色，侧栏的「需要你」、总览、桌面通知都会提醒；如果某个 IM 聊天绑定了这次运行里的某个对话，那个聊天也会收到提醒，审批可以直接点「通过 / 驳回」（其它聊天不会收到，也不能审批）。
-4. **比选**：几个候选并排显示回复、改动统计和完整 diff，点「选它合并」后，先把胜者 worktree 里新的改动提交，再用 `merge --no-ff` 合并到运行开始时的分支。**编排不会毁掉你的东西**：你手上有进行中的 merge / rebase、或者暂存区有改动时会直接拒绝；合并冲突只撤销它自己的这次合并；合并没成功时节点回到「等你选」，所有 worktree 和分支原样保留。合并成功后，只删除没有未提交改动的 worktree、以及没被人动过的落选分支，有改动的都保留并在节点上列出来。
-5. **失败 / 重启**：失败的节点可以单独「重试」，被跳过的下游会一起重来；重试用新的 worktree（名字带 `-attempt2` 等后缀），旧的都保留。服务重启时正在跑的运行会标记为「服务重启中断」，点「续跑」从没完成的节点接着做（已完成的输出保留）。删除运行记录时可以选择「同时清理 worktree 与分支」：只删干净、已合并的，其余列出来给你。
+1. **Build a workflow**: click + to create one, or start from a template ("Plan → Implement → Review", "Three-way comparison", "Fix a bug + tests"). Each node is one of three kinds:
+   - **Task**: pick the agent, permissions and workspace (the shared working folder, or a separate git worktree that's merged back automatically when done); tick "Keep going until done" and it advances turn by turn under the goal protocol until the agent reports it's finished;
+   - **Compare**: the same prompt goes to several agents, each working in its own worktree, and you can name a "judge" agent to give a recommendation first;
+   - **Approval**: stops and waits for you to approve or reject (you can write comments).
+   Set the dependencies and the execution graph above previews them live. In a prompt you can use `{{input}}` (the input you fill in at run time), `{{nodes.<id>.output}}` (an upstream node's last reply) and `{{nodes.<id>.approval}}` (the approval comments); click a variable under the prompt to insert it.
+2. **Run**: click ▶ and fill in this run's input. Every task node is an ordinary conversation, and shows up as usual in the sidebar, the Overview and permission approvals, and you can step in to interject or interrupt at any time.
+3. **While it waits for you**: when an approval or a comparison is ready, the node turns yellow, and the sidebar's "Needs you", the Overview and desktop notifications all remind you; if an IM chat is bound to one of the conversations in this run, that chat also gets the reminder, and you can click "Approve / Reject" right there (other chats don't get it and can't approve).
+4. **Compare**: the candidates show their replies, change stats and full diffs side by side; after you click "Pick and merge", the new changes in the winner's worktree are committed first, then merged into the branch the run started from with `merge --no-ff`. **Orchestration won't wreck your stuff**: if you have a merge / rebase in progress, or changes in the staging area, it refuses outright; on a merge conflict it only undoes its own merge; if the merge doesn't succeed, the node goes back to "Waiting for your pick" and all worktrees and branches are kept as they were. After a successful merge, it only deletes worktrees with no uncommitted changes and losing branches nobody has touched; anything with changes is kept and listed on the node.
+5. **Failure / restart**: a failed node can be "Retry"-ed on its own, and the skipped downstream nodes are redone with it; a retry uses a new worktree (the name gets a suffix such as `-attempt2`) and the old ones are all kept. If the service restarts while a run is in progress, that run is marked "Interrupted by a service restart", and clicking "Resume" continues from the nodes that weren't finished (completed outputs are kept). When you delete a run record you can choose to "also clean up worktrees and branches": it only deletes the clean, merged ones and lists the rest for you.
 
-worktree 放在仓库外面的 `~/.claude-web/worktrees/<仓库名>-<hash>/`（不会被你的测试、构建扫到，也不出现在 git status 里），分支名 `cw/<运行 id>/<节点>-<agent>`。同时运行的节点数在 **设置 → 通用 → 更多选项 → 编排并发上限** 里调（默认 3）。
+Worktrees live outside the repository, in `~/.claude-web/worktrees/<repo name>-<hash>/` (so your tests and builds don't scan them and they don't appear in git status), and branch names are `cw/<run id>/<node>-<agent>`. The number of nodes that run at the same time is set under **Settings → General → More options → Orchestration concurrency limit** (default 3).
 
-### 15. 后台：看子代理在网吧里干活
+### 15. Background: watch subagents work in the café
 
-![后台页：上面是网吧，下面是每个子代理一张卡片](docs/images/background.png)
+![The Background page: the café on top, one card per subagent below](docs/images/en/background.png)
 
-对话派出子代理、跑工作流（输入框旁「想多深」里打开「深度编排」后，大一点的任务会自己写工作流分给几个子代理）、开后台命令时，输入框上方会出现一个「后台 · 1 个工作流 · 2 个在跑」的小胶囊，点它打开 **后台**（图标栏上也有）。
+When a conversation sends out subagents, runs a workflow (turn on "Deep orchestration" in the thinking effort button next to the input box, and a bigger task will write its own workflow and hand it out to several subagents), or starts a background command, a small pill like "Background · 1 workflow · 2 running" appears above the input box; click it to open **Background** (it's on the icon bar too).
 
-- **网吧**：主对话是前台的**网管**，在跑时它在柜台敲键盘，闲着会四处转、喊两句。每个子代理是一位**客人**：
-  - 进门先到前台开机，再坐到自己的机位（座位牌上写着机号和网费）；
-  - 干活时屏幕上滚代码，头顶冒出它刚做的那一步（「读了 src/auth/login.ts」）；
-  - 一阵子没动静，就去吃泡面、喝饮料、打一局游戏、上厕所、去吸烟区或者借充电宝，一有活马上回座位；
-  - 做完走到前台**结账**，弹一张小票：上机多久、网费、用了多少 token、大概多少钱，然后出门。失败的会蓝屏，被你停掉的网管会喊「被叫下机」。
+- **The café**: the main conversation is **the admin** at the front desk; while it runs it types at the counter, and when idle it wanders around and shouts a couple of things. Each subagent is a **guest**:
+  - On arrival it goes to the front desk to boot up a PC, then sits down at its own seat (the seat sign shows the PC number and the fee);
+  - While working, code scrolls on its screen and the step it just did pops up above its head ("Read src/auth/login.ts");
+  - If nothing's happened for a while, it goes off to eat instant noodles, have a drink, play a game, go to the toilet, visit the smoking area or borrow a power bank, and goes straight back to its seat as soon as there's work;
+  - When done it walks to the front desk to **check out**, and a little receipt pops up: how long it was on the PC, the fee, how many tokens it used and roughly how much money, and then it leaves. One that fails gets a blue screen, and one you stop is "called off" the PC by the admin.
   
-  网费是图个乐子，单价在 **设置 → 通用** 里改；鼠标停在客人身上能看到真实的 token 和估算费用。点一位客人，旁边打开它自己的对话：它读了什么、跑了什么命令、改了什么。拖动画面平移，滚轮缩放，双击看全景；右上角能开关音效。
-- **网吧下面**是每个子代理一张卡片（所在阶段、在跑 / 排队 / 完成 / 失败、在做什么、用了多少 token）、今日账单、关系图和动态。左边列出所有有后台活动的对话，还能回看这个对话以前跑完的工作流。
-- **右侧面板**的「更多」里也有一个小网吧，跟着当前对话。
-- **停止**：输入框的停止键**只停这一轮**，后台的工作流、子代理、命令继续跑。要停它们，在后台页、卡片或右侧面板的「任务」里单独停。一轮结束了后台还在跑的对话，闲置回收不会把它关掉；工作流跑完，结果会自己开一轮告诉你。
+  The fee is just for fun, and the rate is set under **Settings → General** ("Café fee (per hour)"); hover over a guest to see the real tokens and estimated cost. Click a guest and its own conversation opens next to it: what it read, which commands it ran, what it changed. Drag the view to pan, scroll to zoom, double-click for the full view; the top right switches sound effects on and off ("Check-out sound" under Settings → General).
+- **Below the café** is one card per subagent (its phase, running / queued / done / failed, what it's doing, how many tokens it used), today's bill, a relationship graph and an activity feed. On the left are all the conversations that have background activity, and you can also look back at workflows this conversation has finished before.
+- **The right panel's** "More" has a small café too, which follows the current conversation.
+- **Stop**: the Stop button in the input box **only stops the current turn**; background workflows, subagents and commands keep running. To stop them, stop them individually on the Background page, on a card, or in the right panel's "Task" tab. A conversation that still has background work after its turn ends won't be closed by idle cleanup; when a workflow finishes, the result starts a turn by itself to tell you.
 
-#### 捏角色
+#### Making a character
 
-<img src="docs/images/characters.png" alt="角色库：内置的小章鱼和网管，右上角「捏个角色」" width="560">
+<img src="docs/images/en/characters.png" alt="The character library: the built-in little octopus and the admin, with &quot;Make a character&quot; at the top right" width="560">
 
-客人默认是小章鱼，网管戴一顶蓝帽子。网吧右上角 **角色库 → 捏个角色**，给一张照片或者说说想要的样子（「戴黑框眼镜、蓝色卫衣的程序员」），Claude 会画一个 24×24 的像素角色，给你看正面、背面、走路、坐下、打字的几帧：
+By default guests are little octopuses, and the admin wears a blue cap. In the café, top right **Character library → Make a character**, give it a photo or describe what you want ("a programmer in black-framed glasses and a blue hoodie"), and Claude draws a 24×24 pixel character and shows you a few frames: front, back, walking, sitting, typing:
 
-![捏出来的角色：黑框眼镜、蓝色卫衣，正面、背面、走路、坐下、打字的几帧](docs/images/character-made.png)
+![A character made this way: black-framed glasses, blue hoodie, with frames for front, back, walking, sitting and typing](docs/images/character-made.png)
 
-不满意就接着说（「眼睛大一点」「换成红衣服」），满意了存下来，指定给网管、所有客人、某一类子代理（比如 Explore）或者某个名字的子代理。在任何对话里直接说「帮我做个像这张照片的网吧角色」也行：这是一个随应用带的 skill，Claude 和 ccb 两种运行内核都能用。角色存在 `~/.claude-web/characters/`，一个角色一个 JSON 文件。
+If you're not happy, keep talking ("bigger eyes", "switch to a red shirt"); once you like it, save it and assign it to the admin, all guests, a type of subagent (such as Explore), or a subagent with a particular name. You can also just say "make me a café character that looks like this photo" in any conversation: this is a skill that ships with the app, and it works on both the Claude and ccb runtimes. Characters are stored in `~/.claude-web/characters/`, one JSON file per character.
 
-## 快捷键
+## Interface language
 
-桌面版的 <kbd>Ctrl</kbd> 在 macOS 上是 <kbd>⌘</kbd>。完整列表按 <kbd>F1</kbd>（网页版按 <kbd>?</kbd>）查看。
+![Settings → Appearance → Language](docs/images/en/language.png)
 
-| 操作 | 桌面版 | 网页版 |
+The whole interface comes in **Chinese** and **English**, and **by default it follows your computer's language**: English if your computer is English, Chinese if it's Chinese (other languages are shown in English for now). To change it: **Settings → Appearance → Language**, and pick "Follow system / 中文 / English"; the interface reloads once.
+
+- The web version follows the browser's language and the desktop app follows the system language; the language you pick is stored on this computer (`~/.claude-web/meta.json`), and all windows on the computer and the phone page switch together.
+- The desktop app's menus, tray and update prompts, and a small part of the server's text (fixed at startup), only change after you restart the app.
+- Which language Claude replies in within a conversation is up to you and the model and has nothing to do with the interface language; exported HTML follows the interface language at the time of export.
+
+## Keyboard shortcuts
+
+On the desktop app, <kbd>Ctrl</kbd> is <kbd>⌘</kbd> on macOS. Press <kbd>F1</kbd> (<kbd>?</kbd> in the web version) for the full list.
+
+| Action | Desktop app | Web version |
 | --- | --- | --- |
-| 新对话 | Ctrl+N | Alt+N |
-| 命令面板 / 全文搜索 | Ctrl+K | Ctrl+K |
-| 设置 | Ctrl+, | Ctrl+, |
-| 发送 / 换行 | Enter / Shift+Enter | Enter / Shift+Enter |
-| 中断当前轮 | Esc | Esc |
-| 在对话中查找 | Ctrl+F | Ctrl+F |
-| 侧栏 | Ctrl+B | Ctrl+B |
-| 向右 / 向下分屏 | Ctrl+D / Ctrl+Shift+D | 同左 |
-| 关闭标签 | Ctrl+W | Alt+W |
-| 新分组 | Ctrl+T | Alt+T |
-| 切换分组 | Ctrl+Tab | Alt+PageDown |
-| 放大 / 还原分屏 | Ctrl+Shift+Enter | 同左 |
-| 放大 / 缩小 / 还原整个界面 | Ctrl+= / Ctrl+- / Ctrl+0（会记住；设置 → 外观 → 界面缩放） | 浏览器自己的缩放 |
-| 终端 | Ctrl+` | Ctrl+` |
-| 右侧面板 | Ctrl+J | Ctrl+J |
-| 对话 / 步骤视图 | Alt+J | Alt+J |
-| 总览（Mission Control） | Ctrl+Shift+M | Ctrl+Shift+M |
+| New conversation | Ctrl+N | Alt+N |
+| Command palette / full-text search | Ctrl+K | Ctrl+K |
+| Settings | Ctrl+, | Ctrl+, |
+| Send / new line | Enter / Shift+Enter | Enter / Shift+Enter |
+| Interrupt the current turn | Esc | Esc |
+| Find in conversation | Ctrl+F | Ctrl+F |
+| Sidebar | Ctrl+B | Ctrl+B |
+| Split right / down | Ctrl+D / Ctrl+Shift+D | Same |
+| Close tab | Ctrl+W | Alt+W |
+| New group | Ctrl+T | Alt+T |
+| Switch group | Ctrl+Tab | Alt+PageDown |
+| Maximize / restore split | Ctrl+Shift+Enter | Same |
+| Zoom the whole interface in / out / reset | Ctrl+= / Ctrl+- / Ctrl+0 (remembered; Settings → Appearance → Interface zoom) | The browser's own zoom |
+| Terminal | Ctrl+` | Ctrl+` |
+| Right panel | Ctrl+J | Ctrl+J |
+| Conversation / Steps view | Alt+J | Alt+J |
+| Overview | Ctrl+Shift+M | Ctrl+Shift+M |
 
-## 数据存在哪里
+## Where your data lives
 
-| 位置 | 内容 |
+| Location | Contents |
 | --- | --- |
-| `~/.claude/` | Claude Code 自己的数据：登录状态、设置、对话记录（与命令行共用） |
-| `~/.claude-web/` | 本应用的数据：项目列表、置顶 / 归档、供应商（密钥加密）、草稿、定时任务、用量账本、附件、共享记忆库、对话库索引（`library.db`）与删除备份（`library-trash/`）、编排工作流（`meta.json`）、网吧角色（`characters/`）、运行记录（`orchestra/`）与 worktree（`worktrees/`）、其它 agent 配置文件的备份（`config-backups/`）、模型网关与其它机器的设置（`meta.json`，密钥加密） |
-| 桌面版日志 | Windows：`%APPDATA%\claude-web\`；macOS：`~/Library/Application Support/claude-web/`（`server.log`、`main.log`） |
+| `~/.claude/` | Claude Code's own data: login state, settings, conversation records (shared with the command line) |
+| `~/.claude-web/` | This app's data: the project list, pins / archive, providers (keys encrypted), drafts, scheduled tasks, the usage ledger, attachments, the shared memory database, the conversation library index (`library.db`) and delete backups (`library-trash/`), orchestration workflows (`meta.json`), café characters (`characters/`), run records (`orchestra/`) and worktrees (`worktrees/`), backups of other agents' config files (`config-backups/`), and settings for the model gateway and other computers (`meta.json`, keys encrypted) |
+| Desktop app logs | Windows: `%APPDATA%\claude-web\`; macOS: `~/Library/Application Support/claude-web/` (`server.log`, `main.log`) |
 
-**设置 → 高级 → 诊断** 可以一键打包日志和脱敏后的配置，方便排查问题。
+**Settings → Advanced → Diagnostics** packs the logs and a redacted copy of your config in one click, to make troubleshooting easier.
 
-## 常见问题
+## FAQ
 
-**macOS 提示「已损坏，无法打开」**
-没有 Apple 签名导致的，执行 `xattr -cr "/Applications/Claude Web.app"` 后再打开。
+**macOS says "is damaged and can't be opened"**
+This is caused by the missing Apple signature. Run `xattr -cr "/Applications/Claude Web.app"` and then open it again.
 
-**提示未登录 / 发消息没反应**
-首页顶上的提示里点 **在终端登录**（或按 <kbd>Ctrl</kbd>+<kbd>`</kbd> 打开终端，输入 `/login`）；**设置 → 账号与登录** 能看到登录状态，「更多选项」里是运行内核的版本和 doctor，看具体报错。
+**It says you're not signed in / sending a message does nothing**
+In the notice at the top of the home page, click **Sign in with Claude account** (or press <kbd>Ctrl</kbd>+<kbd>`</kbd> to open a terminal and type `/login`); **Settings → Account and login** shows the sign-in state, and "More options" there has the runtime's version and doctor, so you can see the exact error.
 
-**中转报「客户端版本过低」或「请求可能被第三方中转改写」**
-在 **设置 → 供应商** 里对这个供应商点「测试连接」，它会自动改用官方 Claude Code 运行。版本过低时更新到最新版本的 Claude Web 即可（内置的 Claude Code 跟着版本升级）。
+**A relay says "client version too old" or "request may have been rewritten by a third-party relay"**
+Under **Settings → Providers**, click "Test connection" for that provider, and it automatically switches to running on the official Claude Code. For "version too old", just update to the latest Claude Web (the bundled Claude Code is upgraded along with it).
 
-**macOS 上找不到 git / gh / codex 等命令**
-应用启动时会读取登录 shell（zsh / bash）的 PATH。如果命令装在不常见的位置，把它加进 `~/.zshrc` 的 PATH，然后重启应用。
+**On macOS, git / gh / codex and other commands can't be found**
+At startup the app reads the PATH of your login shell (zsh / bash). If a command is installed somewhere unusual, add it to the PATH in `~/.zshrc` and restart the app.
 
-**窗口黑屏 / 闪烁**
-显卡驱动问题。**设置 → 通用 → 更多选项 → 软件渲染** 打开后重启；连续崩溃两次时应用也会自动切换。
+**The interface language isn't the one I want**
+Under **Settings → Appearance → Language**, pick "中文" or English (the default is "Follow system"). The desktop app's menus and tray only change after you restart the app.
 
-**自动更新**
-桌面版启动后和每 4 小时会到本仓库的 GitHub Releases 检查一次新版本（在 **设置 → 高级 → 更新** 里可以手动检查，也可以关掉自动检查）。Windows 安装版会在后台下载好，然后弹窗问你要不要重启更新；选「稍后」就在下次退出时自动装好。macOS 版没有 Apple 签名、Windows 免安装版不能自己更新，有新版本时弹窗给出下载链接：macOS 下载新的 dmg 把应用拖进「应用程序」替换，免安装版换成新的 exe。标成「必须更新」的版本不能跳过。自己从源码打的包，`git pull` 之后重新 `npm install && npm run build:desktop` 覆盖安装即可。数据都不会丢。每个版本的变化见 [更新日志](CHANGELOG.md)。
+**The window is black / flickers**
+That's a graphics driver issue. Turn on **Settings → General → More options → Software rendering (desktop version)** and restart; after two crashes in a row the app also switches by itself.
 
-## 工作原理
+**Auto-update**
+The desktop app checks this repository's GitHub Releases for a new version after it starts and every 4 hours (under **Settings → Advanced → Update** you can check manually, or turn off the automatic check). The Windows installer version downloads in the background and then pops up a window asking whether to restart and update; choose "Later" and it installs by itself the next time you quit. The macOS build has no Apple signature and the Windows portable version can't update itself, so when there's a new version a window gives you a download link: on macOS, download the new dmg and drag the app into "Applications" to replace it, and for the portable version, swap in the new exe. A version marked "must update" can't be skipped. If you built the package yourself from source, after `git pull` just run `npm install && npm run build:desktop` again and install over it. None of your data is lost. See the [changelog](CHANGELOG.md) for what changed in each version.
 
-- 一个 Node 进程（`server/`）用 [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk-typescript) 驱动本机的 Claude Code，通过一条 WebSocket 把所有消息推给 React 前端（`web/`）；桌面版（`desktop/`）只是 Electron 外壳，里面跑的是同一个 server 和网页。
-- **运行内核**默认用我们自己的引擎 claude-web-engine（桌面版安装包里自带；从源码安装时 `npm install` 会从本仓库的 [引擎 Release](https://github.com/ypyik0669/claude-web/releases/tag/engine-v2.8.4-cw.4) 下载，不需要任何账号）：在 [claude-code-best](https://github.com/claude-code-best/claude-code)（ccb，Claude Code 的社区构建，额外支持 OpenAI / Gemini / Grok 接口）2.8.4 上改的，让「智能程度」「深度编排」「自动判断」在每种接口、每个模型上都生效；找不到时自动退回 Agent SDK 自带的官方 Claude Code。只放行官方客户端的中转会被自动识别，对应的供应商改用官方 Claude Code 运行。
-- Codex 走 `codex app-server`（JSON-RPC），Gemini / Qwen / Kimi 等走 [ACP](https://agentclientprotocol.com/)，它们的事件都被归一成同一种消息格式，所以界面、工具卡片、权限审批、账本对所有 agent 都一样。
-- 对话记录仍然是各个 CLI 自己的（`~/.claude/projects`、`~/.codex/sessions` …），命令行和 Claude Web 可以交替使用同一个对话。
+## How it works
 
-更细的架构、协议和踩过的坑见 [CLAUDE.md](CLAUDE.md) 和它索引的 [docs/notes/](docs/notes/)。
+- One Node process (`server/`) drives the Claude Code on your computer with the [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk-typescript), and pushes all messages to the React frontend (`web/`) over a single WebSocket; the desktop app (`desktop/`) is just an Electron shell, running the same server and web page inside.
+- The **runtime** defaults to our own engine, claude-web-engine (bundled in the desktop installer; when you install from source, `npm install` downloads it from this repository's [engine release](https://github.com/ypyik0669/claude-web/releases/tag/engine-v2.8.4-cw.4), no account needed). It's modified from 2.8.4 of [claude-code-best](https://github.com/claude-code-best/claude-code) (ccb, a community build of Claude Code that also supports OpenAI / Gemini / Grok interfaces), so that "Thinking effort", "Deep orchestration" and "Auto" work on every interface and every model; when it can't be found, it automatically falls back to the official Claude Code that ships with the Agent SDK. Relays that only let the official client through are detected automatically, and the matching provider runs on the official Claude Code.
+- Codex goes through `codex app-server` (JSON-RPC), and Gemini / Qwen / Kimi and others go through [ACP](https://agentclientprotocol.com/); their events are all normalized into the same message format, so the interface, tool cards, permission approvals and ledger are the same for every agent.
+- Conversation records are still each CLI's own (`~/.claude/projects`, `~/.codex/sessions` …), so the command line and Claude Web can take turns on the same conversation.
 
-## 安全与隐私
+For more detail on the architecture, protocols and the pitfalls hit along the way, see [CLAUDE.md](CLAUDE.md) and the [docs/notes/](docs/notes/) it indexes.
 
-- 服务**默认只监听 `127.0.0.1`**。局域网 / 手机访问要在设置里手动打开，而且每台设备都要用一次性配对码换取设备令牌，可以随时吊销。
-- 供应商密钥、IM 机器人令牌、设备令牌都**加密保存**（Windows 用 DPAPI，macOS 用钥匙串），界面和日志里一律打码；密钥只注入到用它的那个对话的进程，不写进 `~/.claude/settings.json` 等 CLI 自己的配置。
-- 模型网关只接受本机回环连接。
-- **在外面也能用**：
-  - 牵线和慢速转发经过公共 MQTT 服务器，它们看得到哈希过的频道名、加密后数据的大小和时间、双方的 IP，看不到内容；直连前还会问公共 STUN 服务器，它们看得到双方的 IP。这些服务都不是给本项目用的，可能限流或下线，列表可以在「更多选项」里换（换过的列表写在二维码里，手机扫码时拿到；换了之后已经配对的手机要重新扫码）。
-  - **一台手机上配对的每台电脑，都能读到这台手机上其它电脑的访问令牌**：「在哪都能用」的手机页面只有一个网址，配对过的几台电脑的界面都在它里面运行，共用手机浏览器给这个网址的存储。所以只把互相信任的电脑配对到同一台手机上。用「只在局域网」二维码配对的不受影响（每台电脑各是一个网址）。手机页面自己的文件在缓存里被改过的话不会被使用（每个文件的 SHA-256 写在手机页面的 Service Worker 里，对不上就重新从站点取）；但令牌挡不住，各台电脑缓存在手机上的界面文件也没有这样的核对：一台被动了手脚的电脑可以改掉另一台电脑的界面缓存。怀疑哪台电脑时，在手机上删掉它（手机会同时清掉所有电脑的界面缓存，下次连接时重新取），再在其它电脑上吊销这台手机、重新配对。
-  - 手机页面放在一个只给它用的 GitHub 组织的网站上（`https://claude-web-shell.github.io/`）。一个账号的所有 GitHub Pages 共用同一个网站源（origin），放在一起的话，手机浏览器里存的设备令牌和缓存会和同一账号的别的页面混在一起；单独一个组织就没有别的页面和它共用。
-  - 剩下的风险是手机页面被换掉：换掉它的人能偷走手机上存的设备令牌，从外面连上你的电脑。能换掉它的有两处：
-    - 这个组织：谁能往它的站点仓库推代码，谁就能直接换；
-    - 本仓库的发布和构建依赖：站点每天自动把本仓库最新的正式发布构建、发布上去，中间没有人看。所以谁能在本仓库发布版本，或者构建用到的 npm 包被人动了手脚，一天之内手机页面就跟着变了。
-  - 手机页面不加载任何第三方脚本，被缓存后只在新版本时更新，但更新时拿到的就是站点上的那一份。不放心的话，可以自己部署一份（`deploy/shell-site/` 有步骤），在「更多选项 → 手机页面地址」里换成它（已配对的手机要在新地址上重新配对）。自己部署时可以去掉部署流程里每天的自动运行，只在看过某个版本之后手动发布那个 tag。
-  - 发现令牌可能泄露时，在电脑上吊销那台设备，它已经连着的通道会立刻断开。
-- **Claude Web 自己不收集、不上报任何数据**。模型请求直接从你的机器发往你选的供应商；各个 CLI（Claude Code、Codex …）自身的遥测行为以它们的设置为准。
-- 发现安全问题请用 GitHub 的 **Security → Report a vulnerability** 私下报告，不要公开开 issue。
+## Security and privacy
 
-## 从源码运行与开发
+- The service **only listens on `127.0.0.1` by default**. Local-network / phone access has to be turned on by hand in settings, and every device has to exchange a one-time pairing code for a device token, which you can revoke at any time.
+- Provider keys, IM bot tokens and device tokens are all **stored encrypted** (DPAPI on Windows, Keychain on macOS) and always masked in the interface and logs; a key is only injected into the process of the conversation that uses it, and isn't written to the CLI's own config such as `~/.claude/settings.json`.
+- The model gateway only accepts loopback connections from this computer.
+- **Using it away from home**:
+  - The matchmaking and the slow relayed path go through public MQTT servers. They can see the hashed channel names, the size and timing of the encrypted data, and both sides' IPs, but not the content; before a direct connection is made it also asks public STUN servers, which can see both sides' IPs. None of these services are run for this project, and they may rate-limit or go offline; the list can be changed under "More options" (a changed list is written into the QR code, which the phone picks up when it scans; after changing it, phones that are already paired have to scan again).
+  - **Every computer paired on one phone can read the access tokens of the other computers on that phone**: the "works anywhere" phone page has a single URL, the interfaces of all the paired computers run inside it, and they share the storage the phone's browser gives that URL. So only pair computers that trust each other to the same phone. Pairing with the "local network only" QR code isn't affected (each computer is its own URL). If the phone page's own files are modified in the cache they aren't used (each file's SHA-256 is written into the phone page's Service Worker, and on a mismatch it fetches from the site again); but tokens can't be protected this way, and the interface files each computer caches on the phone get no such check either: a tampered computer can change another computer's interface cache. If you suspect a computer, delete it on the phone (the phone clears every computer's interface cache at the same time and fetches them fresh at the next connection), then revoke this phone on the other computers and pair again.
+  - The phone page is hosted on the website of a GitHub organization used only for it (`https://claude-web-shell.github.io/`). All GitHub Pages of one account share a single site origin; if they were kept together, the device tokens and caches stored in the phone browser would be mixed up with that account's other pages; with an organization of its own, no other page shares the origin with it.
+  - The remaining risk is that the phone page gets swapped out: whoever swaps it can steal the device tokens stored on the phone and connect to your computer from outside. There are two ways it could be swapped:
+    - The organization: whoever can push code to its site repository can swap it directly;
+    - This repository's release and build dependencies: every day the site automatically builds and publishes this repository's latest official release, with nobody looking in between. So if someone can publish a release in this repository, or an npm package used in the build is tampered with, the phone page changes with it within a day.
+  - The phone page loads no third-party scripts and, once cached, only updates on a new version, but what it gets at update time is whatever is on the site. If that worries you, deploy your own copy (`deploy/shell-site/` has the steps) and switch to it under "More options → Phone page address" (already-paired phones have to pair again at the new address). When self-hosting you can remove the deployment workflow's daily automatic run, and only publish a tag by hand after you've looked at that version.
+  - If you find a token may have leaked, revoke that device on the computer, and the channel it's already connected on is cut right away.
+- **Claude Web itself doesn't collect or report any data.** Model requests go directly from your machine to the provider you chose; the telemetry behavior of the individual CLIs (Claude Code, Codex …) follows their own settings.
+- If you find a security issue, report it privately through GitHub's **Security → Report a vulnerability**, and please don't open a public issue.
+
+## Running from source and development
 
 ```bash
 npm install
-npm run dev              # 开发模式：server 热重载 + Vite（http://localhost:5173）
-npm run typecheck        # server + web + desktop 类型检查
-npm test                 # 单元测试
-npm run build:all        # 构建 server / web / desktop
-npm run e2e              # 端到端检查（临时目录，mock agent，不花 token）
-npm run desktop          # 用源码启动桌面版
-npm run build:desktop    # 打 Windows 安装包（在 Windows 上）
-npm run build:desktop:mac  # 打 macOS 安装包（只能在 macOS 上）
+npm run dev              # dev mode: server hot reload + Vite (http://localhost:5173)
+npm run typecheck        # type-check server + web + desktop
+npm test                 # unit tests
+npm run build:all        # build server / web / desktop
+npm run e2e              # end-to-end checks (temp folder, mock agent, costs no tokens)
+npm run desktop          # start the desktop app from source
+npm run build:desktop    # build the Windows installer (on Windows)
+npm run build:desktop:mac  # build the macOS installer (on macOS only)
 ```
 
-每次推送，GitHub Actions 会在 Windows、macOS、Linux 上跑类型检查、单元测试、构建和端到端检查。推送 `v*` 标签（如 `git tag v0.2.0 && git push origin v0.2.0`）会构建 Windows、macOS arm64 与 x64 安装包，**真实启动一次安装包做冒烟测试**，然后发布到 Releases。
+On every push, GitHub Actions runs type checks, unit tests, builds and end-to-end checks on Windows, macOS and Linux. Pushing a `v*` tag (such as `git tag v0.2.0 && git push origin v0.2.0`) builds the Windows, macOS arm64 and x64 installers, **really launches the installer once as a smoke test**, and then publishes them to Releases.
 
-还有一个界面冒烟测试：`npm run build:all && node scripts/ui-smoke.cjs`。它用 Electron 在临时目录里把几乎所有入口点一遍，任何 console 错误都算失败。内置浏览器另有一个：`node scripts/browser-smoke.cjs`（真的 `<webview>` + 本机一个小网站，把 Agent 的每种网页操作走一遍）。
+There's also a UI smoke test: `npm run build:all && node scripts/ui-smoke.cjs`. It uses Electron in a temp folder to click through almost every entry point, and any console error counts as a failure. The built-in browser has its own: `node scripts/browser-smoke.cjs` (a real `<webview>` plus a small local website, running through every kind of web action the agent can do).
 
-架构、协议和踩过的坑见 [CLAUDE.md](CLAUDE.md)（给用 AI agent 写代码的人：`AGENTS.md` 指向同一份说明）。
+For the architecture, protocols and the pitfalls hit along the way, see [CLAUDE.md](CLAUDE.md) (for people writing code with an AI agent: `AGENTS.md` points to the same file).
 
 ```
-server/   Node 服务：会话驱动、对话库、供应商 / 模型网关、文件 / Git、远程、IM、编排…
-web/      React 前端（Vite + zustand），对话渲染的核心是纯函数 reducer：web/src/model/conversation.ts
-desktop/  Electron 外壳
-scripts/  e2e、界面冒烟测试、截图、打包辅助
-docs/     设计文档与实施计划（docs/superpowers/）、README 截图
+server/   Node service: session driving, conversation library, providers / model gateway, files / Git, remote, IM, orchestration…
+web/      React frontend (Vite + zustand); the core of conversation rendering is a pure-function reducer: web/src/model/conversation.ts
+desktop/  Electron shell
+scripts/  e2e, UI smoke tests, English-interface check (i18n/), README screenshots (readme-shots.cjs), packaging helpers
+docs/     Design docs and implementation plans (docs/superpowers/), notes (docs/notes/), README screenshots (docs/images/en, docs/images/zh)
 ```
 
-## 参与贡献
+## Contributing
 
-欢迎提 issue 和 PR。提交前请跑一遍：
+Issues and PRs are welcome. Please run this before you submit:
 
 ```bash
 npm run typecheck && npm test && npm run e2e
 ```
 
-- 改界面文案请先看 `web/src/ui/terms.ts`（术语表）和 `wording.test.ts`（默认界面里不出现「档案 / 引擎 / 窗格」这类实现词）；
-- 改对话渲染先跑 `npm test -w web`，`conversation.test.ts` 会回放录下来的真实消息流；
-- 不要在测试、fixture 或文档里放真实密钥。
+- Before changing interface wording, look at `web/src/ui/terms.ts` (the glossary) and `wording.test.ts` (implementation words like "profile / engine / pane", in their Chinese forms, must not appear in the default interface);
+- Every piece of text a user can see goes through `tr('<Chinese source text>')` (the Chinese original is the key), and the English goes in `web/src/i18n/en.ts` (the server's `server/src/i18n/en.ts`, the desktop app's `desktop/src/en.ts`, the phone shell's `web/src/shell/en.ts`); `npm test` checks for anything left untranslated, and `node scripts/i18n-smoke.cjs` walks through the whole English interface looking for any Chinese left over;
+- Before changing conversation rendering, run `npm test -w web`; `conversation.test.ts` replays recorded real message streams;
+- Don't put real keys in tests, fixtures or docs.
 
-## 许可证与致谢
+## License and credits
 
-本项目的代码以 [MIT 许可证](LICENSE) 开源。
+The code of this project is open source under the [MIT License](LICENSE).
 
-它依赖的一些组件有自己的许可条款，使用和再分发（尤其是打包后的安装包，里面包含它们）时请分别遵守：
+Some of the components it depends on have their own license terms; please follow them separately when you use and redistribute it (especially the packaged installers, which include them):
 
-- [@anthropic-ai/claude-agent-sdk](https://github.com/anthropics/claude-agent-sdk-typescript) 及其自带的 Claude Code：Anthropic 的条款（见该包的 README）；
-- [claude-code-best](https://github.com/claude-code-best/claude-code)（以及在它上面改的 claude-web-engine）：以该项目的说明为准；
-- 界面里的字体随应用一起分发，都是 [SIL Open Font License 1.1](https://openfontlicense.org/)：[Inter](https://github.com/rsms/inter)（界面文字）、[JetBrains Mono](https://github.com/JetBrains/JetBrainsMono)（代码）、[思源宋体 / Noto Serif SC](https://github.com/notofonts/noto-cjk)（只取了标题用到的几十个字）。许可证全文在 `web/public/licenses/`；
-- 图标的形状来自 [Lucide](https://lucide.dev)（ISC 许可证；其中一部分源自 Feather，MIT）；
-- 其余依赖（Electron、React、Monaco、node-pty、xterm.js …）是 MIT 等常见开源许可证。
+- [@anthropic-ai/claude-agent-sdk](https://github.com/anthropics/claude-agent-sdk-typescript) and the Claude Code it ships with: Anthropic's terms (see that package's README);
+- [claude-code-best](https://github.com/claude-code-best/claude-code) (and claude-web-engine, which is modified from it): as stated by that project;
+- The fonts in the interface are distributed with the app and are all under the [SIL Open Font License 1.1](https://openfontlicense.org/): [Inter](https://github.com/rsms/inter) (interface text), [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono) (code), [Noto Serif SC](https://github.com/notofonts/noto-cjk) (only the few dozen characters used in headings were taken). The full licenses are in `web/public/licenses/`;
+- Icon shapes come from [Lucide](https://lucide.dev) (ISC license; part of it derives from Feather, MIT);
+- The remaining dependencies (Electron, React, Monaco, node-pty, xterm.js …) are under MIT and other common open-source licenses.
 
-感谢这些项目，以及 Codex、Gemini CLI、Qwen Code、OpenCode、Agent Client Protocol 等开放的 agent 生态。
+Thanks to these projects, and to the open agent ecosystem of Codex, Gemini CLI, Qwen Code, OpenCode and the Agent Client Protocol.

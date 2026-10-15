@@ -28,6 +28,7 @@ npm run dev          # 开发：server tsx watch + vite :5173（代理 /ws 到 3
 - 原生对话框一律 `web/src/ui/dialog.tsx` 的 `dlg.*`；菜单用 `useAnchoredMenu` / `composer/Popover` / `useDropdown`，别自己挂 window 监听。
 - zustand 选择器必须返回稳定引用（别 `?? []`、`.filter()`、`({…})`），`store/selectors.test.ts` 会查。
 - 文本框的 Enter / Escape 先问 `ui/ime.ts` 的 `imeComposing()`。
+- **用户看得见的字都走 `tr('中文')`**（中文原文是 key，英文在旁边的 `en.ts`；界面语言默认跟着电脑，设置 → 外观 → 语言可换）。新加 / 改字后 `node scripts/i18n/extract.mjs --check`，`npm test` 的覆盖测试会拦漏翻；README 的图用 `node scripts/readme-shots.cjs --lang en|zh` 重拍。细节在 `i18n` 笔记。
 - 用户看得见的字：叫「对话」不叫「会话」；不出现 档案 / 引擎 / 窗格 / 停靠 / effort / ultracode / ACP；空状态走 `terms.ts` 的 `EMPTY`。`wording.test.ts` 会拦。
 - 子进程 spawn 显式写 `windowsHide: true`；新加带 sessionId 的请求要进联邦路由表（`federation/rewrite.ts`）。
 - 停靠面板 / 右侧面板 / 分区页**不卸载**，只 `hidden`（终端 pty、xterm 缓冲、表单状态）。
@@ -79,6 +80,7 @@ npm run dev          # 开发：server tsx watch + vite :5173（代理 /ws 到 3
 | [macos-ci](docs/notes/macos-ci.md) | macOS / CI（2026-09-27） | mac 打包、发版收尾、CI、没有 Mac 时怎么验 |
 | [robustness](docs/notes/robustness.md) | 子进程窗口 / 前端健壮性（2026-09-28） | 停止、终端是 shell、spawn guard、错误边界、zustand 选择器、ui-smoke 用法 |
 | [ui-refresh](docs/notes/ui-refresh.md) | 界面换新（2026-10-10） | 样式文件顺序、令牌、外壳、字体、图标、标题栏、动效、手机交互 |
+| [i18n](docs/notes/i18n.md) | 界面语言：中文和英文（2026-10-15，用户要求） | tr() 约定、语言怎么定、四份英文目录、加一句字的流程、i18n-smoke、README 截图脚本、坑 |
 | [zoom](docs/notes/zoom.md) | 界面缩放（2026-10-10 用户要求：台式机分辨率高，界面看着小） | 桌面版页面缩放 |
 | [rail-sections-web](docs/notes/rail-sections-web.md) | 图标栏 / 分区 / 联网（2026-10-10，界面第二轮） | 图标栏、分区页、扩展页、强度按钮、浏览器标签、web MCP |
 | [search-computer](docs/notes/search-computer.md) | 搜索在内置浏览器里 / 网页上的鼠标键盘 / 操控电脑（2026-10-10，用户要求） | 浏览器里搜索、browser_computer、操控电脑（computer MCP） |

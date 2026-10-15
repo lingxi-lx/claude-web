@@ -4,7 +4,7 @@ import { useStore } from '@/store';
 import type { UpdateState } from '@/features/update/model';
 import { clsx } from '@/util';
 import { Row } from './controls';
-import { tr } from '@/i18n';
+import { tr, trAs } from '@/i18n';
 
 export type { UpdateState };
 
@@ -27,7 +27,7 @@ export function UpdateSection() {
   if (!desktop) {
     return (
       <div className="section">
-        <h5>{tr('更新')}</h5>
+        <h5>{trAs('更新', 'Updates')}</h5>
         <div className="sub">{tr('浏览器模式：在 claude-web 目录')} <code>git pull && npm install && npm run build</code> {tr('后重启服务。运行内核（claude-web-engine）随应用一起更新。')}</div>
         <div className="kv" style={{ marginTop: 6 }}><span className="k">{tr('运行内核')}</span><span>v{engine?.version ?? '?'}</span></div>
       </div>

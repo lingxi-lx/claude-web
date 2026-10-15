@@ -17,6 +17,8 @@ const REAL_TIME = [
 // acp-source and drivers — not as real failures.
 export default defineConfig({
   test: {
+    // the suites assert the Chinese texts (the interface's key language); a machine in English must not change them
+    env: { CLAUDE_WEB_SYSTEM_LANG: 'zh-CN' },
     testTimeout: 30_000,
     hookTimeout: 30_000,
     projects: [

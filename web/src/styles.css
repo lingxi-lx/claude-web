@@ -430,7 +430,7 @@ button.link:hover { text-decoration: underline; }
 .welcome .greet { font-family: var(--display); font-size: var(--fs-display); line-height: 40px; font-weight: 600; color: var(--ink-1); margin: 0 0 26px; display: flex; align-items: center; justify-content: center; gap: 12px; letter-spacing: 0.02em; text-wrap: balance; }
 .welcome .greet .spark { color: var(--accent); display: inline-flex; }
 .welcome .composer { width: 100%; padding: 0; }
-.welcome .composer-inner { max-width: 720px; }
+.welcome .composer-inner { max-width: 768px; } /* English chip words need the room (the start page column, .home-col, matches) */
 .dirpick { position: relative; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); background: var(--fill-subtle); border: 0; border-radius: var(--r-pill); padding: 3px 8px; cursor: pointer; max-width: 320px; min-width: 0; }
 .dirpick:hover, .dirpick.active { background: var(--layer-selected); }
 .dirpick .dirpick-ic { color: var(--ink-4); display: inline-flex; flex: none; }
@@ -1926,7 +1926,7 @@ html.desktop.mac .sp-nav-top { min-height: 40px; padding-left: calc(76px / var(-
 /* ---- redesign phase 7: start page / automation page / phone ---- */
 /* spec §5.8 / §5.9 / §5.11, mock-home.png. The start page is one 720px column: title · composer · starters · notice ·
    入门清单 · 最近任务 / 定时任务 / 已归档. */
-.home-col { width: 100%; max-width: 720px; display: flex; flex-direction: column; }
+.home-col { width: 100%; max-width: 768px; display: flex; flex-direction: column; }
 .welcome .composer .composer-inner { border-radius: var(--r-2xl); }
 .starters { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--sp-2); margin-top: var(--sp-4); }
 .chip.starter { min-height: 34px; padding: 0 14px; gap: 7px; border: 0; background: var(--surface-0); box-shadow: var(--elev-1); color: var(--ink-2); font-size: var(--fs-sm); transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out); }

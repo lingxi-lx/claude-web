@@ -112,15 +112,6 @@
 /* nothing picked: 「子代理」 stays whole (the longer chips around it give way) */
 .cb .mm-anchor.sub-anchor.same { flex: none; }
 .cb .sub-anchor .mm-chip-label { max-width: 200px; }
-/* a full row (the 子代理 chip made it longer): the main model chip, the longest, gives way before the short ones —
-   「proj」 and 「深入」 stayed whole before the 子代理 chip came, and keep doing so. Narrow rows (a split pane, a phone)
-   keep the old even give-and-take, and the 子代理 chip is its icon there (lit when a model is picked) */
-@container (min-width: 561px) {
-  .cb > .cb-right { flex-shrink: 100; }
-  .cb .mm-anchor:not(.sub-anchor) { flex-shrink: 100; }
-  .cb .mm-anchor.sub-anchor:not(.same) { flex-shrink: 30; }
-  .cb .depth-chip { flex-shrink: 0; }
-}
 @container (max-width: 560px) {
   .cb .sub-anchor .mm-chip-label { display: none; }
 }
