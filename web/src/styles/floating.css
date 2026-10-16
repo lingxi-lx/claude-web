@@ -167,3 +167,7 @@ html.desktop:not(.mac) .app[data-rp-closing] :is(.groupbar, .tabstrip, .sess-hea
 }
 /* 1px, not 0: Popover takes a 0 × 0 anchor for one that left the screen and closes */
 .file-menu-at { position: fixed; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+/* 更新内容: the changelog scrolls inside the dialog */
+.modal.whats-new .wn-body { max-height: 60vh; overflow: auto; margin: 4px 0 12px; }
+.modal.whats-new h3 .sub { font-weight: var(--fw-regular); color: var(--fg-3); font-size: var(--fs-sm); }

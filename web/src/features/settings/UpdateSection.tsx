@@ -5,6 +5,7 @@ import type { UpdateState } from '@/features/update/model';
 import { clsx } from '@/util';
 import { Row } from './controls';
 import { tr, trAs } from '@/i18n';
+import { openWhatsNew } from '@/features/update/WhatsNew';
 
 export type { UpdateState };
 
@@ -56,7 +57,8 @@ export function UpdateSection() {
         <button className="btn sm" disabled={st.status === 'checking' || st.status === 'downloading'} onClick={() => d.checkUpdate?.()}>{tr('检查更新')}</button>
         {st.status === 'downloaded' && <button className="btn sm primary" onClick={() => d.installUpdate?.()}>{tr('重启并安装')}</button>}
         {st.url && (manual ? st.status === 'available' : st.status === 'error') && <button className="btn sm primary" onClick={() => void d.openExternal(st.url!)}>{tr('下载新版本')}</button>}
-        {st.page && st.version && <button className="btn sm ghost" onClick={() => void d.openExternal(st.page!)}>{tr('更新内容')}</button>}
+        {st.page && st.version && <button className="btn sm ghost" onClick={() => void d.openExternal(st.page!)}>{tr('新版本的说明')}</button>}
+        <button className="btn sm ghost" onClick={() => openWhatsNew()}>{tr('更新内容')}</button>
       </div>
       <Row label={tr('自动检查更新')} hint={tr('启动后和每 4 小时一次；有新版本时弹窗提醒。')}>
         <button className={clsx('toggle', auto && 'on')} role="switch" aria-checked={auto} aria-label={tr('自动检查更新')} onClick={toggleAuto} />

@@ -47,6 +47,7 @@ import { CustomCss } from './custom-css';
 import { AddAccountHost } from '@/features/settings/ClaudeAccounts';
 import { FileMenu } from '@/features/files/FileMenu';
 import { fillComposer } from '@/features/composer/fill';
+import { WhatsNewModal, useWhatsNewOnUpdate } from '@/features/update/WhatsNew';
 
 /** Width of the right panel minimized to its icon rail. */
 const MIN_RAIL = 36;
@@ -89,6 +90,7 @@ function SidebarColumn() {
 const MOBILE = window.matchMedia(MOBILE_QUERY);
 
 export function App() {
+  useWhatsNewOnUpdate();
   const sidebarOpen = useStore((s) => s.sidebarOpen);
   // phone width lives in the store: the workbench chrome, the session header and the panel commands all follow it
   const mobile = useStore((s) => s.mobile);
@@ -286,6 +288,7 @@ export function App() {
       <ErrorBoundary area={tr('通知')} floating><Toasts /></ErrorBoundary>
       <ErrorBoundary area={tr('命令面板')} floating><CommandPalette /></ErrorBoundary>
       <ErrorBoundary area={tr('快捷键')} floating><ShortcutsModal /></ErrorBoundary>
+      <ErrorBoundary area={tr('更新内容')} floating><WhatsNewModal /></ErrorBoundary>
       <ErrorBoundary area={tr('设置')} floating onReset={() => useStore.setState({ settingsOpen: null })}><SettingsModal /></ErrorBoundary>
       <ErrorBoundary area={tr('首次引导')} floating><Onboarding /></ErrorBoundary>
       <ErrorBoundary area={tr('图片查看')} floating><ImageViewer /></ErrorBoundary>

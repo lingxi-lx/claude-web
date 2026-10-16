@@ -482,6 +482,8 @@ export type ClientRequest =
   | { kind: 'shell.open'; path: string; app?: 'explorer' | 'reveal' | 'code' | 'cursor' | 'zed' }
   /** the editors 「用 … 打开」 can offer: the ones on PATH (macOS: also the app bundles) → `{ editors: ('code'|'cursor'|'zed')[] }` */
   | { kind: 'shell.editors' }
+  /** 更新内容: the newest versions of the app's changelog in `lang` → `{ markdown, version }` */
+  | { kind: 'app.changelog'; lang: string }
   /** 本机环境变量: names only → `{ names: string[] }`; a value only on `env.reveal` → `{ value }`; `env.set` with
    *  `value: null` removes. In every conversation / terminal started here, under 供应商's own variables */
   | { kind: 'env.list' }

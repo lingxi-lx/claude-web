@@ -14,6 +14,9 @@ files:
   - desktop/dist/**
   - desktop/package.json
   - server/dist/**
+  # 更新内容 reads them (server/src/app/changelog.ts)
+  - CHANGELOG.md
+  - CHANGELOG.zh-CN.md
   - server/package.json
   - web/dist/**
   - "!**/*.map"

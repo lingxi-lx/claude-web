@@ -19,6 +19,7 @@ import { canZoom, useZoom } from '@/ui/zoom';
 import { zoomPercent } from '@/ui/zoom-math';
 import { commandHits } from './filter';
 import { tr } from '@/i18n';
+import { openWhatsNew } from '@/features/update/WhatsNew';
 
 interface Cmd { id: string; label: string; sub?: string; ic?: IconName; group: string; run: () => void }
 
@@ -70,7 +71,8 @@ export function CommandPalette() {
       { id: 'ws.add', label: tr('打开项目文件夹…'), ic: 'folder', group: tr('对话'), run: async () => { const p = await ws.request<string | null>({ kind: 'fs.pickDir' }); if (p) await st.addWorkspace(p); } },
       { id: 'sidebar', label: st.sidebarOpen ? tr('收起侧栏') : tr('展开侧栏'), sub: 'Ctrl+B', ic: 'sidebar', group: tr('视图'), run: () => useStore.setState((s) => ({ sidebarOpen: !s.sidebarOpen })) },
       { id: 'archived', label: st.showArchived ? tr('隐藏已归档的对话') : tr('显示已归档的对话'), ic: 'archive', group: tr('视图'), run: () => useStore.setState((s) => ({ showArchived: !s.showArchived })) },
-      { id: 'keys', label: tr('键盘快捷键'), sub: '?', ic: 'keyboard', group: tr('视图'), run: () => useStore.setState({ shortcutsOpen: true }) },
+      { id: 'keys', label: tr('键盘快捷键'), sub: 'Ctrl+/', ic: 'keyboard', group: tr('视图'), run: () => useStore.setState({ shortcutsOpen: true }) },
+      { id: 'whatsNew', label: tr('更新内容'), ic: 'sparkle', group: tr('视图'), run: () => openWhatsNew() },
       { id: 'settings', label: tr('设置…'), sub: 'Ctrl+,', ic: 'settings', group: tr('视图'), run: () => st.openSettings() },
       // 界面缩放: the desktop app's whole-window zoom (a browser has its own)
       ...(canZoom ? SHORTCUTS.filter((x) => x.id.startsWith('zoom.')).map<Cmd>((x) => ({ id: x.id, label: x.id === 'zoom.reset' ? tr('{label}（现在 {zoomPercent}）', { label: x.label, zoomPercent: zoomPercent(zoom) }) : x.label, sub: keyLabel(x), ic: x.id === 'zoom.in' ? 'zoomIn' : x.id === 'zoom.out' ? 'zoomOut' : 'zoom', group: tr('视图'), run: () => runCommand(x.id) })) : []),
