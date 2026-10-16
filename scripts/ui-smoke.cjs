@@ -125,7 +125,18 @@ function seedHome(home) {
     tr('toolu_t_bash', ' M README.md', 41),
     am([{ type: 'text', text: 'smoke: the readme is tidy now.\n\n```\nline one\nline two\n```' }], 45, 'msg_t4'),
   ].map((x) => JSON.stringify(x)).join('\n') + '\n');
-  return { repo, sid, toolsSid, transcript: path.join(proj, `${sid}.jsonl`) };
+  // a third: /code-review's findings, reported through ReportFindings (spec 2026-10-16 review-pr §2)
+  const reviewSid = '5a0e0e0e-0000-4000-8000-00000000c0e1';
+  pu = null; un = 40;
+  const rb = { ...base, sessionId: reviewSid };
+  const rline = (o, s) => { const uuid = `00000000-0000-4000-8000-0000000c0e${String(++un).padStart(2, '0')}`; const l = { ...rb, parentUuid: pu, uuid, timestamp: at(s), ...o }; pu = uuid; return l; };
+  fs.writeFileSync(path.join(proj, `${reviewSid}.jsonl`), [
+    rline({ type: 'user', message: { role: 'user', content: 'smoke: /code-review' } }, 0),
+    rline({ type: 'assistant', message: { id: 'msg_r1', type: 'message', role: 'assistant', model: 'claude-smoke', content: [{ type: 'tool_use', id: 'toolu_r_find', name: 'ReportFindings', input: { level: 'high', findings: [{ file: 'src/index.ts', line: 1, summary: 'smoke finding one', failure_scenario: 'x → y', category: 'correctness', verdict: 'CONFIRMED' }, { file: 'README.md', summary: 'smoke finding two', failure_scenario: 'a → b' }] } }], stop_reason: 'tool_use', usage: { input_tokens: 1, output_tokens: 1 } } }, 5),
+    rline({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_r_find', content: 'reported' }] } }, 6),
+    rline({ type: 'assistant', message: { id: 'msg_r2', type: 'message', role: 'assistant', model: 'claude-smoke', content: [{ type: 'text', text: 'smoke: review done.' }], stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 } } }, 8),
+  ].map((x) => JSON.stringify(x)).join('\n') + '\n');
+  return { repo, sid, toolsSid, reviewSid, transcript: path.join(proj, `${sid}.jsonl`) };
 }
 
 async function startServer(home, out, extraEnv) {
@@ -215,6 +226,7 @@ async function runner() {
     SMOKE_REPO: seed?.repo ?? '',
     SMOKE_SID: seed?.sid ?? '',
     SMOKE_TOOLS_SID: seed?.toolsSid ?? '',
+    SMOKE_REVIEW_SID: seed?.reviewSid ?? '',
     // the server's data dir (the temp HOME's): checks that read what the server wrote (the canonical mirror)
     SMOKE_DATA: home ? path.join(home, '.claude-web') : '',
     // the mock ACP agent (phase 5: a real permission request) runs under this node, not Electron
@@ -1147,7 +1159,7 @@ function driver() {
           const v2 = await vm();
           await ctrlKey('O');
           const v3 = await vm();
-          check('Ctrl+O steps the view mode 普通 → 详细 → 精简 → 普通, and the conversation still renders', before === 'normal' && v1 === 'verbose' && v2 === 'summary' && v3 === 'normal' && !(await noBoundary('.pane.focused')), JSON.stringify({ before, v1, v2, v3 }));
+          check('Ctrl+O steps the view mode 普通 → 显示思考 → 详细 → 普通, and the conversation still renders', before === 'normal' && v1 === 'thinking' && v2 === 'verbose' && v3 === 'normal' && !(await noBoundary('.pane.focused')), JSON.stringify({ before, v1, v2, v3 }));
           if (E.SMOKE_READONLY !== '1') {
             await click('.pane.focused .composer textarea');
             wc.insertText('/btw');
@@ -1572,6 +1584,18 @@ function driver() {
         const readme = await waitFor('[...document.querySelectorAll(".dock .rv-file")].some((f) => f.textContent.includes("README.md") && f.querySelector(".rv-body .diff"))', 8000);
         check('未提交的改动 lists the modified README.md with its diff; 提交 box at the bottom', readme && (await js('!!document.querySelector(".dock .rv-foot textarea")')));
         await shot('right-panel-review');
+        // ---- 审阅: comments on diff lines (spec 2026-10-16 review-pr §1)
+        if (E.SMOKE_READONLY !== '1') {
+          const lineFound = await js(`(() => { const l = [...document.querySelectorAll('.dock .rv-file .rv-body .dl.commentable')].find((x) => x.classList.contains('add')); if (l) l.dataset.smokeLine = '1'; return !!l; })()`);
+          if (lineFound) await click('.dock .dl[data-smoke-line="1"]');
+          const box = await waitFor('document.activeElement === document.querySelector(".dock .dl-note-edit textarea")', 3000);
+          wc.insertText('smoke comment');
+          await key('Enter');
+          const added = await waitFor('document.querySelectorAll(".dock .dl-note").length === 1 && /1 条评论/.test(document.querySelector(".dock .rv-comments")?.textContent ?? "")', 3000);
+          await js('document.querySelector(".dock .rv-comments .btn.ghost")?.click()');
+          const cleared = await waitFor('!document.querySelector(".dock .rv-comments") && !document.querySelector(".dock .dl-note")', 3000);
+          check('审阅: a click on a diff line opens a comment box, Enter adds it (the bar says 1 条评论), 清空 clears them', lineFound && box && added && cleared, JSON.stringify({ lineFound, box, added, cleared }));
+        }
         await js('document.querySelector(\'.dock .rv-bar button[aria-label="更多审阅操作"]\')?.click()');
         await sleep(300);
         await js(`[...document.querySelectorAll('.rv-more-menu button')].find((b) => b.textContent.includes('Git'))?.click()`);
@@ -2028,7 +2052,9 @@ function driver() {
           const autoTab = (tab) => `(() => { const p = document.querySelector('.auto-page'); const b = p && p.querySelector('.auto-body[data-body="${tab}"]:not([hidden])'); return !!p && !p.hidden && p.dataset.tab === '${tab}' && !!b && b.getBoundingClientRect().height > 0; })()`;
           await click('.sidebar [data-id="filter"]');
           await click(':is(.rail, .sidebar) [data-id="automation"]');
-          const one = { menus: await count('.menu.sb-menu, .menu.sess-menu'), page: await waitFor(`(() => { const p = document.querySelector('.auto-page'); return !!p && !p.hidden; })()`, 3000), funnel: await exists('.menu.sb-filter'), inert: await exists('.pane-layer[inert]'), active: await exists('.rail [data-id="automation"].on') };
+          // a closed menu leaves an inert fading copy (.leaving, ui/ghost.ts) for ~120ms: not a menu
+          await waitFor('!document.querySelector(".menu.sb-menu:not(.leaving), .menu.sess-menu:not(.leaving)")', 1000);
+          const one = { menus: await count('.menu.sb-menu:not(.leaving), .menu.sess-menu:not(.leaving)'), page: await waitFor(`(() => { const p = document.querySelector('.auto-page'); return !!p && !p.hidden; })()`, 3000), funnel: await exists('.menu.sb-filter'), inert: await exists('.pane-layer[inert]'), active: await exists('.rail [data-id="automation"].on') };
           check('自动化 opens the automation page (panes underneath inert, the entry marked) and closes the funnel', !one.menus && one.page && !one.funnel && one.inert && one.active, JSON.stringify(one));
           const am = await ids(':is(.auto-page .auto-tabs, .sb-sect:not([hidden]) .auto-side .sect-nav) [data-id]');
           const newBtn = await js(`document.querySelector('.auto-page .auto-head [data-new]')?.textContent ?? null`);
@@ -2564,6 +2590,19 @@ function driver() {
       // ---- redesign phase 5: chat rendering — folded turns, the change card, thinking time, hover actions, and the
       // permission card docked above the composer (a real request from the mock ACP agent: allow once with an empty
       // Enter, deny with the words in the box, 拒绝 with a reason; 总是允许 and 「还有 N 条」 on staged requests)
+      if (E.SMOKE_READONLY !== '1' && E.SMOKE_REVIEW_SID) {
+        phase = 'code-review-card';
+        const rsid = JSON.stringify(E.SMOKE_REVIEW_SID);
+        await js(`window.__store.getState().setSetting('ui.viewMode', 'verbose')`);
+        await js(`window.__store.getState().loadHistory(${rsid})`);
+        const card = await waitFor(`document.querySelectorAll('.pane.focused .findings .fd-item').length === 2`, 10_000);
+        const files = await js(`[...document.querySelectorAll('.pane.focused .findings .fd-path')].map((p) => p.textContent)`);
+        const openBtn = await js(`document.querySelector('.pane.focused .findings .fd-foot .btn')?.textContent ?? ''`);
+        await js(`document.querySelector('.pane.focused .findings .fd-item .fd-acts .btn.ghost')?.click()`);
+        const dismissed = await waitFor(`document.querySelector('.pane.focused .findings .fd-item')?.classList.contains('done') && /（1）/.test(document.querySelector('.pane.focused .findings .fd-foot .btn')?.textContent ?? '') && (window.__store.getState().sessionMeta[${rsid}]?.reviewDismissed ?? []).length === 1`, 4000);
+        check('代码审查卡: ReportFindings draws by file, 修复还开着的（2）; 忽略 greys one out, remembers it, and the count drops', card && files.join() === 'src/index.ts,README.md' && /（2）/.test(openBtn) && dismissed, JSON.stringify({ card, files, openBtn, dismissed }));
+        await js(`window.__store.getState().setSetting('ui.viewMode', 'normal')`);
+      }
       if (E.SMOKE_READONLY !== '1' && E.SMOKE_TOOLS_SID) {
         phase = 'chat-turns';
         const tsid = JSON.stringify(E.SMOKE_TOOLS_SID);
