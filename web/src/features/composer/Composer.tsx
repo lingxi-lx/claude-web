@@ -11,6 +11,7 @@ import { QueueCards } from '@/features/chat/QueueCards';
 import { SideChat } from '@/features/chat/SideChat';
 import { openSideChat } from '@/features/chat/side-chat';
 import { parseBtw } from '@/features/chat/side-chat-model';
+import { atQueryAt, pickAt } from './at-mention';
 import { RunCard } from '@/features/chat/RunCard';
 import { BackgroundPill } from '@/features/background/BackgroundPill';
 import { PermissionDock, runDockPrimary } from '@/features/chat/PermissionCards';
@@ -287,6 +288,32 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   }, [text]);
   const matches = useMemo(() => (slashQuery === null ? [] : commands.filter((c) => c.name.toLowerCase().includes(slashQuery)).slice(0, 40)), [slashQuery, commands]);
   useEffect(() => setPalIdx(0), [slashQuery]);
+  // @ file completion (phase 2 spec §4): the @word at the caret, the project's files matching it (not for a
+  // conversation on another machine — its files are there)
+  const [caret, setCaret] = useState(0);
+  const [atClosed, setAtClosed] = useState<number | null>(null);
+  const atRoot = welcome ? cwd.trim() : remote ? '' : active?.cwd ?? '';
+  const atQuery = atRoot && slashQuery === null ? atQueryAt(text, caret) : null;
+  const atOpen = atQuery && atQuery.start !== atClosed ? atQuery : null;
+  const [atFiles, setAtFiles] = useState<string[]>([]);
+  const [atIdx, setAtIdx] = useState(0);
+  useEffect(() => {
+    if (!atOpen) { setAtFiles([]); return; }
+    let live = true;
+    const t = setTimeout(() => {
+      ws.request({ kind: 'fs.findFiles', root: atRoot, query: atOpen.q, limit: 30 })
+        .then((r: any) => { if (live) { setAtFiles(r.files ?? []); setAtIdx(0); } })
+        .catch(() => { if (live) setAtFiles([]); });
+    }, 80);
+    return () => { live = false; clearTimeout(t); };
+  }, [atOpen?.start, atOpen?.q, atRoot]);
+  const pickFile = (file: string) => {
+    if (!atOpen) return;
+    const r = pickAt(text, atOpen, file);
+    onChange(r.text);
+    setCaret(r.caret);
+    requestAnimationFrame(() => { const el = ta.current; if (el) { el.focus(); el.setSelectionRange(r.caret, r.caret); } });
+  };
 
   const busy = !welcome && !!active && (active.state === 'running' || active.state === 'waiting' || active.state === 'starting');
   const canSend = (text.trim().length > 0 || imgs.length > 0 || atts.length > 0 || files.length > 0 || refs.length > 0) && !starting && !upload && !disabled;
@@ -543,6 +570,12 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     if (suggestion && !imeComposing(e.nativeEvent)) {
       if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); takeSuggestion(); return; }
       if (e.key === 'Escape') { e.preventDefault(); setDismissed(suggestion); return; }
+    }
+    if (atOpen && atFiles.length && !imeComposing(e.nativeEvent)) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setAtIdx((i) => (i + 1) % atFiles.length); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setAtIdx((i) => (i - 1 + atFiles.length) % atFiles.length); return; }
+      if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) { e.preventDefault(); pickFile(atFiles[Math.min(atIdx, atFiles.length - 1)]); return; }
+      if (e.key === 'Escape') { e.preventDefault(); setAtClosed(atOpen.start); return; }
     }
     if (matches.length && slashQuery !== null && !imeComposing(e.nativeEvent)) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setPalIdx((i) => (i + 1) % matches.length); return; }
@@ -882,6 +915,16 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     // and sweep) hold still until it is back in view (UI refresh §4.5)
     <div className="composer" data-paused={inView ? undefined : ''}>
       <div className="composer-inner">
+        {atOpen && atFiles.length > 0 && (
+          <div className="palette at-files" role="listbox" aria-label={tr('文件')}>
+            {atFiles.map((f, i) => (
+              <div key={f} role="option" aria-selected={i === atIdx} className={`it ${i === atIdx ? 'sel' : ''}`} onMouseDown={(e) => { e.preventDefault(); pickFile(f); }}>
+                <span className="n">{f.slice(f.lastIndexOf('/') + 1)}</span>
+                <span className="d">{f.includes('/') ? f.slice(0, f.lastIndexOf('/')) : ''}</span>
+              </div>
+            ))}
+          </div>
+        )}
         {matches.length > 0 && (
           <div className="palette">
             {matches.map((c, i) => (
@@ -950,7 +993,8 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
             value={text}
             disabled={disabled}
             placeholder={suggestion ? `${suggestion}   ${tr('Tab 采用')}` : disabled ? tr('对话已被删除，不能继续') : docked ? DOCK_PLACEHOLDER[dockKind(docked)](dockAgent) : welcome && !ultraOn ? tr('描述一个任务，或者问个问题。输入 / 查看命令，拖入文件作为附件') : busy ? tr('运行中，输入会排队 · Esc 中断') : ultraOn ? ULTRACODE.placeholder : active?.state === 'history' ? tr('发送即可继续这个对话…') : tr('回复 {agentName}… 输入 / 查看命令，拖入文件作为附件', { agentName: info?.agentName && info.agent !== 'claude' ? info.agentName : 'Claude' })}
-            onChange={(e) => onChange(e.target.value)}
+            onChange={(e) => { setCaret(e.target.selectionStart ?? e.target.value.length); onChange(e.target.value); }}
+            onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
             onKeyDown={onKey}
             onPaste={onPaste}
             // a phone's soft keyboard labels its return key 发送: Enter sends here (Shift+Enter is a new line)

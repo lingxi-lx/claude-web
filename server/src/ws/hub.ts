@@ -2,6 +2,7 @@ import type { WebSocket, WebSocketServer } from 'ws';
 import { CLAUDE_PROVIDER_ID, type ClientRequest, type OpenSessionParams, type RemoteStatus, type ServerEvent, type WireDown, type WireUp } from '../protocol.js';
 import { RunnerPool } from '../runtime/pool.js';
 import { SessionRunner, setPromptSuggestions } from '../runtime/session-runner.js';
+import { listProjectFiles, rankFiles } from '../files/find.js';
 import { cacheParentFor } from '../runtime/cache-key.js';
 import { SessionService } from '../sessions/service.js';
 import { ConfigService } from '../config/service.js';
@@ -697,6 +698,8 @@ export class Hub {
       }
       case 'files.diff':
         return s.files.diff(req.path);
+      case 'fs.findFiles':
+        return { files: rankFiles(await listProjectFiles(req.root), req.query, Math.min(req.limit ?? 30, 100)) };
       case 'fs.list':
         return s.files.list(req.path);
       case 'fs.read':

@@ -415,6 +415,8 @@ export type ClientRequest =
   | { kind: 'session.info'; sessionId: string }
   | { kind: 'session.send'; params: SendParams }
   | { kind: 'session.interrupt'; sessionId: string }
+  /** @ file completion: files under `root` matching `query` → `{ files: string[] }` (relative, `/`-separated) */
+  | { kind: 'fs.findFiles'; root: string; query: string; limit?: number }
   /** 旁聊: a question about the conversation that never enters it → `{ text: string | null; synthetic? }`, or
    *  `{ error: 'not-open' | 'unsupported' }`. `history`: this side chat's earlier turns */
   | { kind: 'session.side'; sessionId: string; question: string; history?: SideTurn[] }
