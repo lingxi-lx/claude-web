@@ -52,6 +52,21 @@ describe('type and radii', () => {
     const bad = cssFiles(SRC).filter((f) => /font-weight:\s*500\b/.test(readFileSync(f, 'utf8')));
     expect(bad).toEqual([]);
   });
+  it('Inter Dark has its italic cuts (else dark-theme emphasis is a fake slant)', () => {
+    const italic = [...fonts.matchAll(/@font-face \{[^}]*\}/g)].map((m) => m[0]).filter((f) => f.includes("'Inter Dark'") && f.includes('font-style: italic'));
+    expect(italic.filter((f) => f.includes('font-weight: 350 380') && f.includes('opsz-italic.woff2'))).toHaveLength(2);
+    expect(italic.filter((f) => f.includes('font-weight: 501 900') && f.includes('opsz-italic.woff2'))).toHaveLength(2);
+  });
+  it('reduce motion makes the springs short and plain, both ways of asking for it', () => {
+    const app = tokens.split('\n').find((l) => l.startsWith(":root[data-reduce-motion='1'] {")) ?? '';
+    const media = tokens.slice(tokens.indexOf('@media (prefers-reduced-motion: reduce)'));
+    for (const block of [app, media.slice(0, media.indexOf('\n}'))]) {
+      for (const n of ['bouncy', 'snappy', 'gentle']) {
+        expect(block).toContain(`--spring-${n}: var(--ease-out)`);
+        expect(block).toContain(`--spring-${n}-dur: 80ms`);
+      }
+    }
+  });
   it('radii', () => {
     expect(tokens).toMatch(/--r-bubble:\s*18px/);
     expect(tokens).toMatch(/--r-composer:\s*20px/);

@@ -48,10 +48,13 @@ export async function askSide(question: string): Promise<void> {
   try {
     let r = await ask();
     if (r.error === 'not-open') {
-      // closed / reclaimed / opened from history: start it again (nothing is sent to it) and ask once more
+      // closed / reclaimed / opened from history: start it again (nothing is sent to it) and ask once more — not
+      // another agent's conversation (Codex…), which would only be started to answer 'unsupported'
       const st = useStore.getState();
       const o = st.open[sessionId];
       if (!o) throw new Error(tr('这个对话没有打开'));
+      const agent = o.info?.agent ?? st.sessions.find((x) => x.sessionId === sessionId)?.agent;
+      if (agent && agent !== 'claude') throw new Error(tr('这个对话的 agent 不支持旁聊'));
       await st.openSession({ sessionId, cwd: o.cwd, ...resumeParams(o, st.sessionMeta[sessionId]) }, 'none');
       r = await ask();
     }

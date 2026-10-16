@@ -52,10 +52,13 @@ spec `docs/superpowers/specs/2026-10-16-texture-design.md`，计划 `docs/superp
 - **滚动渐隐** `styles/scroll-fade.css`：scroll-driven animation 在元素自己的滚动时间线上把注册属性 `--sf-t / --sf-b` 在 0 和 `--fade` 之间动，`mask-image` 读它们（顶 / 底各 7 个缓出停点）。不能滚时时间线不活动 → 都是 0 → 不渐隐。坑：
   - 选择器列表必须是 `:where(…)`：`:is()` 取最高的那项（`.cmdk .list`）的权重，后面的 `.chat { --fade: 16px }` 和 `.welcome` 的组合动画会被它盖掉（写成 `:is` 时首页的 `fadein` 就没了）。
   - 元素本来有 `animation` 的要把它和 `sf-top / sf-bottom` 写在一起（`.welcome` 那样，`animation-timeline: auto, scroll(self), scroll(self)`）；`.menu` 一族有 `fl-menu-in`，没套。
-  - 「减少动画」的 `animation-duration: 0.01ms !important` 对滚动时间线无害（时长按比例换算），渐隐照常。
+  - 系统的减少动态效果（`prefers-reduced-motion`）下渐隐照常：`animation-duration: 0.01ms` 对滚动时间线无害（按比例换算）。应用里的「减少动画」开关不一样：`html[data-reduce-motion='1'] * { animation: none }` 连渐隐一起关掉。
+  - 有粘性条时不渐隐：对话的查找栏、侧栏的筛选 / 多选条在顶部渐隐带里会被洗白，`:has()` 命中时 `--fade: 0px`。
+  - 两种减少动画下弹簧都退成 80ms 的 `--ease-out`（`--spring-*` / `--spring-*-dur` 在两个块里覆盖），开关和发送键不再 260ms 带超调。
+  - 'Inter Dark' 正体和斜体都要声明：只有正体时 `<em>` 被浏览器拿正体伪斜（不会往下找 Inter Variable 的斜体）。
   - 遮罩会把滚动条两端也淡掉，接受。
 - **暗色字重**：`fonts.css` 的 `'Inter Dark'` 是同一份 Inter 文件声明两段字重（350–380、501–900），暗色主题的 `--font` 把它排在 `'Inter Variable'` 前面。请求 400 → 400–500 里没有面 → 往下取 350–380 夹到 380；600 → 501–900。中文落到雅黑等 CJK 字体时请求的还是 400，不会掉到 Light。**所以样式里别写 `font-weight: 500`**（暗色下会变成 380），`texture.test.ts` 拦。URL 写的是 `../../node_modules/@fontsource-variable/inter/files/…`，构建后和 fontsource 自己那份是同一个哈希文件，不多一份。导出的对话没有这份字体，`--font` 的下一项接上。
 - **圆角**：`--r-bubble` 18（用户气泡、toast，36px 高的 toast 仍是整圆）；新 `--r-composer` 20（输入框外框）；`--r-2xl` 24 留给审批卡、对话框、抽屉顶边。
 - **行内图标**：`:where(svg) { vertical-align: -0.125em }`，零权重，flex 行不受影响，任何已有规则都赢它。
 - `texture.test.ts` 还会用 postcss 解析每一份样式表：tokens.css 里一行跑出注释外的字只有构建才报，单元测试不拦，这次就是这么漏的。
-- **验证 2x**：Electron 离屏窗口不认 `force-device-scale-factor`；用两倍大小的窗口 + `webContents.setZoomFactor(2)` 能让 `devicePixelRatio` 和 `resolution` 媒体查询都变成 2x，但 Windows 会把窗口夹到屏幕大小，布局会挤——只看线和渐隐，别看布局。
+- **验证 2x**：Electron 离屏窗口不认 `force-device-scale-factor`；用两倍大小的窗口 + `webContents.setZoomFactor(2)` 能让 `devicePixelRatio` 和 `resolution` 媒体查询都变成 2x，但 Windows 会把窗口夹到屏幕大小，布局会挤——只看线和渐隐，别看布局。**Chromium 按 host 记住这个缩放**（Electron 默认 profile 的 `%APPDATA%ElectronPreferences`），之后对 127.0.0.1 跑的 ui-smoke 会整页放大、大面积失败：测完 `setZoomFactor(1)` 或清掉那条记录。

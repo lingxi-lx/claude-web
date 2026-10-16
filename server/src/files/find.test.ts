@@ -25,6 +25,12 @@ describe('rankFiles', () => {
     expect(rankFiles(files, 'cmpsr')).toEqual(['web/src/features/composer/composer.css', 'web/src/features/composer/Composer.tsx']);
     expect(rankFiles(files, 'src/index')).toEqual(['server/src/index.ts']);
   });
+  it('a plain word does not match a file just because a long path has its letters', () => {
+    const deep = ['docs/superpowers/specs/2026-10-16-everything-review-pr-design.md', 'web/src/features/workbench/tiles/ChatTile.tsx', 'server/src/runtime/session-runner.test.ts'];
+    expect(rankFiles(deep, 'alice')).toEqual([]);
+    expect(rankFiles(deep, 'team')).toEqual([]);
+    expect(rankFiles(deep, 'everyone')).toEqual([]);
+  });
   it('nothing typed yet: the shortest paths', () => {
     expect(rankFiles(files, '', 2)).toEqual(['README.md', 'server/src/index.ts']);
   });

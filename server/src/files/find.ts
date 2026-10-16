@@ -48,14 +48,18 @@ function subsequence(hay: string, q: string): boolean {
   return q.length === 0;
 }
 
-/** Best first: a name starting with the query, a name containing it, a path containing it, its letters in order. */
+/**
+ * Best first: a name starting with the query, a name containing it, a path containing it, the name having its letters
+ * in order. Not the whole path's letters in order: over a long path almost any word matches ('@everyone' found
+ * '.../e/v/e/r/y/o/n/e'), and Enter would write that file over what was meant as a word.
+ */
 export function rankFiles(files: string[], query: string, limit = 30): string[] {
   const q = query.toLowerCase();
   const scored: { f: string; s: number }[] = [];
   for (const f of files) {
     const lower = f.toLowerCase();
     const name = lower.slice(lower.lastIndexOf('/') + 1);
-    const s = !q ? 4 : name.startsWith(q) ? 0 : name.includes(q) ? 1 : lower.includes(q) ? 2 : subsequence(name, q) ? 3 : subsequence(lower, q) ? 3.5 : -1;
+    const s = !q ? 4 : name.startsWith(q) ? 0 : name.includes(q) ? 1 : lower.includes(q) ? 2 : subsequence(name, q) ? 3 : -1;
     if (s >= 0) scored.push({ f, s });
   }
   scored.sort((a, b) => a.s - b.s || a.f.length - b.f.length || a.f.localeCompare(b.f));

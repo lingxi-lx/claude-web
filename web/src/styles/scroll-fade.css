@@ -54,3 +54,9 @@
     animation-range: normal, 0 var(--fade), calc(100% - var(--fade)) 100%;
   }
 }
+
+/* a sticky bar at the top of the list (the conversation's find bar, the sidebar's filter / selection bar) sits inside
+   the top fade: while one shows, the list does not fade */
+@supports (animation-timeline: scroll()) {
+  :is(.chat:has(.find-bar), .sb-list:has(> .sb-filtered, > .sel-bar)) { --fade: 0px; }
+}

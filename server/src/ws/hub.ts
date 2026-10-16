@@ -1,3 +1,5 @@
+import path from 'node:path';
+import fs from 'node:fs';
 import type { WebSocket, WebSocketServer } from 'ws';
 import { CLAUDE_PROVIDER_ID, type ClientRequest, type OpenSessionParams, type RemoteStatus, type ServerEvent, type WireDown, type WireUp } from '../protocol.js';
 import { RunnerPool } from '../runtime/pool.js';
@@ -698,8 +700,12 @@ export class Hub {
       }
       case 'files.diff':
         return s.files.diff(req.path);
-      case 'fs.findFiles':
-        return { files: rankFiles(await listProjectFiles(req.root), req.query, Math.min(req.limit ?? 30, 100)) };
+      case 'fs.findFiles': {
+        // a project folder: absolute and a directory (an empty root would list the server's own folder)
+        if (!req.root || !path.isAbsolute(req.root) || !(await fs.promises.stat(req.root).then((st) => st.isDirectory(), () => false))) return { files: [] };
+        const limit = Math.max(1, Math.min(Math.floor(Number(req.limit) || 30), 100));
+        return { files: rankFiles(await listProjectFiles(req.root), String(req.query ?? ''), limit) };
+      }
       case 'fs.list':
         return s.files.list(req.path);
       case 'fs.read':

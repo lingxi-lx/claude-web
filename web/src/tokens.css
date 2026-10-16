@@ -295,12 +295,12 @@
 }
 
 /* 减少动态效果 (the setting, or the system's): colour and opacity still ease, briefly; nothing moves, blurs or loops */
-:root[data-reduce-motion='1'] { --dur-instant: 0s; --dur-fast: 80ms; --dur-base: 80ms; --dur-slow: 80ms; --dur-slower: 80ms; --dur-page: 80ms; }
+:root[data-reduce-motion='1'] { --dur-instant: 0s; --dur-fast: 80ms; --dur-base: 80ms; --dur-slow: 80ms; --dur-slower: 80ms; --dur-page: 80ms; --spring-bouncy: var(--ease-out); --spring-snappy: var(--ease-out); --spring-gentle: var(--ease-out); --spring-bouncy-dur: 80ms; --spring-snappy-dur: 80ms; --spring-gentle-dur: 80ms; }
 :root[data-reduce-motion='1'] *, :root[data-reduce-motion='1'] *::before, :root[data-reduce-motion='1'] *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
 /* …except what says 「still working」: a spinner that stands still reads as stuck */
 :root[data-reduce-motion='1'] :is(.spinner, .spin) { animation-duration: 1.2s !important; animation-iteration-count: infinite !important; }
 @media (prefers-reduced-motion: reduce) {
   :is(.spinner, .spin) { animation-duration: 1.2s !important; animation-iteration-count: infinite !important; }
-  :root { --dur-instant: 0s; --dur-fast: 80ms; --dur-base: 80ms; --dur-slow: 80ms; --dur-slower: 80ms; --dur-page: 80ms; }
+  :root { --dur-instant: 0s; --dur-fast: 80ms; --dur-base: 80ms; --dur-slow: 80ms; --dur-slower: 80ms; --dur-page: 80ms; --spring-bouncy: var(--ease-out); --spring-snappy: var(--ease-out); --spring-gentle: var(--ease-out); --spring-bouncy-dur: 80ms; --spring-snappy-dur: 80ms; --spring-gentle-dur: 80ms; }
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
 }

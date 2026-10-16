@@ -54,9 +54,9 @@
 
 ### 2.1 生成脚本
 
-`scripts/gen-springs.ts`（`npx tsx` 跑，和 `subset-heading-font.ts` 一样）：输入 `(stiffness, damping, mass)`，按阻尼谐振子解析解采样到落定（位移误差 < 0.001 且速度足够小），输出：
+`scripts/gen-springs.ts`（`npx tsx` 跑，和 `subset-heading-font.ts` 一样）：输入 `(stiffness, damping, mass)`，按阻尼谐振子解析解采样到落定（实现：位移误差 < 1% 之后不再离开，落定时间取整到 10ms），输出：
 
-- `linear(...)` 字符串（采样点 ≤ 40 个，按曲率自适应取点，坐标保留 3 位小数）；
+- `linear(...)` 字符串（实现：等间距 41 个点，坐标保留 3 位小数——曲线看着够顺，没做按曲率取点）；
 - 落定时间（毫秒，取整到 10）。
 
 结果写进 `web/src/tokens.css` 派生块里一段用注释围起来的区域（`/* springs:begin */ … /* springs:end */`），脚本只替换这一段。`--check` 参数：生成结果和文件里不一致就非零退出（和 `scripts/i18n/extract.mjs --check` 一样的用法）。

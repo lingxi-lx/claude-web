@@ -580,7 +580,8 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     if (atOpen && atFiles.length && !imeComposing(e.nativeEvent)) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setAtIdx((i) => (i + 1) % atFiles.length); return; }
       if (e.key === 'ArrowUp') { e.preventDefault(); setAtIdx((i) => (i - 1 + atFiles.length) % atFiles.length); return; }
-      if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) { e.preventDefault(); pickFile(atFiles[Math.min(atIdx, atFiles.length - 1)]); return; }
+      // Enter picks only once something was typed after @ (a lone @ then Enter is a message); Tab always picks
+      if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey && atOpen.q)) { e.preventDefault(); pickFile(atFiles[Math.min(atIdx, atFiles.length - 1)]); return; }
       if (e.key === 'Escape') { e.preventDefault(); setAtClosed(atOpen.start); return; }
     }
     if (matches.length && slashQuery !== null && !imeComposing(e.nativeEvent)) {
@@ -796,6 +797,8 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   ) : null;
 
   let model: React.ReactNode = null, subagent: React.ReactNode = null, effort: React.ReactNode = null, permission: React.ReactNode = null, meter: React.ReactNode = null, status: React.ReactNode = null;
+  // Shift+Tab steps only the permission chip drawn below — none drawn (a conversation starting), nothing to step
+  permCycle.current = null;
   // 深度编排 on: the placeholder says what to ask for (user report: the switch looked clear, but not how to use it)
   let ultraOn = false;
   if (welcome) {

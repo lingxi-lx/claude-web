@@ -213,7 +213,7 @@ export const ToolCard = memo(function ToolCard({ t, version, bare }: { t: ToolUs
   const [open, setOpen] = useState<boolean | null>(null);
   const def = getToolDef(t.name);
   const isAgent = def.category === 'agent';
-  const defaultOpen = (t.status === 'error' && !t.stopped) || (isAgent && t.status === 'running') || def.category === 'plan';
+  const defaultOpen = (t.status === 'error' && !t.stopped) || (isAgent && t.status === 'running') || def.category === 'plan' || !!def.defaultOpen;
   const show = bare || (open ?? defaultOpen);
   void version;
   const Body = def.Body;
