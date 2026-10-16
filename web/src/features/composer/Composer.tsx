@@ -139,6 +139,9 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   const [wWorktree, setWWorktree] = useState('');
   // 新对话选机器: '' = this computer, else a federation peer's id (the welcome page only)
   const [wPeer, setWPeer] = useState('');
+  // 只聊天: this new conversation only, never a stored default (a default would quietly take the tools from every one)
+  const [wChatOnly, setWChatOnly] = useState(false);
+  const liveChatOnly = useStore((s) => !!(active && s.sessionMeta[active.sessionId]?.chatOnly));
   const [peers, setPeers] = useState<PeerInfo[]>([]);
   useEffect(() => {
     if (!welcome) return;
@@ -535,7 +538,8 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
         localStorage.setItem('cw.lastProvider', providerId);
         localStorage.setItem('cw.lastAgent', wAgent);
         if (wAgent !== 'claude' && !agent) throw new Error(tr('选中的 agent 已不可用'));
-        const id = await openSession({ cwd: cwd.trim(), model, permissionMode: wMode, effort, ultracode: wUltracode && wUltra ? true : undefined, subagentModel: foreign ? undefined : wSubModel, worktree: wWorktree || undefined, providerId, features: foreign ? {} : featDefaults, agent: foreign ? wAgent : undefined }, target);
+        const id = await openSession({ cwd: cwd.trim(), model, permissionMode: wMode, effort, ultracode: wUltracode && wUltra ? true : undefined, subagentModel: foreign ? undefined : wSubModel, worktree: wWorktree || undefined, providerId, features: foreign ? {} : wChatOnly ? { chatOnly: true } : featDefaults, agent: foreign ? wAgent : undefined }, target);
+        setWChatOnly(false);
         // what is asked for anew for every conversation (操控电脑) is off again for the next one
         if (!foreign && isFeatures(storedFeatures) && afterStart(storedFeatures) !== storedFeatures) setFeatures(afterStart(storedFeatures));
         const uploaded = files.length ? await uploadAll(id) : [];
@@ -819,14 +823,15 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   // what it was started with (fixed — a launch parameter)
   const claudeHere = welcome ? !foreign : sessionAgent === 'claude';
   const sessionFeatures = info?.features ?? NO_FEATURES;
-  const tags = welcome ? (claudeHere ? capabilityTags(featDefaults, capEnv) : []) : capabilityTags(sessionFeatures, capEnv);
-  const hasChips = imgs.length > 0 || atts.length > 0 || files.length > 0 || refs.length > 0 || !!upload || tags.length > 0 || (welcome && !!wWorktree);
+  const tags = welcome ? (claudeHere && !wChatOnly ? capabilityTags(featDefaults, capEnv) : []) : capabilityTags(sessionFeatures, capEnv);
+  const hasChips = imgs.length > 0 || atts.length > 0 || files.length > 0 || refs.length > 0 || !!upload || tags.length > 0 || (welcome && (!!wWorktree || wChatOnly)) || (!welcome && liveChatOnly);
   const insertGoal = () => { const v = text.trim() ? `/goal ${text.trim()}` : '/goal '; onChange(v); requestAnimationFrame(() => { const el = ta.current; if (el) { el.focus(); el.setSelectionRange(v.length, v.length); } }); };
 
   // ---- the row's pieces
   const plus = (
     <PlusMenu claude={claudeHere} live={!welcome} remote={remote} disabled={disabled}
       features={welcome ? featDefaults : sessionFeatures} onFeatures={setFeatures} selfId={welcome ? undefined : active?.sessionId}
+      chatOnly={welcome ? wChatOnly : undefined} onChatOnly={welcome && claudeHere && !wPeer ? setWChatOnly : undefined}
       onFiles={() => fileInput.current?.click()} onFolder={() => folderInput.current?.click()} onReference={addRef} onGoal={insertGoal} />
   );
   // one round button that changes in place (UI refresh §6 「发送键」): faint with nothing to send, ink with something,
@@ -1015,6 +1020,15 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
           {glow && <span className="composer-glow" aria-hidden><i /></span>}
           {hasChips && (
             <div className="attach">
+              {!welcome && liveChatOnly && (
+                <span className="cap-tag fixed" data-cap="chatOnly" title={tr('这个对话开始时就是只聊天：Claude 没有任何工具')}><Icon name="chat" size={12} /> {tr('只聊天')}</span>
+              )}
+              {welcome && wChatOnly && (
+                <span className="cap-tag" data-cap="chatOnly" title={tr('这个新对话不给 Claude 任何工具')}>
+                  <Icon name="chat" size={12} /> {tr('只聊天')}
+                  <button aria-label={tr('关闭{label}', { label: tr('只聊天') })} onClick={() => setWChatOnly(false)}><Icon name="close" size={10} /></button>
+                </span>
+              )}
               {tags.map((t) => (
                 <span key={`t${t.key}`} className={clsx('cap-tag', !welcome && 'fixed')} data-cap={t.key} title={welcome ? t.title : tr("{title}\n这个对话开始时就开着", { title: t.title })}>
                   <Icon name={t.icon} size={12} /> {t.label}

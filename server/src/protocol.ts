@@ -299,6 +299,8 @@ export interface SessionFeatures {
   channels?: string[]; // --channels plugin:name@marketplace | server:name (ccb)
   devChannels?: boolean; // --dangerously-load-development-channels (ccb)
   env?: Record<string, string>; // extra env for the CLI process (provider keys, LANGFUSE_*, ...)
+  /** 只聊天: no tools at all — no files, no commands, no MCP (remembered per conversation: SessionMeta.chatOnly) */
+  chatOnly?: boolean;
 }
 
 export interface SendParams {
@@ -316,7 +318,7 @@ export interface AttachmentRef { kind: 'image' | 'text' | 'file' | 'folder'; nam
 export interface MessageFeedback { rating: 'up' | 'down' | null; note?: string; at: number }
 
 export interface Workspace { id: string; path: string; name: string; addedAt: number; order: number }
-export interface SessionMeta { /** 代码审查卡: findings dismissed here, `<toolUseId>#<index>` */ reviewDismissed?: string[]; /** 任务 chip: suggestions dismissed (tool use ids), and started (tool use id → the new conversation) */ taskDismissed?: string[]; taskStarted?: Record<string, string>; /** PR 监控条: 自动修 CI on, and the failures it already asked about */ prAutoFix?: boolean; prFixed?: string[]; pinned?: boolean; archived?: boolean; workspaceId?: string; tags?: string[]; providerId?: string; /** sidebar grouping directory when it differs from the cwd (orchestration worktrees) */ groupCwd?: string; /** prompt-cache route key when it is not the session's own id (forks keep their root's) */ cacheKey?: string; /** the model its subagents run on, picked for this provider ('' = the main model) */ subagent?: { providerId: string; model: string }; /** the permission mode it last ran with: a resume without a pick comes back in it (the SDK never says it) */ permissionMode?: PermissionMode }
+export interface SessionMeta { /** 只聊天: started without tools; a resume keeps it that way */ chatOnly?: boolean; /** 代码审查卡: findings dismissed here, `<toolUseId>#<index>` */ reviewDismissed?: string[]; /** 任务 chip: suggestions dismissed (tool use ids), and started (tool use id → the new conversation) */ taskDismissed?: string[]; taskStarted?: Record<string, string>; /** PR 监控条: 自动修 CI on, and the failures it already asked about */ prAutoFix?: boolean; prFixed?: string[]; pinned?: boolean; archived?: boolean; workspaceId?: string; tags?: string[]; providerId?: string; /** sidebar grouping directory when it differs from the cwd (orchestration worktrees) */ groupCwd?: string; /** prompt-cache route key when it is not the session's own id (forks keep their root's) */ cacheKey?: string; /** the model its subagents run on, picked for this provider ('' = the main model) */ subagent?: { providerId: string; model: string }; /** the permission mode it last ran with: a resume without a pick comes back in it (the SDK never says it) */ permissionMode?: PermissionMode }
 export interface Schedule { id: string; name: string; cwd: string; prompt: string; everyMinutes: number; cron?: string; enabled: boolean; lastRunAt?: number; nextRunAt?: number; sessionId?: string; model?: string; permissionMode?: string; freshSession?: boolean; lastError?: string; runs?: number; /** 手动: only 立即运行 starts it */ manual?: boolean; /** each run in its own worktree (with freshSession) */ worktree?: boolean }
 export interface LimitWindow { label: string; percent: number; resetsAt: string | null; active: boolean; severity?: string }
 // ---- remote access / phones / IM (phase 6) ----

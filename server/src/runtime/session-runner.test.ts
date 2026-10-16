@@ -262,6 +262,24 @@ describe('SessionRunner Stop (interrupt)', () => {
     } finally { setPromptSuggestions(true); }
   });
 
+  it('只聊天: no tools at all — none of the engine’s, none of ours, none from the user’s settings', async () => {
+    queries.length = 0;
+    const r = new SessionRunner({ sessionId: 'chat-1', cwd: '/x', features: { chatOnly: true } } as any);
+    await tick();
+    const o = queries[0].options;
+    expect(o.tools).toEqual([]);
+    expect(o.strictMcpConfig).toBe(true);
+    expect(o.mcpServers).toEqual({});
+    expect(o.allowedTools).toBeUndefined();
+    expect(o.plugins).toBeUndefined();
+    await r.close();
+    queries.length = 0;
+    const normal = new SessionRunner({ sessionId: 'chat-2', cwd: '/x' } as any);
+    await tick();
+    expect(queries[0].options.tools).toBeUndefined();
+    await normal.close();
+  });
+
   it('本机环境变量 reach the conversation, under its own variables', async () => {
     const { setLocalEnv } = await import('./local-env.js');
     setLocalEnv({ DATABASE_URL: 'pg://local', CLAUDE_CODE_REPORT_FINDINGS: 'never' });

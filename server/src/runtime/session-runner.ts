@@ -360,10 +360,13 @@ export class SessionRunner extends EventEmitter {
     // The engine's own WebSearch tool: its default backend is a hosted Tavily proxy of the upstream project, and the
     // user wants no Tavily — searching is the `web` MCP server's, in the built-in browser. So the engine's tool is
     // taken away below (`disallowedTools`), unless the user chose a backend for it themselves (web/engine-search.ts).
-    const computer = this.features.computerUse ? computerClaudeMcpServer({ sessionId: this.sessionId }) : {};
+    // 只聊天: no tool of any kind — the engine's own (`tools: []`), ours (no MCP servers, no plugin), the user's
+    // (`strictMcpConfig`: the servers in their settings files are not loaded either)
+    const chatOnly = !!this.features.chatOnly;
+    const computer = this.features.computerUse && !chatOnly ? computerClaudeMcpServer({ sessionId: this.sessionId }) : {};
     // 跨对话工具 (sessions-mcp/tools.ts): in-process, so nothing to hand out; archive_session is left to the permission mode
-    const sessionsMcp: Record<string, McpServerConfig> = sessionsMcpEnabled() ? { [SESSIONS_SERVER]: sessionsMcpServer(() => this.sessionId) } : {};
-    const allowed = [...webAllowedTools(), ...(Object.keys(computer).length ? computerAllowedTools() : []), ...(Object.keys(sessionsMcp).length ? SESSIONS_ALLOWED : [])];
+    const sessionsMcp: Record<string, McpServerConfig> = sessionsMcpEnabled() && !chatOnly ? { [SESSIONS_SERVER]: sessionsMcpServer(() => this.sessionId) } : {};
+    const allowed = chatOnly ? [] : [...webAllowedTools(), ...(Object.keys(computer).length ? computerAllowedTools() : []), ...(Object.keys(sessionsMcp).length ? SESSIONS_ALLOWED : [])];
     this.preAllowed = new Set(allowed);
     const noEngineSearch = engineSearchOff({ engine: engine.kind, userChoice: 'WEB_SEARCH_ADAPTER' in fenv || userPickedSearchAdapter(this.cwd) });
     // a provider session must not inherit provider-ish env from this process (e.g. a global ANTHROPIC_API_KEY)
@@ -400,10 +403,11 @@ export class SessionRunner extends EventEmitter {
       // uninstalling claude-web must not leave an MCP entry behind in the user's own config.
       // 联网 (`web`: search + the built-in browser) goes in the same way (web/launcher.ts).
       // 操控电脑 (`computer`: the whole desktop, computer/launcher.ts) only for a conversation that has it switched on.
-      mcpServers: { ...claudeMcpServer({ cwd: this.cwd, sessionId: this.sessionId, agent: 'claude' }), ...webClaudeMcpServer({ sessionId: this.sessionId }), ...computer, ...sessionsMcp },
+      mcpServers: chatOnly ? {} : { ...claudeMcpServer({ cwd: this.cwd, sessionId: this.sessionId, agent: 'claude' }), ...webClaudeMcpServer({ sessionId: this.sessionId }), ...computer, ...sessionsMcp },
+      ...(chatOnly ? { tools: [], strictMcpConfig: true } : {}),
       // 网吧's cafe-character skill, as a local plugin (both runtimes load it: 2026-10-13), only while the `web` server
       // that answers its character_* tools is handed out
-      ...(webMcpEnabled() && cafePluginDir() ? { plugins: [{ type: 'local' as const, path: cafePluginDir()! }] } : {}),
+      ...(!chatOnly && webMcpEnabled() && cafePluginDir() ? { plugins: [{ type: 'local' as const, path: cafePluginDir()! }] } : {}),
       // searching only reads: 每步询问 does not ask for every search (the browser tools follow the permission mode).
       // The computer tools are not asked about one by one either: the user approves the applications, in the app
       // (computer/access.ts), and the server's own gate holds every action to that.

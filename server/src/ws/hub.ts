@@ -285,6 +285,9 @@ export class Hub {
       params = { ...params, providerId: remembered ?? def };
     }
     if (!params.features && s.meta.settings().defaultFeatures) params = { ...params, features: defaultFeaturesOf(s.meta.settings().defaultFeatures) };
+    // 只聊天 is the conversation's, not a default: a resume (or a fork of it) stays without tools
+    const chatOnlyOf = params.sessionId && s.meta.sessionMeta(params.sessionId).chatOnly;
+    if (chatOnlyOf && !params.features?.chatOnly) params = { ...params, features: { ...params.features, chatOnly: true } };
     // prompt-cache route key: a fork keeps its parent's (the prefix is the same), decided before the id changes
     const cacheParentId = cacheParentFor(params, (id) => s.meta.sessionMeta(id).cacheKey);
     if (cacheParentId) params = { ...params, cacheParentId };
@@ -300,6 +303,7 @@ export class Hub {
     const r = s.pool.open(params);
     if (cacheParentId && cacheParentId !== r.sessionId && s.meta.sessionMeta(r.sessionId).cacheKey !== cacheParentId) void s.meta.setSessionMeta(r.sessionId, { cacheKey: cacheParentId }).catch(() => { /* in memory; the next save persists it */ });
     await s.canonical.ensure(r.sessionId, params.cwd);
+    if (params.features?.chatOnly && !s.meta.sessionMeta(r.sessionId).chatOnly) void s.meta.setSessionMeta(r.sessionId, { chatOnly: true }).catch(() => { /* in memory; the next save persists it */ });
     if (r !== before && params.providerId && params.providerId !== 'claude') {
       // remember which provider a session uses so resume / fork keep it (the id is known up front: new sessions get a
       // uuid from us) — only when this open started the process (re-review m-3: a live runner keeps its own provider)

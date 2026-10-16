@@ -27,6 +27,9 @@ export interface PlusMenuProps {
   /** the conversation's own id: it cannot reference itself */
   selfId?: string;
   onGoal: () => void;
+  /** 只聊天, for the new conversation only (never a stored default): no tools at all. Welcome page + Claude only */
+  chatOnly?: boolean;
+  onChatOnly?: (on: boolean) => void;
 }
 
 /**
@@ -92,7 +95,15 @@ function PlusBody(p: PlusMenuProps & { close: (refocus: boolean) => void }) {
       <div className="menu-sep" />
       <div className="cm-h">{tr('这次对话可以…')}</div>
       {s.note && <div className="cm-sub">{s.note}</div>}
-      {s.capabilities && CAPABILITIES.filter((c) => c.group === 'main').map((c) => row(c.key))}
+      {p.onChatOnly && (
+        <button type="button" data-mi data-id={PLUS_ID.chatOnly} role="menuitemcheckbox" aria-checked={!!p.chatOnly} className={clsx('cm-it', p.chatOnly && 'on')}
+          title={tr('这个新对话不给 Claude 任何工具：不读写文件、不跑命令、不上网，只是聊天')} onClick={() => p.onChatOnly!(!p.chatOnly)}>
+          <span className="cm-ic"><Icon name="chat" size={15} /></span>
+          <span className="cm-tx"><span className="cm-l">{tr('只聊天')}</span><span className="cm-d">{tr('不碰文件、不跑命令，只这一个新对话')}</span></span>
+          <span className={clsx('toggle sm', p.chatOnly && 'on')} aria-hidden />
+        </button>
+      )}
+      {!p.chatOnly && s.capabilities && CAPABILITIES.filter((c) => c.group === 'main').map((c) => row(c.key))}
       {s.goal && (
         <button type="button" data-mi data-id={PLUS_ID.goal} role="menuitem" className="cm-it" title={tr('在输入框写下目标并发送：Claude 会一轮接一轮做下去，直到完成或卡住（等同于 /goal）')} onClick={() => { p.close(false); p.onGoal(); }}>
           <span className="cm-ic"><Icon name="goals" size={15} /></span>
