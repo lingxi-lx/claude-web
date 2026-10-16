@@ -262,6 +262,39 @@ describe('SessionRunner Stop (interrupt)', () => {
     } finally { setPromptSuggestions(true); }
   });
 
+  it('预览服务器: the tools are there, only logs / stop pre-allowed; a project with launch.json is told to verify', async () => {
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const { setPreviewDeps, PREVIEW_ALLOWED } = await import('../preview/tools.js');
+    const { PreviewService } = await import('../preview/service.js');
+    setPreviewDeps({ service: new PreviewService(), open: async () => {} });
+    const withLaunch = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-pv-'));
+    fs.mkdirSync(path.join(withLaunch, '.claude'));
+    fs.writeFileSync(path.join(withLaunch, '.claude', 'launch.json'), '{ "configurations": [{ "name": "web", "program": "s.js" }] }');
+    const without = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-pv-'));
+    try {
+      queries.length = 0;
+      const a = new SessionRunner({ sessionId: 'pv-1', cwd: withLaunch } as any);
+      await tick();
+      const o = queries[0].options;
+      expect(o.mcpServers.preview).toMatchObject({ type: 'sdk', name: 'preview' });
+      expect(o.allowedTools).toEqual(expect.arrayContaining(PREVIEW_ALLOWED));
+      expect(o.allowedTools).not.toContain('mcp__preview__preview_start');
+      expect(o.systemPrompt.append).toMatch(/preview_start/);
+      await a.close();
+      queries.length = 0;
+      const b = new SessionRunner({ sessionId: 'pv-2', cwd: without } as any);
+      await tick();
+      expect(queries[0].options.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code' });
+      await b.close();
+    } finally {
+      setPreviewDeps(null);
+      fs.rmSync(withLaunch, { recursive: true, force: true });
+      fs.rmSync(without, { recursive: true, force: true });
+    }
+  });
+
   it('只聊天: no tools at all — none of the engine’s, none of ours, none from the user’s settings', async () => {
     queries.length = 0;
     const r = new SessionRunner({ sessionId: 'chat-1', cwd: '/x', features: { chatOnly: true } } as any);

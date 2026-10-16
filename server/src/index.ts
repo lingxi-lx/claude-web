@@ -37,6 +37,8 @@ import { setMemoryMcpEnabled } from './memory/launcher.js';
 import { setPromptSuggestions } from './runtime/session-runner.js';
 import { LocalEnvStore } from './runtime/local-env.js';
 import { setSessionsDeps, setSessionsMcpEnabled } from './sessions-mcp/tools.js';
+import { PreviewService } from './preview/service.js';
+import { setPreviewDeps } from './preview/tools.js';
 import { sendWhenIdle } from './sessions-mcp/deliver.js';
 import { RemoteService, pairPage } from './remote/service.js';
 import { AnywhereService } from './remote/anywhere/service.js';
@@ -383,6 +385,9 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   characters = new CharacterService(path.join(dataDir(), 'characters'), { get: () => meta.settings()['cafe.assign'] as any, set: (a) => meta.setSetting('cafe.assign', a) });
   const customCss = new CustomCssService();
   customCss.watch();
+  // 预览服务器 (preview/): dev servers from .claude/launch.json, opened in the app's browser
+  const previews = new PreviewService();
+  setPreviewDeps({ service: previews, open: async (sid, url) => { await web.browser(sid, 'open', { url }); } });
   // 跨对话工具: what a conversation's sessions tools see and do (sessions-mcp/tools.ts)
   setSessionsDeps({
     list: () => library.list(),
@@ -439,6 +444,8 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       await pool.closeAll();
       await library.close(); // library-only Codex app-server / opencode serve / ACP processes
       terminal.closeAll(); // pty children (the embedded `claude` terminals) would outlive us otherwise
+      setPreviewDeps(null);
+      await previews.stopAll(); // the dev servers preview_start started (preview/service.ts)
       // server.close() waits for every open connection; a connected browser's ws / keep-alive would hang shutdown forever
       for (const c of wss.clients) c.terminate();
       const closed = new Promise<void>((r) => server.close(() => r()));

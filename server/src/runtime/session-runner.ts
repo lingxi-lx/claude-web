@@ -22,6 +22,7 @@ import type { AttachmentRef, EffortLevel, ModelInfo, OpenSessionParams, Permissi
 import { tr } from '../i18n/index.js';
 import { localEnv } from './local-env.js';
 import { SESSIONS_ALLOWED, SESSIONS_SERVER, sessionsMcpEnabled, sessionsMcpServer } from '../sessions-mcp/tools.js';
+import { PREVIEW_ALLOWED, PREVIEW_SERVER, previewEnabled, previewMcpServer, verifyInstructions } from '../preview/tools.js';
 
 /** A conversation above this share of the next model's window is compacted before the switch. */
 const FIT_SHARE = 0.8;
@@ -366,7 +367,10 @@ export class SessionRunner extends EventEmitter {
     const computer = this.features.computerUse && !chatOnly ? computerClaudeMcpServer({ sessionId: this.sessionId }) : {};
     // 跨对话工具 (sessions-mcp/tools.ts): in-process, so nothing to hand out; archive_session is left to the permission mode
     const sessionsMcp: Record<string, McpServerConfig> = sessionsMcpEnabled() && !chatOnly ? { [SESSIONS_SERVER]: sessionsMcpServer(() => this.sessionId) } : {};
-    const allowed = chatOnly ? [] : [...webAllowedTools(), ...(Object.keys(computer).length ? computerAllowedTools() : []), ...(Object.keys(sessionsMcp).length ? SESSIONS_ALLOWED : [])];
+    // 预览服务器 (preview/tools.ts): preview_start runs a command, so only its logs / stop are pre-allowed
+    const previewMcp: Record<string, McpServerConfig> = previewEnabled() && !chatOnly ? { [PREVIEW_SERVER]: previewMcpServer(this.cwd, () => this.sessionId) } : {};
+    const verify = chatOnly ? null : verifyInstructions(this.cwd);
+    const allowed = chatOnly ? [] : [...webAllowedTools(), ...(Object.keys(computer).length ? computerAllowedTools() : []), ...(Object.keys(sessionsMcp).length ? SESSIONS_ALLOWED : []), ...(Object.keys(previewMcp).length ? PREVIEW_ALLOWED : [])];
     this.preAllowed = new Set(allowed);
     const noEngineSearch = engineSearchOff({ engine: engine.kind, userChoice: 'WEB_SEARCH_ADAPTER' in fenv || userPickedSearchAdapter(this.cwd) });
     // a provider session must not inherit provider-ish env from this process (e.g. a global ANTHROPIC_API_KEY)
@@ -398,12 +402,13 @@ export class SessionRunner extends EventEmitter {
       permissionMode: this.permissionMode,
       // The SDK defaults to an EMPTY system prompt. We want the real Claude Code prompt: same behaviour as the
       // CLI, and relays that fingerprint Claude Code requests (e.g. super-nb) reject bodies without it.
-      systemPrompt: { type: 'preset', preset: 'claude_code' },
+      // 自动验证: a project with .claude/launch.json is told to check its change in the running app (preview/tools.ts)
+      systemPrompt: verify ? { type: 'preset', preset: 'claude_code', append: verify } : { type: 'preset', preset: 'claude_code' },
       // Shared cross-agent memory, injected per session rather than written into ~/.claude —
       // uninstalling claude-web must not leave an MCP entry behind in the user's own config.
       // 联网 (`web`: search + the built-in browser) goes in the same way (web/launcher.ts).
       // 操控电脑 (`computer`: the whole desktop, computer/launcher.ts) only for a conversation that has it switched on.
-      mcpServers: chatOnly ? {} : { ...claudeMcpServer({ cwd: this.cwd, sessionId: this.sessionId, agent: 'claude' }), ...webClaudeMcpServer({ sessionId: this.sessionId }), ...computer, ...sessionsMcp },
+      mcpServers: chatOnly ? {} : { ...claudeMcpServer({ cwd: this.cwd, sessionId: this.sessionId, agent: 'claude' }), ...webClaudeMcpServer({ sessionId: this.sessionId }), ...computer, ...sessionsMcp, ...previewMcp },
       ...(chatOnly ? { tools: [], strictMcpConfig: true } : {}),
       // 网吧's cafe-character skill, as a local plugin (both runtimes load it: 2026-10-13), only while the `web` server
       // that answers its character_* tools is handed out
