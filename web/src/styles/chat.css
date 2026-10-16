@@ -257,6 +257,18 @@ div.code { border: 0; border-radius: var(--r-lg); background-color: var(--surfac
 .fd-acts { display: flex; gap: 6px; padding-left: 40px; }
 .fd-foot { display: flex; justify-content: flex-end; }
 
+/* 跨对话工具 (spec 2026-10-16 sessions-env §1–2): a message from another conversation says which, and links back */
+.msg.user .from-head { display: flex; align-items: center; gap: 4px; margin: -2px 0 6px; font-size: var(--fs-micro); color: var(--ink-3); text-align: left; }
+.msg.user .from-head:hover { color: var(--accent-text); text-decoration: underline; }
+/* 任务 chip: a piece of work Claude thinks deserves its own conversation */
+.task-chip { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: var(--r-md); background: var(--surface-1); box-shadow: var(--ring-1); }
+.task-chip.off { opacity: 0.55; }
+.tc-head { display: flex; align-items: center; gap: 6px; color: var(--ink-1); font-weight: var(--fw-strong); }
+.tc-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tc-tag { font-size: var(--fs-micro); font-weight: normal; padding: 0 6px; border-radius: var(--r-xs); background: var(--layer-hover); color: var(--ink-3); white-space: nowrap; }
+.tc-p { font-size: var(--fs-small); color: var(--ink-2); white-space: pre-wrap; }
+.tc-acts { display: flex; gap: 6px; }
+
 /* PR 监控条 (spec 2026-10-16 review-pr §3): like the goal bar, one row over the conversation */
 .pr-bar { display: flex; align-items: center; gap: 8px; flex: none; min-height: 32px; padding: 0 12px 0 16px; border-bottom: var(--hairline) solid var(--edge-subtle); background: var(--surface-1); font-size: 13px; color: var(--ink-2); }
 .pr-bar > svg { flex: none; color: var(--ink-3); }

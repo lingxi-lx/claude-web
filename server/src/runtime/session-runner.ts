@@ -1,4 +1,4 @@
-import { query, type Query, type SDKMessage, type SDKUserMessage, type Options, type PermissionResult } from '@anthropic-ai/claude-agent-sdk';
+import { query, type Query, type SDKMessage, type SDKUserMessage, type Options, type PermissionResult, type McpServerConfig } from '@anthropic-ai/claude-agent-sdk';
 import type { ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
@@ -21,6 +21,7 @@ import { markUnknownCost } from '../usage/pricing.js';
 import type { AttachmentRef, EffortLevel, ModelInfo, OpenSessionParams, PermissionMode, PermissionRequestEvent, PermissionResponse, Provider, RunnerState, SessionFeatures, SessionInfoSnapshot, SideTurn } from '../protocol.js';
 import { tr } from '../i18n/index.js';
 import { localEnv } from './local-env.js';
+import { SESSIONS_ALLOWED, SESSIONS_SERVER, sessionsMcpEnabled, sessionsMcpServer } from '../sessions-mcp/tools.js';
 
 /** A conversation above this share of the next model's window is compacted before the switch. */
 const FIT_SHARE = 0.8;
@@ -358,7 +359,9 @@ export class SessionRunner extends EventEmitter {
     // user wants no Tavily — searching is the `web` MCP server's, in the built-in browser. So the engine's tool is
     // taken away below (`disallowedTools`), unless the user chose a backend for it themselves (web/engine-search.ts).
     const computer = this.features.computerUse ? computerClaudeMcpServer({ sessionId: this.sessionId }) : {};
-    const allowed = [...webAllowedTools(), ...(Object.keys(computer).length ? computerAllowedTools() : [])];
+    // 跨对话工具 (sessions-mcp/tools.ts): in-process, so nothing to hand out; archive_session is left to the permission mode
+    const sessionsMcp: Record<string, McpServerConfig> = sessionsMcpEnabled() ? { [SESSIONS_SERVER]: sessionsMcpServer(() => this.sessionId) } : {};
+    const allowed = [...webAllowedTools(), ...(Object.keys(computer).length ? computerAllowedTools() : []), ...(Object.keys(sessionsMcp).length ? SESSIONS_ALLOWED : [])];
     const noEngineSearch = engineSearchOff({ engine: engine.kind, userChoice: 'WEB_SEARCH_ADAPTER' in fenv || userPickedSearchAdapter(this.cwd) });
     // a provider session must not inherit provider-ish env from this process (e.g. a global ANTHROPIC_API_KEY)
     const base = { ...process.env };
@@ -394,7 +397,7 @@ export class SessionRunner extends EventEmitter {
       // uninstalling claude-web must not leave an MCP entry behind in the user's own config.
       // 联网 (`web`: search + the built-in browser) goes in the same way (web/launcher.ts).
       // 操控电脑 (`computer`: the whole desktop, computer/launcher.ts) only for a conversation that has it switched on.
-      mcpServers: { ...claudeMcpServer({ cwd: this.cwd, sessionId: this.sessionId, agent: 'claude' }), ...webClaudeMcpServer({ sessionId: this.sessionId }), ...computer },
+      mcpServers: { ...claudeMcpServer({ cwd: this.cwd, sessionId: this.sessionId, agent: 'claude' }), ...webClaudeMcpServer({ sessionId: this.sessionId }), ...computer, ...sessionsMcp },
       // 网吧's cafe-character skill, as a local plugin (both runtimes load it: 2026-10-13), only while the `web` server
       // that answers its character_* tools is handed out
       ...(webMcpEnabled() && cafePluginDir() ? { plugins: [{ type: 'local' as const, path: cafePluginDir()! }] } : {}),

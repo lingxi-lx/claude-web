@@ -50,6 +50,8 @@ export interface UserItem {
   text: string;
   images: string[];
   attachments?: Attachment[];
+  /** 跨对话工具: sent by Claude in another conversation (server sessions-mcp `<cw-from>`) */
+  from?: { sessionId: string; title: string };
   meta?: boolean;
   raw?: unknown;
 }
@@ -492,8 +494,17 @@ export function sessionRefMarker(id: string, title: string): string {
   return `<session-ref id="${escapeAttr(id)}" title="${escapeAttr(title)}" />`;
 }
 
-export function decodeAttachments(text: string): { text: string; attachments: Attachment[] } {
+// a whole message from another conversation (server sessions-mcp/format.ts `fromMarker`)
+const FROM_RE = /^<cw-from ([^>]*)>\n([\s\S]*)\n<\/cw-from>$/;
+
+export function decodeAttachments(text: string): { text: string; attachments: Attachment[]; from?: { sessionId: string; title: string } } {
   const attachments: Attachment[] = [];
+  let from: { sessionId: string; title: string } | undefined;
+  const fm = FROM_RE.exec(text.trim());
+  if (fm) {
+    from = { sessionId: attrOf(fm[1], 'session') ?? '', title: attrOf(fm[1], 'title') ?? '' };
+    text = fm[2];
+  }
   let clean = text.replace(ATTACH_RE, (_m, kind, name, path, size) => {
     attachments.push({ kind, name, path: path || undefined, size: size ? Number(size) : undefined });
     return '';
@@ -505,7 +516,7 @@ export function decodeAttachments(text: string): { text: string; attachments: At
       return '';
     });
   }
-  return { text: clean.replace(/\n{3,}$/, '\n\n').trimEnd(), attachments };
+  return { text: clean.replace(/\n{3,}$/, '\n\n').trimEnd(), attachments, ...(from ? { from } : {}) };
 }
 
 function applyUser(c: Conversation, m: any) {
@@ -569,8 +580,8 @@ function applyUser(c: Conversation, m: any) {
     return;
   }
   const isMeta = m.isMeta || m.isSynthetic || /^<(command-name|local-command|system-reminder|task-notification)/.test(rawText.trim());
-  const { text, attachments } = decodeAttachments(rawText);
-  containerFor(c, parent).push({ kind: 'user', id: m.uuid ?? String(Math.random()), ts: m.timestamp, text, images, attachments: attachments.length ? attachments : undefined, meta: isMeta, raw: m });
+  const { text, attachments, from } = decodeAttachments(rawText);
+  containerFor(c, parent).push({ kind: 'user', id: m.uuid ?? String(Math.random()), ts: m.timestamp, text, images, attachments: attachments.length ? attachments : undefined, ...(from ? { from } : {}), meta: isMeta, raw: m });
   if (!parent && !isMeta) c.turnStartedAt = clock();
 }
 

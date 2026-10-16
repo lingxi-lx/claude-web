@@ -272,6 +272,20 @@ export function SessionRefChip({ a, onRemove }: { a: Attachment; onRemove?: () =
   );
 }
 
+/** 跨对话工具: a message Claude in another conversation sent here — which one, and a way back to it. */
+function FromHead({ from }: { from: { sessionId: string; title: string } }) {
+  const go = () => {
+    const st = useStore.getState();
+    if (st.open[from.sessionId]) st.setActive(from.sessionId);
+    else void st.loadHistory(from.sessionId);
+  };
+  return (
+    <button className="from-head" onClick={go} title={tr('打开那个对话')}>
+      <Icon name="chat" size={12} /> {tr('来自「{title}」', { title: from.title || tr('另一个对话') })}
+    </button>
+  );
+}
+
 function UserRow({ it, version }: { it: UserItem; version: number }) {
   const sessionId = useScopedSessionId();
   const [editing, setEditing] = useState(false);
@@ -288,6 +302,7 @@ function UserRow({ it, version }: { it: UserItem; version: number }) {
         <UserEditor it={it} sessionId={sessionId} onDone={() => setEditing(false)} />
       ) : (
         <div className="bubble">
+          {it.from && <FromHead from={it.from} />}
           {it.text}
           {images.length > 0 && <div className="img-grid">{images.map((src, i) => <img key={i} src={src} alt="" onClick={() => open && useStore.getState().openViewer(images, i)} />)}</div>}
           {it.attachments?.length ? <AttachmentChips atts={it.attachments} /> : null}

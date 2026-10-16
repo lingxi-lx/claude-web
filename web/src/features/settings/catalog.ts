@@ -19,7 +19,7 @@ export const SETTINGS_GROUPS: { id: SettingsGroupId; l: string }[] = [
 
 /** One setting row (a meta.json key). */
 export type EntryId =
-  | 'ui.defaultMode' | 'autoContinueOnReset' | 'ui.showThinking' | 'ui.viewMode' | 'ui.autoArchivePr' | 'ui.promptSuggestions' | 'ui.diffMode' | 'ui.inlineDiffs' | 'ui.workbench' | 'ui.autoSave'
+  | 'ui.defaultMode' | 'autoContinueOnReset' | 'ui.showThinking' | 'ui.viewMode' | 'ui.autoArchivePr' | 'sessions.mcp' | 'ui.promptSuggestions' | 'ui.diffMode' | 'ui.inlineDiffs' | 'ui.workbench' | 'ui.autoSave'
   | 'ui.notifications' | 'ui.closeToTray' | 'ui.confirmExit' | 'ui.softwareRender' | 'orchestra.maxParallel' | 'cafe.rate' | 'cafe.sound'
   | 'ui.language' | 'ui.theme' | 'ui.zoom' | 'ui.fontSize' | 'ui.density' | 'ui.cjkFont' | 'ui.reduceMotion' | 'ui.haptics';
 
@@ -104,6 +104,7 @@ const GENERAL: EntryMeta[] = [
   { id: 'ui.showThinking', block: tr('对话显示'), label: tr('显示思考过程'), hint: tr('展开模型回答之前的推理内容。关掉更清爽。'), keywords: tr('thinking reasoning 思考') },
   { id: 'ui.viewMode', block: tr('对话显示'), label: tr('查看模式'), hint: tr('普通：做完的回合收成一行。显示思考：回合照样收起，思考过程展开。详细：每一步和思考全部展开。Ctrl+O 随时切换。'), keywords: tr('view mode thinking verbose 查看 详细 思考 展开 Ctrl+O') },
   { id: 'ui.autoArchivePr', block: tr('对话显示'), label: tr('PR 合并或关闭后自动归档对话'), hint: tr('对话分支的 PR 合并或关闭、对话也没在跑时，把对话归档（从侧栏收起，随时能找回）。'), keywords: tr('pr pull request archive merge 归档 合并 自动') },
+  { id: 'sessions.mcp', block: tr('新对话'), label: tr('对话之间可以互相看和留言'), hint: tr('Claude 能列出这台电脑上的其它对话、读它们在做什么、给它们发消息、建议另开一个对话做的事；归档别的对话之前会先问你。改了之后新开的对话生效。'), keywords: tr('sessions cross session message 跨对话 其它对话 留言 任务 task chip') },
   { id: 'ui.promptSuggestions', block: tr('对话显示'), label: tr('下一句提示'), hint: tr('每轮结束后，在空的输入框里用灰字猜你下一句想说什么，按 Tab 采用。改了之后新开的对话生效。'), keywords: tr('prompt suggestion next 提示 建议 下一句 Tab') },
   { id: 'ui.diffMode', block: tr('对话显示'), label: tr('改动的显示方式'), hint: tr('审阅改动时 diff 的默认样式。'), keywords: tr('diff split unified 并排 内联 默认 diff 视图 上下对照 左右并排') },
   { id: 'ui.inlineDiffs', block: tr('对话显示'), label: INLINE_DIFFS_LABEL, hint: tr('每一步改了什么直接在对话里展开。关着时（默认）点那一步，或回合末尾的「改动了 N 个文件」查看。'), keywords: tr('diff inline expand edit 展开 改动 大 diff 内联 默认展开') },

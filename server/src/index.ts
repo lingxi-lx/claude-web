@@ -36,6 +36,8 @@ import { MemoryService } from './memory/service.js';
 import { setMemoryMcpEnabled } from './memory/launcher.js';
 import { setPromptSuggestions } from './runtime/session-runner.js';
 import { LocalEnvStore } from './runtime/local-env.js';
+import { setSessionsDeps, setSessionsMcpEnabled } from './sessions-mcp/tools.js';
+import { sendWhenIdle } from './sessions-mcp/deliver.js';
 import { RemoteService, pairPage } from './remote/service.js';
 import { AnywhereService } from './remote/anywhere/service.js';
 import { reportKeepAwake } from './remote/keep-awake.js';
@@ -306,6 +308,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   const memory = new MemoryService();
   setMemoryMcpEnabled(meta.settings()['memory.mcp'] !== false);
   setPromptSuggestions(meta.settings()['ui.promptSuggestions'] !== false);
+  setSessionsMcpEnabled(meta.settings()['sessions.mcp'] !== false);
   const localEnvStore = new LocalEnvStore(path.join(dataDir(), 'local-env.json'), secrets);
   await localEnvStore.load();
   // 联网: web search here, the browser tools in whichever desktop window hosts the built-in browser (web/service.ts).
@@ -380,6 +383,20 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   characters = new CharacterService(path.join(dataDir(), 'characters'), { get: () => meta.settings()['cafe.assign'] as any, set: (a) => meta.setSetting('cafe.assign', a) });
   const customCss = new CustomCssService();
   customCss.watch();
+  // 跨对话工具: what a conversation's sessions tools see and do (sessions-mcp/tools.ts)
+  setSessionsDeps({
+    list: () => library.list(),
+    read: async (id) => (await library.read(id)).messages,
+    stateOf: (id) => pool.stateOf(id),
+    deliver: async (id, text) => {
+      const sum = (await library.list()).find((x) => x.sessionId === id);
+      // a closed conversation opens again (its provider / mode come back from meta, runtime/pool.ts) and then hears it
+      const r = pool.get(id) ?? pool.open({ sessionId: id, cwd: sum?.cwd ?? '', agent: sum?.agent });
+      sendWhenIdle(r as any, text, { onGiveUp: (why) => console.warn(`[sessions-mcp] message for ${id} not delivered: ${why}`) });
+    },
+    rename: async (id, title) => { await library.rename(id, title); sessionsSvc.emit('changed'); },
+    archive: async (id) => { await library.archive([id], true); },
+  });
   const services = { customCss, orchestra, background, characters, remote, anywhere, tunnels, im, vcs: new VcsService(gitSvc), goals, android: new AndroidService(), pool, sessions: sessionsSvc, config, usage: new UsageService(async (sid) => providerTimeline(await canonical.providerSwitches(sid), meta.sessionMeta(sid).providerId, (id) => { const p = meta.provider(id); return p ? { type: p.type, name: p.name } : undefined; })), files, terminal, meta, limits: new LimitsService(), schedules: new ScheduleService(meta, pool), providers, git: gitSvc, search: new SearchService(), skills: new SkillsService(), mcp: new McpService(), diag: new DiagService(version), ledger, agents, transcripts, canonical, memory, library, version, federation, agentConfig: new AgentConfigService({ agents, backupDir: path.join(dataDir(), 'config-backups') }), gateway, web, computer, localEnv: localEnvStore };
   new Hub(wss, services);
   // model lists older than a day (or never pulled) are refreshed in the background — list only, no tokens

@@ -236,6 +236,20 @@ describe('user messages', () => {
     expect(expanded.attachments.map((a) => [a.sessionId, a.name, a.error])).toEqual([['s-2', 'T', undefined], ['s-3', 'U', '无法读取：gone']]);
   });
 
+  it('跨对话工具: a message from another conversation is drawn as from it, with only what was said', () => {
+    const r = decodeAttachments('<cw-from session="s-9" title="Fix &quot;login&quot;">\nthanks, merged\nsecond line\n</cw-from>');
+    expect(r.text).toBe('thanks, merged\nsecond line');
+    expect(r.from).toEqual({ sessionId: 's-9', title: 'Fix "login"' });
+    expect(decodeAttachments('plain').from).toBeUndefined();
+    // only a whole message is one: a quote of the marker inside someone's text stays text
+    expect(decodeAttachments('see <cw-from session="x" title="y">\nz\n</cw-from>').from).toBeUndefined();
+    const c = createConversation();
+    applyMessage(c, { type: 'user', uuid: 'u-from', message: { role: 'user', content: '<cw-from session="s-9" title="T">\nhi\n</cw-from>' } } as any);
+    const u = c.items.find((i) => i.id === 'u-from') as any;
+    expect(u.from).toEqual({ sessionId: 's-9', title: 'T' });
+    expect(u.text).toBe('hi');
+  });
+
   it('decodeAttachments round-trips text-kind markers with inlined content', () => {
     const r = decodeAttachments('hello\n\n<attached kind="text" name="paste.txt" size="5">abcde</attached>');
     expect(r.text).toBe('hello');
