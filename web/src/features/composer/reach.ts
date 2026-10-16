@@ -31,7 +31,7 @@ export const PLACE_CONTAINER: Record<ComposerPlace, string> = {
   depth: '.menu.depth-menu',
   permission: '.menu.perm-menu',
   bar: '.composer-bar',
-  meter: '.composer-bar',
+  meter: '.cb',
 };
 /** What to click to open the place (none: always on screen). */
 export const PLACE_OPENER: Partial<Record<ComposerPlace, string>> = {
