@@ -534,7 +534,7 @@ export class Hub {
       case 'env.set': {
         if (!s.localEnv) throw new Error('local env unavailable');
         try { await s.localEnv.set(req.name, req.value); } catch (e: any) {
-          throw new Error(e?.message === 'reserved' ? tr('{name} 由供应商设置决定，不能在这里改', { name: req.name }) : e?.message === 'invalid' ? tr('变量名只能用字母、数字和下划线，且不以数字开头') : String(e?.message ?? e));
+          throw new Error(e?.message === 'reserved' ? tr('{name} 由供应商设置决定，不能在这里改', { name: req.name }) : e?.message === 'exists' ? tr('已经有一个只是大小写不同的 {name}：Windows 上它们是同一个变量', { name: req.name }) : e?.message === 'invalid' ? tr('变量名只能用字母、数字和下划线，且不以数字开头') : String(e?.message ?? e));
         }
         return { names: s.localEnv.names() };
       }

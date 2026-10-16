@@ -44,4 +44,22 @@ describe('LocalEnvStore', () => {
     expect(st.names()).toEqual([]);
     fs.rmSync(path.dirname(file), { recursive: true, force: true });
   });
+  it('object keys are not names (no prototype reads or writes)', async () => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cw-env-')), 'local-env.json');
+    const st = new LocalEnvStore(file, fakeSecrets);
+    for (const k of ['__proto__', 'constructor', 'toString']) {
+      expect(await st.reveal(k)).toBe('');
+      await expect(st.set(k, 'x')).rejects.toThrow('invalid');
+    }
+    fs.rmSync(path.dirname(file), { recursive: true, force: true });
+  });
+  it.runIf(process.platform === 'win32')('Windows: one variable whatever its case — a second spelling is refused, removing either removes it', async () => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cw-env-')), 'local-env.json');
+    const st = new LocalEnvStore(file, fakeSecrets);
+    await st.set('MyVar', '1');
+    await expect(st.set('MYVAR', '2')).rejects.toThrow('exists');
+    await st.set('MYVAR', null);
+    expect(st.names()).toEqual([]);
+    fs.rmSync(path.dirname(file), { recursive: true, force: true });
+  });
 });

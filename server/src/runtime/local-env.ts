@@ -7,10 +7,12 @@ import path from 'node:path';
 /** Names that pick the model, the account or the engine: those belong to 供应商 and must not be overridden from here. */
 const RESERVED = /^(ANTHROPIC_|CLAUDE_CODE_|CLAUDE_WEB_|CLAUDE_CONFIG_DIR$|OPENAI_|GEMINI_API_KEY$|GOOGLE_GEMINI_|AWS_BEARER_TOKEN_BEDROCK$|CW_)/i;
 const NAME = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
+/** Object keys of their own: a name like these would read or write the store object's prototype */
+const OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype', 'hasOwnProperty', 'toString', 'valueOf']);
 
 /** Why a name cannot be used here, or null. */
 export function envNameProblem(name: string): 'invalid' | 'reserved' | null {
-  if (!NAME.test(name)) return 'invalid';
+  if (!NAME.test(name) || OBJECT_KEYS.has(name)) return 'invalid';
   if (RESERVED.test(name)) return 'reserved';
   return null;
 }
@@ -64,6 +66,9 @@ export class LocalEnvStore {
     const problem = envNameProblem(name);
     if (problem) throw new Error(problem);
     const all = this.stored();
+    // Windows: PATH and Path are one variable — a second spelling would be a duplicate the child sees twice
+    const same = process.platform === 'win32' ? Object.keys(all).find((k) => k !== name && k.toLowerCase() === name.toLowerCase()) : undefined;
+    if (same) { if (value === null) delete all[same]; else throw new Error('exists'); }
     if (value === null) delete all[name];
     else all[name] = await this.secrets.protect(value, `env-${name}`);
     fs.mkdirSync(path.dirname(this.file), { recursive: true });
@@ -74,7 +79,7 @@ export class LocalEnvStore {
   }
 
   async reveal(name: string): Promise<string> {
-    const v = this.stored()[name];
-    return v === undefined ? '' : this.secrets.reveal(v);
+    const all = this.stored();
+    return Object.hasOwn(all, name) && typeof all[name] === 'string' ? this.secrets.reveal(all[name]) : '';
   }
 }

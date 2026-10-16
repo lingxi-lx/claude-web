@@ -433,6 +433,7 @@ export const EN_SERVER: Record<string, string> = {
   "已经关闭": "Already closed",
   "已经加入过（「{name}」）": "Already added (“{name}”)",
   "已经完成的节点不能重试": "A node that has already finished can't be retried",
+  "已经有一个只是大小写不同的 {name}：Windows 上它们是同一个变量": "There is already a {name} spelled with different case: on Windows they are the same variable",
   "已输入。": "Typed.",
   "已返回上一页。": "Went back to the previous page.",
   "已连接（{botName}）。还没有聊天绑定：去 IM 里给机器人发 /pair <配对码>": "Connected ({botName}). No chat is bound yet: send /pair <pairing code> to the bot in your IM app",
