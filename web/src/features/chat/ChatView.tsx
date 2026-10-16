@@ -177,7 +177,7 @@ function Steps({ tools, version }: { tools: ToolUseBlock[]; version: number }) {
 function Thinking({ b, streaming }: { b: ThinkingBlock; streaming: boolean }) {
   const pref = useStore((s) => s.settings['ui.showThinking']);
   const view = useViewMode();
-  const mode = view === 'summary' ? 'hidden' : view === 'verbose' || pref === true || pref === 'expanded' ? 'expanded' : pref === 'hidden' ? 'hidden' : 'collapsed';
+  const mode = view !== 'normal' || pref === true || pref === 'expanded' ? 'expanded' : pref === 'hidden' ? 'hidden' : 'collapsed';
   const touch = useContext(TurnTouchCtx);
   const [open, setOpen] = useState<boolean | null>(null);
   const moves = useMoves();
@@ -472,7 +472,8 @@ function TurnView({ turn, last, live, version, sessionId, cwd }: { turn: Turn; l
   const moves = useMoves();
   const setOpen = (v: boolean, move = false) => { moves.current = move; foldMemory.set(key, v); setChoice(v); };
   const touch = useCallback(() => { if (!foldMemory.has(key)) { foldMemory.set(key, true); setChoice(true); } }, [key]);
-  const open = fold ? choice ?? (view === 'verbose') : true;
+  // 显示思考 / 详细: a finished turn starts open — its steps stay one-line rows in 显示思考, open in 详细
+  const open = fold ? choice ?? (view !== 'normal') : true;
   const body = useRef<HTMLDivElement>(null);
   // The first time this turn is seen folded. Drawn folded from the start: nothing plays. Folded later, in view: the
   // end of a turn the user watched — `ended` for a moment (the line's fade and count-up), and the fold below moves.
@@ -499,8 +500,8 @@ function TurnView({ turn, last, live, version, sessionId, cwd }: { turn: Turn; l
     el.addEventListener('cw:open-fold', on);
     return () => el.removeEventListener('cw:open-fold', on);
   }, [key]);
-  const lastFinal = parts.final[parts.final.length - 1];
-  const finals = view === 'summary' ? (lastFinal ? [lastFinal] : []) : parts.final;
+  const finals = parts.final;
+  const lastFinal = finals[finals.length - 1];
   const answerActions = !!lastFinal && !lastFinal.streaming && lastFinal.blocks.some((b) => b.type === 'text' && b.text.trim());
   return (
     <div className={clsx('turn', fold && 'folded', fold && open && 'open')} data-turn={turn.id}>

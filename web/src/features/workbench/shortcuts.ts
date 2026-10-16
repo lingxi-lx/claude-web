@@ -47,7 +47,7 @@ export const SHORTCUTS: Shortcut[] = [
   { id: 'menu.model', label: tr('模型菜单'), desktop: 'Alt+M', browser: 'Alt+M', group: tr('输入') },
   { id: 'menu.effort', label: tr('思考强度菜单'), desktop: 'Ctrl+Shift+E', browser: 'Ctrl+Shift+E', group: tr('输入') },
   { id: 'perm.cycle', label: tr('下一个权限模式（输入框为空时）'), desktop: 'Shift+Tab', browser: 'Shift+Tab', group: tr('输入') },
-  { id: 'view.cycle', label: tr('查看模式：普通 / 详细 / 精简'), desktop: 'Ctrl+O', browser: 'Ctrl+O', group: tr('对话') },
+  { id: 'view.cycle', label: tr('查看模式：普通 / 显示思考 / 详细'), desktop: 'Ctrl+O', browser: 'Ctrl+O', group: tr('对话') },
   { id: 'tab', label: tr('对话 / 步骤视图'), desktop: 'Alt+J', browser: 'Alt+J', group: tr('对话') },
   { id: 'send', label: tr('发送 / 换行'), desktop: 'Enter / Shift+Enter', browser: 'Enter / Shift+Enter', group: tr('输入') },
   { id: 'slash', label: tr('命令补全'), desktop: tr('/ 然后 Tab'), browser: tr('/ 然后 Tab'), group: tr('输入') },

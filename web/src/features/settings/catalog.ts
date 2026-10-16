@@ -101,7 +101,7 @@ const GENERAL: EntryMeta[] = [
   { id: 'ui.defaultMode', block: tr('新对话'), label: tr('默认权限'), hint: tr('Claude 改文件、运行命令之前要不要先问你。每个对话里也能随时改。'), keywords: tr('permission mode 权限 新会话默认权限模式 每步询问 自动') },
   { id: 'autoContinueOnReset', block: tr('新对话'), label: tr('额度用完后自动继续'), hint: tr('被限流时，等到额度重置再自动发出上一条消息。'), keywords: tr('rate limit quota 限流 额度 额度恢复后自动继续') },
   { id: 'ui.showThinking', block: tr('对话显示'), label: tr('显示思考过程'), hint: tr('展开模型回答之前的推理内容。关掉更清爽。'), keywords: tr('thinking reasoning 思考') },
-  { id: 'ui.viewMode', block: tr('对话显示'), label: tr('查看模式'), hint: tr('普通：做完的回合收成一行。详细：步骤和思考全部展开。精简：只看你的消息和每轮的回答。Ctrl+O 随时切换。'), keywords: tr('view mode verbose summary 查看 详细 精简 展开 Ctrl+O') },
+  { id: 'ui.viewMode', block: tr('对话显示'), label: tr('查看模式'), hint: tr('普通：做完的回合收成一行。显示思考：回合照样收起，思考过程展开。详细：每一步和思考全部展开。Ctrl+O 随时切换。'), keywords: tr('view mode thinking verbose 查看 详细 思考 展开 Ctrl+O') },
   { id: 'ui.autoArchivePr', block: tr('对话显示'), label: tr('PR 合并或关闭后自动归档对话'), hint: tr('对话分支的 PR 合并或关闭、对话也没在跑时，把对话归档（从侧栏收起，随时能找回）。'), keywords: tr('pr pull request archive merge 归档 合并 自动') },
   { id: 'ui.promptSuggestions', block: tr('对话显示'), label: tr('下一句提示'), hint: tr('每轮结束后，在空的输入框里用灰字猜你下一句想说什么，按 Tab 采用。改了之后新开的对话生效。'), keywords: tr('prompt suggestion next 提示 建议 下一句 Tab') },
   { id: 'ui.diffMode', block: tr('对话显示'), label: tr('改动的显示方式'), hint: tr('审阅改动时 diff 的默认样式。'), keywords: tr('diff split unified 并排 内联 默认 diff 视图 上下对照 左右并排') },

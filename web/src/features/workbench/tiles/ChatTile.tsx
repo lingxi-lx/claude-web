@@ -61,7 +61,7 @@ function HeaderMenu({ tile, paneId, s, live, remote, gone, onClose }: { tile: Ch
       {/* the old stats bar: the composer's card (the ring in its corner shows up only from 60 %; final review I3) */}
       <button data-act="usage" onClick={act(() => { if (tile.wb !== 'live') patch({ wb: 'live' }); requestAnimationFrame(() => showUsageCard(tile.id)); })}><Icon name="usage" size={14} /> {tr('本对话用量')}</button>
       {/* 查看模式 is for every conversation (one setting); here because the header is where you look for it */}
-      <button data-act="view-mode" onClick={act(() => runCommand('view.cycle'))} title={tr('普通 → 详细 → 精简')}><Icon name="eye" size={14} /> <span style={{ flex: 1 }}>{tr('查看模式：{label}', { label: viewModeLabel(viewMode) })}</span><span className="kbd">{modKey}+O</span></button>
+      <button data-act="view-mode" onClick={act(() => runCommand('view.cycle'))} title={tr('普通 → 显示思考 → 详细')}><Icon name="eye" size={14} /> <span style={{ flex: 1 }}>{tr('查看模式：{label}', { label: viewModeLabel(viewMode) })}</span><span className="kbd">{modKey}+O</span></button>
       <div className="menu-label">{tr('查看这个对话的')}</div>
       <div className="menu-grid" role="group" aria-label={tr('查看这个对话的')}>
         {viewsFor(remote).map((v) => (
