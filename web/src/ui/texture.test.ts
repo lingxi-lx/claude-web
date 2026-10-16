@@ -2,6 +2,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import postcss from 'postcss';
 import { describe, expect, it } from 'vitest';
 
 const tokens = readFileSync(new URL('../tokens.css', import.meta.url), 'utf8');
@@ -15,6 +16,9 @@ const cssFiles = (dir: string): string[] =>
 const STYLED = cssFiles(SRC).filter((f) => !/[\\/]shell[\\/]/.test(f));
 
 describe('texture tokens', () => {
+  it('every stylesheet parses', () => {
+    for (const f of cssFiles(SRC)) expect(() => postcss.parse(readFileSync(f, 'utf8'), { from: f })).not.toThrow();
+  });
   it('hairline is 1px, and 0.5px at 2x', () => {
     expect(tokens).toMatch(/--hairline:\s*1px/);
     expect(tokens).toMatch(/@media \(resolution >= 2x\)\s*\{\s*:root\s*\{[^}]*--hairline:\s*0\.5px/);

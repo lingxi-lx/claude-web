@@ -106,7 +106,7 @@
   --surface-elev: var(--bg-elev);
 
   /* edges — translucent so one value reads correctly on every surface. Few lines: a separator is subtle,
-     an input or a secondary button default; whatever floats draws its edge as a shadow ring (the --elev-* below) */
+     an input or a secondary button default; whatever floats draws its edge as a shadow ring (the --elev-* below).
      Lines are --hairline wide: 1px, half a pixel on 2x screens, where --e-k makes them that much stronger to read the same */
   --hairline: 1px;
   --e-k: 1;
