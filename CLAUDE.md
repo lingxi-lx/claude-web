@@ -83,6 +83,7 @@ npm run dev          # 开发：server tsx watch + vite :5173（代理 /ws 到 3
 | [i18n](docs/notes/i18n.md) | 界面语言：中文和英文（2026-10-15，用户要求） | tr() 约定、语言怎么定、四份英文目录、加一句字的流程、i18n-smoke、README 截图脚本、坑 |
 | [claude-accounts](docs/notes/claude-accounts.md) | 其它 Claude 账号（2026-10-15，用户要求） | claude-account 档案、setup-token 令牌、runner 走账号那条路、添加对话框、真机验证 |
 | [custom-css](docs/notes/custom-css.md) | 自定义样式 custom.css 与 DOM 钩子（2026-10-15，GitHub issue #2） | custom.css 加载 / 热更新、钩子约定、计划进度条 |
+| [chat-input](docs/notes/chat-input.md) | 对话与输入：旁聊 / 下一句提示 / 查看模式 / @文件 / 快捷键（2026-10-16） | side_question、CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION、ui.viewMode、fs.findFiles、官方快捷键对照、桌面版无麦克风 |
 | [zoom](docs/notes/zoom.md) | 界面缩放（2026-10-10 用户要求：台式机分辨率高，界面看着小） | 桌面版页面缩放 |
 | [rail-sections-web](docs/notes/rail-sections-web.md) | 图标栏 / 分区 / 联网（2026-10-10，界面第二轮） | 图标栏、分区页、扩展页、强度按钮、浏览器标签、web MCP |
 | [search-computer](docs/notes/search-computer.md) | 搜索在内置浏览器里 / 网页上的鼠标键盘 / 操控电脑（2026-10-10，用户要求） | 浏览器里搜索、browser_computer、操控电脑（computer MCP） |
