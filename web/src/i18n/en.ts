@@ -878,6 +878,7 @@ export const EN_WEB: Record<string, string> = {
   "关掉声音": "Mute sound",
   "关掉界面里的过渡与动画。": "Turn off transitions and animations in the interface.",
   "关掉的模型不再出现在输入框的模型菜单里；星标的模型在菜单里置顶。「刷新全部模型」只请求各供应商的": "Models you turn off no longer appear in the composer’s model menu; starred models are pinned to the top of the menu. “Refresh all models” only requests each provider’s",
+  "关掉聚焦的分屏": "Close the focused split",
   "关着：Agent 打开的网页带着你在内置浏览器里登录过的账号。打开：它用单独的一份，你登录过的网站对它来说都没登录。对之后新开的 Agent 标签页生效。": "Off: pages the agent opens carry the accounts you're signed in to in the built-in browser. On: it uses its own separate profile, and every site you're signed in to counts as signed out for it. Applies to agent tabs opened afterwards.",
   "关着：手机只能在同一个 Wi-Fi 里连这台电脑": "Off: your phone can only reach this computer over the same Wi-Fi",
   "关闭": "Close",

@@ -107,6 +107,8 @@ export function runCommand(id: string): boolean {
     }
     case 'tile.close': if (pane?.activeTileId) st.closeTile(pane.id, pane.activeTileId); return true;
     case 'pane.zoom': d({ t: 'pane.zoom', paneId: g.zoomedPaneId ? null : g.focusedPaneId }); return true;
+    // only a split closes: the last pane stays (Ctrl+W empties a tab, this does not)
+    case 'pane.close': if (Object.keys(g.panes).length > 1) d({ t: 'pane.close', paneId: g.focusedPaneId }); return true;
     case 'pane.next': d({ t: 'pane.cycle', dir: 1 }); return true;
     case 'pane.prev': d({ t: 'pane.cycle', dir: -1 }); return true;
     case 'tile.new': d({ t: 'tile.open', paneId: g.focusedPaneId, tile: chatTile(null), mode: 'tab' }); return true;

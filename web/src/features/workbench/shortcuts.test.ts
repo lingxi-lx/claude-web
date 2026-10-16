@@ -46,4 +46,9 @@ describe('matchBrowserKey', () => {
     expect(matchBrowserKey(ev({ key: 'E', code: 'KeyE', ctrlKey: true, shiftKey: true }))).toBe('menu.effort');
     expect(matchBrowserKey(ev({ key: 'I', code: 'KeyI', ctrlKey: true, shiftKey: true }))).toBeNull();
   });
+
+  it('Ctrl+\\ closes the focused split (by the physical key too)', () => {
+    expect(matchBrowserKey(ev({ key: '\\', code: 'Backslash', ctrlKey: true }))).toBe('pane.close');
+    expect(matchBrowserKey(ev({ key: '#', code: 'Backslash', ctrlKey: true }))).toBe('pane.close');
+  });
 });

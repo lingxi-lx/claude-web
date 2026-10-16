@@ -243,7 +243,7 @@ export function App() {
       const id = matchBrowserKey(e);
       if (!id) return;
       // on desktop the menu accelerators own the Ctrl-only chords; browser-only (Alt) chords still run here
-      if (desktop && (e.ctrlKey || e.metaKey) && !e.altKey && !['pane.splitRight', 'pane.splitDown', 'pane.zoom', 'dock.toggle', 'dock.minimize', 'view.cycle', 'side', 'menu.effort'].includes(id) && !id.startsWith('panel.') && !/^group\.jump/.test(id)) return;
+      if (desktop && (e.ctrlKey || e.metaKey) && !e.altKey && !['pane.splitRight', 'pane.splitDown', 'pane.zoom', 'dock.toggle', 'dock.minimize', 'view.cycle', 'side', 'menu.effort', 'pane.close'].includes(id) && !id.startsWith('panel.') && !/^group\.jump/.test(id)) return;
       e.preventDefault();
       runCommand(id);
     };

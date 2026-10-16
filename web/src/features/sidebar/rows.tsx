@@ -24,13 +24,7 @@ function SidebarMenuExtra({ s, onClose }: { s: SessionSummary; onClose: () => vo
   const act = (fn: () => unknown) => () => { onClose(); closeDrawer(); void fn(); };
   const openIn = (mode: 'tab' | 'replace') => act(() => (open ? st.openInPane(s.sessionId, mode) : st.loadHistory(s.sessionId, { mode })));
   const id = (x: RowMenuId) => x;
-  const split = () => {
-    const g = st.layout;
-    const before = g;
-    st.dispatchLayout({ t: 'pane.split', paneId: (g.groups.find((x) => x.id === g.activeGroupId) ?? g.groups[0]).focusedPaneId, dir: 'row' });
-    if (useStore.getState().layout === before) return st.toast(tr('最多 6 个分屏'));
-    open ? st.openInPane(s.sessionId, 'replace') : void st.loadHistory(s.sessionId);
-  };
+  const split = () => openFromSidebar(s.sessionId, 'split');
   return (
     <>
       <button data-id={id('open-tab')} onClick={openIn('tab')}><Icon name="board" size={14} /> {tr('在新{tile}打开', { tile: TERMS.tile })}</button>
@@ -46,8 +40,15 @@ function SidebarMenuExtra({ s, onClose }: { s: SessionSummary; onClose: () => vo
 }
 
 /** Open a session from the sidebar: click → the focused pane (replace); Ctrl / middle click → a new tab. */
-export function openFromSidebar(sessionId: string, mode: 'replace' | 'tab') {
+/** `split`: in a new pane beside the focused one (the row menu's 在右侧打开, Ctrl/Cmd+click — the official app's key). */
+export function openFromSidebar(sessionId: string, mode: 'replace' | 'tab' | 'split') {
   const st = useStore.getState();
+  if (mode === 'split') {
+    const g = st.layout;
+    st.dispatchLayout({ t: 'pane.split', paneId: (g.groups.find((x) => x.id === g.activeGroupId) ?? g.groups[0]).focusedPaneId, dir: 'row' });
+    if (useStore.getState().layout === g) { st.toast(tr('最多 6 个分屏')); return; }
+    mode = 'replace';
+  }
   if (st.open[sessionId]) st.openInPane(sessionId, mode);
   else void st.loadHistory(sessionId, { mode });
   // the phone drawer gets out of the way of what was just opened
@@ -143,7 +144,7 @@ export function SessionRow({ s, ctx, depth = 0, flat = false, pip = false }: { s
   const onClick = (e: React.MouseEvent) => {
     if (sel.on) { if (e.shiftKey) sel.range(id); else sel.toggle(id); return; }
     if (e.shiftKey) { e.preventDefault(); sel.range(id); return; }
-    openFromSidebar(id, e.ctrlKey || e.metaKey ? 'tab' : 'replace');
+    openFromSidebar(id, e.ctrlKey || e.metaKey ? 'split' : 'replace');
   };
   // not while selecting: the rows are checkboxes then, and have no ··· either
   const press = useLongPress(() => { haptic('menu'); setMenu(key); }, mobile && !sel.on);

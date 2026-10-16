@@ -25,6 +25,7 @@ export const SHORTCUTS: Shortcut[] = [
   { id: 'pane.splitRight', label: tr('向右分屏'), desktop: 'Ctrl+D', browser: 'Ctrl+D', group: tr('分屏') },
   { id: 'pane.splitDown', label: tr('向下分屏'), desktop: 'Ctrl+Shift+D', browser: 'Ctrl+Shift+D', group: tr('分屏') },
   { id: 'tile.close', label: tr('关闭标签页（最后一个则关掉这个分屏）'), desktop: 'Ctrl+W', browser: 'Alt+W', group: tr('分屏') },
+  { id: 'pane.close', label: tr('关掉聚焦的分屏'), desktop: 'Ctrl+\\', browser: 'Ctrl+\\', group: tr('分屏') },
   { id: 'pane.zoom', label: tr('放大 / 还原分屏'), desktop: 'Ctrl+Shift+Enter', browser: 'Ctrl+Shift+Enter', group: tr('分屏') },
   { id: 'pane.jump', label: tr('跳到分屏 1..6'), desktop: 'Alt+1..6', browser: 'Alt+1..6', group: tr('分屏') },
   { id: 'pane.next', label: tr('下一个分屏'), desktop: 'Ctrl+Alt+→ / Alt+]', browser: 'Ctrl+Alt+→ / Alt+]', group: tr('分屏') },
@@ -93,6 +94,7 @@ export function matchBrowserKey(e: KeyboardEvent): string | null {
   if (ctrl && !alt && !shift && lower === 'd') return 'pane.splitRight';
   if (ctrl && !alt && shift && lower === 'd') return 'pane.splitDown';
   if (ctrl && shift && k === 'Enter') return 'pane.zoom';
+  if (ctrl && !alt && !shift && (k === '\\' || e.code === 'Backslash')) return 'pane.close';
   if (ctrl && shift && /^[1-5]$/.test(k)) return `panel.${['tasks', 'files', 'usage', 'config', 'terminal'][Number(k) - 1]}`;
   if (ctrl && !alt && !shift && k === ',') return 'settings';
   if (ctrl && !alt && !shift && k === '`') return 'panel.terminal';
