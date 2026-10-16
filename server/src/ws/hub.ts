@@ -6,7 +6,7 @@ import { RunnerPool } from '../runtime/pool.js';
 import { SessionRunner, setPromptSuggestions } from '../runtime/session-runner.js';
 import { setSessionsMcpEnabled } from '../sessions-mcp/tools.js';
 import { listProjectFiles, rankFiles } from '../files/find.js';
-import { copyWorktreeIncludes } from '../git/worktree-include.js';
+import { copyWorktreeIncludes, resolveWorktreeDir } from '../git/worktree-include.js';
 import { readChangelog } from '../app/changelog.js';
 import { recentArtifacts } from '../library/artifacts.js';
 import type { LocalEnvStore } from '../runtime/local-env.js';
@@ -371,7 +371,7 @@ export class Hub {
           const root = where || prefix ? await s.git.root(params.cwd) : null;
           if (root) {
             const name = params.worktree;
-            const wt = await s.git.worktreeAdd(root, name, { branch: `${prefix || 'worktree-'}${name}`, dir: where ? path.join(where, `${path.basename(root)}-${name}`) : undefined });
+            const wt = await s.git.worktreeAdd(root, name, { branch: `${prefix || 'worktree-'}${name}`, dir: where ? path.join(resolveWorktreeDir(where), `${path.basename(root)}-${name}`) : undefined });
             await copyWorktreeIncludes(root, wt.path);
             params = { ...params, cwd: wt.path, worktree: undefined };
             worktreeRoot = root;

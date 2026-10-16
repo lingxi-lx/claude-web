@@ -202,6 +202,7 @@ export const EN_SERVER: Record<string, string> = {
   "✅ 已允许": "✅ Allowed",
   "✅ 已授权 {userName}。发 /help 看命令，或直接说要做什么。": "✅ {userName} is now authorized. Send /help to see the commands, or just say what you want done.",
   "✅ 已选择：{choice}": "✅ Chosen: {choice}",
+  "「worktree 放在哪」要填一个本机的完整路径（可以用 ~ 表示用户目录），现在是：{where}": "“Where worktrees go” needs a full path on this computer (~ for your home folder), not: {where}",
   "「{label}」依赖的节点 {d} 不存在": "The node {d} that “{label}” depends on doesn't exist",
   "「{label}」比选至少要 2 个不同的 agent": "The comparison “{label}” needs at least 2 different agents",
   "「{label}」比选要在各自的 worktree 里做，但工作目录不是 git 仓库": "The comparison “{label}” has to run in separate worktrees, but the working folder isn't a git repository",

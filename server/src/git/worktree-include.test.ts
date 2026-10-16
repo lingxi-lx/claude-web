@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { copyWorktreeIncludes, worktreeIncludes } from './worktree-include.js';
+import { copyWorktreeIncludes, resolveWorktreeDir, worktreeIncludes } from './worktree-include.js';
 
 const tmp: string[] = [];
 afterAll(() => { for (const d of tmp) fs.rmSync(d, { recursive: true, force: true }); });
@@ -17,6 +17,18 @@ const repo = (files: Record<string, string>) => {
   execFileSync('git', ['init', '-q'], { cwd: dir, windowsHide: true });
   return dir;
 };
+
+describe('worktree location setting', () => {
+  const home = path.resolve(os.tmpdir(), 'home-x');
+  it('~ is the home folder; an absolute path is used as is', () => {
+    expect(resolveWorktreeDir('~', home)).toBe(home);
+    expect(resolveWorktreeDir('~/wts', home)).toBe(path.join(home, 'wts'));
+    expect(resolveWorktreeDir(' ' + path.join(home, 'a') + ' ', home)).toBe(path.join(home, 'a'));
+  });
+  it('relative, ~user, or a network path: refused, saying what to fill in', () => {
+    for (const w of ['wts', './wts', '../up', '~other/wts', '\\\\host\\share', '//host/share']) expect(() => resolveWorktreeDir(w, home)).toThrow(/完整路径/);
+  });
+});
 
 describe('.worktreeinclude', () => {
   it('copies what is listed AND ignored by git — never a tracked or merely untracked file', async () => {

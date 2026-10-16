@@ -3,12 +3,26 @@
 // syntax) are copied over — only files that are both listed there and ignored by git; tracked files are never copied.
 // git does the matching: what it lists as ignored under .gitignore AND under .worktreeinclude as the exclude file.
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
+import { tr } from '../i18n/index.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const MAX_FILES = 2000;
+
+/**
+ * The 「worktree 放在哪」 setting as a folder: `~` is the home folder; anything else must be absolute. A relative one
+ * used to be joined as is — git made the worktree inside the repository and the conversation got a cwd relative to
+ * the server's own folder.
+ */
+export function resolveWorktreeDir(where: string, home = os.homedir()): string {
+  const w = where.trim();
+  const expanded = w === '~' ? home : /^~[\\/]/.test(w) ? path.join(home, w.slice(2)) : w;
+  if (!path.isAbsolute(expanded) || /^[\\/]{2}/.test(expanded)) throw new Error(tr('「worktree 放在哪」要填一个本机的完整路径（可以用 ~ 表示用户目录），现在是：{where}', { where: w }));
+  return path.resolve(expanded);
+}
 
 async function lsIgnored(root: string, exclude: string[]): Promise<Set<string>> {
   const { stdout } = await execFileAsync('git', ['ls-files', '--others', '--ignored', ...exclude, '-z'], { cwd: root, windowsHide: true, maxBuffer: 64 * 1024 * 1024 });
