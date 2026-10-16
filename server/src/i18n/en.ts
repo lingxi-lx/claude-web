@@ -742,6 +742,7 @@ export const EN_SERVER: Record<string, string> = {
   "这个对话的来源没有加入对话库": "This conversation's source isn't in the conversation library",
   "这个对话的进程出错退出了{v}\n再发一次会重新打开它；还是不行的话，到 设置 → 供应商 点「测试连接」看看。": "This conversation's process exited with an error{v}\nSending again will reopen it; if that doesn't work, go to Settings → Providers and click “Test connection”.",
   "这个对话的进程已经关闭。再发一次会重新打开它。": "This conversation's process has closed. Sending again will reopen it.",
+  "这个对话的进程没在运行": "This conversation's process isn't running",
   "这个对话的进程没能启动：{reason}": "This conversation's process couldn't start: {reason}",
   "这个对话还没发过消息，发出第一条消息之后才能改名": "This conversation has no messages yet. You can rename it after the first message is sent",
   "这个对话还没有打开网页：先用 browser_open 打开一个网址。": "This conversation hasn't opened a web page yet: open a URL with browser_open first.",

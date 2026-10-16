@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 /** Every query() the runner starts: end / fail its message stream, push a message into it, react to interrupt(). */
-interface FakeQuery { options: any; end: () => void; fail: (e: Error) => void; push: (m: any) => void; onInterrupt?: () => void; flags: any[] }
+interface FakeQuery { options: any; end: () => void; fail: (e: Error) => void; push: (m: any) => void; onInterrupt?: () => void; flags: any[]; sides: any[]; sideAnswer?: any }
 const queries: FakeQuery[] = [];
 
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
@@ -16,7 +16,7 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
       if (err) { waiter = null; w.rej(err); } else if (buf.length) { waiter = null; w.res({ value: buf.shift(), done: false }); } else if (ended) { waiter = null; w.res({ value: undefined, done: true }); }
     };
     const next = () => new Promise<IteratorResult<any>>((res, rej) => { waiter = { res, rej }; settle(); });
-    const h: FakeQuery = { options, end: () => { ended = true; settle(); }, fail: (e) => { err = e; settle(); }, push: (m) => { buf.push(m); settle(); }, flags: [] };
+    const h: FakeQuery = { options, end: () => { ended = true; settle(); }, fail: (e) => { err = e; settle(); }, push: (m) => { buf.push(m); settle(); }, flags: [], sides: [] };
     const q: any = {
       initializationResult: async () => ({}),
       supportedCommands: async () => [],
@@ -28,6 +28,7 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
       setModel: async () => { throw new Error('unsupported'); },
       interrupt: async () => { h.onInterrupt?.(); },
       applyFlagSettings: async (f: any) => { h.flags.push(f); },
+      askSideQuestion: async (question: string, opts: any) => { h.sides.push({ question, opts }); return h.sideAnswer ?? null; },
     };
     queries.push(h);
     return q;
@@ -216,6 +217,22 @@ describe('SessionRunner prompt-cache routing (cache shim)', () => {
 describe('SessionRunner Stop (interrupt)', () => {
   const result = (extra: any = {}) => ({ type: 'result', subtype: 'error_during_execution', is_error: true, result: '', session_id: 's', uuid: 'r1', ...extra });
   const collect = (r: any) => { const msgs: any[] = []; r.on('message', (m: any) => msgs.push(m)); return msgs; };
+
+  it('旁聊: asks the engine with the side chat so far, and the conversation hears nothing of it', async () => {
+    queries.length = 0;
+    const r = new SessionRunner({ sessionId: 'side-1', cwd: '/x' } as any);
+    await tick();
+    const msgs = collect(r);
+    queries[0].sideAnswer = { response: 'the answer', synthetic: false };
+    const hist = [{ question: 'a', response: 'b' }];
+    expect(await r.askSide('why?', hist)).toEqual({ text: 'the answer', synthetic: false });
+    expect(queries[0].sides).toEqual([{ question: 'why?', opts: { history: hist } }]);
+    queries[0].sideAnswer = null;
+    expect(await r.askSide('again?', [])).toEqual({ text: null });
+    expect(msgs).toEqual([]);
+    expect(r.state).toBe('idle');
+    await r.close();
+  });
 
   it('a CLI that ends the turn itself is not touched', async () => {
     queries.length = 0;

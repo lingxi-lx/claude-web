@@ -250,3 +250,19 @@
 /* 下一句提示 on a phone (no Tab key): a small button above the box takes the grey suggestion */
 .cmp-suggest { display: inline-flex; align-items: center; gap: 4px; margin: 0 0 6px 4px; padding: 3px 10px; border-radius: var(--r-pill, 999px); font-size: var(--fs-sm); color: var(--ink-2); background: var(--layer-hover); }
 .cmp-suggest:active { transform: var(--press); }
+
+/* 旁聊 (spec 2026-10-16 chat-input §1): a card over the box, like a docked permission card but its own conversation */
+.side-chat { margin: 0 0 10px; border-radius: var(--r-xl); background: var(--surface-elev); box-shadow: var(--elev-2); animation: fl-card-in var(--spring-snappy-dur) var(--spring-snappy); display: flex; flex-direction: column; max-height: min(46vh, 420px); }
+.side-chat .sc-head { display: flex; align-items: center; gap: 6px; padding: 8px 8px 6px 12px; color: var(--ink-2); font-size: var(--fs-small); }
+.side-chat .sc-head .t { font-weight: var(--fw-strong); color: var(--ink-1); }
+.side-chat .sc-head .sub { color: var(--ink-4); }
+.side-chat .sc-btn { font-size: var(--fs-small); color: var(--ink-3); padding: 2px 8px; border-radius: var(--r-sm); }
+.side-chat .sc-btn:hover { background: var(--layer-hover); color: var(--ink-1); }
+.side-chat .sc-list { overflow: auto; padding: 0 12px; display: flex; flex-direction: column; gap: 10px; }
+.side-chat .sc-q { color: var(--ink-1); font-weight: var(--fw-strong); white-space: pre-wrap; }
+.side-chat .sc-a { color: var(--ink-2); }
+.side-chat .sc-wait { display: flex; align-items: center; gap: 6px; color: var(--ink-4); font-size: var(--fs-small); }
+.side-chat .sc-err { color: var(--red); font-size: var(--fs-small); }
+.side-chat .sc-input { display: flex; align-items: flex-end; gap: 6px; padding: 8px 8px 8px 12px; border-top: var(--hairline) solid var(--edge-subtle); margin-top: 6px; }
+.side-chat .sc-input textarea { flex: 1; resize: none; border: 0; background: none; color: var(--ink-1); font: inherit; outline: none; max-height: 96px; padding: 4px 0; }
+.side-chat .spin { width: 12px; height: 12px; border-radius: 50%; border: 1.6px solid var(--edge-default); border-top-color: var(--ink-2); animation: spin 0.9s linear infinite; flex: none; }

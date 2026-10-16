@@ -32,4 +32,11 @@ describe('matchBrowserKey', () => {
     expect(matchBrowserKey(ev({ key: 't', code: 'KeyY', altKey: true }))).toBe('group.new');
     expect(matchBrowserKey(ev({ key: '?', code: 'Slash', shiftKey: true }))).toBe('shortcuts');
   });
+
+  it('the official app’s keys: Ctrl+O view mode, Ctrl+; side chat (by the physical key on other layouts too)', () => {
+    expect(matchBrowserKey(ev({ key: 'o', code: 'KeyO', ctrlKey: true }))).toBe('view.cycle');
+    expect(matchBrowserKey(ev({ key: ';', code: 'Semicolon', ctrlKey: true }))).toBe('side');
+    expect(matchBrowserKey(ev({ key: 'ö', code: 'Semicolon', ctrlKey: true }))).toBe('side');
+    expect(matchBrowserKey(ev({ key: ';', code: 'Semicolon', ctrlKey: true, shiftKey: true }))).toBeNull();
+  });
 });

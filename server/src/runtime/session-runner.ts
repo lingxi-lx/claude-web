@@ -18,7 +18,7 @@ import { cafePluginDir } from '../characters/tools.js';
 import { computerAllowedTools, computerClaudeMcpServer } from '../computer/launcher.js';
 import { ENGINE_SEARCH_TOOL, engineSearchOff, userPickedSearchAdapter } from '../web/engine-search.js';
 import { markUnknownCost } from '../usage/pricing.js';
-import type { AttachmentRef, EffortLevel, ModelInfo, OpenSessionParams, PermissionMode, PermissionRequestEvent, PermissionResponse, Provider, RunnerState, SessionFeatures, SessionInfoSnapshot } from '../protocol.js';
+import type { AttachmentRef, EffortLevel, ModelInfo, OpenSessionParams, PermissionMode, PermissionRequestEvent, PermissionResponse, Provider, RunnerState, SessionFeatures, SessionInfoSnapshot, SideTurn } from '../protocol.js';
 import { tr } from '../i18n/index.js';
 
 /** A conversation above this share of the next model's window is compacted before the switch. */
@@ -667,6 +667,18 @@ export class SessionRunner extends EventEmitter {
 
   /** After Stop the CLI gets this long to end the turn itself; then its process is killed and the turn ended here. */
   static STOP_GRACE_MS = 8_000;
+
+  /**
+   * 旁聊 (spec 2026-10-16 chat-input §1): the engine answers a question from this conversation's context and writes
+   * nothing to it. `askSideQuestion` is on the SDK's Query but not in its types; the CLI wants the side chat's earlier
+   * turns as {question, response}. `text: null`: the engine had no answer.
+   */
+  async askSide(question: string, history: SideTurn[]): Promise<{ text: string | null; synthetic?: boolean }> {
+    const q = this.q as (Query & { askSideQuestion?: (q: string, o: { history: SideTurn[] }) => Promise<{ response: string; synthetic: boolean } | null> }) | null;
+    if (!q?.askSideQuestion) throw new Error(tr('这个对话的进程没在运行'));
+    const r = await q.askSideQuestion(question, { history });
+    return r ? { text: r.response, synthetic: r.synthetic } : { text: null };
+  }
 
   /**
    * Stop always stops. The CLI normally answers the interrupt with a `result`; one stuck on a request that never

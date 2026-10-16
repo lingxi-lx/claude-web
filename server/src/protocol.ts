@@ -401,6 +401,9 @@ export interface SessionInfoSnapshot {
 }
 
 // ---- requests ----
+/** One question and answer of a side chat (旁聊), as the CLI wants them. */
+export interface SideTurn { question: string; response: string }
+
 export type ClientRequest =
   | { kind: 'sessions.list'; limit?: number }
   | { kind: 'sessions.projects' }
@@ -412,6 +415,9 @@ export type ClientRequest =
   | { kind: 'session.info'; sessionId: string }
   | { kind: 'session.send'; params: SendParams }
   | { kind: 'session.interrupt'; sessionId: string }
+  /** 旁聊: a question about the conversation that never enters it → `{ text: string | null; synthetic? }`, or
+   *  `{ error: 'not-open' | 'unsupported' }`. `history`: this side chat's earlier turns */
+  | { kind: 'session.side'; sessionId: string; question: string; history?: SideTurn[] }
   | { kind: 'session.close'; sessionId: string }
   | { kind: 'session.setPermissionMode'; sessionId: string; mode: PermissionMode }
   /** `providerId`: the provider the pick was made for ('claude' = the account); a switch in between drops the pick */

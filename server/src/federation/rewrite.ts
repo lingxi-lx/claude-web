@@ -11,7 +11,7 @@ import { tr } from '../i18n/index.js';
 
 /** Requests about a remote session that are answered by the machine the session lives on. */
 const FORWARD = new Set<ClientRequest['kind']>([
-  'session.open', 'session.info', 'session.send', 'session.interrupt', 'session.close',
+  'session.open', 'session.info', 'session.send', 'session.interrupt', 'session.side', 'session.close',
   'session.setModel', 'session.setPermissionMode', 'session.setEffort', 'session.setUltracode', 'session.setSubagentModel',
   'session.contextUsage', 'session.stopTask', 'session.canonical',
   'permission.respond',

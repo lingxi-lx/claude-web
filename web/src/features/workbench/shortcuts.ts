@@ -43,6 +43,7 @@ export const SHORTCUTS: Shortcut[] = [
   { id: 'panel.terminal', label: tr('终端'), desktop: 'Ctrl+`', browser: 'Ctrl+`', group: tr('面板') },
   { id: 'interrupt', label: tr('中断当前轮'), desktop: 'Ctrl+Shift+C / Esc', browser: 'Esc', group: tr('对话') },
   { id: 'close', label: tr('结束当前对话的进程'), desktop: 'Ctrl+Shift+Q', browser: tr('命令面板'), group: tr('对话') },
+  { id: 'side', label: tr('旁聊：问一个不进对话的小问题'), desktop: 'Ctrl+;', browser: 'Ctrl+;', group: tr('对话') },
   { id: 'view.cycle', label: tr('查看模式：普通 / 详细 / 精简'), desktop: 'Ctrl+O', browser: 'Ctrl+O', group: tr('对话') },
   { id: 'tab', label: tr('对话 / 步骤视图'), desktop: 'Alt+J', browser: 'Alt+J', group: tr('对话') },
   { id: 'send', label: tr('发送 / 换行'), desktop: 'Enter / Shift+Enter', browser: 'Enter / Shift+Enter', group: tr('输入') },
@@ -80,6 +81,7 @@ export function matchBrowserKey(e: KeyboardEvent): string | null {
   if (ctrl && !alt && !shift && lower === 'k') return 'palette';
   if (ctrl && !alt && !shift && lower === 'b') return 'sidebar';
   if (ctrl && !alt && !shift && lower === 'o') return 'view.cycle';
+  if (ctrl && !alt && !shift && (k === ';' || e.code === 'Semicolon')) return 'side';
   if (ctrl && !alt && !shift && lower === 'j') return 'dock.toggle';
   if (ctrl && !alt && shift && lower === 'j') return 'dock.minimize';
   if (ctrl && !alt && shift && lower === 'm') return 'panel.mission';

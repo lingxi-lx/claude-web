@@ -8,6 +8,9 @@ import { compressImage, expandDataTransfer, fmtSize, isLongPaste, pasteAsAttachm
 import { pickFolderFiles } from '@/model/attachment-filter';
 import { StatusStrip } from '@/features/chat/StatusStrip';
 import { QueueCards } from '@/features/chat/QueueCards';
+import { SideChat } from '@/features/chat/SideChat';
+import { openSideChat } from '@/features/chat/side-chat';
+import { parseBtw } from '@/features/chat/side-chat-model';
 import { RunCard } from '@/features/chat/RunCard';
 import { BackgroundPill } from '@/features/background/BackgroundPill';
 import { PermissionDock, runDockPrimary } from '@/features/chat/PermissionCards';
@@ -275,7 +278,9 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     if (welcome) ta.current?.focus();
   }, [welcome]);
 
-  const commands = active?.info?.slashCommands ?? [];
+  // /btw is ours (旁聊, never sent to the engine); the engine's own list may carry one too
+  const engineCommands = active?.info?.slashCommands;
+  const commands = useMemo(() => [{ name: 'btw', description: tr('旁聊：问一个不进对话的小问题'), argumentHint: tr('问题') }, ...(engineCommands ?? []).filter((c) => c.name !== 'btw')], [engineCommands]);
   const slashQuery = useMemo(() => {
     const m = /^\/(\S*)$/.exec(text);
     return m ? m[1].toLowerCase() : null;
@@ -416,6 +421,9 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     if (act === 'deny') { denyDocked(); return; }
     if (act === 'blocked') { toast(DOCK_BLOCKED); return; }
     if (act !== 'send') return;
+    // 旁聊: /btw opens the side chat over this conversation (and asks, if there is a question) — nothing is sent
+    const btw = parseBtw(text);
+    if (btw !== null && active && !welcome) { openSideChat(active.sessionId, btw || undefined); setText(''); setDraft(active.sessionId, ''); return; }
     // words from before the card go out as an ordinary (queued) message; the card then offers to take them back
     const requeue = !!docked && !!seenRef.current?.carried && !hasAttachments && !imgs.length && !isSlashCommand(text);
     const t = text;
@@ -884,6 +892,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
             ))}
           </div>
         )}
+        {active && !welcome && <SideChat sessionId={active.sessionId} onDraft={(t) => { onChange(t); ta.current?.focus(); }} />}
         {active && !welcome && <StatusStrip sessionId={active.sessionId} />}
         {/* what was sent while the turn runs waits here, a card each; 编辑 puts one back into the box */}
         {active && !welcome && <QueueCards key={active.sessionId} sessionId={active.sessionId} queue={active.queue} onEdit={(t) => { setText((cur) => (cur ? `${cur}\n${t}` : t)); ta.current?.focus(); }} />}

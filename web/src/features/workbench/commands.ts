@@ -11,6 +11,7 @@ import { underCovers } from './cover-commands';
 import { changeZoom } from '@/ui/zoom';
 import { tr } from '@/i18n';
 import { nextViewMode, normViewMode, viewModeLabel } from '@/features/chat/view-mode';
+import { openSideChat } from '@/features/chat/side-chat';
 
 export function runCommand(id: string): boolean {
   const st = useStore.getState();
@@ -54,6 +55,14 @@ export function runCommand(id: string): boolean {
       return true;
     case 'sidebar': useStore.setState((s) => ({ sidebarOpen: !s.sidebarOpen })); return true;
     case 'shortcuts': useStore.setState({ shortcutsOpen: true }); return true;
+    case 'side': {
+      // 旁聊 over the conversation in front (the one the input box belongs to)
+      const at = currentChatTile(st.layout);
+      const t = at && activeGroup(st.layout).panes[at.paneId]?.tiles.find((x) => x.id === at.tileId);
+      const sid = t?.kind === 'chat' ? t.sessionId : undefined;
+      if (sid && st.open[sid]) openSideChat(sid);
+      return true;
+    }
     case 'view.cycle': {
       const next = nextViewMode(normViewMode(st.settings['ui.viewMode']));
       st.setSetting('ui.viewMode', next);

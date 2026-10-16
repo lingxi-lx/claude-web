@@ -499,6 +499,13 @@ export class Hub {
         return s.customCss.read();
       case 'ui.customCss.create':
         return { path: s.customCss.create() };
+      case 'session.side': {
+        // a conversation not running here (closed, idle-reclaimed, history): the client opens it and asks again
+        const r = s.pool.get(req.sessionId);
+        if (!r) return { error: 'not-open' };
+        if (!(r instanceof SessionRunner)) return { error: 'unsupported' };
+        return r.askSide(req.question, req.history ?? []);
+      }
       case 'session.interrupt': {
         // no process (closed, crashed, the server restarted): nothing is running here — the client says so and ends
         // the turn it still shows, instead of a Stop button that errors in silence
