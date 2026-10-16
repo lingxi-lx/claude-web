@@ -10,6 +10,8 @@ import { closeTab, ensureTab, frontTab, guestOf, guestReady, hasWebview, newTab,
 import { RECENT_KEY, addressToUrl, frameSandbox, loadable, pushRecent, readRecent, siteHue, siteLetter, siteOf } from './url';
 import './browser.css';
 import { tr } from '@/i18n';
+import { ws } from '@/ws/client';
+import { sessionPeer } from '@/features/peers';
 
 /** A site's letter on its own colour: what stands for a page that has no icon of ours to show. */
 function SiteMark({ url, size = 16 }: { url: string; size?: number }) {
@@ -146,6 +148,7 @@ function NewTabPage({ tab, front }: { tab: BrowserTab; front: boolean }) {
         <Icon name="search" size={16} />
         <input ref={box} value={q} spellCheck={false} placeholder={tr('搜索，或者输入网址')} aria-label={tr('搜索，或者输入网址')} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && imeComposing(e.nativeEvent)) e.preventDefault(); }} />
       </form>
+      <LaunchList tab={tab} front={front} />
       {sites.length > 0 && (
         <div className="bw-recent" data-id="recent">
           <div className="bw-h">{tr('最近打开')}</div>
@@ -160,6 +163,60 @@ function NewTabPage({ tab, front }: { tab: BrowserTab; front: boolean }) {
         </div>
       )}
       <p className="bw-tip"><Icon name="sparkle" size={13} />{tr('Agent 也用这个浏览器：在对话里让它「搜一下……」或者「打开这个网址看看」，它打开的页面会出现在这里。')}</p>
+    </div>
+  );
+}
+
+interface LaunchItem { name: string; port: number; url?: string }
+
+/**
+ * The project's dev servers (phase 6 §7, as the official browser's empty page): what `.claude/launch.json` in the
+ * conversation's folder lists, each with ▶ — it starts (or is already running) and opens here. Asked again each time
+ * the page comes to the front; a conversation on another machine has its files there, so nothing is listed.
+ */
+function LaunchList({ tab, front }: { tab: BrowserTab; front: boolean }) {
+  const active = useScopedSession();
+  const sessions = useStore((s) => s.sessions);
+  const cwd = active && !sessionPeer(active.sessionId, sessions) ? active.cwd : undefined;
+  const [list, setList] = useState<{ configs: LaunchItem[]; error?: string } | null>(null);
+  const [all, setAll] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  useEffect(() => {
+    if (!cwd || !front) return;
+    let live = true;
+    ws.request<{ configs: LaunchItem[]; error?: string } | null>({ kind: 'preview.list', cwd }).then((r) => { if (live) setList(r); }, () => { if (live) setList(null); });
+    return () => { live = false; };
+  }, [cwd, front]);
+  if (!cwd) return null;
+  const start = async (c: LaunchItem) => {
+    if (c.url) { go(tab, c.url); return; }
+    setBusy(c.name);
+    try {
+      const r = await ws.request<{ url: string }>({ kind: 'preview.start', cwd, name: c.name });
+      go(tab, r.url);
+    } catch (e) {
+      useStore.getState().toast(tr('{name} 没启动：{e}', { name: c.name, e: (e as Error).message }));
+    }
+    setBusy(null);
+  };
+  const configs = list?.configs ?? [];
+  const shown = all ? configs : configs.slice(0, 4);
+  return (
+    <div className="bw-recent bw-launch" data-id="launch">
+      {configs.length > 0 && <div className="bw-h">{tr('开发服务器')}</div>}
+      {shown.map((c) => (
+        <div key={c.name} className="bw-srv" data-srv={c.name}>
+          <span className={clsx('dot', c.url && 'on')} aria-hidden />
+          <span className="n">{c.name}</span>
+          <span className="p">{c.url ? c.url.replace(/^https?:\/\//, '') : `:${c.port}`}</span>
+          <button className="icon-btn" disabled={busy === c.name} title={c.url ? tr('打开') : tr('启动并打开')} aria-label={c.url ? tr('打开 {name}', { name: c.name }) : tr('启动 {name}', { name: c.name })} onClick={() => void start(c)}>
+            {busy === c.name ? <span className="spinner" /> : <Icon name={c.url ? 'external' : 'play'} size={14} />}
+          </button>
+        </div>
+      ))}
+      {configs.length > 4 && !all && <button className="link bw-all" onClick={() => setAll(true)}>{tr('查看全部（{n}）', { n: configs.length })}</button>}
+      {list?.error && <p className="bw-tip err">{list.error}</p>}
+      <p className="bw-tip"><Icon name="play" size={13} />{tr('启动一个开发服务器来预览你的应用，或者在上面输入网址。这个列表在项目的 .claude/launch.json 里改。')}</p>
     </div>
   );
 }

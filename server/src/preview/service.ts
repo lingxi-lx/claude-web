@@ -139,6 +139,22 @@ export class PreviewService {
     return `${head}\n${r.log.slice(-Math.max(1, Math.min(lines, LOG_LINES))).join('\n')}`;
   }
 
+  /**
+   * The project's configurations for the browser's empty page (phase 6 §7): name, port, and the address of the ones
+   * running. No launch.json → null; one that does not parse → its error, for the page to say.
+   */
+  list(root: string): { configs: { name: string; port: number; url?: string }[]; error?: string } | null {
+    let f;
+    try { f = readLaunch(root); } catch (e) { return { configs: [], error: (e as Error).message }; }
+    if (!f) return null;
+    return {
+      configs: f.configurations.map((c) => {
+        const r = this.running.get(`${path.resolve(root)}|${c.name}`);
+        return { name: c.name, port: c.port, ...(r && r.exited === undefined ? { url: r.url } : {}) };
+      }),
+    };
+  }
+
   async stopAll(): Promise<void> {
     await Promise.all([...this.running.values()].map((r) => this.stop(r.root, r.name)));
   }

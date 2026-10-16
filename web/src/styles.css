@@ -271,8 +271,17 @@ details.structured summary { cursor: pointer; color: var(--ink-3); }
 .todos { margin: 0; padding: 0; list-style: none; }
 .todos li { display: flex; gap: 8px; padding: 2px 0; }
 .todos li.completed { color: var(--ink-4); text-decoration: line-through; }
-.todos li.in_progress { color: var(--warn); }
-.todos .tick { width: 16px; text-align: center; }
+.todos .tick { width: 16px; height: 20px; flex: none; display: inline-flex; align-items: center; justify-content: center; }
+.todos li.in_progress { color: var(--ink-1); }
+.todos .td-ring, .todos .td-arc { width: 12px; height: 12px; border-radius: 50%; box-sizing: border-box; }
+.todos .td-ring { border: 1.5px dashed var(--ink-4); }
+.todos .td-arc { border: 1.5px solid color-mix(in oklab, var(--accent) 25%, transparent); border-top-color: var(--accent); animation: td-turn 0.9s linear infinite; }
+@keyframes td-turn { to { transform: rotate(360deg); } }
+:root[data-reduce-motion='1'] .todos .td-arc { animation: none; }
+/* in the conversation the plan is a card of its own: hairline box, rows split by hairlines */
+.tool .todos, .tl .todos { border: var(--hairline) solid var(--edge-subtle); border-radius: var(--r-md); padding: 2px 10px; }
+.tool .todos li, .tl .todos li { padding: 6px 0; }
+.tool .todos li + li, .tl .todos li + li { border-top: var(--hairline) solid var(--edge-subtle); }
 .ask .ask-q { margin-bottom: 6px; }
 .ask .ask-a { color: var(--ok); margin-left: 4px; font-size: 13px; }
 .agent-brief { display: flex; gap: 8px; align-items: center; font-size: 13px; margin-bottom: 4px; }
@@ -555,6 +564,7 @@ input.field:focus-visible, select.field:focus-visible, textarea.field:focus-visi
 .msg-actions button:hover { color: var(--ink-1); background: var(--surface-2); }
 .msg-actions button.on { color: var(--accent-text); border-color: var(--accent); }
 .msg-actions button:disabled { opacity: 0.5; cursor: default; }
+.msg-actions .msg-time { align-self: center; padding: 0 6px; font-size: var(--fs-meta); color: var(--ink-4); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .user-editor { width: 100%; max-width: 80%; background: var(--user-bg); border-radius: var(--r-2xl); padding: 10px 12px; border: 1px solid var(--accent); }
 .user-editor textarea { width: 100%; background: var(--surface-0); border: var(--hairline) solid var(--edge-default); border-radius: var(--r-lg); padding: 8px 10px; resize: vertical; font: inherit; }
 .user-editor .actions { display: flex; gap: 8px; align-items: center; margin-top: 6px; }

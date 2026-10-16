@@ -10,6 +10,7 @@ import { copyWorktreeIncludes, resolveWorktreeDir } from '../git/worktree-includ
 import { readChangelog } from '../app/changelog.js';
 import { recentArtifacts } from '../library/artifacts.js';
 import type { LocalEnvStore } from '../runtime/local-env.js';
+import type { PreviewService } from '../preview/service.js';
 import { cacheParentFor } from '../runtime/cache-key.js';
 import { SessionService, claudeDir } from '../sessions/service.js';
 import { runStatusLine, userStatusLine } from '../statusline/run.js';
@@ -80,6 +81,8 @@ export interface Services {
   agentConfig: AgentConfigService;
   /** 本机环境变量 (runtime/local-env.ts); optional (tests) */
   localEnv?: LocalEnvStore;
+  /** 预览服务器 (preview/service.ts): the browser's empty page lists and starts them; optional (tests) */
+  previews?: PreviewService;
 
   /** Cross-machine sessions: routes peer_… requests / merges lists before handle(); optional (tests). */
   federation?: FederationService;
@@ -719,6 +722,12 @@ export class Hub {
         if (!r.toggleMcp) throw new Error(tr('这个对话的 Agent 不能在对话里开关连接器'));
         await r.toggleMcp(req.name, req.enabled);
         return null;
+      }
+      case 'preview.list':
+        return s.previews?.list(req.cwd) ?? null;
+      case 'preview.start': {
+        if (!s.previews) throw new Error('no preview service');
+        return s.previews.start(req.cwd, req.name);
       }
       case 'session.stopTask':
         await this.runner(req.sessionId).stopTask?.(req.taskId);

@@ -85,7 +85,8 @@ export function TodoBody({ t, count = true }: { t: ToolUseBlock; count?: boolean
       <ul className="todos" {...(attrs as any)}>
         {todos.map((td, i) => (
           <li key={i} className={td.status} data-status={td.status}>
-            <span className="tick"><Icon name={td.status === 'completed' ? 'checkCircle' : td.status === 'in_progress' ? 'dot' : 'circle'} size={13} /></span>
+            {/* the official plan card's marks (phase 6 §6): a turning arc, a dashed ring to do, a tick when done */}
+            <span className="tick" aria-label={td.status === 'completed' ? tr('完成') : td.status === 'in_progress' ? tr('进行中') : tr('待办')}>{td.status === 'completed' ? <Icon name="check" size={13} /> : <span className={td.status === 'in_progress' ? 'td-arc' : 'td-ring'} />}</span>
             <span>{td.status === 'in_progress' && td.activeForm ? td.activeForm : td.content}</span>
           </li>
         ))}

@@ -3,7 +3,7 @@ import type { AssistantItem, UserItem } from '@/model/conversation';
 import { groupTurns } from '@/model/turn';
 import { buildHtml, downloadHtml } from '@/model/export';
 import { isLastPrompt, useStore } from '@/store';
-import { clsx } from '@/util';
+import { ago, clsx } from '@/util';
 import { Icon } from '@/ui/icons';
 import { imeComposing } from '@/ui/ime';
 import { tr, dateLocale } from '@/i18n';
@@ -78,6 +78,7 @@ export function UserActions({ it, sessionId, onEdit }: { it: UserItem; sessionId
 }
 
 export function AssistantActions({ it, sessionId }: { it: AssistantItem; sessionId: string }) {
+  const st = useStore.getState;
   const fb = useStore((s) => s.open[sessionId]?.feedback[it.id]?.rating ?? null);
   const setFeedback = useStore((s) => s.setFeedback);
   const text = it.blocks.filter((b) => b.type === 'text').map((b: any) => b.text).join('\n\n');
@@ -93,8 +94,18 @@ export function AssistantActions({ it, sessionId }: { it: AssistantItem; session
       <button className={clsx(fb === 'up' && 'on')} title={tr('好评')} aria-label={tr('好评')} aria-pressed={fb === 'up'} onClick={() => setFeedback(sessionId, it.id, fb === 'up' ? null : 'up')}><Icon name="thumbUp" size={14} /></button>
       <button className={clsx(fb === 'down' && 'on')} title={tr('差评')} aria-label={tr('差评')} aria-pressed={fb === 'down'} onClick={() => setFeedback(sessionId, it.id, fb === 'down' ? null : 'down')}><Icon name="thumbDown" size={14} /></button>
       <button title={tr('导出这一轮为 HTML')} aria-label={tr('分享本轮')} onClick={turn}><Icon name="share" size={14} /></button>
+      {/* the official app's row also has 分叉 and when it was said (phase 6 §6) */}
+      {it.uuid && <button data-act="fork" title={tr('从这条回复之后分叉出新对话（原对话不变）')} aria-label={tr('分叉')} onClick={() => st().forkAt(sessionId, it.uuid!).catch((e) => st().toast(e.message))}><Icon name="branch" size={14} /></button>}
+      {it.ts && <span className="msg-time" title={new Date(it.ts).toLocaleString(dateLocale())}>{agoText(it.ts)}</span>}
     </div>
   );
+}
+
+/** 「2 分钟前」: `ago` says how long; under a reply it reads as when. */
+function agoText(ts: string): string {
+  const a = ago(ts);
+  const old = Date.now() - Date.parse(ts) >= 7 * 86400_000; // a date by then
+  return old || a === tr('刚刚') ? a : tr('{a}前', { a });
 }
 
 /** Inline editor shown in place of a user bubble. */

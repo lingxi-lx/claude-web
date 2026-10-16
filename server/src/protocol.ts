@@ -464,6 +464,9 @@ export type ClientRequest =
   | { kind: 'export.save'; name: string; html: string } // → ~/.claude-web/exports/<name>.html, returns path
   | { kind: 'session.stopTask'; sessionId: string; taskId: string }
   | { kind: 'session.fastMode'; sessionId: string; on: boolean }
+  /** the browser's empty page: a project's .claude/launch.json servers, and starting one (preview/service.ts) */
+  | { kind: 'preview.list'; cwd: string }
+  | { kind: 'preview.start'; cwd: string; name: string }
   | { kind: 'session.toggleMcp'; sessionId: string; name: string; enabled: boolean }
   | { kind: 'permission.respond'; requestId: string; response: PermissionResponse }
   | { kind: 'workspaces.list' }

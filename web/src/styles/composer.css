@@ -232,6 +232,10 @@ html .composer-under.cb.cb .cb-right .mm-anchor:not(.sub-anchor) { min-width: 0;
 
 .run-card .pip { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: none; animation: cmp-pulse var(--cmp-pulse) var(--ease-in-out) infinite; }
 @keyframes cmp-pulse { 50% { opacity: 0.35; transform: scale(0.8); } }
+.run-card .pip.spark { width: auto; height: auto; border-radius: 0; background: none; color: var(--accent); display: inline-flex; animation: cmp-spark 3s linear infinite; }
+@keyframes cmp-spark { 0% { transform: rotate(0) scale(1); } 50% { transform: rotate(180deg) scale(0.78); } 100% { transform: rotate(360deg) scale(1); } }
+.run-card .rc-model { flex: none; color: var(--ink-2); white-space: nowrap; }
+.run-card.waiting .pip.spark { background: none; color: var(--warn); }
 
 /* the words: .what clips them (its colour is the ellipsis'), .rc-words carries the sweep. New words = a new .what
    (keyed in RunCard), which comes in blurred from 6px below */

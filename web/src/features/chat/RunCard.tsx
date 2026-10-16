@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '@/store';
 import { getToolDef } from './tools/registry';
-import { clsx } from '@/util';
+import { clsx, shortModel } from '@/util';
+import { Icon } from '@/ui/icons';
 import { RUN_TAB_IN_MS, RUN_TAB_OUT_MS, elapsedText, lingerPhase, runStatus, swapCount, type LingerPhase, type RunStatus, type StepLabeler } from './run-status';
 import { tr } from '@/i18n';
 
@@ -59,11 +60,12 @@ export function RunCard({ sessionId }: { sessionId: string }) {
   const phase = useLinger(running);
   // while it leaves, the tab keeps the turn's last words and time: the conversation itself has moved on (no step, no
   // turn start), and words changing on the way out would play the swap animation on a tab that is going
-  const last = useRef<{ st: RunStatus; clock: string; waiting: boolean } | null>(null);
+  const last = useRef<{ st: RunStatus; clock: string; waiting: boolean; model: string } | null>(null);
   const words = useRef<{ key: string; n: number } | undefined>(undefined);
   if (o && running) {
     const st = runStatus(o.conv, o.state, stepLabel);
-    last.current = { st, clock: st.since ? elapsedText(Date.now() - st.since) : '', waiting: o.state === 'waiting' };
+    const model = o.info?.models?.find((m) => m.value === o.info?.model)?.displayName ?? shortModel(o.info?.model);
+    last.current = { st, clock: st.since ? elapsedText(Date.now() - st.since) : '', waiting: o.state === 'waiting', model };
     words.current = swapCount(words.current, st.key);
   }
   const v = last.current;
@@ -75,7 +77,9 @@ export function RunCard({ sessionId }: { sessionId: string }) {
 
   return (
     <div className={clsx('run-card', v.waiting && 'waiting', phase === 'enter' && 'enter', leaving && 'out')} data-kind={st.kind} aria-hidden={leaving || undefined}>
-      <span className="pip" aria-hidden />
+      {/* the official app's running line: Claude's mark turning while it works, then the model's name (phase 6 §6) */}
+      <span className="pip spark" aria-hidden><Icon name="claude" size={13} /></span>
+      {v.model && <span className="rc-model">{v.model} ·</span>}
       <span key={st.key} className={clsx('what', swap && 'swap')}>
         <span className="rc-words">{st.text}{st.target && <span className="tgt">{st.target}</span>}</span>
       </span>

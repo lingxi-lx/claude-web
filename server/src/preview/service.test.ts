@@ -31,6 +31,7 @@ describe('preview servers', () => {
     expect(r).toMatchObject({ name: 'web', port, url: `http://localhost:${port}` });
     expect(await (await fetch(`http://127.0.0.1:${port}/`)).text()).toBe('hello preview');
     expect((await svc.start(root, 'web')).already).toBe(true);
+    expect(svc.list(root)).toEqual({ configs: [{ name: 'web', port, url: `http://localhost:${port}` }] });
     expect(svc.logs(root)).toContain(`listening on ${port}`);
     expect(await svc.stop(root, 'web')).toBe(true);
     await expect.poll(() => portFree(port), { timeout: 5000 }).toBe(true);
@@ -108,4 +109,14 @@ describe('preview servers', () => {
       await svc.stop(root);
     } finally { process.env.PATH = prevPath; }
   }, 30_000);
+});
+
+describe('the browser page lists them', () => {
+  it('no launch.json → null; one → its configurations, none running', () => {
+    const bare = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-preview-'));
+    roots.push(bare);
+    expect(svc.list(bare)).toBeNull();
+    const root = project([{ name: 'web', program: 'server.js', port: 4321 }, { name: 'docs', program: 'server.js', port: 4322 }]);
+    expect(svc.list(root)).toEqual({ configs: [{ name: 'web', port: 4321 }, { name: 'docs', port: 4322 }] });
+  });
 });
