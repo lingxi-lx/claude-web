@@ -79,7 +79,7 @@ npm run dev          # 开发：server tsx watch + vite :5173（代理 /ws 到 3
 | [desktop](docs/notes/desktop.md) | 桌面版（desktop/） | Electron 壳、打包、应用自动更新 |
 | [macos-ci](docs/notes/macos-ci.md) | macOS / CI（2026-09-27） | mac 打包、发版收尾、CI、没有 Mac 时怎么验 |
 | [robustness](docs/notes/robustness.md) | 子进程窗口 / 前端健壮性（2026-09-28） | 停止、终端是 shell、spawn guard、错误边界、zustand 选择器、ui-smoke 用法 |
-| [ui-refresh](docs/notes/ui-refresh.md) | 界面换新（2026-10-10） | 样式文件顺序、令牌、外壳、字体、图标、标题栏、动效、手机交互 |
+| [ui-refresh](docs/notes/ui-refresh.md) | 界面换新（2026-10-10） | 样式文件顺序、令牌、外壳、字体、图标、标题栏、动效、手机交互、质感：发丝边 / 弹簧 / 滚动渐隐 / 暗色字重（10-16） |
 | [i18n](docs/notes/i18n.md) | 界面语言：中文和英文（2026-10-15，用户要求） | tr() 约定、语言怎么定、四份英文目录、加一句字的流程、i18n-smoke、README 截图脚本、坑 |
 | [claude-accounts](docs/notes/claude-accounts.md) | 其它 Claude 账号（2026-10-15，用户要求） | claude-account 档案、setup-token 令牌、runner 走账号那条路、添加对话框、真机验证 |
 | [custom-css](docs/notes/custom-css.md) | 自定义样式 custom.css 与 DOM 钩子（2026-10-15，GitHub issue #2） | custom.css 加载 / 热更新、钩子约定、计划进度条 |

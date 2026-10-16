@@ -2,7 +2,7 @@
 
 spec 和实施记录：`docs/superpowers/specs/2026-10-10-ui-refresh/design.md`（§12 逐阶段记了做了什么、和设计不一样的地方、没验的）；调研和定方向用的静态稿在同一个目录。功能、入口、协议都没动，换的是外观、动效和手机上的交互。**下面和前面各节冲突的地方，以这一节为准**（末尾有清单）。
 
-- **样式文件和顺序**（`main.tsx` 里的 import 顺序就是层叠顺序，同选择器后写的生效）：`styles.css`（开头 `@import './tokens.css'`）→ `styles/chat.css`（消息、步骤行、回合、代码块、改动卡）→ `composer.css`（输入框、发送键、流光、状态页签）→ `floating.css`（菜单、分段控件、toast、审批卡、右侧面板开合）→ `extras.css`（排队卡、终端按键条）→ `review-phone.css` → `phone.css`（手机：头部、输入卡、审批卡、点击区、安全区）→ `phone-sheet.css`（底部抽屉、侧栏抽屉）→ `phone-menus.css`（操作单）→ `corners.css`（超椭圆圆角）。`styles.css` 里被后面几份整条盖掉的旧规则还在；改某个面的样子先看后面那份。导出对话（`model/export.ts`）内联的是 tokens + styles + chat + composer + floating。
+- **样式文件和顺序**（`main.tsx` 里的 import 顺序就是层叠顺序，同选择器后写的生效）：`styles.css`（开头 `@import './tokens.css'`）→ `styles/chat.css`（消息、步骤行、回合、代码块、改动卡）→ `composer.css`（输入框、发送键、流光、状态页签）→ `floating.css`（菜单、分段控件、toast、审批卡、右侧面板开合）→ `extras.css`（排队卡、终端按键条）→ `scroll-fade.css`（滚动边缘渐隐，见文末「质感」）→ `review-phone.css` → `phone.css`（手机：头部、输入卡、审批卡、点击区、安全区）→ `phone-sheet.css`（底部抽屉、侧栏抽屉）→ `phone-menus.css`（操作单）→ `corners.css`（超椭圆圆角）。`styles.css` 里被后面几份整条盖掉的旧规则还在；改某个面的样子先看后面那份。导出对话（`model/export.ts`）内联的是 tokens + styles + chat + composer + floating。
 - **令牌**（`web/src/tokens.css`）：浅色暖纸（`--bg #fefdfc`、外壳底 `--bg-1 #f7f6f2`）、深色暖黑（`#1b1a18` / `#12110f`），强调色亮橙。**`--accent` 只做填充**（它在白底上只有 2.7:1），当文字、图标用 `--accent-text`；加主题要写 `--accent-text` 和 `--accent-fg`，`ui/contrast.test.ts` 会查。圆角 `--r-xs 4 · sm 6 · row 8 · md 10 · lg 12 · xl 16 · bubble 20 · 2xl 24 · pill`，外壳 `--shell-gap`（8，紧凑密度 4）和 `--r-card`。**阴影令牌自带 1px 的环**（`--elev-1/2/3`、`--elev-composer`）：浮起来的东西不再写 border。时长 `--dur-instant 80 · fast 120 · base 180 · slow 240 · slower 320 · page 480`，缓动 `--ease-out / in-out / in / sheet / pop`。淡底色 `--fill-subtle`（无描边的输入框、垫在卡片上的容器）。字号是整数的一套（`--fs-micro 11 … --fs-display 31`），中文只用 400 / 600 两个字重。
 - **外壳**：侧栏没有底色和边线，直接坐在 `--bg-1` 上；中栏的每个窗格、右侧面板、设置页的内容区、自动化页是圆角卡片，之间留 `--shell-gap`。`PaneLayer` 的 `GAP`、`tab-row.ts` 的 `SHELL_GAP`（8）和 `CAPTION_W`（142，系统按钮三个各 46 + 4）要和样式表一致。手机上没有缝、没有圆角（整屏）。
 - **字体**：Inter Variable、JetBrains Mono Variable 经 fontsource 打进包；中文正文用系统字体；首页问候语和各页标题用 `CW Heading`（思源宋体 600 裁出来的 97 个字，16 KB）。**改了标题文字要重新裁**：字符串清单在 `ui/heading-text.ts` 的 `HEADING_STRINGS`，`npx tsx scripts/subset-heading-font.ts`，`heading-text.test.ts` 会拦住缺字。带用户输入的标题（设置搜索）不用标题字。许可证在 `web/public/licenses/`。
@@ -40,3 +40,22 @@ spec 和实施记录：`docs/superpowers/specs/2026-10-10-ui-refresh/design.md`�
   - 手机：「会话头只有 ☰ · 标题 · ···」→ 还有 `+N −M`；「抽屉 78vh、没有拖动条、不能拖」→ 两档、有把手、能拖；「侧栏抽屉 84vw / 320」→ 86vw / 380；「工具行点开就是原地展开」→ 进抽屉；「断线是一条 24px 的细条」→ 手机上是琥珀色小胶囊；「手机上右侧面板的菜单是锚定菜单」→ 操作单。
   - 设置里的 `.sp-seg` 是 `Segmented`（根元素类名 `segmented sp-seg`）；`[data-id="pair-switch"]` 现在是包在它外面的一层。
   - 终端面板的根元素是 `.term-wrap`，xterm 挂在里面的 `.term` 上。
+
+## 质感（2026-10-16）
+
+spec `docs/superpowers/specs/2026-10-16-texture-design.md`，计划 `docs/superpowers/plans/2026-10-16-texture.md`。参考了 open-claude-ui（MIT，手写的近似实现，不是官方代码）的观感，按我们自己的令牌重写；颜色原语一个没动。
+
+- **发丝边**：`--hairline` 是 1px，`@media (resolution >= 2x)` 下 0.5px，同时 `--e-k: 1.4` 把三条 `--edge-*` 的强度乘上去（细了一半，淡了就看不见）。样式里画线一律 `var(--hairline) solid var(--edge-…)` / `0 0 0 var(--hairline) var(--edge-…)`；`texture.test.ts` 拦 `1px solid var(--edge-` 和 `0 0 0 1px var(--edge-`。手机壳 `shell/` 不吃 tokens.css，不受这条约束。Windows 150% 缩放不是 2x，仍是 1px。
+- **环**：`--elev-*` 的第一段是 `--ring-1`（贴着外壳的卡片）/ `--ring-2`（浮起来的）。浅色（light、paper）是外环；暗色（默认、dracula、nord、tokyo-night）是 `inset` 白色内高光 + 黑色外环，写在 `:root:not([data-theme='light']):not([data-theme='paper'])` 里——**新加浅色主题要加进这个排除列表**。`--elev-2/3` 多了一层短的接触阴影。
+- **弹簧**：`--spring-bouncy`（开关、分段滑块、发送键图标）/ `--spring-snappy`（菜单、`.ctx-card`、toast、审批卡进场、步骤 pop）/ `--spring-gentle`（右侧面板滑入、手机抽屉和操作单落位），各带 `-dur`。由 `web/src/ui/springs.ts`（阻尼振子解析解）生成 `linear()`，`npx tsx scripts/gen-springs.ts` 写进 tokens.css 的 `springs:begin/end` 标记区，`--check` / `springs.test.ts` 拦手改或过期；不支持 `linear()` 时是 cubic-bezier 退路。落定阈值 1%（0.2% 时要 400–540ms，尾巴看不出来但菜单还在缩放，ui-smoke 量位置会量到半路）。退场动画没换：`Dock.tsx` 按名字等 `fl-rp-out`。`--ease-pop` 现在是 `--spring-snappy` 的别名。
+- **按下**：`--press: scale(0.98)`，`.btn` / `.icon-btn` / `.chip.starter` / 代码块按钮 / 消息操作 / 输入框（`--cmp-press`）都用它。后台的大卡片 `bg-card` 仍是 0.985。
+- **滚动渐隐** `styles/scroll-fade.css`：scroll-driven animation 在元素自己的滚动时间线上把注册属性 `--sf-t / --sf-b` 在 0 和 `--fade` 之间动，`mask-image` 读它们（顶 / 底各 7 个缓出停点）。不能滚时时间线不活动 → 都是 0 → 不渐隐。坑：
+  - 选择器列表必须是 `:where(…)`：`:is()` 取最高的那项（`.cmdk .list`）的权重，后面的 `.chat { --fade: 16px }` 和 `.welcome` 的组合动画会被它盖掉（写成 `:is` 时首页的 `fadein` 就没了）。
+  - 元素本来有 `animation` 的要把它和 `sf-top / sf-bottom` 写在一起（`.welcome` 那样，`animation-timeline: auto, scroll(self), scroll(self)`）；`.menu` 一族有 `fl-menu-in`，没套。
+  - 「减少动画」的 `animation-duration: 0.01ms !important` 对滚动时间线无害（时长按比例换算），渐隐照常。
+  - 遮罩会把滚动条两端也淡掉，接受。
+- **暗色字重**：`fonts.css` 的 `'Inter Dark'` 是同一份 Inter 文件声明两段字重（350–380、501–900），暗色主题的 `--font` 把它排在 `'Inter Variable'` 前面。请求 400 → 400–500 里没有面 → 往下取 350–380 夹到 380；600 → 501–900。中文落到雅黑等 CJK 字体时请求的还是 400，不会掉到 Light。**所以样式里别写 `font-weight: 500`**（暗色下会变成 380），`texture.test.ts` 拦。URL 写的是 `../../node_modules/@fontsource-variable/inter/files/…`，构建后和 fontsource 自己那份是同一个哈希文件，不多一份。导出的对话没有这份字体，`--font` 的下一项接上。
+- **圆角**：`--r-bubble` 18（用户气泡、toast，36px 高的 toast 仍是整圆）；新 `--r-composer` 20（输入框外框）；`--r-2xl` 24 留给审批卡、对话框、抽屉顶边。
+- **行内图标**：`:where(svg) { vertical-align: -0.125em }`，零权重，flex 行不受影响，任何已有规则都赢它。
+- `texture.test.ts` 还会用 postcss 解析每一份样式表：tokens.css 里一行跑出注释外的字只有构建才报，单元测试不拦，这次就是这么漏的。
+- **验证 2x**：Electron 离屏窗口不认 `force-device-scale-factor`；用两倍大小的窗口 + `webContents.setZoomFactor(2)` 能让 `devicePixelRatio` 和 `resolution` 媒体查询都变成 2x，但 Windows 会把窗口夹到屏幕大小，布局会挤——只看线和渐隐，别看布局。
