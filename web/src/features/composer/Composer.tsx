@@ -44,6 +44,7 @@ import { showGoals } from '@/features/workbench/right-panel';
 import { ComposerBar } from './ComposerBar';
 import { PlusMenu } from './PlusMenu';
 import { PermissionChip } from './PermissionChip';
+import { nextPermissionMode } from '@/ui/terms';
 import { BranchChip, ProjectChip } from './ProjectChip';
 import { ContextMeter } from './ContextMeter';
 import { BAR_ID } from './ids';
@@ -115,6 +116,8 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   const pane = usePaneCtx();
   const [upload, setUpload] = useState<{ done: number; total: number; name: string } | null>(null);
   const [palIdx, setPalIdx] = useState(0);
+  // Shift+Tab in the empty box: the next permission mode (like the CLI) — set by whichever chip is drawn below
+  const permCycle = useRef<(() => void) | null>(null);
   // a session on another machine: uploaded files land on THIS machine's disk, the remote agent can't read
   // their paths — images (sent inline) and pasted text still work
   const remote = !welcome && !!active && !!parsePeerId(active.sessionId);
@@ -571,6 +574,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
       if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); takeSuggestion(); return; }
       if (e.key === 'Escape') { e.preventDefault(); setDismissed(suggestion); return; }
     }
+    if (e.key === 'Tab' && e.shiftKey && !text && !imeComposing(e.nativeEvent) && permCycle.current) { e.preventDefault(); permCycle.current(); return; }
     if (atOpen && atFiles.length && !imeComposing(e.nativeEvent)) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setAtIdx((i) => (i + 1) % atFiles.length); return; }
       if (e.key === 'ArrowUp') { e.preventDefault(); setAtIdx((i) => (i - 1 + atFiles.length) % atFiles.length); return; }
@@ -816,6 +820,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
         ultracode={wUltracode ? { on: wUltra, onChange: setWUltra } : undefined}
       />
     );
+    permCycle.current = () => { modeTouched.current = true; setWMode(nextPermissionMode(wMode)); };
     permission = <PermissionChip mode={wMode} compact={mobile} onPick={(m) => { modeTouched.current = true; setWMode(m); }} />;
   } else if (liveOk) {
     const ultraOk = info.supportsUltracode !== false && !!CATALOG[liveAgent]?.supportsUltracode;
@@ -853,6 +858,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
         ultracode={ultraOk ? { on: !!info.ultracode, onChange: setUltracode } : undefined}
       />
     );
+    permCycle.current = () => setMode(nextPermissionMode(info.permissionMode ?? 'default'));
     permission = <PermissionChip mode={info.permissionMode ?? 'default'} compact={mobile} onPick={setMode} />;
   } else if (active && !disabled && active.state !== 'starting') {
     // not running (history, reaped, crashed — every conversation after a restart): the chips show what the next
@@ -894,6 +900,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
         ultracode={rUltraOk ? { on: v.ultracode, onChange: (on) => setResume(sid, { ultracode: on }) } : undefined}
       />
     );
+    permCycle.current = () => setResume(sid, { permissionMode: nextPermissionMode(v.permissionMode) });
     permission = <PermissionChip mode={v.permissionMode} compact={mobile} onPick={(m) => setResume(sid, { permissionMode: m })} />;
     status = <span className="cb-status opt" title={tr('对话没在运行，发送后按这里选的模型和权限继续')}>{tr('发送后继续')}</span>;
   } else if (active) {

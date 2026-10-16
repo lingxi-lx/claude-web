@@ -63,6 +63,13 @@ export function runCommand(id: string): boolean {
       if (sid && st.open[sid]) openSideChat(sid);
       return true;
     }
+    case 'menu.model': case 'menu.effort': {
+      // the chip of the input box in the focused pane (or the only one: the new-conversation page, a phone)
+      const sel = id === 'menu.model' ? '.composer .mm-anchor:not(.sub-anchor) > button.chip' : '.composer .depth-chip';
+      const el = document.querySelector<HTMLButtonElement>(`.pane.focused ${sel}`) ?? document.querySelector<HTMLButtonElement>(sel);
+      if (el && !el.disabled) el.click();
+      return true;
+    }
     case 'view.cycle': {
       const next = nextViewMode(normViewMode(st.settings['ui.viewMode']));
       st.setSetting('ui.viewMode', next);

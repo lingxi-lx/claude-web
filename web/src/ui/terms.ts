@@ -38,6 +38,11 @@ export const PERMISSION_MODES: Record<PermissionMode, ModeTerm> = {
   bypassPermissions: { label: tr('完全放开'), desc: tr('什么都不问直接执行。只在可以随便弄坏的环境里用'), danger: true },
 };
 export const PERMISSION_MODE_ORDER = Object.keys(PERMISSION_MODES) as PermissionMode[];
+/** Shift+Tab's next mode: round the safe ones (a dangerous mode is only ever picked from the menu). */
+export function nextPermissionMode(mode: PermissionMode): PermissionMode {
+  const safe = PERMISSION_MODE_ORDER.filter((m) => !PERMISSION_MODES[m].danger);
+  return safe[(safe.indexOf(mode) + 1) % safe.length] ?? 'default';
+}
 /** Short label per mode (chips, selects). */
 export const MODE_LABEL = Object.fromEntries(PERMISSION_MODE_ORDER.map((m) => [m, PERMISSION_MODES[m].label])) as Record<PermissionMode, string>;
 

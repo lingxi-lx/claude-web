@@ -39,4 +39,11 @@ describe('matchBrowserKey', () => {
     expect(matchBrowserKey(ev({ key: 'ö', code: 'Semicolon', ctrlKey: true }))).toBe('side');
     expect(matchBrowserKey(ev({ key: ';', code: 'Semicolon', ctrlKey: true, shiftKey: true }))).toBeNull();
   });
+
+  it('the menus of the input box: Alt+M model (Ctrl+Shift+I is the developer tools), Ctrl+Shift+E thinking strength', () => {
+    expect(matchBrowserKey(ev({ key: 'm', code: 'KeyM', altKey: true }))).toBe('menu.model');
+    expect(matchBrowserKey(ev({ key: 'µ', code: 'KeyM', altKey: true }))).toBe('menu.model'); // macOS Option+M
+    expect(matchBrowserKey(ev({ key: 'E', code: 'KeyE', ctrlKey: true, shiftKey: true }))).toBe('menu.effort');
+    expect(matchBrowserKey(ev({ key: 'I', code: 'KeyI', ctrlKey: true, shiftKey: true }))).toBeNull();
+  });
 });
