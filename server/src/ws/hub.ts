@@ -6,6 +6,7 @@ import { RunnerPool } from '../runtime/pool.js';
 import { SessionRunner, setPromptSuggestions } from '../runtime/session-runner.js';
 import { setSessionsMcpEnabled } from '../sessions-mcp/tools.js';
 import { listProjectFiles, rankFiles } from '../files/find.js';
+import { copyWorktreeIncludes } from '../git/worktree-include.js';
 import type { LocalEnvStore } from '../runtime/local-env.js';
 import { cacheParentFor } from '../runtime/cache-key.js';
 import { SessionService } from '../sessions/service.js';
@@ -352,6 +353,23 @@ export class Hub {
             params = { ...params, agent: r.agent, cwd: params.cwd || r.cwd, fork: false, resumeAt: undefined };
           }
         }
+        // worktree 位置 / 分支前缀 (spec 2026-10-16 sessions-env §4): Claude Code's --worktree always makes
+        // <repo>/.claude/worktrees/<name> on worktree-<name>. With either setting the worktree is made here instead (and
+        // .worktreeinclude copied, which the CLI does for its own), then the conversation starts in it, listed under the repo
+        let worktreeRoot: string | undefined;
+        if (params.worktree && !params.sessionId && (params.agent ?? 'claude') === 'claude') {
+          const set = s.meta.settings();
+          const where = typeof set['worktree.dir'] === 'string' ? set['worktree.dir'].trim() : '';
+          const prefix = typeof set['worktree.prefix'] === 'string' ? set['worktree.prefix'].trim() : '';
+          const root = where || prefix ? await s.git.root(params.cwd) : null;
+          if (root) {
+            const name = params.worktree;
+            const wt = await s.git.worktreeAdd(root, name, { branch: `${prefix || 'worktree-'}${name}`, dir: where ? path.join(where, `${path.basename(root)}-${name}`) : undefined });
+            await copyWorktreeIncludes(root, wt.path);
+            params = { ...params, cwd: wt.path, worktree: undefined };
+            worktreeRoot = root;
+          }
+        }
         // an explicitly chosen profile must fit the agent / engine (welcome page, schedules, IM, orchestration all land here)
         const unfitOpen = s.providers.fitError(req.params.providerId, params.agent ?? 'claude');
         if (unfitOpen) throw new Error(unfitOpen);
@@ -362,7 +380,11 @@ export class Hub {
         // the conversation's lock (openOnProvider)
         const nameOf = (id: string) => (normProvider(id) ? s.providers.forSession(id)?.name ?? id : tr('Claude 账号'));
         return openOnProvider({ pool: s.pool, meta: s.meta, canonical: s.canonical }, params, nameOf, {
-          open: (p) => this.openSession(p),
+          open: async (p) => {
+            const r = await this.openSession(p);
+            if (worktreeRoot) { await s.meta.setSessionMeta(r.sessionId, { groupCwd: worktreeRoot }); s.sessions.emit('changed'); }
+            return r;
+          },
           // running on another provider: the same as session.setProvider (re-review m-3)
           swapped: (r) => ({ ...r, pending: this.pendingOf(r.sessionId) }),
           onRecorded: () => s.sessions.emit('changed'),

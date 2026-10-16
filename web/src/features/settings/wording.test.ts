@@ -401,6 +401,9 @@ describe('the whole interface: 对话 not 会话, no implementation words by def
     ['features/sidebar/entries.ts', 'worktree', 'an entry id (PROJECT_MENU)'],
     ['features/sidebar/entries.ts', 'project:worktree', 'an entry id (LEGACY)'],
     ['features/workbench/GitView.tsx', 'worktrees', 'the sub-tab state of the Git view'],
+    ['features/settings/SettingsModal.tsx', '.claude/worktrees/', 'the placeholder: Claude Code’s default folder, a path'],
+    ['features/settings/catalog.ts', '.worktreeinclude', 'a file name (Claude Code reads it)'],
+    ['features/settings/SettingsModal.tsx', 'worktree-', 'the placeholder: Claude Code’s default branch prefix, a value'],
   ];
   it('says worktree only as 「独立副本（worktree）」 on the default screens', () => {
     const bad: string[] = [];

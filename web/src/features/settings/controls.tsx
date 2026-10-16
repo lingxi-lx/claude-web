@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useStore } from '@/store';
 import { clsx } from '@/util';
 import { Segmented } from '@/ui/Segmented';
+import { imeComposing } from '@/ui/ime';
 
 // The controls of one settings row (a meta.json key through `settings.set`) and the row itself: 标题 + 一句后果 +
 // 右侧控件 (spec §5.7). Every row of the settings window uses these; section components may use `Row` too.
@@ -20,6 +21,21 @@ export function Select({ k, def, options, label }: { k: string; def: string; opt
     <select className="field" aria-label={label} value={String(v ?? def)} onChange={(e) => void set(k, e.target.value)}>
       {options.map((o) => <option key={o.id} value={o.id}>{o.l}</option>)}
     </select>
+  );
+}
+
+/** A line of text, saved when it loses focus or on Enter ('' = not set). */
+export function TextSetting({ k, label, placeholder, mono }: { k: string; label?: string; placeholder?: string; mono?: boolean }) {
+  const v = useStore((s) => s.settings[k]);
+  const set = useStore((s) => s.setSetting);
+  const saved = typeof v === 'string' ? v : '';
+  const [text, setText] = useState(saved);
+  useEffect(() => setText(saved), [saved]);
+  const commit = () => { const t = text.trim(); if (t !== saved) void set(k, t || undefined); };
+  return (
+    <input className={clsx('field', mono && 'mono')} aria-label={label} placeholder={placeholder} value={text} spellCheck={false}
+      onChange={(e) => setText(e.target.value)} onBlur={commit}
+      onKeyDown={(e) => { if (e.key === 'Enter' && !imeComposing(e.nativeEvent)) { e.preventDefault(); commit(); } }} />
   );
 }
 
