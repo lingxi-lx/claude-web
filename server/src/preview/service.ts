@@ -89,7 +89,7 @@ export class PreviewService {
     const sp = resolveSpawn(cmd, args);
     const cwd = c.cwd ? path.resolve(root, c.cwd) : root;
     const rel = path.relative(path.resolve(root), cwd);
-    if (rel.startsWith('..') || path.isAbsolute(rel)) throw new Error(`"${c.name}": cwd must be inside the project (${c.cwd})`);
+    if (rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) throw new Error(`"${c.name}": cwd must be inside the project (${c.cwd})`);
     const child = spawn(sp.command, sp.args, {
       cwd,
       // an npm-style .cmd runs through cmd.exe with the quoting resolveSpawn made: Node must not escape it again

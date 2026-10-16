@@ -295,8 +295,10 @@ export class Hub {
       // right after a turn the CLI is still writing its last answer (~2 s after the result): a copy taken now lost it
       const src = s.pool.get(params.sessionId);
       if (src instanceof SessionRunner) await src.flushed();
+      // 只聊天 carries over: the copy gets a new id the pool has no record for (it records it once opened)
+      const chatOnly = !!s.meta.sessionMeta(params.sessionId).chatOnly;
       const newId = await s.sessions.fork(params.sessionId, params.resumeAt);
-      params = { ...params, sessionId: newId, fork: false, resumeAt: undefined };
+      params = { ...params, sessionId: newId, fork: false, resumeAt: undefined, ...(chatOnly ? { features: { ...params.features, chatOnly: true } } : {}) };
     }
     const before = params.sessionId ? s.pool.get(params.sessionId) : undefined;
     const r = s.pool.open(params);

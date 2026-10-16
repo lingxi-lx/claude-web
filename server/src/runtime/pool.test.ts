@@ -245,6 +245,12 @@ describe('RunnerPool: 只聊天 stays without tools, whoever reopens it', () => 
     f.emit('info', { sessionId: 'forked' });
     expect(writes[1]).toEqual(['forked', { chatOnly: true }]);
   });
+  it('a non-Claude agent is never started on it (none has a mode without tools)', () => {
+    const { p } = setup({ chat: { chatOnly: true } });
+    (p as any).agents = { launch: () => { throw new Error('launched'); } };
+    (p as any).transcripts = {};
+    expect(() => p.open({ sessionId: 'chat', cwd: 'C:/x', agent: 'codex' } as any)).toThrow(/只聊天/);
+  });
 });
 
 describe('RunnerPool: the provider when the caller does not name one (IM, schedules, goals, hand-overs)', () => {

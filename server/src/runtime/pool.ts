@@ -11,6 +11,7 @@ import { CodexDriver } from '../agents/codex-driver.js';
 import { proxy } from '../net/proxy.js';
 import { withExplanation } from '../errors/explain.js';
 import { SUBAGENT_DEFAULTS, providerKey, subagentModelFor } from '../models/subagent.js';
+import { tr } from '../i18n/index.js';
 
 const MODES: readonly PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk', 'auto'];
 /** A permission mode, or undefined for anything else (a stored setting is not trusted to be one). */
@@ -111,6 +112,8 @@ export class RunnerPool extends EventEmitter {
       this.ttl.set(r, idleTtlFor(sp));
     }
     else {
+      // 只聊天 is Claude's alone (`tools: []`): no other agent has a mode without its files and commands
+      if (chatOnly) throw new Error(tr('只聊天的对话不能换成其它 agent：它们没有不带工具的模式'));
       const l = this.agents.launch(kind);
       // on a provider the id is fixed before the process starts: the cache shim's route (and ledger rows) carry it.
       // The drivers resume only a session whose transcript already names a native thread, so this is still new.
