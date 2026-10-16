@@ -11,6 +11,7 @@ import { cleanUserAgent } from './user-agent';
 import os from 'node:os';
 import { ZOOM_STEPS, cleanZoom, fitWindow, minWindow, nextZoom, scaleCaption, trafficLightY, zoomAsk, zoomLimit, type ZoomAsk } from './zoom';
 import { getLocale, initLanguage, tr } from './i18n.js';
+import { SCHEME, linkFromArgv, parseDeepLink, type DeepLink } from './deep-link';
 
 const isMac = process.platform === 'darwin';
 
@@ -82,8 +83,28 @@ const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => showWindow());
+  app.on('second-instance', (_e, argv) => { showWindow(wins.get('main') ?? focusedWin()); const l = linkFromArgv(argv); if (l) takeLink(l); });
 }
+
+// ---------- 深链接 (deep-link.ts) ----------
+// The page asks for the waiting link when it is ready (desktop:deepLink:take) and on every nudge after that — a link
+// can arrive before the server is up or the page has loaded, and must not be lost or opened twice.
+let pendingLink: DeepLink | null = null;
+function takeLink(raw: string, nudge = true) {
+  const link = parseDeepLink(raw, (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } });
+  if (!link) return;
+  pendingLink = link;
+  if (!nudge) return;
+  const m = wins.get('main');
+  if (m && !m.isDestroyed()) { showWindow(m); m.webContents.send('desktop:deepLink'); }
+}
+// only the installed app claims the scheme: a dev run (`electron desktop/dist/main.js`) would point the system's
+// claude-web:// links at itself and take them from the installed one
+if (app.isPackaged) app.setAsDefaultProtocolClient(SCHEME);
+// macOS hands links over as an event (also the one that launched the app, before ready)
+app.on('open-url', (e, url) => { e.preventDefault(); takeLink(url); });
+// the link that started the app: kept until the page takes it (no window exists yet)
+{ const l = linkFromArgv(process.argv); if (l) takeLink(l, false); }
 
 function iconPath() {
   const p = app.isPackaged ? path.join(process.resourcesPath, 'icon.png') : path.resolve(__dirname, '../build/icon.png');
@@ -534,6 +555,12 @@ ipcMain.handle('desktop:pickDir', async (e) => {
   const w = BrowserWindow.fromWebContents(e.sender) ?? focusedWin();
   const r = await dialog.showOpenDialog(w!, { properties: ['openDirectory', 'createDirectory'], title: tr('选择工作目录') });
   return r.canceled ? null : r.filePaths[0];
+});
+ipcMain.handle('desktop:deepLink:take', (e) => {
+  if (BrowserWindow.fromWebContents(e.sender) !== wins.get('main')) return null;
+  const l = pendingLink;
+  pendingLink = null;
+  return l;
 });
 ipcMain.handle('desktop:openPath', (_e, p: string) => shell.openPath(p));
 ipcMain.handle('desktop:openExternal', (_e, url: string) => shell.openExternal(url));

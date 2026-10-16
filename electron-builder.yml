@@ -48,6 +48,11 @@ asarUnpack:
   # WebRTC (phone reaches the PC from anywhere): the JS package plus its per-platform prebuilt .node
   - "**/node_modules/node-datachannel/**"
   - "**/node_modules/@node-datachannel/**"
+# 深链接 (claude-web://new?folder=…&q=…): Windows registers it in the installer, macOS in Info.plist
+protocols:
+  - name: Claude Web
+    schemes:
+      - claude-web
 extraResources:
   - from: desktop/build/icon.png
     to: icon.png

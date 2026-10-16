@@ -14,6 +14,9 @@ export interface DesktopBridge {
   setLoginItem(on: boolean): Promise<void>;
   onCommand(cb: (id: string) => void): () => void;
   onFocusSession(cb: (sessionId: string) => void): () => void;
+  /** 深链接 (claude-web://): a nudge that one is waiting, and taking it (null when there is none / not the main window) */
+  onDeepLink?(cb: () => void): () => void;
+  takeDeepLink?(): Promise<{ kind: 'new'; folder?: string; q?: string; peer?: string } | { kind: 'session'; id: string } | null>;
   // multi-window (phase 2); optional so an older preload still type-checks
   windowId?: string;
   newWindow?(): Promise<string>;

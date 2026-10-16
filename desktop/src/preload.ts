@@ -22,6 +22,9 @@ contextBridge.exposeInMainWorld('desktop', {
   setLoginItem: (on: boolean) => ipcRenderer.invoke('desktop:loginItem:set', on),
   onCommand: on('desktop:command'),
   onFocusSession: on('desktop:focusSession'),
+  // 深链接: a nudge that a claude-web:// link is waiting; take it (once) when ready
+  onDeepLink: on('desktop:deepLink'),
+  takeDeepLink: () => ipcRenderer.invoke('desktop:deepLink:take'),
   windowId: process.argv.find((a) => a.startsWith('--cw-win='))?.slice(9) ?? 'main',
   newWindow: () => ipcRenderer.invoke('desktop:window:new'),
   focusWindow: (id: string) => ipcRenderer.invoke('desktop:window:focus', id),

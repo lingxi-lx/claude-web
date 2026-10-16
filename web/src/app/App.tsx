@@ -46,6 +46,7 @@ import { tr } from '@/i18n';
 import { CustomCss } from './custom-css';
 import { AddAccountHost } from '@/features/settings/ClaudeAccounts';
 import { FileMenu } from '@/features/files/FileMenu';
+import { fillComposer } from '@/features/composer/fill';
 
 /** Width of the right panel minimized to its icon rail. */
 const MIN_RAIL = 36;
@@ -235,7 +236,18 @@ export function App() {
       else if (!desktop?.windowId || desktop.windowId === 'main') (st.open[sessionId] ? st.setActive(sessionId) : void st.loadHistory(sessionId));
       else claimSession(sessionId);
     });
-    return () => { offCmd(); offFocus(); };
+    // 深链接: claude-web://new?folder=…&q=… fills the new-conversation page (never sends); …/session/<id> opens one
+    const takeLink = async () => {
+      const l = await desktop?.takeDeepLink?.().catch(() => null);
+      if (!l) return;
+      const st = useStore.getState();
+      if (l.kind === 'session') { if (st.open[l.id]) st.setActive(l.id); else void st.loadHistory(l.id); return; }
+      runCommand('new');
+      requestAnimationFrame(() => fillComposer({ cwd: l.folder, text: l.q, focus: true }));
+    };
+    const offLink = desktop.onDeepLink?.(() => void takeLink());
+    void takeLink();
+    return () => { offCmd(); offFocus(); offLink?.(); };
   }, []);
 
   useEffect(() => {
