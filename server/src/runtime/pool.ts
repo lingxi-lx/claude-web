@@ -85,6 +85,10 @@ export class RunnerPool extends EventEmitter {
       const mode = recorded ?? asMode(this.providers.meta.settings()['ui.defaultMode']);
       if (mode) params = { ...params, permissionMode: mode };
     }
+    // 只聊天 is the conversation's, whoever reopens it (a window, another conversation's message, IM, goals, schedules,
+    // a provider switch) and its forks: without tools it started, without tools it stays — no caller can drop it
+    const chatOnly = !!params.features?.chatOnly || !!(params.sessionId && this.providers.meta?.sessionMeta(params.sessionId).chatOnly);
+    if (chatOnly && !params.features?.chatOnly) params = { ...params, features: { ...params.features, chatOnly: true } };
     let r: AgentDriver;
     if (kind === 'claude' || !this.agents || !this.transcripts) {
       // a fork routes its prompt cache under its root's key; every reopen (goals, IM, schedules, hot switch) keeps it
@@ -139,6 +143,10 @@ export class RunnerPool extends EventEmitter {
     this.runners.set(r.id, r);
     // a fork runs under a made-up id until the CLI gives it its own at init: nothing is recorded under that one
     const placeholder = params.sessionId && (params.fork || params.resumeAt) ? r.id : undefined;
+    const keepChatOnly = (id: string | undefined) => {
+      if (chatOnly && meta && id && id !== placeholder && !meta.sessionMeta(id).chatOnly) void meta.setSessionMeta(id, { chatOnly: true }).catch(() => { /* in memory; the next save persists it */ });
+    };
+    keepChatOnly(r.sessionId);
     r.on('message', (m) => this.emit('message', r.sessionId, m));
     // the user message a send accepted, from whichever window, IM, schedule or goal sent it (AgentDriver 'sent'). Its
     // own event, not 'message': the canonical mirror records sends itself, the ledger / IM / goals read the agent's stream
@@ -158,6 +166,8 @@ export class RunnerPool extends EventEmitter {
         this.runners.delete(r.id);
         this.runners.set(i.sessionId, r);
       }
+      // a fork gets its own id here: it is as tool-less as its parent
+      keepChatOnly(i.sessionId);
       // the mode it runs in now (picked in a window, or the CLI's own move out of plan mode) is what it comes back in
       const mode = asMode(i.permissionMode);
       if (mode && meta && i.sessionId && i.sessionId !== placeholder && meta.sessionMeta(i.sessionId).permissionMode !== mode) {

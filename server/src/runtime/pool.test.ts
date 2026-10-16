@@ -222,6 +222,31 @@ describe('RunnerPool: the permission mode a conversation comes back in', () => {
   });
 });
 
+describe('RunnerPool: 只聊天 stays without tools, whoever reopens it', () => {
+  const setup = (recorded: Record<string, any>) => {
+    const writes: [string, any][] = [];
+    const meta = { sessionMeta: (id: string) => recorded[id] ?? {}, settings: () => ({}), setSessionMeta: async (id: string, patch: any) => { writes.push([id, patch]); recorded[id] = { ...recorded[id], ...patch }; } };
+    return { p: new RunnerPool({ forSession: () => undefined, meta } as any), writes };
+  };
+  it('a reopen that does not say (another conversation’s message, IM, goals, schedules) gets it from the record', () => {
+    const { p } = setup({ chat: { chatOnly: true } });
+    expect((p.open({ sessionId: 'chat', cwd: 'C:/x', features: { web: true } }) as any).params.features).toEqual({ web: true, chatOnly: true });
+    expect((p.open({ sessionId: 'chat', cwd: 'C:/x', features: { chatOnly: false } }) as any).params.features.chatOnly).toBe(true);
+    expect((p.open({ sessionId: 'other', cwd: 'C:/x' }) as any).params.features?.chatOnly).toBeUndefined();
+  });
+  it('recorded for a new one at once, for a fork under the id the CLI gives it — and a fork of one is one too', () => {
+    const { p, writes } = setup({ src: { chatOnly: true } });
+    const n: any = p.open({ cwd: 'C:/x', features: { chatOnly: true } });
+    expect(writes).toEqual([[n.sessionId, { chatOnly: true }]]);
+    const f: any = p.open({ sessionId: 'src', cwd: 'C:/x', fork: true });
+    expect(f.params.features.chatOnly).toBe(true);
+    f.emit('info', { sessionId: f.id });
+    expect(writes).toHaveLength(1);
+    f.emit('info', { sessionId: 'forked' });
+    expect(writes[1]).toEqual(['forked', { chatOnly: true }]);
+  });
+});
+
 describe('RunnerPool: the provider when the caller does not name one (IM, schedules, goals, hand-overs)', () => {
   const setup = (o: { recorded?: Record<string, any>; settings?: Record<string, unknown>; agents?: Record<string, any>; providers?: Record<string, { type: string }> } = {}) => {
     const recorded: Record<string, any> = { ...(o.recorded ?? {}) };

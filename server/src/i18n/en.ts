@@ -313,6 +313,7 @@ export const EN_SERVER: Record<string, string> = {
   "只有本机的桌面窗口才能提供{what}": "Only the desktop window on this computer can provide {what}",
   "只有本机的桌面窗口才能提供内置浏览器": "Only a desktop window on this computer can provide the built-in browser",
   "只有本机的窗口才能改角色": "Only windows on this computer can change characters",
+  "只聊天的对话不能换成其它 agent：它们没有不带工具的模式": "A chat-only conversation cannot switch to another agent: they have no mode without tools",
   "只能删除编排 worktree 目录下的孤儿目录": "Only orphan folders under the orchestration worktree folder can be deleted",
   "只能打开 http / https 网址，不能打开 {protocol}": "Only http / https URLs can be opened, not {protocol}",
   "只能选一个成功完成的候选": "You can only pick a candidate that finished successfully",

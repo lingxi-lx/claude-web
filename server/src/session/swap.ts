@@ -211,6 +211,8 @@ async function swapProviderNow(d: Pick<SwapDeps, 'pool' | 'meta' | 'canonical'>,
 
 /** Different agent: close, spawn the new one on the same session id, hand it a briefing. */
 export function swapAgent(d: SwapDeps, sessionId: string, agent: AgentKind, model: string | undefined, objective?: string): Promise<SwapResult> {
+  // 只聊天 exists for Claude only (`tools: []`): another agent would get its files and commands back
+  if (agent !== 'claude' && d.meta.sessionMeta(sessionId).chatOnly) return Promise.reject(new Error(tr('只聊天的对话不能换成其它 agent：它们没有不带工具的模式')));
   return withSessionLock(sessionId, () => swapAgentNow(d, sessionId, agent, model, objective));
 }
 async function swapAgentNow(d: SwapDeps, sessionId: string, agent: AgentKind, model: string | undefined, objective?: string): Promise<SwapResult> {
