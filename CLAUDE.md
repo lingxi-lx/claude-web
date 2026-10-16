@@ -85,6 +85,7 @@ npm run dev          # 开发：server tsx watch + vite :5173（代理 /ws 到 3
 | [custom-css](docs/notes/custom-css.md) | 自定义样式 custom.css 与 DOM 钩子（2026-10-15，GitHub issue #2） | custom.css 加载 / 热更新、钩子约定、计划进度条 |
 | [chat-input](docs/notes/chat-input.md) | 对话与输入：旁聊 / 下一句提示 / 查看模式 / @文件 / 快捷键（2026-10-16） | side_question、CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION、ui.viewMode、fs.findFiles、官方快捷键对照、桌面版无麦克风 |
 | [review-pr](docs/notes/review-pr.md) | 审阅与 PR：diff 行评论 / 代码审查卡 / PR 监控条（2026-10-16） | DiffView comments、CLAUDE_CODE_REPORT_FINDINGS 与 ReportFindings、vcs.prForBranch / autoMerge、自动修 CI、自动归档 |
+| [sessions-env](docs/notes/sessions-env.md) | 环境与对话：跨对话工具 / 任务 chip / 选机器 / worktree 设置 / 文件右键 / 本机环境变量 / 深链接（2026-10-16） | sessions MCP（进程内）、ccb 的 ExecuteExtraTool、<cw-from>、新对话选机器、.worktreeinclude、shell.editors、local-env.json、claude-web:// |
 | [zoom](docs/notes/zoom.md) | 界面缩放（2026-10-10 用户要求：台式机分辨率高，界面看着小） | 桌面版页面缩放 |
 | [rail-sections-web](docs/notes/rail-sections-web.md) | 图标栏 / 分区 / 联网（2026-10-10，界面第二轮） | 图标栏、分区页、扩展页、强度按钮、浏览器标签、web MCP |
 | [search-computer](docs/notes/search-computer.md) | 搜索在内置浏览器里 / 网页上的鼠标键盘 / 操控电脑（2026-10-10，用户要求） | 浏览器里搜索、browser_computer、操控电脑（computer MCP） |
