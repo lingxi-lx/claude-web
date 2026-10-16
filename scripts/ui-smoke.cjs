@@ -1134,6 +1134,47 @@ function driver() {
         check('session tile without error boundary', !err, err);
         await shot('session');
 
+        // ---- chat & input (spec 2026-10-16 chat-input): Ctrl+O view mode, 旁聊 from /btw and Ctrl+;, @ file completion
+        phase = 'chat-input';
+        {
+          const ctrlKey = async (k) => { wc.sendInputEvent({ type: 'keyDown', keyCode: k, modifiers: ['control'] }); wc.sendInputEvent({ type: 'keyUp', keyCode: k, modifiers: ['control'] }); await sleep(300); };
+          const vm = () => js("window.__store.getState().settings['ui.viewMode'] ?? 'normal'");
+          const before = await vm();
+          await js('document.activeElement && document.activeElement.blur && document.activeElement.blur()');
+          await ctrlKey('O');
+          const v1 = await vm();
+          await ctrlKey('O');
+          const v2 = await vm();
+          await ctrlKey('O');
+          const v3 = await vm();
+          check('Ctrl+O steps the view mode 普通 → 详细 → 精简 → 普通, and the conversation still renders', before === 'normal' && v1 === 'verbose' && v2 === 'summary' && v3 === 'normal' && !(await noBoundary('.pane.focused')), JSON.stringify({ before, v1, v2, v3 }));
+          if (E.SMOKE_READONLY !== '1') {
+            await click('.pane.focused .composer textarea');
+            wc.insertText('/btw');
+            await sleep(300);
+            await key('Enter');
+            const opened = await waitFor('!!document.querySelector(".pane.focused .side-chat") && document.activeElement === document.querySelector(".side-chat .sc-input textarea")', 4000);
+            const boxEmpty = await js('document.querySelector(".pane.focused .composer textarea").value === ""');
+            await key('Escape');
+            const closed = await waitFor('!document.querySelector(".side-chat")', 3000);
+            check('/btw opens the side chat card over the input box (focus in its own line, the box cleared); Esc closes it', opened && boxEmpty && closed, JSON.stringify({ opened, boxEmpty, closed }));
+            await ctrlKey(';');
+            const viaKey = await waitFor('!!document.querySelector(".pane.focused .side-chat")', 3000);
+            await js('document.querySelector(".side-chat .icon-btn[aria-label]")?.click()');
+            const viaKeyClosed = await waitFor('!document.querySelector(".side-chat")', 3000);
+            check('Ctrl+; opens the side chat too; its × closes it', viaKey && viaKeyClosed, JSON.stringify({ viaKey, viaKeyClosed }));
+            await click('.pane.focused .composer textarea');
+            wc.insertText('@');
+            const atList = await waitFor('document.querySelectorAll(".pane.focused .palette.at-files .it").length > 0', 5000);
+            const atCount = await js('document.querySelectorAll(".pane.focused .palette.at-files .it").length');
+            await key('Tab');
+            const picked = await js('document.querySelector(".pane.focused .composer textarea").value');
+            check('@ lists the project\'s files over the input box; Tab writes the first as @path', atList && /^@\S+ $/.test(picked), JSON.stringify({ atList, atCount, picked }));
+            wc.selectAll(); wc.delete(); await sleep(200);
+            await js(`window.__store.getState().saveDraft(${JSON.stringify(E.SMOKE_SID)}, '')`);
+          }
+        }
+
         // final review §9 #1: a conversation that is not running (every one after a restart) still shows its model and
         // permission chips with 「发送后继续」; a pick there is what the send resumes with. Nothing picked (re-review I-1 /
         // M-2): the chips show what the resume really gets — the default model by name, 每步询问 — and the transcript's
