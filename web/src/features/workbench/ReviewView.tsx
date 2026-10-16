@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { ws } from '@/ws/client';
 import { useScopedSession, useStore } from '@/store';
 import { ago, clsx } from '@/util';
-import type { GitError, GitLogEntry, GitStatus } from '@shared';
+import { parsePeerId, type GitError, type GitLogEntry, type GitStatus } from '@shared';
 import { walkTools } from '@/model/conversation';
 import { DiffView } from '@/features/chat/DiffView';
 import { sessionPeer } from '@/features/peers';
@@ -20,6 +20,11 @@ import { useRightPanel } from './right-panel';
 import { modKey } from './shortcuts';
 import { markChecklist } from '@/features/home/checklist-sync';
 import { tr, dateLocale } from '@/i18n';
+import type { DiffComments } from '@/features/chat/DiffView';
+import { addComment, removeComment, clearComments, sendComments, useReviewComments } from './review-comments';
+import type { LineComment } from './review-comments-model';
+
+const NO_COMMENTS: LineComment[] = [];
 
 /** Diffs fetched up front (for the +N −M on every row); the rest when a file is opened. */
 const EAGER = 8;
@@ -77,17 +82,24 @@ function tagOf(row: ReviewRow, scope: ReviewScope, inRepo: boolean): string | nu
   return null;
 }
 
-function FileBody({ row, diff }: { row: ReviewRow; diff: DiffResult | undefined }) {
+function FileBody({ row, diff, sid }: { row: ReviewRow; diff: DiffResult | undefined; sid?: string }) {
   const p = row.patch;
+  // 行评论: a conversation's own changes only (a commit from history is not something to ask about)
+  const all = useReviewComments((s) => (sid ? s.bySession[sid] : undefined)) ?? NO_COMMENTS;
+  const comments = useMemo<DiffComments | undefined>(() => (sid ? {
+    list: all.filter((c) => c.path === row.rel),
+    onAdd: (c) => addComment(sid, { ...c, path: row.rel }),
+    onRemove: (id) => removeComment(sid, id),
+  } : undefined), [sid, all, row.rel]);
   if (p) {
     if (p.binary) return <div className="rv-note">{tr('二进制文件')}</div>;
     if (!/^@@/m.test(p.text)) return <div className="rv-note">{p.status === 'renamed' ? tr('只改了文件名') : tr('内容没有变化')}</div>;
-    return <DiffView unified={p.text} collapse />;
+    return <DiffView unified={p.text} collapse comments={comments} />;
   }
   if (!diff) return <div className="rv-note">{tr('读取中…')}</div>;
   switch (diff.kind) {
-    case 'diff': return <DiffView unified={diff.text} collapse />;
-    case 'new': return lines(diff.text) > MAX_LINES ? <div className="rv-note">{tr('新文件，共 {lines} 行，太长了不在这里逐行显示', { lines: lines(diff.text) })}</div> : <DiffView oldText="" newText={diff.text} collapse={false} />;
+    case 'diff': return <DiffView unified={diff.text} collapse comments={comments} />;
+    case 'new': return lines(diff.text) > MAX_LINES ? <div className="rv-note">{tr('新文件，共 {lines} 行，太长了不在这里逐行显示', { lines: lines(diff.text) })}</div> : <DiffView oldText="" newText={diff.text} collapse={false} comments={comments} />;
     case 'content': return <><div className="rv-note">{tr('不在 git 仓库里，没有可以对比的版本：这是它现在的内容')}</div><pre className="rv-pre">{diff.text.slice(0, 20000)}</pre></>;
     case 'binary': return <div className="rv-note">{tr('二进制文件')}</div>;
     case 'error': return <div className="rv-note err">{diff.text}</div>;
@@ -114,6 +126,10 @@ function FileBody({ row, diff }: { row: ReviewRow; diff: DiffResult | undefined 
  */
 export function ReviewView({ visible, inPlace, inDock }: { visible: boolean; inPlace?: boolean; inDock?: boolean }) {
   const active = useScopedSession();
+  // diff 行评论: on the conversation's own changes (not on a remote one — its files are on that machine)
+  const commentSid = active && !parsePeerId(active.sessionId) ? active.sessionId : undefined;
+  const pending = useReviewComments((st) => (commentSid ? st.bySession[commentSid] : undefined)) ?? NO_COMMENTS;
+  const handOver = () => { if (commentSid) sendComments(commentSid).catch((e) => useStore.getState().toast(String(e?.message ?? e))); };
   const sessions = useStore((s) => s.sessions);
   const toast = useStore((s) => s.toast);
   const openTile = useStore((s) => s.openTile);
@@ -397,7 +413,16 @@ export function ReviewView({ visible, inPlace, inDock }: { visible: boolean; inP
         {gitMounted && root && <div className="rv-git-body"><GitView cwd={cwd} visible={visible && sub === 'git'} /></div>}
         {gitMounted && !root && <div className="empty">{loaded ? tr('{cwd} 不是 git 仓库。', { cwd }) : tr('读取中…')}</div>}
       </div>
-      <div className="rv-main" hidden={sub !== 'diff'} data-lines={mobile ? lineMode : undefined}>
+      <div className="rv-main" hidden={sub !== 'diff'} data-lines={mobile ? lineMode : undefined} onKeyDown={(e) => { if (commentSid && pending.length && e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !imeComposing(e.nativeEvent)) { e.preventDefault(); handOver(); } }}>
+        {pending.length > 0 && (
+          <div className="rv-comments" role="status">
+            <Icon name="chat" size={13} />
+            <span className="t">{tr('{n} 条评论', { n: pending.length })}</span>
+            <span className="grow" />
+            <button className="btn sm ghost" onClick={() => commentSid && clearComments(commentSid)}>{tr('清空')}</button>
+            <button className="btn sm primary" onClick={handOver} title={tr('把评论整理成一条消息发给 Claude，它会按评论修改')}>{tr('交给 Claude')} <span className="kbd">{modKey}+Enter</span></button>
+          </div>
+        )}
         <div className="rv-bar">
           <button ref={scopeBtn} className={clsx('rv-scope', scopeMenu && 'on')} onClick={toggleScopeMenu} aria-haspopup="menu" aria-expanded={scopeMenu} title={tr('要看哪些改动')}>
             <span className="t">{scopeLabel}</span><Icon name="chevronDown" size={12} />
@@ -485,7 +510,7 @@ export function ReviewView({ visible, inPlace, inDock }: { visible: boolean; inP
                     ))}
                   </div>
                 )}
-                {on && <div className="rv-body"><FileBody row={r} diff={d} /></div>}
+                {on && <div className="rv-body"><FileBody row={r} diff={d} sid={commentSid} /></div>}
               </div>
             );
           })}

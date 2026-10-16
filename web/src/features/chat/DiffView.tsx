@@ -1,9 +1,16 @@
-import { memo, useMemo, useState } from 'react';
+import { Fragment, memo, useMemo, useState, type ReactNode } from 'react';
 import { diffLines, diffWordsWithSpace, parsePatch } from 'diff';
 import { clsx } from '@/util';
 import { useStore } from '@/store';
 import { Icon } from '@/ui/icons';
 import { tr } from '@/i18n';
+import { imeComposing } from '@/ui/ime';
+
+/** A comment on one diff line (审阅 → 交给 Claude, spec 2026-10-16 review-pr §1). `side`: 'old' = a removed line. */
+export interface DiffLineComment { id: string; line: number; side: 'new' | 'old'; code: string; text: string }
+/** Comments on the lines of this diff: given only by the review panel — a click on a line then opens a comment box. */
+export interface DiffComments { list: DiffLineComment[]; onAdd: (c: Omit<DiffLineComment, 'id'>) => void; onRemove: (id: string) => void }
+type At = { line: number; side: 'new' | 'old'; code: string };
 
 export interface Hunk { oldStart: number; oldLines?: number; newStart: number; newLines?: number; lines: string[] }
 
@@ -122,6 +129,7 @@ export interface DiffViewProps {
   /** collapse unchanged context (default true for large inputs) */
   collapse?: boolean;
   title?: string;
+  comments?: DiffComments;
 }
 
 /** Unified / side-by-side diff with line numbers, intra-line word highlights and collapsible context. */
@@ -130,6 +138,32 @@ export const DiffView = memo(function DiffView(p: DiffViewProps) {
   const setSetting = useStore((s) => s.setSetting);
   const mode = p.mode ?? pref ?? 'unified';
   const [opened, setOpened] = useState<Record<string, boolean>>({});
+  const [editing, setEditing] = useState<At | null>(null);
+  const cm = p.comments;
+  const atOf = (r: Row | undefined, side: 'del' | 'add' | 'line'): At | null => {
+    if (!r || (r.type !== 'add' && r.type !== 'del' && r.type !== 'ctx')) return null;
+    const old = r.type === 'del' || (side === 'del' && r.type === 'ctx' && r.newNo === undefined);
+    const line = old ? r.oldNo : r.newNo;
+    return line === undefined ? null : { line, side: old ? 'old' : 'new', code: r.text };
+  };
+  const open = (at: At | null) => { if (cm && at) setEditing(at); };
+  const notes = (at: At | null, span: boolean): ReactNode => {
+    if (!cm || !at) return null;
+    const here = cm.list.filter((c) => c.line === at.line && c.side === at.side);
+    const edit = editing && editing.line === at.line && editing.side === at.side;
+    if (!here.length && !edit) return null;
+    return (
+      <div className={clsx('dl-notes', span && 'span')}>
+        {here.map((c) => (
+          <div key={c.id} className="dl-note">
+            <span className="tx">{c.text}</span>
+            <button className="icon-btn" aria-label={tr('删除这条评论')} onClick={() => cm.onRemove(c.id)}><Icon name="close" size={11} /></button>
+          </div>
+        ))}
+        {edit && <CommentBox onDone={(text) => { if (text.trim()) cm.onAdd({ ...at, text: text.trim() }); setEditing(null); }} />}
+      </div>
+    );
+  };
   const hunks = useMemo(() => toHunks(p), [p.patch, p.oldText, p.newText, p.unified]);
   const rows = useMemo(() => buildRows(hunks, p.collapse ?? true), [hunks, p.collapse]);
   const stats = useMemo(() => {
@@ -182,10 +216,14 @@ export const DiffView = memo(function DiffView(p: DiffViewProps) {
           {pairs.map(({ l, r, key }) => {
             if (l?.type === 'hunk' || l?.type === 'skip') return <SpecialRow key={key} r={l} span onOpen={() => setOpened((o) => ({ ...o, [(l as any).key]: true }))} />;
             return (
-              <div key={key} className="diff-pair">
-                <Cell r={l} side="del" />
-                <Cell r={r} side="add" />
-              </div>
+              <Fragment key={key}>
+                <div className={clsx('diff-pair', cm && 'commentable')}>
+                  <Cell r={l} side="del" onClick={() => open(atOf(l, 'del'))} />
+                  <Cell r={r} side="add" onClick={() => open(atOf(r, 'add'))} />
+                </div>
+                {notes(atOf(l, 'del'), true)}
+                {atOf(r, 'add')?.side === 'new' && (l === r ? null : notes(atOf(r, 'add'), true))}
+              </Fragment>
             );
           })}
         </div>
@@ -199,12 +237,15 @@ export const DiffView = memo(function DiffView(p: DiffViewProps) {
         {flat.map((r, i) => {
           if (r.type === 'hunk' || r.type === 'skip') return <SpecialRow key={i} r={r} onOpen={() => setOpened((o) => ({ ...o, [(r as any).key]: true }))} />;
           return (
-            <div key={i} className={clsx('dl', r.type)}>
-              <span className="ln">{r.oldNo ?? ''}</span>
-              <span className="ln">{r.newNo ?? ''}</span>
-              <span className="mk">{r.type === 'add' ? '+' : r.type === 'del' ? '−' : ' '}</span>
-              <span className="tx"><Segs segs={r.segs} text={r.text} side={r.type === 'add' ? 'add' : 'del'} /></span>
-            </div>
+            <Fragment key={i}>
+              <div className={clsx('dl', r.type, cm && 'commentable')} onClick={() => open(atOf(r, 'line'))} title={cm ? tr('点一下给这一行写评论') : undefined}>
+                <span className="ln">{r.oldNo ?? ''}</span>
+                <span className="ln">{r.newNo ?? ''}</span>
+                <span className="mk">{r.type === 'add' ? '+' : r.type === 'del' ? '−' : ' '}</span>
+                <span className="tx"><Segs segs={r.segs} text={r.text} side={r.type === 'add' ? 'add' : 'del'} /></span>
+              </div>
+              {notes(atOf(r, 'line'), false)}
+            </Fragment>
           );
         })}
       </div>
@@ -218,14 +259,36 @@ function SpecialRow({ r, span, onOpen }: { r: Row; span?: boolean; onOpen: () =>
   return null;
 }
 
-function Cell({ r, side }: { r?: Row; side: 'del' | 'add' }) {
+function Cell({ r, side, onClick }: { r?: Row; side: 'del' | 'add'; onClick?: () => void }) {
   if (!r || r.type === 'hunk' || r.type === 'skip') return <div className="dc empty" />;
   const no = side === 'del' ? r.oldNo : r.newNo;
   const changed = r.type === side;
   return (
-    <div className={clsx('dc', changed && r.type)}>
+    <div className={clsx('dc', changed && r.type)} onClick={onClick}>
       <span className="ln">{no ?? ''}</span>
       <span className="tx"><Segs segs={changed ? r.segs : undefined} text={r.text} side={side} /></span>
+    </div>
+  );
+}
+
+/** The one-line box under a diff line: Enter adds the comment, Esc (or leaving it empty) closes it. */
+function CommentBox({ onDone }: { onDone: (text: string) => void }) {
+  const [v, setV] = useState('');
+  return (
+    <div className="dl-note-edit" onClick={(e) => e.stopPropagation()}>
+      <textarea
+        autoFocus
+        rows={1}
+        value={v}
+        placeholder={tr('写给 Claude 的评论，Enter 添加')}
+        onChange={(e) => setV(e.target.value)}
+        onKeyDown={(e) => {
+          if (imeComposing(e.nativeEvent)) return;
+          if (e.key === 'Enter' && !e.shiftKey && !(e.ctrlKey || e.metaKey)) { e.preventDefault(); onDone(v); }
+          else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onDone(''); }
+        }}
+        onBlur={() => { if (!v.trim()) onDone(''); }}
+      />
     </div>
   );
 }

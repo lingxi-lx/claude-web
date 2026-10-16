@@ -222,3 +222,17 @@ div.code { border: 0; border-radius: var(--r-lg); background-color: var(--surfac
 :root[data-reduce-motion='1'] .sgw .spin { animation: none; }
 :root[data-reduce-motion='1'] :is(.code-btn, .msg-actions button, .fcard-h .btn):active { transform: none; }
 @media (prefers-reduced-motion: reduce) { :is(.code-btn, .msg-actions button, .fcard-h .btn):active { transform: none; } }
+
+/* diff 行评论 (spec 2026-10-16 review-pr §1): only the review panel's diffs take comments */
+.dl.commentable, .diff-pair.commentable .dc:not(.empty) { cursor: pointer; }
+.dl.commentable:hover, .diff-pair.commentable .dc:not(.empty):hover { box-shadow: inset 2px 0 0 var(--accent); }
+.dl-notes { display: flex; flex-direction: column; gap: 4px; padding: 6px 10px 6px 64px; background: var(--surface-1); border-block: var(--hairline) solid var(--edge-subtle); font-family: var(--font); white-space: normal; }
+.dl-notes.span { padding-left: 10px; }
+.dl-note { display: flex; align-items: flex-start; gap: 6px; padding: 6px 8px; border-radius: var(--r-md); background: var(--surface-elev); box-shadow: var(--elev-1); color: var(--ink-1); font-size: var(--fs-small); }
+.dl-note .tx { flex: 1; white-space: pre-wrap; word-break: break-word; }
+.dl-note-edit textarea { width: 100%; resize: none; border-radius: var(--r-md); border: var(--hairline) solid var(--edge-default); background: var(--surface-elev); color: var(--ink-1); font: inherit; font-size: var(--fs-small); padding: 6px 8px; outline: none; }
+.dl-note-edit textarea:focus { outline: 2px solid var(--focus-ring); outline-offset: -1px; }
+.rv-comments { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; padding: 6px 8px 6px 12px; border-radius: var(--r-lg); background: var(--accent-soft); color: var(--ink-1); font-size: var(--fs-small); }
+.rv-comments .t { font-weight: var(--fw-strong); }
+.rv-comments .grow { flex: 1; }
+.rv-comments .kbd { margin-left: 4px; }
