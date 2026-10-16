@@ -736,11 +736,31 @@ function driver() {
         await sleep(100);
         await click('.welcome .composer textarea');
         const saved = await waitFor('JSON.stringify(window.__store.getState().settings["ui.featureDefaults"]?.channels) === \'["server:smoke"]\'', 3000);
-        check('+ → Brief / 频道 in 2 clicks (rows under 进阶, no 「Brief、频道…」 expander); ↓ from Brief reaches the field; typing survives a click outside', rows.join() === 'files,folder,reference,chrome,computerUse,goal,coordinator,proactive,brief,channels' && inField === 'channels' && saved && !(await js('!!document.querySelector(".menu.plus-menu")')), JSON.stringify({ rows, inField, saved }));
+        check('+ → Brief / 频道 in 2 clicks (rows under 进阶, no 「Brief、频道…」 expander); ↓ from Brief reaches the field; typing survives a click outside', rows.join() === 'files,folder,reference,chatOnly,chrome,computerUse,goal,coordinator,proactive,brief,channels' && inField === 'channels' && saved && !(await js('!!document.querySelector(".menu.plus-menu")')), JSON.stringify({ rows, inField, saved }));
         check('频道 shows as a removable tag', await waitFor('!!document.querySelector(\'.welcome .cap-tag[data-cap="channels"]\')', 2000));
         await click('.welcome .cap-tag[data-cap="channels"] button');
         await waitFor('!document.querySelector(\'.welcome .cap-tag[data-cap="channels"]\')', 2000);
         check('the capability defaults live in meta.json, not localStorage', await js('localStorage.getItem("cw.lastFeatures") === null && !!window.__store.getState().settings["ui.featureDefaults"]'));
+        // ---- 只聊天 (spec 2026-10-16 pages §5): this new conversation only — a tag, the capability rows go, × undoes it
+        await click('.welcome .cb .plus');
+        await click('.menu.plus-menu [data-id="chatOnly"]');
+        const chatOnlyOn = await js(`document.querySelector('.menu.plus-menu [data-id="chatOnly"]')?.getAttribute('aria-checked')`);
+        const capsGone = await js(`!document.querySelector('.menu.plus-menu [data-id="chrome"]')`);
+        await key('Escape');
+        const chatTag = await waitFor(`!!document.querySelector('.welcome .cap-tag[data-cap="chatOnly"]')`, 2000);
+        const notStored = await js(`!('chatOnly' in (window.__store.getState().settings['ui.featureDefaults'] || {}))`);
+        await click('.welcome .cap-tag[data-cap="chatOnly"] button');
+        const chatTagGone = await waitFor(`!document.querySelector('.welcome .cap-tag[data-cap="chatOnly"]')`, 2000);
+        check('只聊天: + → 只聊天 hides the tool switches, shows a removable tag, is never a stored default', chatOnlyOn === 'true' && capsGone && chatTag && notStored && chatTagGone, JSON.stringify({ chatOnlyOn, capsGone, chatTag, notStored, chatTagGone }));
+        // ---- menu digits: 1–9 pick the Nth row (the official app's)
+        await click('.welcome .cb .plus');
+        await waitFor('!!document.querySelector(".menu.plus-menu [data-mi]")', 2000);
+        await js(`document.querySelector('.menu.plus-menu [data-mi]')?.focus()`);
+        await key('4');
+        const digit = await waitFor(`!!document.querySelector('.welcome .cap-tag[data-cap="chatOnly"]')`, 2000);
+        if (digit) await click('.welcome .cap-tag[data-cap="chatOnly"] button');
+        await key('Escape');
+        check('menus: a digit picks that row (4 → 只聊天 in the + menu)', digit, JSON.stringify({ digit }));
         await click('.welcome .cb .plus');
         await click('.menu.plus-menu [data-id="goal"]');
         check('设定一个目标 puts /goal into the text box', await waitFor('document.querySelector(".welcome .composer textarea").value.startsWith("/goal")', 2000));
@@ -1078,6 +1098,17 @@ function driver() {
         await key('Escape');
         const afterPal = await js(`({ palette: !!document.querySelector('.palette-bg'), open: !!document.querySelector('.modal.settings.sp') })`);
         check('the command palette opened over settings: Esc closes only the palette', pal && !afterPal.palette && afterPal.open, JSON.stringify({ pal, ...afterPal }));
+        // 更新内容 (spec 2026-10-16 pages §4): from the palette, the changelog in the interface language
+        await ctrl('K');
+        await waitFor('!!document.querySelector(".palette-bg input")', 3000);
+        wc.insertText('更新内容');
+        await sleep(300);
+        await key('Enter');
+        const wn = await waitFor('!!document.querySelector(".modal.whats-new .wn-body h2")', 5000);
+        const wnText = await js(`document.querySelector('.modal.whats-new .wn-body h2')?.textContent ?? ''`);
+        await key('Escape');
+        const wnGone = await waitFor('!document.querySelector(".modal.whats-new")', 2000);
+        check('更新内容: the palette opens the changelog (a version heading), Esc closes it', wn && /\d+\.\d+\.\d+/.test(wnText) && wnGone, JSON.stringify({ wn, wnText, wnGone }));
         // the shortcut sheet over the page (final review M1): `?` with the focus on the page (not in a field) opens it
         // above the page — it used to open underneath and show up only after the page closed — and Esc closes the sheet only
         phase = 'settings:shortcuts';
@@ -1089,6 +1120,11 @@ function driver() {
         await key('Escape');
         const afterSheet = await js(`({ sheet: !!document.querySelector('.shortcuts-bg'), open: !!document.querySelector('.modal.settings.sp'), back: !!document.activeElement?.closest('.modal.settings.sp') })`);
         check('`?` on the settings page opens the shortcut sheet above it (not inert, focused); Esc closes only the sheet, the page gets the focus back', !!sheetOver && sheetOver.hit === 'sheet' && !sheetOver.inert && sheetOver.focus && !afterSheet.sheet && afterSheet.open && afterSheet.back, JSON.stringify({ sheetOver, afterSheet }));
+        // Ctrl+/ (the official key) opens it too
+        wc.sendInputEvent({ type: 'keyDown', keyCode: '/', modifiers: ['control'] }); wc.sendInputEvent({ type: 'keyUp', keyCode: '/', modifiers: ['control'] });
+        const slashSheet = await waitFor('!!document.querySelector(".shortcuts-bg")', 2000);
+        await key('Escape');
+        check('Ctrl+/ opens the shortcut sheet', slashSheet && (await waitFor('!document.querySelector(".shortcuts-bg")', 2000)), JSON.stringify({ slashSheet }));
         // nodes inserted while the page is open are covered too: Ctrl+B twice swaps the sidebar for a placeholder and back
         phase = 'settings:swap';
         const sbState = `({ open: window.__store.getState().sidebarOpen, sb: [...document.querySelectorAll('.app > .sidebar')].map((e) => (e.classList.contains('has-resizer') ? 'column' : 'placeholder') + (e.hasAttribute('inert') ? ':inert' : '')) })`;
