@@ -7,6 +7,7 @@ import { Expandable } from '../Expandable';
 import { langFromPath } from '../highlight';
 import { ErrorPre, ImageGrid } from './McpTool';
 import { blockRemoteOpen } from '@/features/remote-guard';
+import { fileMenuProps } from '@/features/files/FileMenu';
 import { tr } from '@/i18n';
 
 export function ReadBody({ t }: { t: ToolUseBlock }) {
@@ -118,7 +119,7 @@ export function FileLink({ path, line, children }: { path: string; line?: number
     if (e.altKey) { if (sid) useStore.setState({ inspect: { sessionId: sid, file: { path, line } } }); return; }
     st.openTile({ id: `d${Date.now().toString(36)}`, kind: 'doc', path, line }, 'tab');
   };
-  return <button className="file-link" onClick={open} title={tr("{path}\nAlt+点击 在详情面板查看", { path })}>{children ?? path}</button>;
+  return <button className="file-link" onClick={open} {...fileMenuProps(path, ctx?.sessionId ?? useStore.getState().activeId)} title={tr("{path}\nAlt+点击 在详情面板查看", { path })}>{children ?? path}</button>;
 }
 
 export function FileContentPreview({ text, path }: { text: string; path?: string }) {

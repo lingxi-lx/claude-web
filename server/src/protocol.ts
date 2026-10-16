@@ -475,7 +475,9 @@ export type ClientRequest =
   /** The outbound proxy in use (net/proxy.ts); `refresh` looks at the system again. Set it with settings.set 'network.proxy'. */
   | { kind: 'network.proxy'; refresh?: boolean }
   | { kind: 'sessions.search'; query: string; limit?: number }
-  | { kind: 'shell.open'; path: string; app?: 'explorer' | 'code' | 'cursor' }
+  | { kind: 'shell.open'; path: string; app?: 'explorer' | 'reveal' | 'code' | 'cursor' | 'zed' }
+  /** the editors 「用 … 打开」 can offer: the ones on PATH (macOS: also the app bundles) → `{ editors: ('code'|'cursor'|'zed')[] }` */
+  | { kind: 'shell.editors' }
   /** the user's custom.css (appearance/custom-css.ts): its text, and making it with the template */
   | { kind: 'ui.customCss' }
   | { kind: 'ui.customCss.create' }

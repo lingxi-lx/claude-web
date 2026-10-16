@@ -45,6 +45,7 @@ import { drawerEnter, installPhoneDrawer, usePhoneDrawer } from '@/ui/phone-draw
 import { tr } from '@/i18n';
 import { CustomCss } from './custom-css';
 import { AddAccountHost } from '@/features/settings/ClaudeAccounts';
+import { FileMenu } from '@/features/files/FileMenu';
 
 /** Width of the right panel minimized to its icon rail. */
 const MIN_RAIL = 36;
@@ -276,6 +277,7 @@ export function App() {
       <ErrorBoundary area={tr('设置')} floating onReset={() => useStore.setState({ settingsOpen: null })}><SettingsModal /></ErrorBoundary>
       <ErrorBoundary area={tr('首次引导')} floating><Onboarding /></ErrorBoundary>
       <ErrorBoundary area={tr('图片查看')} floating><ImageViewer /></ErrorBoundary>
+      <ErrorBoundary area={tr('文件菜单')} floating><FileMenu /></ErrorBoundary>
       <ErrorBoundary area={tr('接一个模型')} floating><ConnectModelHost /></ErrorBoundary>
       <ErrorBoundary area={tr('应用更新')} floating><UpdatePrompt /></ErrorBoundary>
       <ErrorBoundary area={tr('角色库')} floating><CharacterLibrary /></ErrorBoundary>

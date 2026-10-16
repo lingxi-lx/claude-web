@@ -15,6 +15,16 @@ describe('openCommands', () => {
     expect(openCommands('/Users/me/proj', 'cursor', 'darwin')).toEqual([{ cmd: 'cursor', args: ['/Users/me/proj'] }, { cmd: 'open', args: ['-a', 'Cursor', '/Users/me/proj'] }]);
   });
 
+  it('show in the file manager: the file selected (Windows /select, verbatim and quoted; macOS open -R), Linux the folder', () => {
+    expect(openCommands('C:/a b/p.ts', 'reveal', 'win32')).toEqual([{ cmd: 'explorer', args: ['/select,"C:\\a b\\p.ts"'], show: true, verbatim: true }]);
+    expect(openCommands('/x/p.ts', 'reveal', 'darwin')).toEqual([{ cmd: 'open', args: ['-R', '/x/p.ts'] }]);
+    expect(openCommands('/x/p.ts', 'reveal', 'linux')).toEqual([{ cmd: 'xdg-open', args: ['/x'] }]);
+  });
+
+  it('Zed like the others', () => {
+    expect(openCommands('/p', 'zed', 'darwin')).toEqual([{ cmd: 'zed', args: ['/p'] }, { cmd: 'open', args: ['-a', 'Zed', '/p'] }]);
+  });
+
   it('elsewhere only the shell command', () => {
     expect(openCommands('/home/me/proj', 'code', 'linux')).toEqual([{ cmd: 'code', args: ['/home/me/proj'] }]);
   });

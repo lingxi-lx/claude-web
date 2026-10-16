@@ -14,7 +14,7 @@ import { TerminalService } from '../terminal/service.js';
 import { MetaStore } from '../meta/store.js';
 import { LimitsService } from '../usage/limits.js';
 import { ScheduleService } from '../schedules/service.js';
-import { openPath } from '../runtime/open-path.js';
+import { installedEditors, openPath } from '../runtime/open-path.js';
 import { engineInfo, runClaudeCli } from '../claude-exe.js';
 import type { ProviderService } from '../providers/service.js';
 import type { GitService } from '../git/service.js';
@@ -498,6 +498,8 @@ export class Hub {
       case 'shell.open':
         openPath(req.path, req.app);
         return null;
+      case 'shell.editors':
+        return { editors: await installedEditors() };
       case 'ui.customCss':
         return s.customCss.read();
       case 'ui.customCss.create':

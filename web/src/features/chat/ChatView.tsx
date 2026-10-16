@@ -29,6 +29,7 @@ import { Fold, onScreen, reducedMotion, useEntrance, useFold } from './Fold';
 import { stepBusy, stepState } from './step-view';
 import { COUNT_UP_MS, countAt, splitNumbers } from './count-up';
 import { tr } from '@/i18n';
+import { fileMenuProps } from '@/features/files/FileMenu';
 import { normViewMode, type ViewMode } from './view-mode';
 
 const useViewMode = (): ViewMode => useStore((s) => normViewMode(s.settings['ui.viewMode']));
@@ -395,7 +396,7 @@ function ChangesCard({ rows, sessionId, cwd }: { rows: FileChange[]; sessionId: 
       {rows.slice(0, CARD_ROWS).map((r) => {
         const p = displayPath(r.path, cwd);
         return (
-          <button key={r.path} className="fcard-f" onClick={() => open(r.path)} title={tr("{path}\n点击审阅这个文件的改动", { path: r.path })} data-path={r.path}>
+          <button key={r.path} className="fcard-f" onClick={() => open(r.path)} {...fileMenuProps(r.path, sessionId)} title={tr("{path}\n点击审阅这个文件的改动", { path: r.path })} data-path={r.path}>
             <span className="p"><span className="d">{p.dir}</span><span className="f">{p.name}</span></span>
             <span className="n"><span className="add">+{r.added}</span> <span className="del">−{r.removed}</span></span>
           </button>

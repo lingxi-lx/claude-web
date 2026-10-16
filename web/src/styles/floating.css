@@ -165,3 +165,4 @@ html.desktop:not(.mac) .app[data-rp-closing] :is(.groupbar, .tabstrip, .sess-hea
   .toast { transition: opacity 80ms linear; }
   .pd-actions .btn:active { transform: none; }
 }
+.file-menu-at { position: fixed; width: 0; height: 0; pointer-events: none; }

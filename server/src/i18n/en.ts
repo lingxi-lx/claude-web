@@ -304,6 +304,7 @@ export const EN_SERVER: Record<string, string> = {
   "原文：": "Original: ",
   "另一个 agent": "another agent",
   "只允许删除 skills 目录下的文件夹": "Only folders inside the skills folder can be deleted",
+  "只支持 GitHub 的自动合并": "Auto-merge is only supported on GitHub",
   "只支持 http / https：{raw}": "Only http / https is supported: {raw}",
   "只有失败或已取消的运行可以续跑": "Only failed or canceled runs can be resumed",
   "只有本机的桌面窗口才能提供{what}": "Only the desktop window on this computer can provide {what}",

@@ -22,6 +22,7 @@ import { markChecklist } from '@/features/home/checklist-sync';
 import { tr, dateLocale } from '@/i18n';
 import type { DiffComments } from '@/features/chat/DiffView';
 import { addComment, removeComment, clearComments, sendComments, useReviewComments } from './review-comments';
+import { fileMenuProps } from '@/features/files/FileMenu';
 import type { LineComment } from './review-comments-model';
 
 const NO_COMMENTS: LineComment[] = [];
@@ -486,7 +487,7 @@ export function ReviewView({ visible, inPlace, inDock }: { visible: boolean; inP
             const acts = fileActions(r, sc, !!root);
             return (
               <div key={k} className={clsx('rv-file', on && 'open')} data-key={r.key}>
-                <div className="rv-fh" role="button" tabIndex={0} aria-expanded={on} onClick={() => setOpen((o) => ({ ...o, [k]: !on }))} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen((o) => ({ ...o, [k]: !on })); } }} title={r.abs}>
+                <div className="rv-fh" role="button" tabIndex={0} aria-expanded={on} {...fileMenuProps(r.abs, active?.sessionId)} onClick={() => setOpen((o) => ({ ...o, [k]: !on }))} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen((o) => ({ ...o, [k]: !on })); } }} title={r.abs}>
                   <span className="cv"><Icon name={on ? 'chevronDown' : 'chevronRight'} size={13} /></span>
                   <span className="p"><span className="d">{dir}</span><span className="f">{name}</span></span>
                   {stat && (stat.added > 0 || stat.removed > 0) && <span className="rv-stat"><span className="add">+{stat.added}</span> <span className="del">−{stat.removed}</span></span>}

@@ -49,7 +49,8 @@ import { BranchChip, ProjectChip } from './ProjectChip';
 import { ContextMeter } from './ContextMeter';
 import { BAR_ID } from './ids';
 import { FEATURE_DEFAULTS_KEY, LEGACY_FEATURES_KEY, afterStart, capabilityTags, migrateFeatureDefaults, usable, withoutTag } from './capabilities';
-import { FILL_EVENT, type FillDetail } from './fill';
+import { FILL_EVENT, MENTION_EVENT, type FillDetail, type MentionDetail } from './fill';
+import { mentionText } from './at-mention';
 import { applyStarter, initialCwd } from '@/features/home/model';
 import { usePageOpen } from '@/features/sections';
 import { composerCovered } from './covered';
@@ -260,6 +261,22 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     return () => window.removeEventListener(FILL_EVENT, on);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [welcome, target?.tileId]);
+
+  // 文件右键 → 加到下一条消息: this conversation's box takes `@path` (relative to its folder when inside it)
+  useEffect(() => {
+    if (welcome || !active) return;
+    const sid = active.sessionId, cwdNow = active.cwd;
+    const on = (ev: Event) => {
+      const d = (ev as CustomEvent<MentionDetail>).detail;
+      if (d.handled || d.sessionId !== sid || disabled) return;
+      d.handled = true;
+      setText((cur) => { const next = mentionText(cur, d.path, cwdNow); setDraft(sid, next); return next; });
+      requestAnimationFrame(() => { const el = ta.current; if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } });
+    };
+    window.addEventListener(MENTION_EVENT, on);
+    return () => window.removeEventListener(MENTION_EVENT, on);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [welcome, active?.sessionId, active?.cwd, disabled]);
 
   const autosize = () => {
     const el = ta.current;

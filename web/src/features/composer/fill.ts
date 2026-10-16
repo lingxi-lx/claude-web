@@ -17,3 +17,12 @@ export interface FillDetail {
 export function fillComposer(d: FillDetail): void {
   window.dispatchEvent(new CustomEvent<FillDetail>(FILL_EVENT, { detail: d }));
 }
+
+// 文件右键 → 加到下一条消息: `@path ` at the end of that conversation's input box (Claude Code reads @-mentioned files)
+export const MENTION_EVENT = 'cw:composer-mention';
+export interface MentionDetail { sessionId: string; path: string; handled: boolean }
+
+export function mentionInComposer(sessionId: string, path: string): void {
+  const detail: MentionDetail = { sessionId, path, handled: false };
+  window.dispatchEvent(new CustomEvent<MentionDetail>(MENTION_EVENT, { detail }));
+}
