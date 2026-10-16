@@ -20,6 +20,8 @@ export interface SessionsDeps {
   deliver(id: string, text: string): Promise<void>;
   rename(id: string, title: string): Promise<void>;
   archive(id: string): Promise<void>;
+  /** a scheduled task's conversation: nobody is watching it, so nothing is delivered there (the official app's rule) */
+  isScheduled?(id: string): boolean;
 }
 
 let deps: SessionsDeps | null = null;
@@ -29,6 +31,22 @@ export function setSessionsDeps(d: SessionsDeps | null) { deps = d; }
 /** Settings switch `sessions.mcp`. */
 export function setSessionsMcpEnabled(on: boolean) { enabled = on; }
 export function sessionsMcpEnabled() { return enabled && !!deps; }
+
+/**
+ * At most this many messages to one conversation in the window, from all the others together: two conversations told
+ * to keep each other informed would otherwise answer each other for ever, each answer a new turn on both sides.
+ */
+const SEND_LIMIT = 10;
+const SEND_WINDOW_MS = 10 * 60_000;
+const sent = new Map<string, number[]>();
+/** true and counted when one more may go to `id` now. Exported for tests. */
+export function sendAllowed(id: string, now = Date.now()): boolean {
+  const recent = (sent.get(id) ?? []).filter((t) => now - t < SEND_WINDOW_MS);
+  if (recent.length >= SEND_LIMIT) { sent.set(id, recent); return false; }
+  recent.push(now);
+  sent.set(id, recent);
+  return true;
+}
 
 const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] });
 const fail = (t: string) => ({ content: [{ type: 'text' as const, text: t }], isError: true });
@@ -64,6 +82,8 @@ export function sessionsMcpServer(self: () => string, d: SessionsDeps = deps!) {
         if (!to) return fail(`No conversation ${a.id}. Use list_sessions.`);
         if (to.archived) return fail('That conversation is archived: messages are not delivered to archived conversations.');
         if (to.peer) return fail('That conversation is on another computer.');
+        if (d.isScheduled?.(a.id)) return fail('That is a scheduled task\'s conversation: nobody is watching it, so messages are not delivered there.');
+        if (!sendAllowed(a.id)) return fail(`Too many messages to "${titleOf(to)}" in the last ${SEND_WINDOW_MS / 60_000} minutes (${SEND_LIMIT}). If the two conversations are answering each other, stop and tell the user.`);
         const me = await find(self());
         await d.deliver(a.id, fromMarker(self(), titleOf(me), a.message));
         const st = d.stateOf(a.id);
