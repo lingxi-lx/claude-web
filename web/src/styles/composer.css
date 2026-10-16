@@ -15,7 +15,7 @@
 
 .composer {
   --cmp-hover-out: 150ms;                        /* a hover fill's way out */
-  --cmp-press: scale(0.96);
+  --cmp-press: var(--press);
   --cmp-up-off: scale(0.3) translateY(-8px);     /* the send arrow when it is not the button's face */
   --cmp-sq-off: scale(0.3) rotate(-90deg);       /* the stop square when it is not */
   --cmp-tab-in: 300ms;                           /* = RUN_TAB_IN_MS (chat/run-status.ts) */
@@ -26,7 +26,6 @@
   --cmp-glow: 3.2s;                              /* the light's turn around the box */
   padding: 6px var(--sp-6) var(--sp-4);
 }
-.app.mobile .composer { --cmp-press: scale(0.98); }
 
 /* ---- the box: no border, a shadow ring; in use the ring deepens and a 4px halo of the accent comes around it.
    Both shadow lists have the same four layers, so only their colours change (the halo's goes from nothing) ---- */
@@ -157,7 +156,7 @@
 .cb .send:disabled { background-color: color-mix(in oklab, var(--fg) 15%, transparent); color: var(--surface-elev); cursor: default; transform: none; }
 .cb .send.stop { background-color: var(--primary); color: var(--primary-fg); }
 .cb .send.stop:hover { background-color: color-mix(in oklab, var(--primary) 86%, var(--surface-elev)); }
-.send .send-ic { position: absolute; inset: 0; display: grid; place-items: center; transition: opacity var(--dur-base) var(--ease-out), transform var(--dur-slow) var(--ease-pop); }
+.send .send-ic { position: absolute; inset: 0; display: grid; place-items: center; transition: opacity var(--dur-base) var(--ease-out), transform var(--spring-bouncy-dur) var(--spring-bouncy); }
 .send .send-ic.sq { opacity: 0; transform: var(--cmp-sq-off); }
 .send .send-ic.sq::before { content: ''; width: 12px; height: 12px; border-radius: var(--r-xs); background: currentColor; }
 .send[data-state='running'] .send-ic.up { opacity: 0; transform: var(--cmp-up-off); }

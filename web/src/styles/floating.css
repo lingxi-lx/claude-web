@@ -3,20 +3,20 @@
 
    What floats: anchored menus, the segmented control, toasts, the card a permission / question / plan docks above the
    composer, and the right panel coming and going. Motion (§4.5): only transform / opacity / colour move; a hover is
-   there at once and fades out in 150ms; a press scales to 0.96; what the keyboard triggers is not animated. */
+   there at once and fades out in 150ms; a press scales to --press (0.98); what comes in rides a spring (tokens.css --spring-*); what the keyboard triggers is not animated. */
 
 /* ============================================================ menus ============================================================
    Every `.menu` (the composer's + / permission / branch menus and the right panel's 更多 / 审阅 menus — Popover; the
    model menu; the project menu; the sidebar's and the session header's — useAnchoredMenu; the workbench's dropdowns):
    radius 16, the --elev-2 ring instead of a border, 6px inside, rows 34px high with an 8px radius.
-   In: opacity + scale 0.96 → 1 from the anchor in 180ms. The code that places a menu also says where its anchor is
+   In: opacity + scale 0.96 → 1 from the anchor on --spring-snappy. The code that places a menu also says where its anchor is
    (`--menu-origin`: models/place.ts `menuOrigin`, sidebar/place.ts `spotOrigin`); a menu opened from the keyboard
    carries `data-kb` and is simply there (ui/menu-motion.ts).
    Out: the menu is unmounted at once, as always; when the pointer closed it an inert copy (`.leaving`, ui/ghost.ts)
    fades out in its place for 120ms. */
 @keyframes fl-menu-in { from { opacity: 0; transform: scale(0.96); } }
 @keyframes fl-menu-out { to { opacity: 0; transform: scale(0.97); } }
-.menu { transform-origin: var(--menu-origin, 50% 0%); animation: fl-menu-in 180ms var(--ease-out); }
+.menu { transform-origin: var(--menu-origin, 50% 0%); animation: fl-menu-in var(--spring-snappy-dur) var(--spring-snappy); }
 .menu.ft-menu { --menu-origin: 0% 0%; } /* a right-click menu grows from the pointer, its top-left corner */
 .menu[data-kb] { animation: none; }
 .menu.leaving { animation: fl-menu-out 120ms var(--ease-in) forwards; pointer-events: none; }
@@ -37,14 +37,14 @@
 .menu.sb-filter button.on > svg.ck { color: var(--accent-text); }
 .menu.dirmenu .dirmenu-check { width: 16px; justify-content: center; }
 /* the usage card over the composer (a hover card, not a menu): the same shell, growing from its lower right corner */
-.ctx-card { border-radius: var(--r-xl); padding: 10px 12px; transform-origin: 100% 100%; animation: fl-menu-in 180ms var(--ease-out); }
+.ctx-card { border-radius: var(--r-xl); padding: 10px 12px; transform-origin: 100% 100%; animation: fl-menu-in var(--spring-snappy-dur) var(--spring-snappy); }
 
 /* ============================================================ segmented control ============================================================
    ui/Segmented.tsx: a pill-shaped track, equal-width options, and a shadowed thumb (::before) one option wide that
    slides under the chosen one — `--seg-n` options, the `--seg-i`-th chosen (seg-math.ts). `.none`: nothing chosen,
    no thumb. First used for 智能程度 in the model menu; settings and the right panel's tabs follow in phase 3. */
 .segmented { --seg-pad: 3px; position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); padding: var(--seg-pad); border-radius: var(--r-pill); background: var(--layer-selected); }
-.segmented::before { content: ''; position: absolute; top: var(--seg-pad); bottom: var(--seg-pad); left: var(--seg-pad); width: calc((100% - 2 * var(--seg-pad)) / var(--seg-n, 1)); border-radius: var(--r-pill); background: var(--surface-elev); box-shadow: var(--elev-1); transform: translateX(calc(var(--seg-i, 0) * 100%)); transition: transform 260ms var(--ease-sheet), opacity 150ms linear; pointer-events: none; }
+.segmented::before { content: ''; position: absolute; top: var(--seg-pad); bottom: var(--seg-pad); left: var(--seg-pad); width: calc((100% - 2 * var(--seg-pad)) / var(--seg-n, 1)); border-radius: var(--r-pill); background: var(--surface-elev); box-shadow: var(--elev-1); transform: translateX(calc(var(--seg-i, 0) * 100%)); transition: transform var(--spring-bouncy-dur) var(--spring-bouncy), opacity 150ms linear; pointer-events: none; }
 .segmented.none::before { opacity: 0; }
 /* (`.segmented > button` also out-ranks the generic `.menu button` when the control sits in a menu) */
 .segmented > button { position: relative; display: block; width: auto; min-width: 0; height: 28px; min-height: 0; padding: 0 6px; border-radius: var(--r-pill); background: none; font-size: var(--fs-sm); line-height: 18px; color: var(--ink-3); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color 150ms linear; }
@@ -70,7 +70,7 @@
 .app.no-sidebar .toast-wrap { left: calc((100vw - var(--rp, 0px)) / 2); }
 /* a phone: under the floating header and the 重新连接中 pill's place */
 .app.mobile .toast-wrap { left: 50%; top: calc(var(--h-head) + env(safe-area-inset-top, 0px) + 36px); }
-.toast { --depth: 0; display: flex; align-items: flex-start; gap: 8px; max-width: min(520px, 100%); padding: 8px 16px 8px 12px; border: 0; border-radius: var(--r-bubble); background: var(--primary); color: var(--primary-fg); box-shadow: var(--elev-2); font-size: var(--fs-sm); line-height: 20px; white-space: pre-line; overflow-wrap: anywhere; user-select: none; pointer-events: none; transform-origin: 50% 0; transform: scale(calc(1 - var(--depth) * 0.04)); opacity: calc(1 - var(--depth) * 0.14); transition: transform 260ms var(--ease-sheet), opacity 200ms linear; animation: fl-toast-in 360ms var(--ease-pop); }
+.toast { --depth: 0; display: flex; align-items: flex-start; gap: 8px; max-width: min(520px, 100%); padding: 8px 16px 8px 12px; border: 0; border-radius: var(--r-bubble); background: var(--primary); color: var(--primary-fg); box-shadow: var(--elev-2); font-size: var(--fs-sm); line-height: 20px; white-space: pre-line; overflow-wrap: anywhere; user-select: none; pointer-events: none; transform-origin: 50% 0; transform: scale(calc(1 - var(--depth) * 0.04)); opacity: calc(1 - var(--depth) * 0.14); transition: transform 260ms var(--ease-sheet), opacity 200ms linear; animation: fl-toast-in var(--spring-snappy-dur) var(--spring-snappy); }
 .toast.ok { border: 0; }
 .toast.over { display: none; }
 .toast.out { animation: fl-toast-out 200ms var(--ease-in) forwards; }
@@ -87,7 +87,7 @@
 @keyframes fl-card-out { to { opacity: 0; transform: translateY(10px) scale(0.98); } }
 @keyframes fl-fade-in { from { opacity: 0; } }
 .pdock, .pdock-out { container-type: inline-size; margin: 0 0 10px; padding: 14px; border-radius: var(--r-2xl); background: var(--surface-elev); box-shadow: var(--elev-2); }
-.pdock { animation: fl-card-in 380ms var(--ease-sheet); }
+.pdock { animation: fl-card-in var(--spring-snappy-dur) var(--spring-snappy); }
 .pdock-out { z-index: 2; pointer-events: none; animation: fl-card-out 180ms var(--ease-in) forwards; }
 .app.mobile .pdock, .app.mobile .pdock-out { margin: 0 0 8px; padding: 12px; border-radius: var(--r-2xl); }
 /* the next request taking the place of an answered one: the card stays, its content fades in under the leaving copy */
@@ -143,7 +143,7 @@
 .app { transition: none; }
 @keyframes fl-rp-in { from { opacity: 0; transform: translateX(24px); } }
 @keyframes fl-rp-out { to { opacity: 0; } }
-.app:not(.mobile) > .rpanel:has(> .dock:not(.min)) { animation: fl-rp-in 260ms var(--ease-sheet); }
+.app:not(.mobile) > .rpanel:has(> .dock:not(.min)) { animation: fl-rp-in var(--spring-gentle-dur) var(--spring-gentle); }
 .app[data-rp-closing]:not(.mobile) { grid-template-columns: var(--sb, 264px) 1fr min(var(--rp-was, 0px), max(300px, calc(100vw - var(--rail, 0px) - var(--sb, 264px) - 360px))); }
 .app[data-rp-closing].no-sidebar:not(.mobile) { grid-template-columns: 1fr min(var(--rp-was, 0px), max(300px, calc(100vw - var(--rail, 0px) - 360px))); }
 /* (`display` is inline on the element — App — hence !important; the selector out-ranks the opening rule above.

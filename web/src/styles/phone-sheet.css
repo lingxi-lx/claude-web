@@ -36,7 +36,7 @@
     .app.mobile .rpanel { --sheet-room: calc(100dvh - var(--kb, 0px)); }
   }
   .app.mobile .rpanel[data-detent='full'] { --sheet-share: 0.92; }
-  .app.mobile.sheet-open .rpanel { transform: none; transition: transform var(--dur-slower) var(--ease-sheet); pointer-events: auto; }
+  .app.mobile.sheet-open .rpanel { transform: none; transition: transform var(--spring-gentle-dur) var(--spring-gentle); pointer-events: auto; }
   .app.mobile .rpanel[data-drag] { transition: none; will-change: transform; }
   .app.mobile .rpanel .dock { flex: 1 1 0; width: 100%; height: auto; min-height: 0; }
 
@@ -72,7 +72,7 @@
     transform: translateX(-100%); transition: transform var(--dur-base) var(--ease-in);
     pointer-events: none; touch-action: pan-y;
   }
-  .app.mobile.drawer-open .sidebar { transform: none; transition: transform var(--dur-slower) var(--ease-sheet); pointer-events: auto; }
+  .app.mobile.drawer-open .sidebar { transform: none; transition: transform var(--spring-gentle-dur) var(--spring-gentle); pointer-events: auto; }
   .app.mobile .sidebar[data-drag] { transition: none; will-change: transform; }
   .app.mobile .sidebar :is(.sb-list, .sb-attn-list) { touch-action: pan-y; }
 

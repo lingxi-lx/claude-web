@@ -112,7 +112,7 @@ html[data-density='compact'] .tl-rows > .tl:not(:last-child)::after { top: 21px;
 .sgw .spin { display: block; width: 13px; height: 13px; border-radius: 50%; border: 1.5px solid var(--edge-strong); border-top-color: var(--ink-2); animation: step-spin 0.7s linear infinite; }
 @keyframes step-spin { to { transform: rotate(360deg); } }
 /* the step finished in view: its icon takes the spinner's place with a little bounce */
-.sgw .pop, .code-btn .pop { animation: step-pop var(--dur-slower) var(--ease-pop) backwards; }
+.sgw .pop, .code-btn .pop { animation: step-pop var(--spring-snappy-dur) var(--spring-snappy) backwards; }
 @keyframes step-pop { from { opacity: 0; transform: scale(0.4); } }
 
 .tool-head .name { flex: none; font-weight: 400; color: var(--ink-2); font-variant-numeric: tabular-nums; }
@@ -184,7 +184,7 @@ div.code { border: 0; border-radius: var(--r-lg); background-color: var(--surfac
 .code.err .code-head, .code.err .code-lang { color: var(--err); }
 .code-btn { flex: none; display: inline-grid; place-items: center; width: 26px; height: 26px; padding: 0; border-radius: var(--r-row); color: var(--ink-3); transition: background-color 150ms, color 150ms, transform var(--dur-instant) var(--ease-out); }
 .code-btn:hover { background: var(--layer-hover); color: var(--ink-1); transition-duration: 0s, 0s, var(--dur-instant); }
-.code-btn:active { transform: scale(0.96); }
+.code-btn:active { transform: var(--press); }
 .code-btn.on { background: var(--layer-selected); color: var(--ink-1); }
 .code-btn.ok { color: var(--ink-1); }
 /* the text itself: no box of its own inside the block (a markdown fence and a tool's output both gave it one) */
@@ -198,7 +198,7 @@ div.code { border: 0; border-radius: var(--r-lg); background-color: var(--surfac
 .fcard-h .n { font-size: var(--fs-meta); font-weight: 400; font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* 审阅: a pill, ink (the one thing to do with the card) */
 .fcard-h .btn { margin-left: auto; min-height: 28px; padding: 0 13px; font-weight: 400; }
-.fcard-h .btn:active { transform: scale(0.96); }
+.fcard-h .btn:active { transform: var(--press); }
 .fcard-f { display: flex; align-items: center; gap: 8px; width: 100%; height: 34px; min-height: 0; padding: 0 12px; border-top: 0; border-radius: var(--r-md); font-family: var(--mono); font-size: var(--fs-sm); line-height: 18px; text-align: left; transition: background-color 150ms; }
 .fcard-f:hover { background: var(--layer-hover); transition-duration: 0s; }
 .fcard-f .p { color: var(--ink-1); }
@@ -209,7 +209,7 @@ div.code { border: 0; border-radius: var(--r-lg); background-color: var(--surfac
 /* ---------- message actions ---------- */
 .msg-actions button { transition: background-color 150ms, color 150ms, transform var(--dur-instant) var(--ease-out); }
 .msg-actions button:hover { transition-duration: 0s, 0s, var(--dur-instant); }
-.msg-actions button:active:not(:disabled) { transform: scale(0.96); }
+.msg-actions button:active:not(:disabled) { transform: var(--press); }
 
 /* ---------- 「减少动态效果」 ---------- */
 /* The setting turns every animation and transition off app-wide (styles.css), and tokens.css ends every animation at

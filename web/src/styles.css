@@ -50,7 +50,7 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
 :focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .btn { border: 1px solid var(--edge-strong); background: transparent; border-radius: var(--r-pill); padding: 5px 14px; min-height: 30px; color: var(--ink-1); display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: var(--fs-base); transition: background var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out), transform var(--dur-1) var(--ease-out); }
 .btn:hover { background: var(--layer-hover); border-color: var(--edge-strong); }
-.btn:active { background: var(--layer-active); transform: scale(0.97); }
+.btn:active { background: var(--layer-active); transform: var(--press); }
 .btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-fg); }
 .btn.primary:hover { background: color-mix(in oklab, var(--primary) 86%, var(--surface-0)); border-color: transparent; }
 .btn.primary:active { background: color-mix(in oklab, var(--primary) 78%, var(--surface-0)); }
@@ -65,7 +65,7 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
 /* fixed box: the glyph/icon inside must never decide the hit target */
 .icon-btn { width: 30px; height: 30px; flex: none; color: var(--ink-3); border-radius: var(--r-md); display: inline-flex; align-items: center; justify-content: center; line-height: 1; transition: background var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out); }
 .icon-btn:hover { color: var(--ink-1); background: var(--layer-hover); }
-.icon-btn:active { background: var(--layer-active); transform: scale(0.96); }
+.icon-btn:active { background: var(--layer-active); transform: var(--press); }
 .icon-btn.active { color: var(--ink-1); background: var(--layer-selected); }
 .icon-btn:disabled { opacity: 0.4; }
 .icon-btn:disabled:hover { background: none; color: var(--ink-3); }
@@ -494,7 +494,7 @@ button.link:hover { text-decoration: underline; }
 .bar > i { display: block; height: 100%; background: var(--accent); border-radius: var(--r-pill); }
 .toggle { width: 36px; height: 20px; border-radius: var(--r-pill); background: color-mix(in oklab, var(--fg) 18%, transparent); position: relative; flex: none; cursor: pointer; transition: background var(--dur-base) var(--ease-out); }
 .toggle:hover { background: color-mix(in oklab, var(--fg) 24%, transparent); }
-.toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.22), 0 0 0 0.5px rgba(0, 0, 0, 0.06); transition: transform var(--dur-base) var(--ease-out), width var(--dur-fast) var(--ease-out); }
+.toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.22), 0 0 0 0.5px rgba(0, 0, 0, 0.06); transition: transform var(--spring-bouncy-dur) var(--spring-bouncy), width var(--dur-fast) var(--ease-out); }
 .toggle.on, .toggle.on:hover { background: var(--ctl-on); }
 .toggle.on::after { transform: translateX(16px); background: var(--primary-fg, #fff); }
 .toggle:active:not(:disabled)::after { width: 19px; }
@@ -1951,7 +1951,7 @@ html.desktop.mac .sp-nav-top { min-height: 40px; padding-left: calc(76px / var(-
 .chip.starter { min-height: 34px; padding: 0 14px; gap: 7px; border: 0; background: var(--surface-0); box-shadow: var(--elev-1); color: var(--ink-2); font-size: var(--fs-sm); transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out); }
 .chip.starter svg { color: var(--ink-3); }
 .chip.starter:hover { background: color-mix(in oklab, var(--fg) 5%, var(--surface-0)); color: var(--ink-1); }
-.chip.starter:active { transform: scale(0.97); }
+.chip.starter:active { transform: var(--press); }
 /* login / runtime: only when something is wrong */
 .home-notice { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-6); padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-4); border-radius: var(--r-xl); background: var(--fill-subtle); font-size: 14px; color: var(--ink-1); }
 .home-notice > svg { color: var(--ink-3); flex: none; }

@@ -32,12 +32,12 @@
   max-height: 82vh; max-height: calc((100dvh - var(--kb, 0px)) * 0.82); padding-bottom: env(safe-area-inset-bottom, 0px);
   border-radius: var(--r-2xl) var(--r-2xl) 0 0; background: var(--surface-elev); box-shadow: var(--elev-3);
   color: var(--ink-1); font-size: var(--fs-lg); touch-action: manipulation; -webkit-tap-highlight-color: transparent;
-  transition: transform var(--dur-slow) var(--ease-sheet); /* springing back after a drag that did not close it */
+  transition: transform var(--spring-gentle-dur) var(--spring-gentle); /* springing back after a drag that did not close it */
 }
 .as-sheet.tall { max-height: 92vh; max-height: calc((100dvh - var(--kb, 0px)) * 0.92); }
 /* the desktop app in a narrow window: a tall sheet reaches the title row, whose drag region would take its clicks */
 html.desktop .as-sheet { -webkit-app-region: no-drag; }
-.as-layer.as-in > .as-sheet { animation: as-up var(--dur-slower) var(--ease-sheet); }
+.as-layer.as-in > .as-sheet { animation: as-up var(--spring-gentle-dur) var(--spring-gentle); }
 .as-layer.as-in > .as-scrim { animation: as-scrim-in var(--dur-slow) linear; }
 .as-layer[data-drag] > .as-sheet, .as-layer[data-drag] > .as-scrim { transition: none; }
 .as-layer.as-leaving > .as-sheet { animation: as-down var(--dur-slow) var(--ease-in) forwards; }
