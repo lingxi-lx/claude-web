@@ -198,7 +198,9 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   const setFeatures = (f: SessionFeatures) => { void useStore.getState().setSetting(FEATURE_DEFAULTS_KEY, f).catch((e) => toast(e.message)); };
   const [listening, setListening] = useState(false);
   const recRef = useRef<any>(null);
-  const speechOk = typeof window !== 'undefined' && !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+  // the desktop app has the API but not the recognition service behind it (Electron 44: `network` on every start, mic
+  // allowed — phase 2 spec §6): no microphone there rather than one that always fails
+  const speechOk = !desktop && typeof window !== 'undefined' && !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
   const draftKey = welcome ? 'welcome' : active?.sessionId ?? '';
 
   // welcome draft lives on the server (desktop origin changes with the port)
