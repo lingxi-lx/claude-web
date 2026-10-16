@@ -8,7 +8,19 @@ export type DeepLink =
   | { kind: 'new'; folder?: string; q?: string; peer?: string }
   | { kind: 'session'; id: string };
 
-/** `isDir` decides whether a folder may be prefilled (a folder that is not there is dropped, not passed on). */
+/**
+ * A folder a link may name: an absolute path on a local disk. Never a network path (`\\host\share`, `//host/share`,
+ * `\\?\UNC\…`, `\\.\…`): only asking Windows whether one exists makes it log in to that host over SMB, handing a web
+ * page that links here the user's NTLM hash.
+ */
+export function localFolder(p: string): boolean {
+  if (p.length >= 4096 || /[\0\r\n]/.test(p)) return false;
+  if (/^[\\/]{2}/.test(p)) return false;
+  return /^[a-zA-Z]:[\\/]/.test(p) || (p.startsWith('/') && !p.startsWith('//'));
+}
+
+/** `isDir` decides whether a folder may be prefilled (a folder that is not there is dropped, not passed on); it is
+ *  only ever asked about local absolute paths (`localFolder`). */
 export function parseDeepLink(raw: string, isDir: (p: string) => boolean): DeepLink | null {
   let u: URL;
   try { u = new URL(raw); } catch { return null; }
@@ -23,7 +35,7 @@ export function parseDeepLink(raw: string, isDir: (p: string) => boolean): DeepL
   if (route !== 'new') return null;
   const out: DeepLink = { kind: 'new' };
   const folder = u.searchParams.get('folder');
-  if (folder && folder.length < 4096 && isDir(folder)) out.folder = folder;
+  if (folder && localFolder(folder) && isDir(folder)) out.folder = folder;
   const q = u.searchParams.get('q');
   if (q) out.q = q.slice(0, MAX_Q);
   const peer = u.searchParams.get('peer');

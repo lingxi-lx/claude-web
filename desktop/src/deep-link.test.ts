@@ -12,6 +12,16 @@ describe('deep links', () => {
   it('a folder that is not there, a strange machine name and unknown parameters are dropped', () => {
     expect(parseDeepLink('claude-web://new?folder=C%3A%5Cnope&peer=a%20b&x=1', isDir)).toEqual({ kind: 'new' });
   });
+  it('a network or relative folder is never even looked up (Windows would log in to that host over SMB)', () => {
+    const asked: string[] = [];
+    const spy = (p: string) => { asked.push(p); return true; };
+    for (const f of ['\\\\attacker.example\\share', '//attacker.example/share', '\\\\?\\UNC\\attacker\\s', '\\\\.\\pipe\\x', '/\\attacker\\s', 'relative\\dir', 'C:relative', '..\\up']) {
+      expect(parseDeepLink(`claude-web://new?folder=${encodeURIComponent(f)}`, spy)).toEqual({ kind: 'new' });
+    }
+    expect(asked).toEqual([]);
+    expect(parseDeepLink(`claude-web://new?folder=${encodeURIComponent('D:/work/x')}`, spy)).toEqual({ kind: 'new', folder: 'D:/work/x' });
+    expect(asked).toEqual(['D:/work/x']);
+  });
   it('the text is cut at 10 000 characters', () => {
     const r = parseDeepLink(`claude-web://new?q=${'a'.repeat(12_000)}`, isDir);
     expect(r?.kind === 'new' && r.q?.length).toBe(10_000);
