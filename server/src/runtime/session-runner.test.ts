@@ -218,6 +218,25 @@ describe('SessionRunner Stop (interrupt)', () => {
   const result = (extra: any = {}) => ({ type: 'result', subtype: 'error_during_execution', is_error: true, result: '', session_id: 's', uuid: 'r1', ...extra });
   const collect = (r: any) => { const msgs: any[] = []; r.on('message', (m: any) => msgs.push(m)); return msgs; };
 
+  it('下一句提示: on by default — the option and the CLI’s own switch; off leaves both out', async () => {
+    const { setPromptSuggestions } = await import('./session-runner.js');
+    queries.length = 0;
+    const a = new SessionRunner({ sessionId: 'ps-1', cwd: '/x' } as any);
+    await tick();
+    expect(queries[0].options.promptSuggestions).toBe(true);
+    expect(queries[0].options.env?.CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION).toBe('1');
+    await a.close();
+    setPromptSuggestions(false);
+    try {
+      queries.length = 0;
+      const b = new SessionRunner({ sessionId: 'ps-2', cwd: '/x' } as any);
+      await tick();
+      expect(queries[0].options.promptSuggestions).toBe(false);
+      expect(queries[0].options.env?.CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION).toBeUndefined();
+      await b.close();
+    } finally { setPromptSuggestions(true); }
+  });
+
   it('旁聊: asks the engine with the side chat so far, and the conversation hears nothing of it', async () => {
     queries.length = 0;
     const r = new SessionRunner({ sessionId: 'side-1', cwd: '/x' } as any);

@@ -341,6 +341,9 @@ export class SessionRunner extends EventEmitter {
     // tool's haiku / sonnet / opus; on the official binary a 1M Claude gets its `[1m]` like the main model
     const sub = this.subagent ? this.engineModel(engine.kind, this.subagent) : undefined;
     if (sub) fenv.CLAUDE_CODE_SUBAGENT_MODEL = sub;
+    // 下一句提示: the `promptSuggestions` option alone did not bring one on the official binary (2026-10-16, a real
+    // two-turn conversation); with the CLI's own switch it did
+    if (promptSuggestionsOn && !('CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION' in fenv)) fenv.CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION = '1';
     // a claude.ai-login session on the bundled ccb: its alias table predates the Claude 5 family (see
     // OFFICIAL_ALIAS_TARGETS) — the CLI's own variables align it with the official one; the user's env / settings win.
     // Not for a relay the user set up in settings.json / the environment: its model list is its own (the injected
