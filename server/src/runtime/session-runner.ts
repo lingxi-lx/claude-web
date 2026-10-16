@@ -343,7 +343,7 @@ export class SessionRunner extends EventEmitter {
     if (sub) fenv.CLAUDE_CODE_SUBAGENT_MODEL = sub;
     // 下一句提示: the `promptSuggestions` option alone did not bring one on the official binary (2026-10-16, a real
     // two-turn conversation); with the CLI's own switch it did
-    if (promptSuggestionsOn && !('CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION' in fenv)) fenv.CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION = '1';
+    if (promptSuggestionsOn && !('CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION' in fenv) && process.env.CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION === undefined) fenv.CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION = '1';
     // 代码审查卡: /code-review reports through the ReportFindings tool (drawn as a card) instead of printing its findings
     if (!('CLAUDE_CODE_REPORT_FINDINGS' in fenv) && !process.env.CLAUDE_CODE_REPORT_FINDINGS) fenv.CLAUDE_CODE_REPORT_FINDINGS = '1';
     // a claude.ai-login session on the bundled ccb: its alias table predates the Claude 5 family (see

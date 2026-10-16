@@ -2,6 +2,7 @@
 // its checks, and a CI menu: 自动修 CI (the conversation is asked to fix a failed check, once per push), 就绪后自动合并
 // (GitHub auto-merge, squash). With 设置 → PR 合并或关闭后自动归档对话 the conversation archives itself when the PR is done.
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { create } from 'zustand';
 import { parsePeerId, type BranchPr } from '@shared';
 import { useStore } from '@/store';
 import { ws } from '@/ws/client';
@@ -14,53 +15,74 @@ import { ciFixMessage, fixKey, newFailures, prSettled } from './pr-bar-model';
 const POLL_MS = 60_000;
 const NONE: string[] = [];
 
-export function PrBar({ sessionId }: { sessionId: string }) {
+// One bar per conversation does the work, whichever on-screen one asked first: it polls, and only it auto-fixes or
+// auto-archives (a conversation can sit in two panes; hidden tabs stay mounted). The others draw what it found.
+const usePrs = create<{ bySession: Record<string, BranchPr | null> }>(() => ({ bySession: {} }));
+const owners = new Map<string, symbol>();
+const claim = (sid: string, me: symbol) => { const o = owners.get(sid); if (o && o !== me) return false; owners.set(sid, me); return true; };
+// asked already in this window, before meta.json's `prFixed` comes back round (two renders a frame apart must not both send)
+const sentFix = new Set<string>();
+// 自动归档 acts on a PR this window saw open: turning the setting on must not sweep up conversations whose PRs were
+// merged months ago; one try each (a Codex conversation's archive never shows in sessionMeta)
+const sawOpen = new Set<string>();
+
+export function PrBar({ sessionId, visible = true }: { sessionId: string; visible?: boolean }) {
   const cwd = useStore((s) => s.open[sessionId]?.cwd);
   const state = useStore((s) => s.open[sessionId]?.state);
   const autoFix = useStore((s) => !!s.sessionMeta[sessionId]?.prAutoFix);
   const asked = useStore((s) => s.sessionMeta[sessionId]?.prFixed) ?? NONE;
-  const archived = useStore((s) => !!s.sessionMeta[sessionId]?.archived);
   const autoArchive = useStore((s) => s.settings['ui.autoArchivePr'] === true);
-  const [pr, setPr] = useState<BranchPr | null>(null);
+  const pr = usePrs((s) => s.bySession[sessionId] ?? null);
   const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState(false);
   const ciBtn = useRef<HTMLButtonElement>(null);
+  const me = useRef(Symbol('pr-bar')).current;
   const remote = !!parsePeerId(sessionId);
   const idle = state === 'idle' || state === 'history' || state === 'closed';
+  const on = visible && !remote && !!cwd;
+
+  useEffect(() => () => { if (owners.get(sessionId) === me) owners.delete(sessionId); }, [sessionId, me]);
+  useEffect(() => { if (!visible && owners.get(sessionId) === me) owners.delete(sessionId); }, [visible, sessionId, me]);
 
   const refresh = useCallback(async () => {
-    if (!cwd || remote) return;
+    if (!on || !claim(sessionId, me)) return;
     try {
-      const r = (await ws.request({ kind: 'vcs.prForBranch', cwd })) as { pr?: BranchPr };
-      setPr(r.pr ?? null);
+      const r = (await ws.request({ kind: 'vcs.prForBranch', cwd: cwd! })) as { pr?: BranchPr };
+      const next = r.pr ?? null;
+      if (next?.state === 'open') sawOpen.add(sessionId);
+      usePrs.setState((st) => ({ bySession: { ...st.bySession, [sessionId]: next } }));
     } catch { /* offline / rate-limited: keep what is shown */ }
-  }, [cwd, remote]);
+  }, [on, cwd, sessionId, me]);
 
-  // on open, whenever a turn ends (it may have pushed or opened the PR), and every minute while the window is in view
+  // on open, whenever a turn ends (it may have pushed or opened the PR), and every minute while it is on screen
   useEffect(() => { if (idle) void refresh(); }, [idle, refresh]);
   useEffect(() => {
+    if (!on) return;
     const t = setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, POLL_MS);
     return () => clearInterval(t);
-  }, [refresh]);
+  }, [on, refresh]);
 
   // 自动修 CI: a check failed on the pushed commit and the conversation is not busy — ask it once
   useEffect(() => {
-    if (!pr || !autoFix || !idle) return;
-    const fs = newFailures(pr, asked);
+    if (!pr || !autoFix || !idle || owners.get(sessionId) !== me) return;
+    const fs = newFailures(pr, asked).filter((x) => !sentFix.has(fixKey(pr, x)));
     if (!fs.length) return;
+    const keys = fs.map((x) => fixKey(pr, x));
+    keys.forEach((k) => sentFix.add(k));
     const st = useStore.getState();
-    void st.setSessionMeta(sessionId, { prFixed: [...asked, ...fs.map((f) => fixKey(pr, f))].slice(-50) });
+    void st.setSessionMeta(sessionId, { prFixed: [...asked, ...keys].slice(-50) });
     st.send(sessionId, ciFixMessage(pr, fs)).catch((e) => st.toast(String(e?.message ?? e)));
-  }, [pr, autoFix, idle, asked, sessionId]);
+  }, [pr, autoFix, idle, asked, sessionId, me]);
 
-  // 自动归档: merged / closed, nothing running
+  // 自动归档: a PR seen open here is now merged / closed, nothing running
   useEffect(() => {
-    if (!autoArchive || archived || !idle || !prSettled(pr)) return;
+    if (!autoArchive || !idle || !prSettled(pr) || !sawOpen.has(sessionId) || owners.get(sessionId) !== me) return;
+    sawOpen.delete(sessionId);
     const merged = pr!.state === 'merged';
     ws.request({ kind: 'library.archive', sessionIds: [sessionId], archived: true })
       .then(() => useStore.getState().toast(merged ? tr('PR #{n} 已合并，对话已归档', { n: pr!.number }) : tr('PR #{n} 已关闭，对话已归档', { n: pr!.number }), true))
       .catch((e) => useStore.getState().toast(String(e?.message ?? e)));
-  }, [autoArchive, archived, idle, pr, sessionId]);
+  }, [autoArchive, idle, pr, sessionId, me]);
 
   if (!pr || remote) return null;
   const c = pr.checks;

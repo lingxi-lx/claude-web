@@ -213,7 +213,7 @@ export function ChatTile({ tile, paneId, visible }: { tile: ChatTileModel; paneI
       {tile.wb === 'live' && (
         <>
           <GoalBar sessionId={sid} />
-          <PrBar sessionId={sid} />
+          <PrBar sessionId={sid} visible={visible} />
           {tile.view === 'chat' ? <ChatView key={sid} /> : <TrajectoryView key={sid} />}
           <Composer key={`c-${sid}`} disabled={deleted} visible={visible} />
         </>

@@ -218,8 +218,8 @@ export const DiffView = memo(function DiffView(p: DiffViewProps) {
             return (
               <Fragment key={key}>
                 <div className={clsx('diff-pair', cm && 'commentable')}>
-                  <Cell r={l} side="del" onClick={() => open(atOf(l, 'del'))} />
-                  <Cell r={r} side="add" onClick={() => open(atOf(r, 'add'))} />
+                  <Cell r={l} side="del" onClick={cm ? () => open(atOf(l, 'del')) : undefined} />
+                  <Cell r={r} side="add" onClick={cm ? () => open(atOf(r, 'add')) : undefined} />
                 </div>
                 {notes(atOf(l, 'del'), true)}
                 {atOf(r, 'add')?.side === 'new' && (l === r ? null : notes(atOf(r, 'add'), true))}
@@ -238,7 +238,7 @@ export const DiffView = memo(function DiffView(p: DiffViewProps) {
           if (r.type === 'hunk' || r.type === 'skip') return <SpecialRow key={i} r={r} onOpen={() => setOpened((o) => ({ ...o, [(r as any).key]: true }))} />;
           return (
             <Fragment key={i}>
-              <div className={clsx('dl', r.type, cm && 'commentable')} onClick={() => open(atOf(r, 'line'))} title={cm ? tr('点一下给这一行写评论') : undefined}>
+              <div className={clsx('dl', r.type, cm && 'commentable')} onClick={cm ? () => open(atOf(r, 'line')) : undefined} title={cm ? tr('点一下给这一行写评论') : undefined}>
                 <span className="ln">{r.oldNo ?? ''}</span>
                 <span className="ln">{r.newNo ?? ''}</span>
                 <span className="mk">{r.type === 'add' ? '+' : r.type === 'del' ? '−' : ' '}</span>
@@ -285,6 +285,8 @@ function CommentBox({ onDone }: { onDone: (text: string) => void }) {
         onKeyDown={(e) => {
           if (imeComposing(e.nativeEvent)) return;
           if (e.key === 'Enter' && !e.shiftKey && !(e.ctrlKey || e.metaKey)) { e.preventDefault(); onDone(v); }
+          // Ctrl+Enter: this one too — it is added here and the key goes on up to the review panel, which sends them all
+          else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && v.trim()) onDone(v);
           else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onDone(''); }
         }}
         onBlur={() => { if (!v.trim()) onDone(''); }}

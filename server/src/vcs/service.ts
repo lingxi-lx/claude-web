@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import path from 'node:path';
 import { promisify } from 'node:util';
 import type { GitService } from '../git/service.js';
 import type { BranchPr, VcsDetail, VcsItem, VcsRepo } from '../protocol.js';
@@ -16,6 +17,8 @@ interface Target { provider: 'github' | 'gitlab'; host: string; owner: string; r
  */
 export class VcsService {
   private tokens = new Map<string, { token: string; at: number }>();
+  /** hosts with no login, for a minute: the PR bar asks every minute per conversation and `gh auth token` is a process */
+  private noToken = new Map<string, number>();
   private users = new Map<string, string>();
   constructor(private git: GitService) {}
 
@@ -41,17 +44,19 @@ export class VcsService {
     const key = `${t.provider}:${t.host}`;
     const hit = this.tokens.get(key);
     if (hit && Date.now() - hit.at < 10 * 60_000) return hit.token;
-    let token = '';
-    if (t.provider === 'github') {
-      token = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? '';
-      if (!token) { try { const { stdout } = await execFileAsync(isWin ? 'gh.exe' : 'gh', ['auth', 'token', '-h', t.host], { windowsHide: true, timeout: 15_000 }); token = stdout.trim(); } catch { /* not logged in */ } }
-    } else {
-      token = process.env.GITLAB_TOKEN ?? '';
-      if (!token) { try { const { stdout } = await execFileAsync(isWin ? 'glab.exe' : 'glab', ['config', 'get', 'token', '-h', t.host], { windowsHide: true, timeout: 15_000 }); token = stdout.trim(); } catch { /* not logged in */ } }
-    }
+    const miss = this.noToken.get(key);
+    const token = miss && Date.now() - miss < 60_000 ? '' : await this.lookupToken(t);
+    if (!token) this.noToken.set(key, Date.now());
     if (!token) throw new Error(t.provider === 'github' ? tr('未登录 GitHub：运行 `gh auth login`，或设置 GH_TOKEN') : tr('未登录 GitLab：运行 `glab auth login`，或设置 GITLAB_TOKEN'));
     this.tokens.set(key, { token, at: Date.now() });
     return token;
+  }
+
+  private async lookupToken(t: Target): Promise<string> {
+    const env = t.provider === 'github' ? process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN : process.env.GITLAB_TOKEN;
+    if (env) return env;
+    const [cmd, args] = t.provider === 'github' ? [isWin ? 'gh.exe' : 'gh', ['auth', 'token', '-h', t.host]] : [isWin ? 'glab.exe' : 'glab', ['config', 'get', 'token', '-h', t.host]];
+    try { return (await execFileAsync(cmd, args, { windowsHide: true, timeout: 15_000 })).stdout.trim(); } catch { return ''; /* not logged in */ }
   }
 
   private base(t: Target) {
@@ -211,6 +216,7 @@ export class VcsService {
    * an error — the bar simply does not show.
    */
   async prForBranch(cwd: string): Promise<{ pr?: BranchPr; why?: string }> {
+    if (!cwd || !path.isAbsolute(cwd)) return { why: 'not-a-repo' };
     let branch = '';
     try { branch = (await execFileAsync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd, windowsHide: true, timeout: 10_000 })).stdout.trim(); } catch { return { why: 'not-a-repo' }; }
     if (!branch || branch === 'HEAD') return { why: 'detached' };
@@ -218,8 +224,11 @@ export class VcsService {
     try { t = await this.target(cwd); } catch { return { why: 'no-remote' }; }
     if (t.provider !== 'github') return { why: 'not-github' };
     try { if (!(await this.token(t))) return { why: 'not-logged-in' }; } catch { return { why: 'not-logged-in' }; }
-    const d = await this.graphql<any>(t, `query($owner:String!,$name:String!,$head:String!){ repository(owner:$owner,name:$name){ pullRequests(headRefName:$head,first:1,orderBy:{field:UPDATED_AT,direction:DESC}){ nodes{ id number title url state isDraft mergeable autoMergeRequest{ enabledAt } commits(last:1){ nodes{ commit{ oid statusCheckRollup{ contexts(first:100){ nodes{ __typename ... on CheckRun{ name status conclusion detailsUrl checkSuite{ workflowRun{ databaseId } } } ... on StatusContext{ context state targetUrl } } } } } } } } } } }`, { owner: t.owner, name: t.repo, head: branch });
-    const p = d.repository?.pullRequests?.nodes?.[0];
+    // `headRefName` alone also matches strangers' forks (hundreds of fork PRs from their `main` on a busy repo): only
+    // this repository's own branches count, and never the default branch — nobody's conversation "is" that PR
+    const d = await this.graphql<any>(t, `query($owner:String!,$name:String!,$head:String!){ repository(owner:$owner,name:$name){ defaultBranchRef{ name } pullRequests(headRefName:$head,first:10,orderBy:{field:UPDATED_AT,direction:DESC}){ nodes{ id number title url state isDraft isCrossRepository mergeable autoMergeRequest{ enabledAt } commits(last:1){ nodes{ commit{ oid statusCheckRollup{ contexts(first:100){ nodes{ __typename ... on CheckRun{ name status conclusion detailsUrl checkSuite{ workflowRun{ databaseId } } } ... on StatusContext{ context state targetUrl } } } } } } } } } } }`, { owner: t.owner, name: t.repo, head: branch });
+    if (branch === d.repository?.defaultBranchRef?.name) return { why: 'default-branch' };
+    const p = (d.repository?.pullRequests?.nodes ?? []).find((x: any) => x && !x.isCrossRepository);
     if (!p) return { why: 'no-pr' };
     const c = p.commits?.nodes?.[0]?.commit;
     return { pr: { id: p.id, number: p.number, title: p.title, url: p.url, state: p.state === 'MERGED' ? 'merged' : p.state === 'OPEN' ? 'open' : 'closed', draft: !!p.isDraft, mergeable: p.mergeable === 'MERGEABLE' ? true : p.mergeable === 'CONFLICTING' ? false : undefined, autoMerge: !!p.autoMergeRequest, sha: c?.oid ?? '', checks: summarizeChecks(c?.statusCheckRollup?.contexts?.nodes ?? []) } };

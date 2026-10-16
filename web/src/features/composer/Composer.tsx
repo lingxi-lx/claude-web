@@ -598,7 +598,10 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
       if (e.key === 'ArrowDown') { e.preventDefault(); setAtIdx((i) => (i + 1) % atFiles.length); return; }
       if (e.key === 'ArrowUp') { e.preventDefault(); setAtIdx((i) => (i - 1 + atFiles.length) % atFiles.length); return; }
       // Enter picks only once something was typed after @ (a lone @ then Enter is a message); Tab always picks
-      if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey && atOpen.q)) { e.preventDefault(); pickFile(atFiles[Math.min(atIdx, atFiles.length - 1)]); return; }
+      // Enter takes a file only when it really is what was typed (its path has the letters together) or one was picked
+      // with the arrows — `ping @team` + Enter sends, it does not become a file that happens to have t-e-a-m in order
+      const pick = atFiles[Math.min(atIdx, atFiles.length - 1)];
+      if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey && atOpen.q && (atIdx > 0 || pick.toLowerCase().includes(atOpen.q.toLowerCase())))) { e.preventDefault(); pickFile(pick); return; }
       if (e.key === 'Escape') { e.preventDefault(); setAtClosed(atOpen.start); return; }
     }
     if (matches.length && slashQuery !== null && !imeComposing(e.nativeEvent)) {

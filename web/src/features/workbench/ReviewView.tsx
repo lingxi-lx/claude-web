@@ -414,7 +414,7 @@ export function ReviewView({ visible, inPlace, inDock }: { visible: boolean; inP
         {gitMounted && root && <div className="rv-git-body"><GitView cwd={cwd} visible={visible && sub === 'git'} /></div>}
         {gitMounted && !root && <div className="empty">{loaded ? tr('{cwd} 不是 git 仓库。', { cwd }) : tr('读取中…')}</div>}
       </div>
-      <div className="rv-main" hidden={sub !== 'diff'} data-lines={mobile ? lineMode : undefined} onKeyDown={(e) => { if (commentSid && pending.length && e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !imeComposing(e.nativeEvent)) { e.preventDefault(); handOver(); } }}>
+      <div className="rv-main" hidden={sub !== 'diff'} data-lines={mobile ? lineMode : undefined} onKeyDown={(e) => { if (commentSid && e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !imeComposing(e.nativeEvent)) { e.preventDefault(); handOver(); } }}>
         {pending.length > 0 && (
           <div className="rv-comments" role="status">
             <Icon name="chat" size={13} />
