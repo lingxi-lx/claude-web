@@ -68,3 +68,14 @@
 - server 里 `server/src/<目录>/x.ts` 到仓库根是三级 `../../..`，不是两级（`changelog.ts` 第一版就错在这）。
 - 菜单项的 `data-id` 必须来自 `features/composer/ids.ts` 的表（`reach.test` 会拦字面量）。
 - 会话 meta 的类型有两份：`server/src/meta/store.ts` 的和 `protocol.ts` 的 `SessionMeta`，加字段两边都要加。
+
+## 独立验证查出、已修（2026-10-16）
+
+- 预览：Windows 上 `npm` 这类 `.cmd` 没加 `windowsVerbatimArguments`，Node 把引号又转义一次——命令找不到，参数里的 `&` 还会执行第二条命令；
+  端口只查 127.0.0.1，Vite 在 `localhost`（Windows 上是 ::1）永远等不到、别人占在 ::1 / 0.0.0.0 的端口被当成空的；两次 preview_start 同时来
+  会起两个、第一个成了孤儿。现在 `portFree` 查四个地址、`connects` 试两个回环、同一配置并发共用一次启动、`cwd` 不许出项目。测试里有真的 `.cmd`。
+- 只聊天：以前只有窗口打开对话那条路补回 `chatOnly`；别的对话发消息、IM、目标、定时任务、换供应商重开都会把工具还回去，分叉也记在了临时 id 上。
+  现在由 `RunnerPool.open` 统一从 meta 补，分叉在 CLI 给出真 id 时记；只聊天的对话不能换成其它 agent。
+- 「立即运行」碰上对话正忙 / 失败，不再改下一次的定时，也不说「1 分钟后重试」（手动任务没有定时器去重试）。
+- 跨对话的生成文件：同一个文件路径写法不同（大小写、斜杠）只列一次。菜单数字键不数 + 菜单里的「频道」输入框。
+- 已知限制（没改）：preview_start 的审批卡只显示配置名，不显示要跑的命令；选了「总是允许」后，Claude 改了 launch.json 再起也不会再问。

@@ -71,3 +71,13 @@
 
 - bash 里 `node -e "…"` 写带反引号的注释 / 模板串会被 shell 执行掉（这期两次）：改用 Write / Edit 或脚本文件。
 - 测试里 mock 了 SDK 的地方（`session-runner.test.ts`）要补 `createSdkMcpServer` / `tool`，否则开了 sessions 工具就崩。
+
+## 独立验证查出、已修（2026-10-16）
+
+- 深链接的 folder 是网络路径（`\host\share`）时，光是问「这个目录在不在」Windows 就会去 SMB 登录那台机器，把 NTLM 哈希交出去：
+  `localFolder()` 先挡掉网络路径和相对路径，`isDir` 根本不会被问到。
+- 「worktree 放在哪」填相对路径或 `~`：以前原样拼接，worktree 建进了仓库里；现在 `resolveWorktreeDir` 展开 `~`，不是本机完整路径就报错。
+- 任务 chip 在别的机器的对话里点「在新对话里做」开到了本机：现在带上那台机器；同名任务的 worktree 名字带建议 id 的尾巴，不会撞。
+- 本机环境变量：`__proto__` / `constructor` 之类不是变量名；Windows 上 `PATH` 和 `Path` 是同一个，第二种写法拒绝。
+- 跨对话：同一个对话 10 分钟内最多收 10 条别的对话发来的消息（两个对话互相「告诉对方」会无限互答）；定时任务的对话不投递。
+- 已知风险（没改）：发送方的权限模式比接收方严时，消息会在接收方更宽的权限下执行——接收方本来就是用户自己开的对话。
