@@ -133,6 +133,8 @@ export class SessionRunner extends EventEmitter {
   private input = new InputQueue();
   private abort = new AbortController();
   private pending = new Map<string, PendingPermission>();
+  /** the tools this query runs without asking (Options.allowedTools): ccb asks for them wrapped, see onCanUseTool */
+  private preAllowed = new Set<string>();
   private history: SDKMessage[] = []; // messages since spawn, replayed to late-joining clients
   info: SessionInfoSnapshot;
   private model?: string;
@@ -362,6 +364,7 @@ export class SessionRunner extends EventEmitter {
     // 跨对话工具 (sessions-mcp/tools.ts): in-process, so nothing to hand out; archive_session is left to the permission mode
     const sessionsMcp: Record<string, McpServerConfig> = sessionsMcpEnabled() ? { [SESSIONS_SERVER]: sessionsMcpServer(() => this.sessionId) } : {};
     const allowed = [...webAllowedTools(), ...(Object.keys(computer).length ? computerAllowedTools() : []), ...(Object.keys(sessionsMcp).length ? SESSIONS_ALLOWED : [])];
+    this.preAllowed = new Set(allowed);
     const noEngineSearch = engineSearchOff({ engine: engine.kind, userChoice: 'WEB_SEARCH_ADAPTER' in fenv || userPickedSearchAdapter(this.cwd) });
     // a provider session must not inherit provider-ish env from this process (e.g. a global ANTHROPIC_API_KEY)
     const base = { ...process.env };
@@ -610,6 +613,9 @@ export class SessionRunner extends EventEmitter {
     const requestId = randomUUID();
     const event: PermissionRequestEvent = { requestId, sessionId: this.sessionId, toolName, input, toolUseId: o.toolUseID, suggestions: o.suggestions, blockedPath: o.blockedPath, decisionReason: o.decisionReason };
     if (o.signal.aborted) return Promise.resolve({ behavior: 'deny', message: 'cancelled' });
+    // claude-web-engine (ccb) defers MCP tools behind ExecuteExtraTool { tool_name, params }: `allowedTools` names the tool
+    // inside, so the wrapper asked every time (2026-10-16, the sessions tools on ccb). Allowed when what it runs is.
+    if (toolName === 'ExecuteExtraTool' && typeof input.tool_name === 'string' && this.preAllowed.has(input.tool_name)) return Promise.resolve({ behavior: 'allow', updatedInput: input });
     return new Promise<PermissionResult>((resolve) => {
       this.pending.set(requestId, { event, resolve });
       o.signal.addEventListener('abort', () => {

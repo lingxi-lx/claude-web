@@ -33,6 +33,9 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
     queries.push(h);
     return q;
   },
+  // 跨对话工具 builds an in-process MCP server: here only its shape matters
+  createSdkMcpServer: (o: any) => ({ type: 'sdk', name: o.name, instance: {} }),
+  tool: (name: string) => ({ name }),
 }));
 const eng = vi.hoisted(() => ({ kind: 'claude' as 'claude' | 'ccb' }));
 /** what the CLI answers to supportedModels() (the account's list) */
@@ -181,6 +184,27 @@ describe('SessionRunner', () => {
     const res = await queries[0].options.canUseTool('Bash', { command: 'ls' }, { signal: ac.signal });
     expect(res.behavior).toBe('deny');
     expect(r.getPendingPermissions()).toHaveLength(0);
+    await r.close();
+  });
+
+  it('ccb wraps an MCP tool in ExecuteExtraTool: allowed when the tool inside is, asked otherwise', async () => {
+    const { SESSIONS_ALLOWED, setSessionsDeps } = await import('../sessions-mcp/tools.js');
+    setSessionsDeps({ list: async () => [], read: async () => [], stateOf: () => undefined, deliver: async () => {}, rename: async () => {}, archive: async () => {} });
+    queries.length = 0;
+    const r = new SessionRunner({ sessionId: 'xt', cwd: '/x' } as any);
+    await tick();
+    setSessionsDeps(null);
+    expect(queries[0].options.mcpServers.sessions).toMatchObject({ type: 'sdk', name: 'sessions' });
+    const allowed = queries[0].options.allowedTools as string[];
+    const inner = 'mcp__sessions__list_sessions';
+    expect(allowed).toEqual(expect.arrayContaining(SESSIONS_ALLOWED));
+    expect(allowed).not.toContain('mcp__sessions__archive_session');
+    const ok = await queries[0].options.canUseTool('ExecuteExtraTool', { tool_name: inner, params: { limit: 5 } }, { signal: new AbortController().signal });
+    expect(ok).toEqual({ behavior: 'allow', updatedInput: { tool_name: inner, params: { limit: 5 } } });
+    expect(r.getPendingPermissions()).toHaveLength(0);
+    // archive_session (or anything not on the list) still asks
+    void queries[0].options.canUseTool('ExecuteExtraTool', { tool_name: 'mcp__sessions__archive_session', params: { id: 'a' } }, { signal: new AbortController().signal });
+    expect(r.getPendingPermissions()).toHaveLength(1);
     await r.close();
   });
 });
