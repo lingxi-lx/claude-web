@@ -13,7 +13,7 @@ import { tr } from '../i18n/index.js';
 const FORWARD = new Set<ClientRequest['kind']>([
   'session.open', 'session.info', 'session.send', 'session.interrupt', 'session.side', 'session.close',
   'session.setModel', 'session.setPermissionMode', 'session.setEffort', 'session.setUltracode', 'session.setSubagentModel',
-  'session.contextUsage', 'session.stopTask', 'session.canonical',
+  'session.contextUsage', 'session.statusLine', 'session.stopTask', 'session.canonical',
   'permission.respond',
   'transcript.load', 'transcript.subagents', 'transcript.subagent',
   'library.read', 'library.rename', 'library.fork',

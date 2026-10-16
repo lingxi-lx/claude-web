@@ -31,3 +31,25 @@ export function ComposerBar({ plus, project, branch, status, meter, model, subag
     </div>
   );
 }
+
+/**
+ * A conversation on a wide screen (phase 6 §3, the official app's layout): the box keeps `+`, the words, mic and
+ * send; what the next turn runs with sits on a quiet line under it — permission on the left, model · effort and the
+ * context ring on the right. Same chip classes as the bar (`.cb`), so every menu and chip behaves the same.
+ */
+export function ComposerUnder({ permission, status, model, subagent, effort, meter }: {
+  permission?: ReactNode;
+  status?: ReactNode;
+  model?: ReactNode;
+  subagent?: ReactNode;
+  effort?: ReactNode;
+  meter?: ReactNode;
+}) {
+  return (
+    <div className="composer-under cb">
+      <div className="cb-left">{permission}</div>
+      <span className="grow" />
+      <div className="cb-right">{status}{model}{subagent}{effort}{meter}</div>
+    </div>
+  );
+}

@@ -42,7 +42,8 @@ import { connectModel, useConnect } from '@/features/providers/ConnectModel';
 import { dlg, useDialogStore } from '@/ui/dialog';
 import { DOCK_BLOCKED, DOCK_CARRIED, DOCK_ENTER_IGNORED, DOCK_PLACEHOLDER, DOCK_REQUEUED, DOCK_SEND, TERMS, ULTRACODE } from '@/ui/terms';
 import { showGoals } from '@/features/workbench/right-panel';
-import { ComposerBar } from './ComposerBar';
+import { ComposerBar, ComposerUnder } from './ComposerBar';
+import { StatusLine } from './StatusLine';
 import { PlusMenu } from './PlusMenu';
 import { PermissionChip } from './PermissionChip';
 import { nextPermissionMode } from '@/ui/terms';
@@ -358,6 +359,15 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   const docked = !welcome && !disabled && active ? active.pending[0] : undefined;
   const dockAgent = agentWord(active?.info);
   const hasAttachments = imgs.length > 0 || atts.length > 0 || files.length > 0 || refs.length > 0;
+  // 插话 takes words only (what the button always sent); attachments and slash commands wait their turn in the queue
+  const canSteer = busy && !docked && !!active && canSend && !!text.trim() && !hasAttachments && !isSlashCommand(text);
+  const steerNow = () => {
+    if (!active) return;
+    const t = text;
+    setText('');
+    setDraft(active.sessionId, '');
+    void send(active.sessionId, t, undefined, true).catch((e) => toast(e.message));
+  };
   // 下一句提示 (phase 2 spec §2): the engine's guess, grey in the empty box; Tab takes it, Esc / typing puts it away
   const suggestionRaw = useStore((s) => (active ? s.open[active.sessionId]?.conv.suggestion : undefined));
   const [dismissed, setDismissed] = useState<string | undefined>(undefined);
@@ -633,6 +643,8 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
         if (act === 'primary') { runDockPrimary(primaryKey(dockScope, docked.requestId)); return; }
         if (act === 'ignore') { if (why) setEnterNote({ requestId: docked.requestId, why }); return; }
       }
+      // Ctrl+Enter while a turn runs: 插话 (the official app's second key; Enter keeps queueing — the docked cards build on it)
+      if ((e.ctrlKey || e.metaKey) && canSteer) { steerNow(); return; }
       void doSend();
     }
     if (e.key === 'Escape' && busy && active) void interrupt(active.sessionId);
@@ -849,7 +861,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   const steer = docked && (dockClick === 'deny' || dockClick === 'blocked') ? (
     <button className="steer deny" data-id={BAR_ID.steer} disabled={dockClick === 'blocked'} title={dockClick === 'blocked' ? DOCK_BLOCKED : tr('拒绝这次请求，并把这段话告诉 {dockAgent}（Enter）', { dockAgent })} onClick={denyDocked}>{DOCK_SEND[dockKind(docked)]} <Icon name="send" size={12} /></button>
   ) : busy && canSend && active ? (
-    <button className="steer" data-id={BAR_ID.steer} title={tr('{steer}：不等这一轮结束，马上把这句话告诉 Claude', { steer: TERMS.steer })} aria-label={TERMS.steer} onClick={async () => { const t = text; setText(''); setDraft(active.sessionId, ''); await send(active.sessionId, t, undefined, true).catch((e) => toast(e.message)); }}>{tr('插话')} <Icon name="send" size={12} /></button>
+    <button className="steer" data-id={BAR_ID.steer} title={tr('{steer}：不等这一轮结束，马上把这句话告诉 Claude（Ctrl+Enter）', { steer: TERMS.steer })} aria-label={TERMS.steer} onClick={steerNow}>{tr('插话')} <Icon name="send" size={12} /></button>
   ) : null;
   const mic = speechOk && !mobile ? (
     <button data-id={BAR_ID.mic} className={clsx('icon-btn', listening && 'active')} title={listening ? tr('停止语音输入') : tr('语音输入（浏览器识别）')} onClick={toggleVoice} aria-label={tr('语音输入')}><Icon name="mic" size={15} /></button>
@@ -980,6 +992,8 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
 
   // the light around the box while this conversation runs (the stop button also shows while it waits or starts)
   const glow = glowing({ welcome, state: active?.state, visible });
+  // a conversation on a wide screen: the chips go on a line under the box (phase 6 §3); a phone keeps one row
+  const under = !welcome && !mobile;
 
   return (
     // data-paused: something lies over the conversation — the looping animations in here (the light, the tab's dot
@@ -1012,11 +1026,12 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
         {active && !welcome && <QueueCards key={active.sessionId} sessionId={active.sessionId} queue={active.queue} onEdit={(t) => { setText((cur) => (cur ? `${cur}\n${t}` : t)); ta.current?.focus(); }} />}
         {/* 后台: a workflow / sub-agent / background command still going — the pill opens the 后台 page on it */}
         {active && !welcome && <BackgroundPill sessionId={active.sessionId} />}
+        {active && !welcome && <StatusLine sessionId={active.sessionId} />}
         {/* a docked card takes the run card's place (spec §4.2: 「等确认时被权限卡替代」) */}
         {active && !welcome && (docked
           ? <PermissionDock sessionId={active.sessionId} reason={text} onReasonUsed={() => onChange('')} scope={dockScope} note={dockNote} onDenyQueued={queuedOffer ? denyQueued : undefined} />
           : <RunCard sessionId={active.sessionId} />)}
-        <div className="composer-box" data-state={face} onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+        <div className={clsx('composer-box', under && 'one-line')} data-state={face} onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
           {glow && <span className="composer-glow" aria-hidden><i /></span>}
           {hasChips && (
             <div className="attach">
@@ -1072,7 +1087,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
             rows={1}
             value={text}
             disabled={disabled}
-            placeholder={suggestion ? `${suggestion}   ${tr('Tab 采用')}` : disabled ? tr('对话已被删除，不能继续') : docked ? DOCK_PLACEHOLDER[dockKind(docked)](dockAgent) : welcome && !ultraOn ? tr('描述一个任务，或者问个问题。输入 / 查看命令，拖入文件作为附件') : busy ? tr('运行中，输入会排队 · Esc 中断') : ultraOn ? ULTRACODE.placeholder : active?.state === 'history' ? tr('发送即可继续这个对话…') : tr('回复 {agentName}… 输入 / 查看命令，拖入文件作为附件', { agentName: info?.agentName && info.agent !== 'claude' ? info.agentName : 'Claude' })}
+            placeholder={suggestion ? `${suggestion}   ${tr('Tab 采用')}` : disabled ? tr('对话已被删除，不能继续') : docked ? DOCK_PLACEHOLDER[dockKind(docked)](dockAgent) : welcome && !ultraOn ? tr('描述一个任务，或者问个问题。输入 / 查看命令，拖入文件作为附件') : busy ? tr('Enter 排到这一轮之后，Ctrl+Enter 马上插话 · Esc 中断') : ultraOn ? ULTRACODE.placeholder : active?.state === 'history' ? tr('发送即可继续这个对话…') : tr('回复 {agentName}… 输入 / 查看命令，拖入文件作为附件', { agentName: info?.agentName && info.agent !== 'claude' ? info.agentName : 'Claude' })}
             onChange={(e) => { setCaret(e.target.selectionStart ?? e.target.value.length); onChange(e.target.value); }}
             onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
             onKeyDown={onKey}
@@ -1086,17 +1101,18 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
             plus={plus}
             project={welcome ? <><MachineChip peers={peers} value={wPeer} onPick={pickMachine} /><ProjectChip cwd={cwd} recent={recentDirs} onPick={setCwd} onBrowse={() => (wPeer ? toast(tr('别的电脑上的文件夹，从它最近用过的里面选')) : void pickDir())} worktree={wWorktree} onWorktree={setWWorktree} /></> : null}
             branch={welcome && !mobile && !wPeer ? <BranchChip cwd={cwd} /> : null}
-            status={status}
-            meter={meter}
-            model={model}
-            subagent={subagent}
-            effort={effort}
-            permission={permission}
+            status={under ? undefined : status}
+            meter={under ? undefined : meter}
+            model={under ? undefined : model}
+            subagent={under ? undefined : subagent}
+            effort={under ? undefined : effort}
+            permission={under ? undefined : permission}
             mic={mic}
             steer={steer}
             send={send_}
           />
         </div>
+        {under && <ComposerUnder permission={permission} status={status} model={model} subagent={subagent} effort={effort} meter={meter} />}
       </div>
     </div>
   );

@@ -451,6 +451,8 @@ export type ClientRequest =
   | { kind: 'session.rename'; sessionId: string; title: string }
   | { kind: 'session.delete'; sessionId: string }
   | { kind: 'session.contextUsage'; sessionId: string; detail?: 'summary' | 'full' }
+  /** the user's statusLine command run for this conversation (null: none set, turned off, or it printed nothing); `cwd`: a conversation not running */
+  | { kind: 'session.statusLine'; sessionId: string; cwd?: string }
   | { kind: 'feedback.set'; sessionId: string; messageId: string; rating: 'up' | 'down' | null; note?: string }
   | { kind: 'feedback.list'; sessionId: string }
   | { kind: 'drafts.set'; key: string; text: string } // key = sessionId | 'welcome'

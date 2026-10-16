@@ -11,7 +11,8 @@ import { readChangelog } from '../app/changelog.js';
 import { recentArtifacts } from '../library/artifacts.js';
 import type { LocalEnvStore } from '../runtime/local-env.js';
 import { cacheParentFor } from '../runtime/cache-key.js';
-import { SessionService } from '../sessions/service.js';
+import { SessionService, claudeDir } from '../sessions/service.js';
+import { runStatusLine, userStatusLine } from '../statusline/run.js';
 import { ConfigService } from '../config/service.js';
 import { UsageService } from '../usage/service.js';
 import { FilesService } from '../files/service.js';
@@ -672,6 +673,26 @@ export class Hub {
         if (r.failed.length) throw new Error(r.failed[0].error);
         s.sessions.emit('changed');
         return null;
+      }
+      case 'session.statusLine': {
+        if (s.meta.settings()['ui.statusLine'] === false) return null;
+        const cfg = await userStatusLine(claudeDir);
+        if (!cfg) return null;
+        const info = s.pool.get(req.sessionId)?.info;
+        const cwd = info?.cwd ?? req.cwd;
+        if (!cwd) return null;
+        const model = info?.model ?? '';
+        const text = await runStatusLine(cfg.command, {
+          hook_event_name: 'Status',
+          session_id: req.sessionId,
+          transcript_path: (await s.sessions.locate(req.sessionId)) ?? '',
+          cwd,
+          model: { id: model, display_name: info?.models?.find((m) => m.value === model)?.displayName ?? model },
+          workspace: { current_dir: cwd, project_dir: cwd },
+          version: info?.claudeCodeVersion ?? '',
+          output_style: { name: 'default' },
+        }, cwd);
+        return text === null ? null : { text, padding: cfg.padding };
       }
       case 'session.contextUsage':
         return this.runner(req.sessionId).contextUsage?.(req.detail ?? 'summary') ?? null;
