@@ -123,7 +123,7 @@
 
 /* ---- the cards (AgentCards.tsx): the one at work glows in its colour ---- */
 .bg-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: var(--sp-2); }
-.bg-card { --c: var(--ink-3); position: relative; min-width: 0; display: flex; flex-direction: column; align-items: stretch; gap: 2px; padding: 9px 11px 8px; border-radius: var(--r-lg); background: var(--fill-subtle); box-shadow: inset 0 0 0 1px var(--edge-subtle); color: var(--ink-2); font: inherit; text-align: left; transition: box-shadow var(--dur-base) var(--ease-out), background-color var(--dur-fast) var(--ease-out), transform var(--dur-instant) var(--ease-out); }
+.bg-card { --c: var(--ink-3); position: relative; min-width: 0; display: flex; flex-direction: column; align-items: stretch; gap: 2px; padding: 9px 11px 8px; border-radius: var(--r-lg); background: var(--fill-subtle); box-shadow: inset 0 0 0 var(--hairline) var(--edge-subtle); color: var(--ink-2); font: inherit; text-align: left; transition: box-shadow var(--dur-base) var(--ease-out), background-color var(--dur-fast) var(--ease-out), transform var(--dur-instant) var(--ease-out); }
 .bg-card.shell { --c: var(--office-machine); }
 button.bg-card { cursor: pointer; }
 button.bg-card:hover { background: var(--layer-hover); }

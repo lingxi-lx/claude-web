@@ -129,7 +129,7 @@ html.desktop.mac .app.has-rail .sb-top, html.desktop.mac .app.has-rail .sect-top
 
 .tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--sp-3); padding: var(--sp-2) 0 var(--sp-4); }
 .tpl-card { min-width: 0; display: flex; align-items: flex-start; gap: var(--sp-3); padding: 14px var(--sp-4); text-align: left; border-radius: var(--r-lg); background: var(--fill-subtle); box-shadow: inset 0 0 0 1px transparent; transition: background-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out), transform var(--dur-instant) var(--ease-out); }
-.tpl-card:hover { background: var(--layer-hover); box-shadow: inset 0 0 0 1px var(--edge-default); }
+.tpl-card:hover { background: var(--layer-hover); box-shadow: inset 0 0 0 var(--hairline) var(--edge-default); }
 .tpl-card:active { transform: scale(0.985); }
 .tpl-tx { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .tpl-n { font-size: var(--fs-body); font-weight: 600; color: var(--ink-1); }
@@ -180,7 +180,7 @@ html.desktop.mac .app.has-rail .sb-top, html.desktop.mac .app.has-rail .sect-top
 .cx-d { color: var(--ink-3); font-size: var(--fs-base); line-height: 1.45; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cx-need { flex: none; padding: 0 7px; border-radius: var(--r-pill); background: var(--layer-selected); color: var(--ink-3); font-size: var(--fs-micro); font-weight: 400; line-height: 18px; }
 .cx-add, .cx-added, .cx-rm { flex: none; width: 32px; height: 32px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; }
-.cx-add { color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--edge-default); transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out), transform var(--dur-instant) var(--ease-out); }
+.cx-add { color: var(--ink-2); box-shadow: inset 0 0 0 var(--hairline) var(--edge-default); transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out), transform var(--dur-instant) var(--ease-out); }
 .cx-row:hover .cx-add, .cx-add:focus-visible { background: var(--primary); color: var(--primary-fg); box-shadow: none; }
 .cx-add:active { transform: scale(0.92); }
 .cx-added { color: var(--ok); }
@@ -197,7 +197,7 @@ html.desktop.mac .app.has-rail .sb-top, html.desktop.mac .app.has-rail .sect-top
 .cx-st.err .cx-dot { background: var(--err); }
 .cx-err { display: flex; align-items: center; gap: 8px; color: var(--ink-3); font-size: var(--fs-sm); }
 .cx-none { padding: var(--sp-4) 0; color: var(--ink-3); font-size: var(--fs-base); }
-.cx-foot { display: flex; align-items: center; gap: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--edge-subtle); }
+.cx-foot { display: flex; align-items: center; gap: var(--sp-3); padding-top: var(--sp-3); border-top: var(--hairline) solid var(--edge-subtle); }
 .cx-foot .btn { display: inline-flex; align-items: center; gap: 6px; }
 .cx-hint { color: var(--ink-3); font-size: var(--fs-sm); }
 .tile-ic.brand { color: var(--tint); }

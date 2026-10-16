@@ -46,7 +46,7 @@
 .mm-empty { padding: 18px 12px; text-align: center; color: var(--ink-4); font-size: var(--fs-sm); }
 
 /* the one line left: it stops 6px short of the menu's edges (the menu's own padding) */
-.mm-foot { flex: none; display: flex; align-items: center; gap: 4px; margin-top: 6px; padding: 6px 0 0; border-top: 1px solid var(--edge-subtle); }
+.mm-foot { flex: none; display: flex; align-items: center; gap: 4px; margin-top: 6px; padding: 6px 0 0; border-top: var(--hairline) solid var(--edge-subtle); }
 .mm-foot .grow { flex: 1; }
 .menu .mm-foot button { width: auto; min-height: 30px; font-size: var(--fs-sm); color: var(--ink-2); padding: 0 10px; }
 .menu .mm-foot button:disabled { opacity: 0.7; cursor: default; }
@@ -55,23 +55,23 @@
 .models-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
 .models-top .field { flex: 1; min-width: 180px; }
 .models-fetch { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; margin-bottom: 12px; }
-.models-fetch .pf { display: flex; flex-direction: column; gap: 2px; padding: 7px 10px; border: 1px solid var(--edge-subtle); border-radius: var(--r-md); background: var(--surface-1); min-width: 0; }
+.models-fetch .pf { display: flex; flex-direction: column; gap: 2px; padding: 7px 10px; border: var(--hairline) solid var(--edge-subtle); border-radius: var(--r-md); background: var(--surface-1); min-width: 0; }
 .models-fetch .pf .n { display: flex; align-items: center; gap: 6px; font-weight: 600; color: var(--ink-1); min-width: 0; }
 .models-fetch .pf .n span:first-of-type { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .models-fetch .pf .n .icon-btn { margin-left: auto; }
 .models-fetch .pf .s { font-size: var(--fs-sm); color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .models-fetch .pf .s.err { color: var(--err); }
-.models-table-wrap { overflow-x: auto; border: 1px solid var(--edge-subtle); border-radius: var(--r-md); }
+.models-table-wrap { overflow-x: auto; border: var(--hairline) solid var(--edge-subtle); border-radius: var(--r-md); }
 .models-table { width: 100%; border-collapse: collapse; font-size: var(--fs-base); }
-.models-table th { text-align: left; font-weight: 500; font-size: var(--fs-sm); color: var(--ink-4); padding: 6px 10px; border-bottom: 1px solid var(--edge-subtle); background: var(--surface-1); position: sticky; top: 0; }
-.models-table td { padding: 5px 10px; border-bottom: 1px solid var(--edge-subtle); vertical-align: middle; }
+.models-table th { text-align: left; font-weight: 500; font-size: var(--fs-sm); color: var(--ink-4); padding: 6px 10px; border-bottom: var(--hairline) solid var(--edge-subtle); background: var(--surface-1); position: sticky; top: 0; }
+.models-table td { padding: 5px 10px; border-bottom: var(--hairline) solid var(--edge-subtle); vertical-align: middle; }
 .models-table tr:last-child td { border-bottom: 0; }
 .models-table tr.off td.name { color: var(--ink-4); text-decoration: line-through; }
 .models-table td.name { font-family: var(--mono); font-size: var(--fs-sm); white-space: nowrap; }
 .models-table td.provs { display: flex; flex-wrap: wrap; gap: 4px; }
 .models-table td.acts { white-space: nowrap; text-align: right; width: 1%; }
 .models-table td.acts > * { vertical-align: middle; }
-.prov-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: var(--r-pill); border: 1px solid var(--edge-default); background: var(--surface-1); font-size: var(--fs-sm); color: var(--ink-2); cursor: pointer; white-space: nowrap; }
+.prov-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: var(--r-pill); border: var(--hairline) solid var(--edge-default); background: var(--surface-1); font-size: var(--fs-sm); color: var(--ink-2); cursor: pointer; white-space: nowrap; }
 .prov-chip:hover { background: var(--layer-hover); color: var(--ink-1); }
 .prov-chip.def { border-color: var(--accent); color: var(--ink-1); }
 .models-table .mm-star { opacity: 1; }
@@ -104,7 +104,7 @@
 /* the 子代理 chip and its menu (SubagentChip): 「跟主模型一样」 on top, the default switch above the footer */
 .mm-row.mm-same { margin-bottom: 4px; }
 .mm-row.mm-same:hover { background-color: var(--layer-hover); }
-.mm-subdef { flex: none; display: flex; align-items: center; gap: 8px; margin-top: 6px; padding: 6px 8px 0; border-top: 1px solid var(--edge-subtle); font-size: var(--fs-sm); color: var(--ink-2); cursor: pointer; }
+.mm-subdef { flex: none; display: flex; align-items: center; gap: 8px; margin-top: 6px; padding: 6px 8px 0; border-top: var(--hairline) solid var(--edge-subtle); font-size: var(--fs-sm); color: var(--ink-2); cursor: pointer; }
 .mm-subdef input { margin: 0; }
 .mm-subdef:has(input:disabled) { cursor: default; color: var(--ink-4); }
 .cb .sub-anchor > .chip > svg { flex: none; color: var(--ink-3); }
@@ -116,7 +116,7 @@
   .cb .sub-anchor .mm-chip-label { display: none; }
 }
 /* the main model menu's last row: the subagents' model, opens the 子代理 menu */
-.mm-subrow { flex: none; display: flex; align-items: center; gap: 8px; margin-top: 6px; padding: 7px 8px; border: 0; border-top: 1px solid var(--edge-subtle); background: none; font: inherit; font-size: var(--fs-sm); color: var(--ink-2); cursor: pointer; text-align: left; border-radius: 0; }
+.mm-subrow { flex: none; display: flex; align-items: center; gap: 8px; margin-top: 6px; padding: 7px 8px; border: 0; border-top: var(--hairline) solid var(--edge-subtle); background: none; font: inherit; font-size: var(--fs-sm); color: var(--ink-2); cursor: pointer; text-align: left; border-radius: 0; }
 .mm-subrow:hover, .mm-subrow:focus-visible { background: var(--layer-hover); color: var(--fg-1); }
 .mm-subrow .l { flex: none; }
 .mm-subrow .v { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-4); text-align: right; }
