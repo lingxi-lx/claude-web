@@ -135,6 +135,11 @@ function seedHome(home) {
     rline({ type: 'assistant', message: { id: 'msg_r1', type: 'message', role: 'assistant', model: 'claude-smoke', content: [{ type: 'tool_use', id: 'toolu_r_find', name: 'ReportFindings', input: { level: 'high', findings: [{ file: 'src/index.ts', line: 1, summary: 'smoke finding one', failure_scenario: 'x → y', category: 'correctness', verdict: 'CONFIRMED' }, { file: 'README.md', summary: 'smoke finding two', failure_scenario: 'a → b' }] } }], stop_reason: 'tool_use', usage: { input_tokens: 1, output_tokens: 1 } } }, 5),
     rline({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_r_find', content: 'reported' }] } }, 6),
     rline({ type: 'assistant', message: { id: 'msg_r2', type: 'message', role: 'assistant', model: 'claude-smoke', content: [{ type: 'text', text: 'smoke: review done.' }], stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 } } }, 8),
+    // 跨对话工具 (spec 2026-10-16 sessions-env §1–2): a message from another conversation, then a suggested task
+    rline({ type: 'user', message: { role: 'user', content: '<cw-from session="' + sid + '" title="smoke sender">\nsmoke: hello from the other one\n</cw-from>' } }, 10),
+    rline({ type: 'assistant', message: { id: 'msg_r3', type: 'message', role: 'assistant', model: 'claude-smoke', content: [{ type: 'tool_use', id: 'toolu_r_task', name: 'mcp__sessions__suggest_task', input: { title: 'smoke task', prompt: 'smoke: do the other thing', worktree: true } }], stop_reason: 'tool_use', usage: { input_tokens: 1, output_tokens: 1 } } }, 12),
+    rline({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_r_task', content: 'Shown to the user as a task chip.' }] } }, 13),
+    rline({ type: 'assistant', message: { id: 'msg_r4', type: 'message', role: 'assistant', model: 'claude-smoke', content: [{ type: 'text', text: 'smoke: suggested.' }], stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 } } }, 14),
   ].map((x) => JSON.stringify(x)).join('\n') + '\n');
   return { repo, sid, toolsSid, reviewSid, transcript: path.join(proj, `${sid}.jsonl`) };
 }
@@ -2601,6 +2606,21 @@ function driver() {
         await js(`document.querySelector('.pane.focused .findings .fd-item .fd-acts .btn.ghost')?.click()`);
         const dismissed = await waitFor(`document.querySelector('.pane.focused .findings .fd-item')?.classList.contains('done') && /（1）/.test(document.querySelector('.pane.focused .findings .fd-foot .btn')?.textContent ?? '') && (window.__store.getState().sessionMeta[${rsid}]?.reviewDismissed ?? []).length === 1`, 4000);
         check('代码审查卡: ReportFindings draws by file, 修复还开着的（2）; 忽略 greys one out, remembers it, and the count drops', card && files.join() === 'src/index.ts,README.md' && /（2）/.test(openBtn) && dismissed, JSON.stringify({ card, files, openBtn, dismissed }));
+        // ---- 跨对话工具: the message from another conversation, and the task chip
+        const fromHead = await js(`document.querySelector('.pane.focused .from-head')?.textContent ?? ''`);
+        const fromBody = await js(`[...document.querySelectorAll('.pane.focused .bubble')].some((b) => b.textContent.includes('smoke: hello from the other one') && !b.textContent.includes('cw-from'))`);
+        check('跨对话: a <cw-from> message shows who sent it (来自「smoke sender」) and only what was said', /smoke sender/.test(fromHead) && fromBody, JSON.stringify({ fromHead, fromBody }));
+        const chip = await waitFor(`!!document.querySelector('.pane.focused .task-chip .tc-t')`, 4000);
+        const chipT = await js(`document.querySelector('.pane.focused .task-chip .tc-t')?.textContent ?? ''`);
+        await js(`document.querySelector('.pane.focused .task-chip .tc-acts .btn.ghost')?.click()`);
+        const chipOff = await waitFor(`document.querySelector('.pane.focused .task-chip')?.classList.contains('off') && (window.__store.getState().sessionMeta[${rsid}]?.taskDismissed ?? []).includes('toolu_r_task')`, 4000);
+        check('任务 chip: suggest_task draws as a chip (title, 在新对话里做); 忽略 greys it and remembers it', chip && chipT === 'smoke task' && chipOff, JSON.stringify({ chip, chipT, chipOff }));
+        // ---- 文件右键: a file path in the conversation opens the file menu
+        const fl = await js(`(() => { const a = document.querySelector('.pane.focused .findings .fd-path a, .pane.focused .findings .fd-path [role="link"], .pane.focused .findings .fd-path > *'); if (!a) return null; const r = a.getBoundingClientRect(); a.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 4, clientY: r.top + 4 })); return true; })()`);
+        const fileMenu = await waitFor(`!!document.querySelector('.file-menu [data-act="copy"]') && !!document.querySelector('.file-menu [data-act="reveal"]')`, 3000);
+        await key('Escape');
+        const fileMenuGone = await waitFor(`!document.querySelector('.file-menu:not(.leaving)')`, 3000);
+        check('文件右键: a file path\'s context menu has 复制路径 / 在资源管理器中显示, Esc closes it', !!fl && fileMenu && fileMenuGone, JSON.stringify({ fl, fileMenu, fileMenuGone }));
         await js(`window.__store.getState().setSetting('ui.viewMode', 'normal')`);
       }
       if (E.SMOKE_READONLY !== '1' && E.SMOKE_TOOLS_SID) {

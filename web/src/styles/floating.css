@@ -165,4 +165,5 @@ html.desktop:not(.mac) .app[data-rp-closing] :is(.groupbar, .tabstrip, .sess-hea
   .toast { transition: opacity 80ms linear; }
   .pd-actions .btn:active { transform: none; }
 }
-.file-menu-at { position: fixed; width: 0; height: 0; pointer-events: none; }
+/* 1px, not 0: Popover takes a 0 × 0 anchor for one that left the screen and closes */
+.file-menu-at { position: fixed; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
