@@ -17,7 +17,8 @@ const NONE: string[] = [];
 
 // One bar per conversation does the work, whichever on-screen one asked first: it polls, and only it auto-fixes or
 // auto-archives (a conversation can sit in two panes; hidden tabs stay mounted). The others draw what it found.
-const usePrs = create<{ bySession: Record<string, BranchPr | null> }>(() => ({ bySession: {} }));
+/** also read by 总览 (MissionPanel): what the bars found, by conversation */
+export const usePrs = create<{ bySession: Record<string, BranchPr | null> }>(() => ({ bySession: {} }));
 const owners = new Map<string, symbol>();
 const claim = (sid: string, me: symbol) => { const o = owners.get(sid); if (o && o !== me) return false; owners.set(sid, me); return true; };
 // asked already in this window, before meta.json's `prFixed` comes back round (two renders a frame apart must not both send)

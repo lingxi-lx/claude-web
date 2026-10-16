@@ -7,8 +7,8 @@ import { sessionPeer } from '@/features/peers';
 import { orchAct, useOrch, useOrchBusy, waitingOf } from '@/features/orchestra/state';
 import { accessAsk, isAccessRequest } from '@/features/computer/computer-tools';
 import { tr } from '@/i18n';
-
-type Lane = 'attention' | 'running' | 'idle' | 'error';
+import { usePrs } from '@/features/vcs/PrBar';
+import { laneOf, resolved, type Lane } from './mission-lanes';
 
 /**
  * Mission Control: every session across workspaces at a glance — what needs you, what is running (with the
@@ -29,23 +29,31 @@ export function MissionPanel() {
   const orchFull = useOrch((s) => s.full);
   const orchWait = useMemo(() => waitingOf(orchFull), [orchFull]);
   const orchBusy = useOrchBusy((s) => s.keys);
+  // the PRs the conversations' PR bars found (待审 / 落地中) and what was archived lately (已解决)
+  const prs = usePrs((s) => s.bySession);
+  const sessionMeta = useStore((s) => s.sessionMeta);
+  const done = useMemo(() => resolved(sessions.filter((x) => !x.peer), (id) => !!sessionMeta[id]?.archived), [sessions, sessionMeta]);
+  const [showDone, setShowDone] = useState(false);
 
   const cards = useMemo(() => {
     const now = Date.now();
     return Object.values(open).map((o) => {
       const meta = sessions.find((s) => s.sessionId === o.sessionId);
-      const lane: Lane = o.pending.length ? 'attention' : o.state === 'running' || o.state === 'waiting' || o.state === 'starting' ? 'running' : o.state === 'error' ? 'error' : 'idle';
+      const pr = prs[o.sessionId];
+      const lane: Lane = laneOf({ state: o.state, pending: o.pending.length, pr });
       const tools = [...walkTools(o.conv.items)];
       const lastTool = tools.length ? tools[tools.length - 1].tool : undefined;
       const running = o.conv.runningTool;
       const cost = o.conv.lastResult?.costUsd ?? 0;
-      return { o, meta, peer: sessionPeer(o.sessionId, sessions), lane, title: meta?.title ?? o.sessionId.slice(0, 8), cwd: o.cwd, lastTool, running, quietMs: o.conv.lastEventAt ? now - o.conv.lastEventAt : 0, cost, turns: o.conv.items.filter((i) => i.kind === 'user').length, sched: schedules.find((s) => s.sessionId === o.sessionId) };
+      return { o, meta, peer: sessionPeer(o.sessionId, sessions), lane, title: meta?.title ?? o.sessionId.slice(0, 8), cwd: o.cwd, lastTool, running, quietMs: o.conv.lastEventAt ? now - o.conv.lastEventAt : 0, cost, turns: o.conv.items.filter((i) => i.kind === 'user').length, sched: schedules.find((s) => s.sessionId === o.sessionId), pr };
     });
-  }, [open, sessions, schedules]);
+  }, [open, sessions, schedules, prs]);
   const lanes: { id: Lane; l: string; hint: string }[] = [
     { id: 'attention', l: tr('需要你'), hint: tr('等待权限或提问') },
     { id: 'running', l: tr('运行中'), hint: tr('模型或工具正在执行') },
     { id: 'error', l: tr('出错'), hint: tr('进程异常退出') },
+    { id: 'review', l: tr('待审'), hint: tr('分支的 PR 开着，等人审') },
+    { id: 'landing', l: tr('落地中'), hint: tr('PR 已批准，或开了自动合并') },
     { id: 'idle', l: tr('空闲'), hint: tr('已连接，等待输入') },
   ];
   // federation: sessions running on other machines that this window has not opened (opened ones are cards above)
@@ -57,6 +65,7 @@ export function MissionPanel() {
         <span>{tr('{total} 个活动对话 · {filterCount} 需要你 · {filterCount2} 运行中', { total, filterCount: cards.filter((c) => c.lane === 'attention').length + orchWait.length + remote.filter((s) => s.live === 'waiting').length, filterCount2: cards.filter((c) => c.lane === 'running').length + remote.filter((s) => s.live !== 'waiting').length })}</span>
         <span className="grow" />
         <label className="muted" style={{ fontSize: 13, display: 'flex', gap: 4, alignItems: 'center' }}><input type="checkbox" checked={showIdle} onChange={(e) => setShowIdle(e.target.checked)} /> {tr('显示空闲')}</label>
+        <label className="muted" style={{ fontSize: 13, display: 'flex', gap: 4, alignItems: 'center' }}><input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> {tr('显示已解决')}</label>
       </div>
       {!total && !remote.length && !orchWait.length && <div className="empty">{tr('没有活动的对话。侧栏点开一个，或用「恢复」继续。')}</div>}
       <div className="mission-lanes">
@@ -76,6 +85,7 @@ export function MissionPanel() {
           const items = cards.filter((c) => c.lane === lane.id);
           const orch = lane.id === 'attention' ? orchWait : [];
           if (!items.length && lane.id !== 'attention' && lane.id !== 'running') return null;
+          // (待审 / 落地中 only appear when a conversation is in them)
           return (
             <div key={lane.id} className={clsx('lane', lane.id)}>
               <div className="lane-h"><b>{lane.l}</b><span className="badge">{items.length + orch.length}</span><span className="muted">{lane.hint}</span></div>
@@ -96,6 +106,7 @@ export function MissionPanel() {
                   ))}
                   {c.lane === 'running' && <div className="sub">{c.running ? `${c.running.name} · ${fmtMs(Date.now() - c.running.since)}` : c.o.state === 'starting' ? tr('启动中…') : tr('模型思考中')}{c.quietMs > 15000 ? tr(' · 安静 {fmtMs}', { fmtMs: fmtMs(c.quietMs) }) : ''}</div>}
                   {c.lane === 'error' && <div className="sub" style={{ color: 'var(--red)' }}>{c.o.error ?? tr('进程退出')}</div>}
+                  {(c.lane === 'review' || c.lane === 'landing') && c.pr && <div className="sub"><a href={c.pr.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>PR #{c.pr.number}</a>{c.pr.review === 'changes' ? ` · ${tr('要求修改')}` : c.pr.autoMerge ? ` · ${tr('会自动合并')}` : ''}{c.pr.checks.failed ? ` · ${tr('{n} 个检查失败', { n: c.pr.checks.failed })}` : ''}</div>}
                   <div className="foot">
                     <span className="muted">{tr('{turns} 轮{v}{v2}{v3}', { turns: c.turns, v: c.cost ? ` · $${c.cost.toFixed(3)}` : '', v2: c.lastTool ? tr(' · 最近 {name}', { name: c.lastTool.name }) : '', v3: c.o.conv.lastEventAt ? ` · ${ago(c.o.conv.lastEventAt)}` : '' })}</span>
                     <span className="grow" />
@@ -121,6 +132,18 @@ export function MissionPanel() {
           );
         })}
       </div>
+      {showDone && (
+        <div className="lane resolved">
+          <div className="lane-h"><b>{tr('已解决')}</b><span className="badge">{done.length}</span><span className="muted">{tr('最近 7 天归档的')}</span></div>
+          {done.map((s) => (
+            <div key={s.sessionId} className="mcard" onClick={() => void loadHistory(s.sessionId)}>
+              <div className="t">{s.customTitle || s.title}</div>
+              <div className="sub">{basename(s.cwd)}{s.gitBranch ? ` · ${s.gitBranch}` : ''} · {ago(s.lastModified)}</div>
+            </div>
+          ))}
+          {!done.length && <div className="empty sm">—</div>}
+        </div>
+      )}
     </div>
   );
 }
