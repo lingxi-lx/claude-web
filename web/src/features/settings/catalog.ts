@@ -28,7 +28,7 @@ export type BodyId =
   | 'account' | 'engine' | 'models' | 'providers' | 'proxy' | 'gateway'
   | 'mcp' | 'mcpCatalog' | 'mcpJson' | 'plugins' | 'skills' | 'skillsBackup' | 'agents' | 'subagents' | 'memory'
   | 'remote' | 'anywhere' | 'peers' | 'hosts' | 'im' | 'web' | 'library' | 'secrets'
-  | 'hooks' | 'env' | 'tools' | 'diagnostics' | 'update' | 'raw' | 'customCss';
+  | 'hooks' | 'localEnv' | 'env' | 'tools' | 'diagnostics' | 'update' | 'raw' | 'customCss';
 
 export interface EntryMeta {
   id: EntryId;
@@ -89,6 +89,7 @@ export const BODY_INFO: Record<BodyId, { l: string; keywords: string }> = {
   library: { l: tr('来源与索引'), keywords: tr('session library codex opencode 导入 索引 加入 移出 重建') },
   secrets: { l: tr('API Key 存储'), keywords: tr('secret keychain credential dpapi 钥匙串 加密 密钥') },
   hooks: { l: tr('Hooks 列表'), keywords: tr('hook 钩子 事件 matcher') },
+  localEnv: { l: tr('本机环境变量（加密）'), keywords: tr('env 环境变量 加密 密钥 secret database token 本机 终端 terminal') },
   env: { l: tr('其它环境变量'), keywords: tr('env 环境变量 brave web search artifacts langfuse sentry voice 语音 settings.json') },
   tools: { l: tr('命令行工具检测'), keywords: tr('git gh node python uv docker ripgrep 工具 检测 cli') },
   diagnostics: { l: tr('诊断包'), keywords: tr('diagnostic log bundle 日志 诊断包 导出') },
@@ -164,7 +165,7 @@ export const SETTINGS_SECTIONS: SectionMeta[] = [
   { id: 'secrets', l: tr('密钥'), ic: 'lock', group: 'data', desc: tr('供应商的 API Key 怎么存在本机。'), keywords: tr('secret 密钥 加密'), bodies: ['secrets'] },
   // 高级
   { id: 'hooks', l: 'Hooks', ic: 'bolt', group: 'advanced', advanced: true, desc: tr('Claude Code 在某些事件时运行的命令（只读列表，来自 settings.json 和插件）。'), keywords: tr('hook 钩子'), bodies: ['hooks'] },
-  { id: 'env', l: tr('环境变量'), ic: 'config', group: 'advanced', advanced: true, desc: tr('写进 ~/.claude/settings.json 的 env，所有对话生效；留空表示不设置。供应商的地址和密钥不在这里。'), keywords: tr('env 环境变量'), bodies: ['env'] },
+  { id: 'env', l: tr('环境变量'), ic: 'config', group: 'advanced', advanced: true, desc: tr('本机环境变量加密保存，只给这个应用开的对话和终端；下面的「其它环境变量」写进 ~/.claude/settings.json，命令行里的 Claude Code 也读。供应商的地址和密钥不在这里。'), keywords: tr('env 环境变量'), bodies: ['localEnv', 'env'] },
   { id: 'tools', l: tr('CLI 工具'), ic: 'keyboard', group: 'advanced', advanced: true, desc: tr('本机装了哪些命令行工具（git、gh、node…），Claude 用得上的都在这里检测。'), keywords: tr('tools cli 工具'), bodies: ['tools'] },
   { id: 'diagnostics', l: tr('诊断'), ic: 'info', group: 'advanced', advanced: true, desc: tr('出问题时打一个诊断包：日志尾部和脱敏后的配置。'), keywords: tr('diagnostic 诊断 日志'), bodies: ['diagnostics'] },
   { id: 'update', l: trAs('更新', 'Updates'), ic: 'refresh', group: 'advanced', advanced: true, desc: tr('当前版本与更新。'), keywords: tr('update 更新 版本'), bodies: ['update'] },

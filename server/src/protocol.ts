@@ -478,6 +478,11 @@ export type ClientRequest =
   | { kind: 'shell.open'; path: string; app?: 'explorer' | 'reveal' | 'code' | 'cursor' | 'zed' }
   /** the editors 「用 … 打开」 can offer: the ones on PATH (macOS: also the app bundles) → `{ editors: ('code'|'cursor'|'zed')[] }` */
   | { kind: 'shell.editors' }
+  /** 本机环境变量: names only → `{ names: string[] }`; a value only on `env.reveal` → `{ value }`; `env.set` with
+   *  `value: null` removes. In every conversation / terminal started here, under 供应商's own variables */
+  | { kind: 'env.list' }
+  | { kind: 'env.set'; name: string; value: string | null }
+  | { kind: 'env.reveal'; name: string }
   /** the user's custom.css (appearance/custom-css.ts): its text, and making it with the template */
   | { kind: 'ui.customCss' }
   | { kind: 'ui.customCss.create' }

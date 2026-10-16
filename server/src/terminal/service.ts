@@ -8,6 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { resolveClaudeExe } from '../claude-exe.js';
 import { tr } from '../i18n/index.js';
+import { localEnv } from '../runtime/local-env.js';
 
 type Pty = { write(d: string): void; resize(c: number, r: number): void; kill(): void; onData(cb: (d: string) => void): void; onExit(cb: (e: { exitCode: number }) => void): void };
 
@@ -72,7 +73,7 @@ export class TerminalService extends EventEmitter {
     const termId = randomUUID();
     let exe: string | null = null;
     try { exe = resolveClaudeExe(); } catch { /* no bundled claude: the shell still works */ }
-    const sh = terminalShell(process.platform, { ...process.env, CLAUDE_CODE_ENTRYPOINT: 'claude-web-terminal' }, exe);
+    const sh = terminalShell(process.platform, { ...process.env, ...localEnv(), CLAUDE_CODE_ENTRYPOINT: 'claude-web-terminal' }, exe);
     const p: Pty = this.ptyMod.spawn(sh.file, sh.args, { name: 'xterm-256color', cols, rows, cwd: cwd || os.homedir(), env: sh.env });
     this.terms.set(termId, p);
     p.onData((d) => this.emit('data', termId, d));

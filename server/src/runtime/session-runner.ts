@@ -20,6 +20,7 @@ import { ENGINE_SEARCH_TOOL, engineSearchOff, userPickedSearchAdapter } from '..
 import { markUnknownCost } from '../usage/pricing.js';
 import type { AttachmentRef, EffortLevel, ModelInfo, OpenSessionParams, PermissionMode, PermissionRequestEvent, PermissionResponse, Provider, RunnerState, SessionFeatures, SessionInfoSnapshot, SideTurn } from '../protocol.js';
 import { tr } from '../i18n/index.js';
+import { localEnv } from './local-env.js';
 
 /** A conversation above this share of the next model's window is compacted before the switch. */
 const FIT_SHARE = 0.8;
@@ -242,7 +243,8 @@ export class SessionRunner extends EventEmitter {
   private featureEnv(): Record<string, string> {
     const f = this.features;
     const routed = this.provider ?? this.account;
-    const env: Record<string, string> = { ...(routed ? providerEnv(routed, 'claude', { sessionKey: this.cacheKey, sessionId: this.ledgerId }) : {}), ...(f.env ?? {}) };
+    // 本机环境变量 lowest: 供应商's variables and the session's own win over them (local-env.ts keeps routing names out)
+    const env: Record<string, string> = { ...localEnv(), ...(routed ? providerEnv(routed, 'claude', { sessionKey: this.cacheKey, sessionId: this.ledgerId }) : {}), ...(f.env ?? {}) };
     if (f.coordinator) env.CLAUDE_CODE_COORDINATOR_MODE = '1';
     return env;
   }

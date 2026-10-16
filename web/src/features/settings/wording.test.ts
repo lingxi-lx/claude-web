@@ -45,6 +45,7 @@ const BODY_SOURCE: Record<BodyId, { comp: string; file: string; props?: string }
   library: { comp: 'LibrarySection', file: S('LibrarySection.tsx') },
   secrets: { comp: 'SecretsSection', file: S('SecretsSection.tsx') },
   hooks: { comp: 'SimpleList', file: CONFIG, props: 'kind="config.hooks"' },
+  localEnv: { comp: 'LocalEnvEditor', file: S('LocalEnvEditor.tsx') },
   env: { comp: 'EnvEditor', file: S('EnvEditor.tsx'), props: 'bare' },
   tools: { comp: 'ToolsSection', file: S('ToolsSection.tsx') },
   diagnostics: { comp: 'DiagnosticsSection', file: S('DiagnosticsSection.tsx') },

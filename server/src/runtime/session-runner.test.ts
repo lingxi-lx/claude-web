@@ -238,6 +238,24 @@ describe('SessionRunner Stop (interrupt)', () => {
     } finally { setPromptSuggestions(true); }
   });
 
+  it('本机环境变量 reach the conversation, under its own variables', async () => {
+    const { setLocalEnv } = await import('./local-env.js');
+    setLocalEnv({ DATABASE_URL: 'pg://local', CLAUDE_CODE_REPORT_FINDINGS: 'never' });
+    try {
+      queries.length = 0;
+      const r = new SessionRunner({ sessionId: 'env-1', cwd: '/x', features: { env: { DATABASE_URL: 'pg://session' } } } as any);
+      await tick();
+      expect(queries[0].options.env?.DATABASE_URL).toBe('pg://session');
+      expect(queries[0].options.env?.CLAUDE_CODE_REPORT_FINDINGS).toBe('1'); // a reserved name never gets in
+      await r.close();
+      queries.length = 0;
+      const b = new SessionRunner({ sessionId: 'env-2', cwd: '/x' } as any);
+      await tick();
+      expect(queries[0].options.env?.DATABASE_URL).toBe('pg://local');
+      await b.close();
+    } finally { setLocalEnv({}); }
+  });
+
   it('旁聊: asks the engine with the side chat so far, and the conversation hears nothing of it', async () => {
     queries.length = 0;
     const r = new SessionRunner({ sessionId: 'side-1', cwd: '/x' } as any);

@@ -5,6 +5,7 @@ import { CLAUDE_PROVIDER_ID, type ClientRequest, type OpenSessionParams, type Re
 import { RunnerPool } from '../runtime/pool.js';
 import { SessionRunner, setPromptSuggestions } from '../runtime/session-runner.js';
 import { listProjectFiles, rankFiles } from '../files/find.js';
+import type { LocalEnvStore } from '../runtime/local-env.js';
 import { cacheParentFor } from '../runtime/cache-key.js';
 import { SessionService } from '../sessions/service.js';
 import { ConfigService } from '../config/service.js';
@@ -72,6 +73,8 @@ export interface Services {
   library: LibraryService;
   /** Other agents' config center: MCP / instructions / settings of Codex, Gemini, Qwen, OpenCode (agentConfig.*). */
   agentConfig: AgentConfigService;
+  /** 本机环境变量 (runtime/local-env.ts); optional (tests) */
+  localEnv?: LocalEnvStore;
 
   /** Cross-machine sessions: routes peer_… requests / merges lists before handle(); optional (tests). */
   federation?: FederationService;
@@ -498,6 +501,15 @@ export class Hub {
       case 'shell.open':
         openPath(req.path, req.app);
         return null;
+      case 'env.list': return { names: s.localEnv?.names() ?? [] };
+      case 'env.reveal': return { value: (await s.localEnv?.reveal(req.name)) ?? '' };
+      case 'env.set': {
+        if (!s.localEnv) throw new Error('local env unavailable');
+        try { await s.localEnv.set(req.name, req.value); } catch (e: any) {
+          throw new Error(e?.message === 'reserved' ? tr('{name} 由供应商设置决定，不能在这里改', { name: req.name }) : e?.message === 'invalid' ? tr('变量名只能用字母、数字和下划线，且不以数字开头') : String(e?.message ?? e));
+        }
+        return { names: s.localEnv.names() };
+      }
       case 'shell.editors':
         return { editors: await installedEditors() };
       case 'ui.customCss':

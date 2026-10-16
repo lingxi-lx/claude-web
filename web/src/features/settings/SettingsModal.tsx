@@ -40,6 +40,7 @@ import { WebSettings } from '@/features/browser/WebSettings';
 import { tr, trAs } from '@/i18n';
 import { CustomCssSection } from './CustomCssSection';
 import { VIEW_MODES, viewModeLabel } from '@/features/chat/view-mode';
+import { LocalEnvEditor } from './LocalEnvEditor';
 
 export { Row } from './controls';
 
@@ -102,6 +103,7 @@ const BODIES: Record<BodyId, () => ReactNode> = {
   library: () => <LibrarySection />,
   secrets: () => <SecretsSection />,
   hooks: () => <SimpleList kind="config.hooks" empty={tr('还没有 Hooks。settings.json 或插件里配置的会出现在这里。')} render={(h) => <div className="grow"><div>{h.event} <span style={muted}>{h.matcher ? `matcher: ${h.matcher}` : ''} · {h.source}</span></div><div className="sub">{(h.hooks ?? []).map((x: any) => x.command ?? x.type).join(' ; ')}</div></div>} />,
+  localEnv: () => <LocalEnvEditor />,
   env: () => <EnvEditor bare />,
   tools: () => <ToolsSection />,
   diagnostics: () => <DiagnosticsSection />,
