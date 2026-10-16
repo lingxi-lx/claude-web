@@ -1,0 +1,67 @@
+/* 信息栏 (phase 6 spec §1; the official app's right column): the conversation column | the cards. Two text levels,
+   hairline cards, colour only for diff numbers, switches and the context swatches. */
+.chat-split { display: flex; flex: 1; min-height: 0; min-width: 0; }
+.chat-main { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+
+.info-col {
+  width: 288px; flex: none; overflow-y: auto; padding: var(--sp-3) var(--sp-3) var(--sp-3) 4px;
+  display: flex; flex-direction: column; gap: 10px; font-size: var(--fs-sm);
+}
+.info-card { border-radius: var(--r-md); box-shadow: inset 0 0 0 var(--hairline) var(--edge-default); background: color-mix(in oklab, var(--fg) 2%, transparent); padding: 10px 12px; }
+.info-card.dragging { opacity: 0.5; }
+.info-card .ic-head { display: flex; align-items: center; gap: 6px; min-height: 22px; }
+.info-card .ic-title { display: inline-flex; align-items: center; gap: 4px; font-weight: var(--fw-strong); color: var(--fg); border-radius: var(--r-sm); padding: 1px 2px; margin-left: -2px; }
+.info-card .ic-title svg { color: var(--fg-3); }
+.info-card .ic-title:hover svg { color: var(--fg-2); }
+.info-card .ic-sum { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--fg-2); font-variant-numeric: tabular-nums; }
+.info-card .ic-grip { color: var(--fg-3); cursor: grab; opacity: 0; transition: opacity var(--dur-fast) var(--ease-out); display: inline-flex; }
+.info-card:hover .ic-grip, .info-card:focus-within .ic-grip { opacity: 1; }
+.info-card .ic-body { margin-top: 8px; display: flex; flex-direction: column; gap: 2px; }
+.info-card .ic-row { display: flex; align-items: center; gap: 8px; min-height: 26px; color: var(--fg); width: 100%; text-align: left; border-radius: var(--r-sm); }
+.info-card .ic-row > svg { color: var(--fg-2); flex: none; }
+.info-card .ic-row.clickable:hover { background: var(--layer-hover); }
+.info-card .ic-row-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.info-card .ic-dim, .info-card .ic-st { color: var(--fg-3); }
+.info-card .ic-st.warn, .info-card .warn { color: var(--warn); }
+.info-card .add { color: var(--ok); }
+.info-card .del { color: var(--err); }
+.info-card .ic-acts { display: flex; justify-content: flex-end; gap: 6px; margin-top: 4px; }
+.info-card .ic-acts:empty { display: none; }
+.info-card .ic-link { align-self: flex-start; color: var(--fg-2); font-size: var(--fs-meta); margin-top: 4px; }
+.info-card .ic-link:hover { color: var(--fg); text-decoration: underline; }
+.info-card .icon-btn.xs { width: 22px; height: 22px; }
+
+/* the folded context card's meter */
+.ic-meter { width: 28px; height: 6px; border-radius: 3px; background: color-mix(in oklab, var(--fg) 14%, transparent); overflow: hidden; display: inline-block; }
+.ic-meter > i { display: block; height: 100%; background: var(--blue); border-radius: inherit; }
+
+/* the 上下文 breakdown */
+.ctx .ctx-top { display: flex; justify-content: space-between; margin-bottom: 6px; color: var(--fg); }
+.ctx .ctx-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: color-mix(in oklab, var(--fg) 10%, transparent); margin-bottom: 8px; }
+.ctx .ctx-bar > i { display: block; height: 100%; }
+.ctx .ctx-row { display: grid; grid-template-columns: 10px 1fr auto 44px; align-items: center; gap: 8px; min-height: 21px; font-size: var(--fs-meta); }
+.ctx .ctx-row.sub { grid-template-columns: 1fr auto; padding-left: 18px; }
+.ctx .ctx-row.dim { color: var(--fg-3); }
+.ctx .ctx-row > i { width: 9px; height: 9px; border-radius: 2px; }
+.ctx .ctx-row .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctx .ctx-row .t { color: var(--fg-2); font-variant-numeric: tabular-nums; }
+.ctx .ctx-row .p { color: var(--fg-2); text-align: right; font-variant-numeric: tabular-nums; }
+.ctx .ctx-list { margin-top: 4px; }
+.ctx .ctx-list-h { display: flex; align-items: center; gap: 4px; width: 100%; font-size: var(--fs-meta); color: var(--fg-2); min-height: 22px; }
+.ctx .ctx-list-h .ic-dim { margin-left: auto; }
+.ctx .ctx-foot { margin-top: 8px; font-size: var(--fs-meta); }
+.sw-0 { background: var(--blue); } .sw-1 { background: var(--red); } .sw-2 { background: var(--green); } .sw-3 { background: var(--yellow); }
+.sw-4 { background: color-mix(in oklab, var(--blue) 55%, var(--red)); } .sw-5 { background: var(--accent); }
+.sw-6 { background: color-mix(in oklab, var(--green) 50%, var(--blue)); } .sw-7 { background: color-mix(in oklab, var(--fg) 45%, transparent); }
+.sw-buf { background: repeating-linear-gradient(135deg, color-mix(in oklab, var(--fg) 30%, transparent) 0 2px, transparent 2px 4px); }
+.sw-free { background: color-mix(in oklab, var(--fg) 14%, transparent); }
+.info-card .ic-row-btn { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; min-height: 26px; border-radius: var(--r-sm); text-align: left; color: var(--fg); }
+.info-card .ic-row-btn:hover { background: var(--layer-hover); }
+.info-card .ic-row-btn > svg { color: var(--fg-2); flex: none; }
+
+/* the header ··· menu's 保持电脑唤醒 row: a second, grey line under the label */
+.menu .menu-sub { display: block; font-size: var(--fs-meta); color: var(--fg-3); }
+/* small switches: the info column's 手机远程, the header ··· menu's 保持电脑唤醒 (the composer menus have theirs) */
+.info-card .toggle.sm, .menu.sess-menu .toggle.sm { width: 28px; height: 16px; }
+.info-card .toggle.sm::after, .menu.sess-menu .toggle.sm::after { width: 12px; height: 12px; }
+.info-card .toggle.sm.on::after, .menu.sess-menu .toggle.sm.on::after { transform: translateX(12px); }

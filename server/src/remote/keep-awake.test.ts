@@ -72,4 +72,21 @@ describe('reportKeepAwake', () => {
       warn.mockRestore();
     }
   });
+
+  it('a running conversation set to 保持电脑唤醒 keeps it on with remote access off; recheck sees it end', () => {
+    const meta = fakeMeta({});
+    const sent: boolean[] = [];
+    let running = false;
+    const r = reportKeepAwake(meta, (on) => sent.push(on), () => running);
+    expect(sent).toEqual([false]);
+    running = true;
+    r.recheck();
+    expect(sent).toEqual([false, true]);
+    meta.set('remote.enabled', true);
+    expect(sent).toEqual([false, true]);
+    meta.set('remote.enabled', false);
+    running = false;
+    r.recheck();
+    expect(sent).toEqual([false, true, false]);
+  });
 });

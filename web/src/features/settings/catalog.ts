@@ -19,7 +19,7 @@ export const SETTINGS_GROUPS: { id: SettingsGroupId; l: string }[] = [
 
 /** One setting row (a meta.json key). */
 export type EntryId =
-  | 'ui.defaultMode' | 'autoContinueOnReset' | 'ui.showThinking' | 'ui.viewMode' | 'ui.autoArchivePr' | 'sessions.mcp' | 'worktree.dir' | 'worktree.prefix' | 'ui.promptSuggestions' | 'ui.diffMode' | 'ui.inlineDiffs' | 'ui.workbench' | 'ui.autoSave'
+  | 'ui.defaultMode' | 'autoContinueOnReset' | 'ui.showThinking' | 'ui.viewMode' | 'ui.infoPanel' | 'ui.autoArchivePr' | 'sessions.mcp' | 'worktree.dir' | 'worktree.prefix' | 'ui.promptSuggestions' | 'ui.diffMode' | 'ui.inlineDiffs' | 'ui.workbench' | 'ui.autoSave'
   | 'ui.notifications' | 'ui.closeToTray' | 'ui.confirmExit' | 'ui.softwareRender' | 'orchestra.maxParallel' | 'cafe.rate' | 'cafe.sound'
   | 'ui.language' | 'ui.theme' | 'ui.zoom' | 'ui.fontSize' | 'ui.density' | 'ui.cjkFont' | 'ui.reduceMotion' | 'ui.haptics';
 
@@ -103,6 +103,7 @@ const GENERAL: EntryMeta[] = [
   { id: 'autoContinueOnReset', block: tr('新对话'), label: tr('额度用完后自动继续'), hint: tr('被限流时，等到额度重置再自动发出上一条消息。'), keywords: tr('rate limit quota 限流 额度 额度恢复后自动继续') },
   { id: 'ui.showThinking', block: tr('对话显示'), label: tr('显示思考过程'), hint: tr('展开模型回答之前的推理内容。关掉更清爽。'), keywords: tr('thinking reasoning 思考') },
   { id: 'ui.viewMode', block: tr('对话显示'), label: tr('查看模式'), hint: tr('普通：做完的回合收成一行。显示思考：回合照样收起，思考过程展开。详细：每一步和思考全部展开。Ctrl+O 随时切换。'), keywords: tr('view mode thinking verbose 查看 详细 思考 展开 Ctrl+O') },
+  { id: 'ui.infoPanel', block: tr('对话显示'), label: tr('对话右边的信息栏'), hint: tr('环境、上下文用量、连接器、改动和后台任务一栏摆在对话右边；对话头上的 ⓘ 按钮也能开关。窗口太窄时自动让开。'), keywords: tr('info panel column context connectors changes background 信息栏 上下文 连接器 改动 后台') },
   { id: 'ui.autoArchivePr', block: tr('对话显示'), label: tr('PR 合并或关闭后自动归档对话'), hint: tr('对话分支的 PR 合并或关闭、对话也没在跑时，把对话归档（从侧栏收起，随时能找回）。'), keywords: tr('pr pull request archive merge 归档 合并 自动') },
   { id: 'worktree.dir', more: true, block: tr('新对话'), label: tr('{worktree}放在哪', { worktree: TERMS.worktree }), hint: tr('留空：放在项目自己的 .claude 文件夹里（Claude Code 的默认）。填一个文件夹：新的放到那里，名字是「项目名-任务名」。项目根目录的 {file} 里列出、又被 git 忽略的文件（比如 .env）会拷进去。', { file: '.worktreeinclude' }), keywords: tr('worktree location folder 位置 目录 独立副本 .worktreeinclude') },
   { id: 'worktree.prefix', more: true, block: tr('新对话'), label: tr('{worktree}分支前缀', { worktree: TERMS.worktree }), hint: tr('留空：用 Claude Code 的默认前缀（框里灰色的那个）。比如填 claude/，分支就叫 claude/任务名。'), keywords: tr('worktree branch prefix 分支 前缀 独立副本') },

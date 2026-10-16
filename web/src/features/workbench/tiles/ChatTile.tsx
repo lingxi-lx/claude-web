@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '@/store';
 import { ws } from '@/ws/client';
 import { basename, clsx } from '@/util';
@@ -34,6 +34,11 @@ import { imeComposing } from '@/ui/ime';
 import { showUsageCard } from '@/features/composer/ContextMeter';
 import { tr } from '@/i18n';
 import { normViewMode, viewModeLabel } from '@/features/chat/view-mode';
+import { InfoColumn } from '@/features/info/InfoColumn';
+import { openSideChat } from '@/features/chat/side-chat';
+import { openBackground, useBackground } from '@/features/background/state';
+import { desktop } from '@/desktop';
+import type { PanelId } from '@/model/layout';
 
 type ChatTileModel = Extract<Tile, { kind: 'chat' }>;
 
@@ -48,12 +53,22 @@ function HeaderMenu({ tile, paneId, s, live, remote, gone, onClose }: { tile: Ch
   const pinned = useStore((st) => !!st.sessionMeta[s.sessionId]?.pinned);
   const mobile = useStore((st) => st.mobile);
   const viewMode = useStore((st) => normViewMode(st.settings['ui.viewMode']));
+  const keepAwake = useStore((st) => !!st.sessionMeta[s.sessionId]?.keepAwake);
+  const bgRunning = useBackground((b) => b.sessions[s.sessionId]?.tasks.filter((t) => t.status === 'running').length ?? 0);
   const caps = effectiveCaps(s);
   const act = (fn: () => unknown) => () => { onClose(); void fn(); };
   const st = () => useStore.getState();
   const patch = (p: Partial<ChatTileModel>) => st().dispatchLayout({ t: 'tile.patch', paneId, tileId: tile.id, patch: p });
   return (
     <>
+      <button data-act="side" onClick={act(() => openSideChat(s.sessionId))} disabled={!live || remote}><Icon name="chat" size={14} /> <span style={{ flex: 1 }}>{tr('旁聊')}</span><span className="kbd">{modKey}+;</span></button>
+      <button data-act="background" onClick={act(() => openBackground(s.sessionId))}><Icon name="tasks" size={14} /> <span style={{ flex: 1 }}>{tr('后台任务')}</span>{bgRunning > 0 && <span className="kbd">{bgRunning}</span>}</button>
+      {desktop && !remote && (
+        <button data-act="keep-awake" role="menuitemcheckbox" aria-checked={keepAwake} onClick={() => void st().setSessionMeta(s.sessionId, { keepAwake: !keepAwake })} title={tr('这个对话在跑的时候不让电脑睡眠（屏幕照常会关）')}>
+          <Icon name="bolt" size={14} /> <span style={{ flex: 1 }}>{tr('保持电脑唤醒')}<span className="menu-sub">{tr('只对这个对话')}</span></span><span className={clsx('toggle sm', keepAwake && 'on')} aria-hidden />
+        </button>
+      )}
+      <div className="menu-sep" />
       <button onClick={act(() => shareConversation(s.sessionId))}><Icon name="share" size={14} /> {tr('导出为 HTML')}</button>
       <button onClick={act(() => patch({ wb: 'live', view: tile.view === 'trajectory' && tile.wb === 'live' ? 'chat' : 'trajectory' }))} title={tr('对话 ⇄ {trajectory}（Alt+J）', { trajectory: TERMS.trajectory })}>
         <Icon name="workflow" size={14} /> <span style={{ flex: 1 }}>{TERMS.trajectory}</span>{tile.wb === 'live' && tile.view === 'trajectory' && <Icon name="check" size={13} />}
@@ -91,6 +106,14 @@ function HeaderMenu({ tile, paneId, s, live, remote, gone, onClose }: { tile: Ch
  * worktree, and on the right 「改动 +N −M」, terminal, the right-panel toggle and ···. Everything the old header
  * and its workbench-tab row did is in the ··· menu (see HeaderMenu) or the command palette.
  */
+/** The header's tool row after 信息 and 终端 (phase 6 spec §2): each opens its right-panel tab; `local`: not for a
+ *  conversation on another machine (its files are there). */
+const TOOLS: { panel: PanelId; icon: 'diff' | 'browser' | 'files'; local: boolean; label: () => string; title: () => string }[] = [
+  { panel: 'files', icon: 'diff', local: true, label: () => tr('审阅'), title: () => tr('审阅这个对话的改动') },
+  { panel: 'browser', icon: 'browser', local: false, label: () => tr('浏览器'), title: () => tr('浏览器：预览网页或开发服务器') },
+  { panel: 'explorer', icon: 'files', local: true, label: () => tr('文件'), title: () => tr('文件：项目的文件树') },
+];
+
 function SessionHeader({ tile, paneId }: { tile: ChatTileModel; paneId: string }) {
   const sid = tile.sessionId!;
   const active = useStore((s) => s.open[sid]);
@@ -133,6 +156,7 @@ function SessionHeader({ tile, paneId }: { tile: ChatTileModel; paneId: string }
   const terminalOn = dockShown && dock.active === 'terminal' && !dock.minimized;
   const viewDef = tile.wb !== 'live' ? WB_VIEWS.find((v) => v.id === tile.wb) : undefined;
   const dirty = git?.files.length ?? 0;
+  const infoOn = useStore((s) => s.settings['ui.infoPanel'] !== false);
   return (
     <div className="sess-head">
       {/* the window's top-left row; on a phone every conversation header, the drawer has no other handle */}
@@ -168,12 +192,17 @@ function SessionHeader({ tile, paneId }: { tile: ChatTileModel; paneId: string }
       <span className="sh-actions">
         {/* phone (UI refresh §8): ☰ · title · +N −M (when there are changes) · ··· — 终端 / 任务 and the other views
             are in ··· and open the bottom drawer (whose own tabs switch between 审阅 · 文件 · 终端 · 任务) */}
-        {stat && stat.files > 0 && (
+        {stat && stat.files > 0 && (mobile || !infoOn) && (
           <button className="sh-diff" title={tr("这个对话改了 {files} 个文件：+{added} 行 −{removed} 行\n点击{v}审阅这些改动", { files: stat.files, added: stat.added, removed: stat.removed, v: mobile ? '' : tr('在右侧') })} onClick={() => openReview({ scope: 'session' })}>
             <span className="add">+{stat.added}</span><span className="del">−{stat.removed}</span>
           </button>
         )}
+        {!mobile && <button className={clsx('icon-btn', infoOn && 'active')} title={tr('对话信息：环境、上下文、连接器、改动、后台任务')} aria-label={tr('对话信息')} aria-pressed={infoOn} onClick={() => void useStore.getState().setSetting('ui.infoPanel', !infoOn)}><Icon name={'info'} size={16} /></button>}
         {!peer && !mobile && <button className={clsx('icon-btn', terminalOn && 'active')} title={tr('终端 ({modKey}+`)', { modKey })} aria-label={tr('终端')} onClick={() => (terminalOn ? dispatch({ t: 'dock.set', patch: { open: false } }) : dispatch({ t: 'dock.show', panel: 'terminal' }))}><Icon name="terminal" size={16} /></button>}
+        {!mobile && TOOLS.filter((t) => !peer || !t.local).map((t) => {
+          const on = dockShown && !dock.minimized && dock.active === t.panel;
+          return <button key={t.panel} className={clsx('icon-btn', on && 'active')} data-tool={t.panel} title={t.title()} aria-label={t.label()} aria-pressed={on} onClick={() => (on ? dispatch({ t: 'dock.set', patch: { open: false } }) : dispatch({ t: 'dock.show', panel: t.panel }))}><Icon name={t.icon} size={16} /></button>;
+        })}
         {!mobile && <button className={clsx('icon-btn', dockShown && !dockMin && 'active')} title={dockMin ? tr('展开{dock} ({modKey}+J)', { dock: TERMS.dock, modKey }) : `${TERMS.dock} (${modKey}+J)`} aria-label={dockMin ? tr('展开{dock}', { dock: TERMS.dock }) : TERMS.dock} aria-pressed={dockShown && !dockMin} onClick={toggleDock}><Icon name="inspector" size={16} /></button>}
         <span className="sh-more">
           <button className={clsx('icon-btn', menu && 'active')} title={tr('这个对话的更多操作：导出、步骤视图、改动 / Git / 文件…、重命名、分叉、归档、交给其它 Agent、删除')} aria-label={tr('更多操作')} aria-expanded={menu} aria-haspopup="menu" onClick={(e) => { e.stopPropagation(); setMenu(!menu); }}><Icon name="more" size={16} /></button>
@@ -195,6 +224,19 @@ export function ChatTile({ tile, paneId, visible }: { tile: ChatTileModel; paneI
   const remoteView = !!peer && !viewsFor(true).some((v) => v.id === tile.wb) && tile.wb !== 'live';
   const gitStatus = useGitStatus(active?.cwd ?? '', tile.wb === 'files' && !peer);
   const deleted = useStore((s) => (sid ? !!s.deletedSessions[sid] : false));
+  // 信息栏 (phase 6 spec §1): on unless switched off; it steps aside while the pane is too narrow for both columns
+  const mobile = useStore((s) => s.mobile);
+  const infoOn = useStore((s) => s.settings['ui.infoPanel'] !== false);
+  const split = useRef<HTMLDivElement>(null);
+  const [roomy, setRoomy] = useState(true);
+  useEffect(() => {
+    const el = split.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setRoomy(e.contentRect.width >= 560 + 288));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [!!active, mobile, tile.wb]);
+  const infoShown = infoOn && roomy && !deleted;
   // restored from a persisted layout: lazily pull the transcript
   useEffect(() => {
     if (sid && !has && visible) void loadHistory(sid, { focus: false });
@@ -206,18 +248,24 @@ export function ChatTile({ tile, paneId, visible }: { tile: ChatTileModel; paneI
   }, [sid, stale, visible]);
   if (!sid) return <Welcome paneId={paneId} tileId={tile.id} />;
   if (!active) return <div className="empty">{tr('加载对话…')}</div>;
+  const live = (
+    <>
+      <GoalBar sessionId={sid} />
+      <PrBar sessionId={sid} visible={visible} />
+      {tile.view === 'chat' ? <ChatView key={sid} /> : <TrajectoryView key={sid} />}
+      <Composer key={`c-${sid}`} disabled={deleted} visible={visible} />
+    </>
+  );
   return (
     <div className="chat-tile">
       <SessionHeader tile={tile} paneId={paneId} />
       {deleted && <div className="deleted-banner" role="status"><Icon name="trash" size={13} /> {tr('这个对话已被删除（备份在 ~/.claude-web/library-trash），这里只剩最后看到的内容。')}</div>}
-      {tile.wb === 'live' && (
-        <>
-          <GoalBar sessionId={sid} />
-          <PrBar sessionId={sid} visible={visible} />
-          {tile.view === 'chat' ? <ChatView key={sid} /> : <TrajectoryView key={sid} />}
-          <Composer key={`c-${sid}`} disabled={deleted} visible={visible} />
-        </>
-      )}
+      {tile.wb === 'live' && (mobile ? live : (
+        <div className="chat-split" ref={split}>
+          <div className="chat-main">{live}</div>
+          {infoShown && <InfoColumn sessionId={sid} />}
+        </div>
+      ))}
       {remoteView && <div className="wb-body"><div className="remote-only"><Icon name="machine" size={22} /><div>{tr('这个对话在机器「{name}」上，它的文件 / Git / 搜索 / 定时任务都在那台机器上。', { name: peer!.name })}</div><div className="sub">{tr('请在该机器上查看；这里可以继续对话、审批、中断。')}</div></div></div>}
       {remoteView ? null : <>
       {tile.wb === 'changes' && <div className="wb-body"><ReviewView inPlace visible={visible} /></div>}

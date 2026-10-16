@@ -422,7 +422,10 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   await remote.start();
   if (remote.status().running) console.log(`remote access on http://0.0.0.0:${remote.port}  (${remote.addresses().join(', ')})`);
   // 不让电脑睡眠: the shell holds a powerSaveBlocker while remote access is on — told now and on every change
-  const stopKeepAwake = reportKeepAwake(meta, (on) => parentPort?.postMessage({ type: 'keepAwake', on }));
+  // 保持电脑唤醒 (phase 6): also while a conversation set to it (SessionMeta.keepAwake) is busy
+  const busy = (st: string | undefined) => st === 'running' || st === 'waiting' || st === 'starting';
+  const stopKeepAwake = reportKeepAwake(meta, (on) => parentPort?.postMessage({ type: 'keepAwake', on }), () => pool.list().some((r) => busy(r.state) && !!meta.sessionMeta(r.sessionId).keepAwake));
+  pool.on('state', () => stopKeepAwake.recheck());
   await anywhere.start();
   await im.startAll();
   const eng = await engineInfo();

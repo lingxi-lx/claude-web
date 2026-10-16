@@ -18,11 +18,13 @@ interface SettingsSource {
  * "Remote access on" is the `remote.enabled` setting (RemoteService.enabled()), not whether the listener came up.
  * Returns a function that stops listening.
  */
-export function reportKeepAwake(meta: SettingsSource, post: (on: boolean) => void): () => void {
+/** `also`: another reason to stay awake (a conversation set to 保持电脑唤醒 is running); call the returned `recheck`
+ *  when what it reads changes. */
+export function reportKeepAwake(meta: SettingsSource, post: (on: boolean) => void, also: () => boolean = () => false): (() => void) & { recheck: () => void } {
   let last: boolean | undefined;
   const check = () => {
     const s = meta.settings();
-    const on = keepAwakeWanted({ remoteEnabled: !!s['remote.enabled'], keepAwake: s['remote.keepAwake'] as boolean | undefined });
+    const on = keepAwakeWanted({ remoteEnabled: !!s['remote.enabled'], keepAwake: s['remote.keepAwake'] as boolean | undefined }) || also();
     if (on === last) return;
     // runs inside MetaStore's emit('changed'): a throw here would fail the save that triggered it
     try {
@@ -34,5 +36,5 @@ export function reportKeepAwake(meta: SettingsSource, post: (on: boolean) => voi
   };
   check();
   meta.on('changed', check);
-  return () => { meta.off('changed', check); };
+  return Object.assign(() => { meta.off('changed', check); }, { recheck: check });
 }
