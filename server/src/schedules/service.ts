@@ -83,6 +83,8 @@ export class ScheduleService extends EventEmitter {
       const runner = this.pool.open({ sessionId: s.freshSession ? undefined : s.sessionId, cwd: s.cwd, model: s.model, permissionMode: (s.permissionMode as PermissionMode) ?? 'acceptEdits', worktree });
       for (let i = 0; i < 60 && runner.state === 'starting'; i++) await new Promise((r) => setTimeout(r, 500));
       if (runner.state === 'running' || runner.state === 'waiting') {
+        // 立即运行 leaves the schedule as it was (and a manual task has no timer to retry it): only say why
+        if (manual) { await this.meta.touchSchedule(s.id, { lastError: tr('对话正忙，这次没有运行') }); return; }
         await this.meta.touchSchedule(s.id, { nextRunAt: Date.now() + 60_000, lastError: tr('对话正忙，1 分钟后重试') });
         return; // busy — try again in a minute
       }
@@ -103,7 +105,7 @@ export class ScheduleService extends EventEmitter {
       if (!outcome.ok) await this.meta.touchSchedule(s.id, { lastError: outcome.error });
     } catch (e: any) {
       await this.meta.addScheduleRun({ id: runId, scheduleId: s.id, at: started, ok: false, durationMs: Date.now() - started, error: e.message });
-      await this.meta.touchSchedule(s.id, { lastError: e.message, nextRunAt: safeNext(s).next });
+      await this.meta.touchSchedule(s.id, manual ? { lastError: e.message } : { lastError: e.message, nextRunAt: safeNext(s).next });
       throw e;
     } finally {
       this.running.delete(s.id);

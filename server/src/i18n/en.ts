@@ -382,6 +382,7 @@ export const EN_SERVER: Record<string, string> = {
   "对话库里找不到这个对话": "Can't find this conversation in the conversation library",
   "对话报错": "Conversation error",
   "对话正忙，1 分钟后重试": "The conversation is busy, retrying in 1 minute",
+  "对话正忙，这次没有运行": "The conversation was busy, so this run did not happen",
   "对话没能启动": "The conversation couldn't start",
   "对话的状态": "the conversation's state",
   "对话的项目文件夹不是一个文件夹：{cwd}。在输入框左下角换一个项目文件夹，新开对话。": "The conversation's project folder isn't a folder: {cwd}. Pick another project folder at the bottom left of the input box and start a new conversation.",

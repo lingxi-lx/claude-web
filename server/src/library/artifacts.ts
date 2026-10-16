@@ -35,9 +35,11 @@ export async function recentArtifacts(lib: Lib, o: { sessions?: number; limit?: 
     try { msgs = (await lib.read(s.sessionId)).messages; } catch { continue; }
     for (const w of writtenPaths(msgs)) {
       const abs = path.isAbsolute(w.path) ? w.path : path.join(s.cwd || '', w.path);
-      const prev = found.get(abs);
+      // one file, however its path was spelled (Windows: case, slashes)
+      const key = process.platform === 'win32' ? path.resolve(abs).toLowerCase() : path.resolve(abs);
+      const prev = found.get(key);
       if (prev && prev.at >= w.at) continue;
-      found.set(abs, { path: abs, sessionId: s.sessionId, title: s.customTitle || s.title || '', at: w.at || s.lastModified });
+      found.set(key, { path: abs, sessionId: s.sessionId, title: s.customTitle || s.title || '', at: w.at || s.lastModified });
     }
   }
   return [...found.values()].filter((a) => fs.existsSync(a.path)).sort((a, b) => b.at - a.at).slice(0, o.limit ?? 100);

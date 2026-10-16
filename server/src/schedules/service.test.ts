@@ -65,6 +65,18 @@ describe('ScheduleService: 手动, missed runs, each run in a worktree', () => {
     expect(sched.nextRunAt).toBeGreaterThan(Date.now());
   });
 
+  it('立即运行 on a busy conversation leaves the next scheduled time alone and promises no retry', async () => {
+    const { pool, runner } = fakePool();
+    runner.state = 'running';
+    const at = Date.now() + 5 * 3600_000;
+    const sched: any = { id: 'b', name: 'busy', enabled: true, cron: '0 9 * * *', prompt: 'hi', cwd: '.', nextRunAt: at };
+    const svc = svcOf([sched], pool);
+    await svc.run(sched, true);
+    expect(runner.send).not.toHaveBeenCalled();
+    expect(sched.nextRunAt).toBe(at);
+    expect(sched.lastError).not.toMatch(/重试/);
+  });
+
   it('each run in its own worktree only when every run is a new conversation', async () => {
     const { pool } = fakePool();
     const fresh = { id: 'w1abcdef', name: 'w', enabled: true, cron: '0 9 * * *', prompt: 'hi', cwd: '/r', freshSession: true, worktree: true };
