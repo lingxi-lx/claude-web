@@ -20,6 +20,15 @@ describe('planRoute', () => {
       { kind: 'library.rename', sessionId: 'peer_b1~s1', title: 't' },
     ] as ClientRequest[]) expect(planRoute(req)).toEqual({ kind: 'forward', peerId: 'b1' });
   });
+  it('新对话选机器: a new conversation with `peer` starts on that machine, which never sees the field', () => {
+    const req = { kind: 'session.open', params: { cwd: '/r', peer: 'b1', model: 'opus' } } as ClientRequest;
+    expect(planRoute(req)).toEqual({ kind: 'forward', peerId: 'b1' });
+    expect((outbound(req) as any).params).toEqual({ cwd: '/r', model: 'opus' });
+    expect(inbound('session.open', { sessionId: 's9', info: { sessionId: 's9' } }, P)).toMatchObject({ sessionId: 'peer_b1~s9', info: { sessionId: 'peer_b1~s9' } });
+    // a resume names its machine by the id; a `peer` that says otherwise is refused
+    expect(planRoute({ kind: 'session.open', params: { sessionId: 'local-1', cwd: '/r', peer: 'b1' } } as any).kind).toBe('reject');
+    expect(planRoute({ kind: 'session.open', params: { cwd: '/r', peer: '' } } as any)).toEqual({ kind: 'none' });
+  });
   it('the memory store is this machine\'s: a remote session id is only a scope key', () => {
     expect(planRoute({ kind: 'memory.search', sessionId: 'peer_b1~s1', cwd: '/r' })).toEqual({ kind: 'local' });
     expect(planRoute({ kind: 'memory.write', text: 'x', sessionId: 'peer_b1~s1' })).toEqual({ kind: 'local' });

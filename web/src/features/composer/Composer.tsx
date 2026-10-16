@@ -3,7 +3,8 @@ import { useScopedSession, useStore } from '@/store';
 import { ws } from '@/ws/client';
 import { desktop } from '@/desktop';
 import { clsx, shortModel } from '@/util';
-import { parsePeerId, type AgentKind, type AttachmentRef, type EffortLevel, type PermissionMode, type SessionFeatures } from '@shared';
+import { parsePeerId, type AgentKind, type AttachmentRef, type EffortLevel, type PeerInfo, type PermissionMode, type SessionFeatures } from '@shared';
+import { MachineChip } from './MachineChip';
 import { compressImage, expandDataTransfer, fmtSize, isLongPaste, pasteAsAttachment, uploadAttachment, type DroppedFile, type PendingImage } from '@/model/attachments';
 import { pickFolderFiles } from '@/model/attachment-filter';
 import { StatusStrip } from '@/features/chat/StatusStrip';
@@ -136,6 +137,13 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   const [wEffort, setWEffort] = useState<EffortLevel | ''>('');
   const [wUltra, setWUltra] = useState(false);
   const [wWorktree, setWWorktree] = useState('');
+  // 新对话选机器: '' = this computer, else a federation peer's id (the welcome page only)
+  const [wPeer, setWPeer] = useState('');
+  const [peers, setPeers] = useState<PeerInfo[]>([]);
+  useEffect(() => {
+    if (!welcome) return;
+    ws.request<PeerInfo[]>({ kind: 'peers.list' }).then((l) => setPeers(Array.isArray(l) ? l : [])).catch(() => setPeers([]));
+  }, [welcome]);
   // the 子代理 chip on the welcome page: picked for one provider (another one takes its own default); null = the default
   const [wSub, setWSub] = useState<{ providerId: string; model: string } | null>(null);
   const [starting, setStarting] = useState(false);
@@ -314,7 +322,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   // conversation on another machine — its files are there)
   const [caret, setCaret] = useState(0);
   const [atClosed, setAtClosed] = useState<number | null>(null);
-  const atRoot = welcome ? cwd.trim() : remote ? '' : active?.cwd ?? '';
+  const atRoot = welcome ? (wPeer ? '' : cwd.trim()) : remote ? '' : active?.cwd ?? '';
   const atQuery = atRoot && slashQuery === null ? atQueryAt(text, caret) : null;
   const atOpen = atQuery && atQuery.start !== atClosed ? atQuery : null;
   const [atFiles, setAtFiles] = useState<string[]>([]);
@@ -502,6 +510,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     const im = imgs.map(({ mediaType, data }) => ({ mediaType, data }));
     if (welcome) {
       if (!cwd.trim()) return toast(tr('请先选择项目文件夹'));
+      if (wPeer) return void startOnPeer();
       let providerId = provider ? provider.id : 'claude';
       let model = wModel || undefined;
       let effort = wEffortOk;
@@ -671,6 +680,29 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     toast(tr('已附加文件夹 {top}（{pickedCount} 个文件{v}{v2}）', { top, pickedCount: picked.length, v: truncated ? tr('，已截断到 500') : '', v2: skipped ? tr('，跳过 node_modules / .git 等 {skipped} 个', { skipped }) : '' }), true);
   };
 
+  // 新对话选机器: a conversation on another computer starts there with that computer's own model and settings — this
+  // one's providers / models / capabilities mean nothing there. Files on this disk cannot go (images can).
+  const pickMachine = (id: string) => {
+    setWPeer(id);
+    const mine = sessions.filter((s) => (id ? s.peer?.id === id : !s.peer)).map((s) => s.cwd).filter(Boolean);
+    setCwd(id ? mine[0] ?? '' : initialCwd({ stored: localStorage.getItem('cw.lastCwd'), sessions, workspaces, meta: sessionMeta }));
+  };
+  const startOnPeer = async () => {
+    if (files.length || atts.length) { toast(REMOTE_ATTACH); return; }
+    const t = text.trim();
+    if (!t && !imgs.length) return;
+    sendTick();
+    setStarting(true);
+    try {
+      const id = await openSession({ peer: wPeer, cwd: cwd.trim(), permissionMode: wMode, worktree: wWorktree || undefined }, target);
+      await send(id, withRefs(t), imgs.map(({ mediaType, data }) => ({ mediaType, data })), false, []);
+      setRefs([]);
+      saveDraft('welcome', '');
+    } catch (e: any) {
+      toast(String(e?.message ?? e));
+    }
+    setStarting(false);
+  };
   const pickDir = async () => {
     const p = desktop ? await desktop.pickDir() : await ws.request<string | null>({ kind: 'fs.pickDir' });
     if (p) setCwd(p);
@@ -778,7 +810,8 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     return list;
   }, [agents, providers, engine, gatewayView.groups, gatewayView.enabled, settings.defaultProviderId]);
 
-  const recentDirs = useMemo(() => [...new Set(sessions.map((s) => s.cwd).filter(Boolean))].slice(0, 8), [sessions]);
+  // another computer's folders: the ones its conversations ran in (this computer's dialog cannot browse there)
+  const recentDirs = useMemo(() => [...new Set(sessions.filter((s) => (wPeer ? s.peer?.id === wPeer : !s.peer)).map((s) => s.cwd).filter(Boolean))].slice(0, 8), [sessions, wPeer]);
   const folderChips = useMemo(() => { const m = new Map<string, number>(); for (const f of files) { const top = f.rel.includes('/') ? f.rel.split('/')[0] : null; if (top) m.set(top, (m.get(top) ?? 0) + 1); } return m; }, [files]);
 
   // the capabilities: on the welcome page the ones the new conversation will get (removable); in a running one
@@ -1036,8 +1069,8 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
           <input ref={folderInput} type="file" multiple hidden {...{ webkitdirectory: '' }} onChange={(e) => { onFolderPicked(e.target.files); e.target.value = ''; }} />
           <ComposerBar
             plus={plus}
-            project={welcome ? <ProjectChip cwd={cwd} recent={recentDirs} onPick={setCwd} onBrowse={() => void pickDir()} worktree={wWorktree} onWorktree={setWWorktree} /> : null}
-            branch={welcome && !mobile ? <BranchChip cwd={cwd} /> : null}
+            project={welcome ? <><MachineChip peers={peers} value={wPeer} onPick={pickMachine} /><ProjectChip cwd={cwd} recent={recentDirs} onPick={setCwd} onBrowse={() => (wPeer ? toast(tr('别的电脑上的文件夹，从它最近用过的里面选')) : void pickDir())} worktree={wWorktree} onWorktree={setWWorktree} /></> : null}
+            branch={welcome && !mobile && !wPeer ? <BranchChip cwd={cwd} /> : null}
             status={status}
             meter={meter}
             model={model}

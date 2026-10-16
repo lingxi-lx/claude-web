@@ -92,6 +92,8 @@ export interface SourceStatus {
 
 export interface OpenSessionParams {
   sessionId?: string; // resume this session; omit to start a new one
+  /** 新对话选机器: start it on this federation peer (its id); routed and dropped by federation/rewrite.ts */
+  peer?: string;
   cwd: string;
   model?: string;
   permissionMode?: PermissionMode;

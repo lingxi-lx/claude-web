@@ -63,6 +63,14 @@ export function idsOf(req: ClientRequest): string[] {
 }
 
 export function planRoute(req: ClientRequest): RoutePlan {
+  // 新对话选机器 (spec 2026-10-16 sessions-env §3): a new conversation names its machine; a resume names it by its id
+  const open = req.kind === 'session.open' ? req.params : undefined;
+  const want = typeof open?.peer === 'string' ? open.peer : '';
+  if (want) {
+    const sid = open!.sessionId;
+    if (sid && parsePeerId(sid)?.peerId !== want) return { kind: 'reject', reason: tr('一个请求不能同时涉及多台机器') };
+    return { kind: 'forward', peerId: want };
+  }
   const ids = idsOf(req);
   const peers = new Set(ids.filter(isPeerId).map((id) => parsePeerId(id)!.peerId));
   if (!peers.size) return { kind: 'none' };
@@ -86,6 +94,7 @@ export function outbound<T extends ClientRequest>(req: T): T {
   if (r.params && typeof r.params === 'object') {
     r.params = { ...r.params };
     if (typeof r.params.sessionId === 'string') r.params.sessionId = strip(r.params.sessionId);
+    delete r.params.peer; // the machine it was sent to is that machine
   }
   return r;
 }
