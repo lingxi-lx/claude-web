@@ -11,6 +11,7 @@ import { Artifacts, useArtifacts } from './Artifacts';
 import { useGitStatus } from './git-status';
 import { useRightPanel } from './right-panel';
 import { tr } from '@/i18n';
+import { AllArtifacts } from './AllArtifacts';
 
 /** The last open request (`useRightPanel().explorer.n`) the right panel's 文件 applied (each is applied once). */
 let appliedIntent = 0;
@@ -72,6 +73,7 @@ export function FilesView({ visible, inDock }: { visible: boolean; inDock?: bool
               : <div className="fv-empty">{tr('还没有生成的文件。Claude 新建的文件（Write / Artifact）之后会出现在这里。')}</div>)}
           </div>
         )}
+        <AllArtifacts />
         <FileTree root={cwd} gitStatus={gitStatus} />
       </div>
       {searched && <div className="fv-body" hidden={mode !== 'search'}><SearchView root={cwd} /></div>}

@@ -410,6 +410,9 @@ export interface SessionInfoSnapshot {
 
 // ---- requests ----
 /** One question and answer of a side chat (旁聊), as the CLI wants them. */
+/** A file Claude wrote (Write / Artifact) in a recent conversation, still on disk. */
+export interface ArtifactRef { path: string; sessionId: string; title: string; at: number }
+
 export interface SideTurn { question: string; response: string }
 
 export type ClientRequest =
@@ -484,6 +487,8 @@ export type ClientRequest =
   | { kind: 'shell.editors' }
   /** 更新内容: the newest versions of the app's changelog in `lang` → `{ markdown, version }` */
   | { kind: 'app.changelog'; lang: string }
+  /** 生成的文件 across the recent conversations here → `{ items: ArtifactRef[] }` */
+  | { kind: 'artifacts.list' }
   /** 本机环境变量: names only → `{ names: string[] }`; a value only on `env.reveal` → `{ value }`; `env.set` with
    *  `value: null` removes. In every conversation / terminal started here, under 供应商's own variables */
   | { kind: 'env.list' }

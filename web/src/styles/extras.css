@@ -94,3 +94,7 @@
   .queue-card.enter { animation: none; }
   .term-key:active { transform: none; }
 }
+
+/* 生成的文件 across conversations: the conversation a file came from, a link that looks like the line under the name */
+.all-artifacts .link-btn { background: none; border: 0; padding: 0; font: inherit; color: var(--fg-3); cursor: pointer; text-align: left; }
+.all-artifacts .link-btn:hover { color: var(--fg-2); text-decoration: underline; }

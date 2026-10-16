@@ -8,6 +8,7 @@ import { setSessionsMcpEnabled } from '../sessions-mcp/tools.js';
 import { listProjectFiles, rankFiles } from '../files/find.js';
 import { copyWorktreeIncludes } from '../git/worktree-include.js';
 import { readChangelog } from '../app/changelog.js';
+import { recentArtifacts } from '../library/artifacts.js';
 import type { LocalEnvStore } from '../runtime/local-env.js';
 import { cacheParentFor } from '../runtime/cache-key.js';
 import { SessionService } from '../sessions/service.js';
@@ -541,6 +542,8 @@ export class Hub {
         }
         return { names: s.localEnv.names() };
       }
+      case 'artifacts.list':
+        return { items: await recentArtifacts(s.library) };
       case 'app.changelog':
         return { markdown: readChangelog(String(req.lang ?? 'en')), version: s.version };
       case 'shell.editors':
