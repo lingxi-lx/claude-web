@@ -52,6 +52,7 @@ export const SHORTCUTS: Shortcut[] = [
   { id: 'tab', label: tr('对话 / 步骤视图'), desktop: 'Alt+J', browser: 'Alt+J', group: tr('对话') },
   { id: 'send', label: tr('发送 / 换行'), desktop: 'Enter / Shift+Enter', browser: 'Enter / Shift+Enter', group: tr('输入') },
   { id: 'slash', label: tr('命令补全'), desktop: tr('/ 然后 Tab'), browser: tr('/ 然后 Tab'), group: tr('输入') },
+  { id: 'attach', label: tr('添加文件或图片'), desktop: 'Ctrl+U', browser: 'Ctrl+U', group: tr('输入') },
   { id: 'paste', label: tr('粘贴图片 / 长文本成附件'), desktop: 'Ctrl+V', browser: 'Ctrl+V', group: tr('输入') },
 ];
 

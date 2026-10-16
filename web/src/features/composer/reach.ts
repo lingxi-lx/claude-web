@@ -17,9 +17,10 @@ export interface ReachEntry {
   sel: string;
   /**
    * only present in some states: a running turn (插话), a browser with speech recognition (mic), a conversation with
-   * a context filling up (≥ 60 %: the ring — its card is also the header ··· 「本对话用量」, final review I3)
+   * a context filling up (≥ 60 %: the ring — its card is also the header ··· 「本对话用量」, final review I3), a
+   * conversation (not the welcome page: 连接器 ›), Claude's fast mode reported by the CLI (first-party accounts)
    */
-  when?: 'running' | 'speech' | 'usage';
+  when?: 'running' | 'speech' | 'usage' | 'live' | 'fast';
 }
 
 /** The element each place lives in (after its chip is clicked). */
@@ -52,6 +53,8 @@ export const COMPOSER_REACH: ReachEntry[] = [
   ...CAPABILITIES.map((c): ReachEntry => ({ was: tr('功能 · {key}', { key: OLD_FEATURE_NAME[c.key] ?? c.key }), place: 'plus', sel: idSel(c.key) })),
   { was: tr('功能 · 频道'), place: 'plus', sel: idSel(PLUS_ID.channels) },
   { was: tr('/goal 目标'), place: 'plus', sel: idSel(PLUS_ID.goal) },
+  { was: tr('斜杠命令'), place: 'plus', sel: idSel(PLUS_ID.slash) },
+  { was: tr('连接器'), place: 'plus', sel: idSel(PLUS_ID.connectors), when: 'live' },
   // the welcome page's directory chip and its 「…」
   { was: tr('选择目录（最近的目录）'), place: 'project', sel: '[data-dir]' },
   { was: tr('… 浏览文件夹'), place: 'project', sel: idSel(PROJECT_MENU_ID.browse) },
@@ -65,6 +68,8 @@ export const COMPOSER_REACH: ReachEntry[] = [
   { was: 'ultracode', place: 'depth', sel: idSel(EFFORT_MENU_ID.ultracode) },
   { was: tr('刷新全部模型'), place: 'model', sel: idSel(MODEL_MENU_ID.refresh) },
   { was: tr('管理模型…'), place: 'model', sel: idSel(MODEL_MENU_ID.manage) },
+  { was: tr('强度 ›'), place: 'model', sel: idSel(MODEL_MENU_ID.effort) },
+  { was: tr('快速模式'), place: 'model', sel: idSel(MODEL_MENU_ID.fast), when: 'fast' },
   // permission: all six modes
   ...PERMISSION_MODE_ORDER.map((m) => ({ was: tr('权限 · {label}', { label: OLD_MODE_NAME[m] ?? PERMISSION_MODES[m].label }), place: 'permission' as const, sel: `[data-mode="${m}"]` })),
   // the row itself

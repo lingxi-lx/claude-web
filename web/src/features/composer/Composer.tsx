@@ -28,7 +28,7 @@ import { sessionRefMarker } from '@/model/conversation';
 import { SessionRefChip } from '@/features/chat/ChatView';
 import { REFERENCE_EVENT, handOver, type ReferenceDetail } from '@/features/sidebar/session-actions';
 import { ModelChip } from '@/features/models/ModelMenu';
-import { EffortChip } from '@/features/models/EffortChip';
+import { EffortChip, type EffortChipProps } from '@/features/models/EffortChip';
 import { SubagentChip, subagentLabel } from '@/features/models/SubagentChip';
 import { SUBAGENT_DEFAULTS, subagentDefault, subagentModelFor } from '../../../../server/src/models/subagent';
 import { OWN_PROVIDER, agentModels, effectiveRuntime, usableProfile, type AgentSource, type ModelMenuItem } from '@/features/models/menu';
@@ -40,7 +40,7 @@ import { providersLoaded, useGatewayStatus } from '@/features/models/data';
 import { needsModel, welcomeProvider } from './welcome-provider';
 import { connectModel, useConnect } from '@/features/providers/ConnectModel';
 import { dlg, useDialogStore } from '@/ui/dialog';
-import { DOCK_BLOCKED, DOCK_CARRIED, DOCK_ENTER_IGNORED, DOCK_PLACEHOLDER, DOCK_REQUEUED, DOCK_SEND, TERMS, ULTRACODE } from '@/ui/terms';
+import { DOCK_BLOCKED, DOCK_CARRIED, DOCK_ENTER_IGNORED, DOCK_PLACEHOLDER, DOCK_REQUEUED, DOCK_SEND, EFFORT_LABEL, TERMS, ULTRACODE } from '@/ui/terms';
 import { showGoals } from '@/features/workbench/right-panel';
 import { ComposerBar, ComposerUnder } from './ComposerBar';
 import { StatusLine } from './StatusLine';
@@ -97,6 +97,21 @@ function migrateFeaturesOnce(): void {
  * capabilities in `+` (PlusMenu), the agent, profile, model, effort and 深度编排 in the model menu, the permission
  * modes in PermissionChip, the stats bar behind the context ring (ContextMeter).
  */
+/** fast mode's reasons that no switch here can change (another provider, turned off by the environment): no row */
+const FAST_NEVER = new Set(['not_first_party', 'disabled_by_env']);
+
+function fastOffText(reason: string): string {
+  switch (reason) {
+    case 'free': return tr('免费账号没有');
+    case 'extra_usage_disabled': return tr('要先开额外用量');
+    case 'model_not_allowed': return tr('这个模型没有');
+    case 'network_error': return tr('暂时连不上');
+    case 'sdk_opt_in_required': case 'preference': return '';
+    case 'pending': return tr('检查中…');
+    default: return tr('现在不可用');
+  }
+}
+
 export function Composer({ welcome = false, target, disabled = false, visible = true }: { welcome?: boolean; target?: { paneId: string; tileId: string }; disabled?: boolean; visible?: boolean }) {
   const active = useScopedSession();
   const send = useStore((s) => s.send);
@@ -113,6 +128,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   const [text, setText] = useState(welcome ? '' : active?.draft ?? '');
   const [imgs, setImgs] = useState<PendingImage[]>([]);
   const [subOpen, setSubOpen] = useState(0);
+  const [effortOpen, setEffortOpen] = useState(0);
   const [atts, setAtts] = useState<AttachmentRef[]>([]); // inline text attachments
   const [files, setFiles] = useState<DroppedFile[]>([]); // uploaded on send
   const [refs, setRefs] = useState<{ id: string; title: string }[]>([]); // referenced sessions → <session-ref /> markers on send
@@ -618,6 +634,8 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
       if (e.key === 'Escape') { e.preventDefault(); setDismissed(suggestion); return; }
     }
     if (e.key === 'Tab' && e.shiftKey && !text && !imeComposing(e.nativeEvent) && permCycle.current) { e.preventDefault(); permCycle.current(); return; }
+    // Ctrl+U: 添加文件或图片, the official key (the + menu's first row)
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.code === 'KeyU' && !remote && !disabled) { e.preventDefault(); fileInput.current?.click(); return; }
     if (atOpen && atFiles.length && !imeComposing(e.nativeEvent)) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setAtIdx((i) => (i + 1) % atFiles.length); return; }
       if (e.key === 'ArrowUp') { e.preventDefault(); setAtIdx((i) => (i - 1 + atFiles.length) % atFiles.length); return; }
@@ -837,6 +855,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   const sessionFeatures = info?.features ?? NO_FEATURES;
   const tags = welcome ? (claudeHere && !wChatOnly ? capabilityTags(featDefaults, capEnv) : []) : capabilityTags(sessionFeatures, capEnv);
   const hasChips = imgs.length > 0 || atts.length > 0 || files.length > 0 || refs.length > 0 || !!upload || tags.length > 0 || (welcome && (!!wWorktree || wChatOnly)) || (!welcome && liveChatOnly);
+  const insertSlash = () => { const v = text.startsWith('/') ? text : `/${text}`; onChange(v); requestAnimationFrame(() => { const el = ta.current; if (el) { el.focus(); el.setSelectionRange(1, 1); } }); };
   const insertGoal = () => { const v = text.trim() ? `/goal ${text.trim()}` : '/goal '; onChange(v); requestAnimationFrame(() => { const el = ta.current; if (el) { el.focus(); el.setSelectionRange(v.length, v.length); } }); };
 
   // ---- the row's pieces
@@ -844,7 +863,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     <PlusMenu claude={claudeHere} live={!welcome} remote={remote} disabled={disabled}
       features={welcome ? featDefaults : sessionFeatures} onFeatures={setFeatures} selfId={welcome ? undefined : active?.sessionId}
       chatOnly={welcome ? wChatOnly : undefined} onChatOnly={welcome && claudeHere && !wPeer ? setWChatOnly : undefined}
-      onFiles={() => fileInput.current?.click()} onFolder={() => folderInput.current?.click()} onReference={addRef} onGoal={insertGoal} />
+      onFiles={() => fileInput.current?.click()} onFolder={() => folderInput.current?.click()} onReference={addRef} onGoal={insertGoal} onSlash={insertSlash} sessionId={!welcome && claudeHere ? active?.sessionId : undefined} />
   );
   // one round button that changes in place (UI refresh §6 「发送键」): faint with nothing to send, ink with something,
   // the stop square while a turn is in flight. Both glyphs are always there and cross-fade on `data-state`
@@ -988,6 +1007,22 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     const sp = subagent.props;
     model = cloneElement(model as React.ReactElement<{ subagentRow?: { label: string; onOpen: () => void } }>, { subagentRow: { label: sp.value ? subagentLabel({ providers, providerId: sp.providerId, model: sp.value, builtin: sp.builtin }) : tr('跟主模型一样'), onOpen: () => setSubOpen((n) => n + 1) } });
     subagent = cloneElement(subagent as React.ReactElement<{ openSignal?: number }>, { openSignal: subOpen });
+  }
+  // and 强度 › / 快速模式 (phase 6 §4), as the official model menu has them
+  if (isValidElement<EffortChipProps>(effort) && isValidElement(model)) {
+    const ep = effort.props;
+    const cur = ep.intelligence?.value ?? ep.intelligence?.defaultLevel;
+    const label = ep.ultracode?.on ? ULTRACODE.label : cur ? EFFORT_LABEL[cur] : '';
+    model = cloneElement(model as React.ReactElement<{ effortRow?: { label: string; onOpen: () => void } }>, { effortRow: { label, onOpen: () => setEffortOpen((n) => n + 1) } });
+    effort = cloneElement(effort as React.ReactElement<EffortChipProps>, { openSignal: effortOpen });
+  }
+  if (liveOk && info.fastMode && liveAgent === 'claude' && isValidElement(model) && !FAST_NEVER.has(info.fastModeOff ?? '')) {
+    const sid = active!.sessionId;
+    const on = info.fastMode !== 'off';
+    const note = info.fastMode === 'cooldown' ? tr('额度限速，稍后自动恢复') : info.fastModeOff ? fastOffText(info.fastModeOff) : undefined;
+    model = cloneElement(model as React.ReactElement<{ fast?: { on: boolean; note?: string; onToggle: (on: boolean) => void } }>, {
+      fast: { on, note, onToggle: (v) => void ws.request({ kind: 'session.fastMode', sessionId: sid, on: v }).catch((e) => toast(tr('快速模式没切换：{e}', { e: e.message }))) },
+    });
   }
 
   // the light around the box while this conversation runs (the stop button also shows while it waits or starts)

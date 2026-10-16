@@ -40,6 +40,8 @@ export interface AgentDriver extends EventEmitter {
   setSubagentModel?(model: string): Promise<void>;
   stopTask?(taskId: string): Promise<void>;
   contextUsage?(detail: 'summary' | 'full'): Promise<unknown>;
+  setFastMode?(on: boolean): Promise<void>;
+  toggleMcp?(name: string, enabled: boolean): Promise<void>;
   respawn?(): Promise<void>;
 }
 

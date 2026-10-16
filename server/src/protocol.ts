@@ -399,6 +399,10 @@ export interface SessionInfoSnapshot {
   /** Claude: the model subagents run on (absent = the same as the main model) */
   subagentModel?: string;
   claudeCodeVersion?: string;
+  /** Claude: fast mode as the CLI last reported it (absent: it never said — an engine without it) */
+  fastMode?: 'off' | 'cooldown' | 'on';
+  /** why fast mode can't serve right now (the SDK's FastModeDisabledReason) */
+  fastModeOff?: string;
   runtime?: RuntimeKind;
   providerId?: string;
   providerName?: string;
@@ -459,6 +463,8 @@ export type ClientRequest =
   | { kind: 'drafts.get'; key: string }
   | { kind: 'export.save'; name: string; html: string } // → ~/.claude-web/exports/<name>.html, returns path
   | { kind: 'session.stopTask'; sessionId: string; taskId: string }
+  | { kind: 'session.fastMode'; sessionId: string; on: boolean }
+  | { kind: 'session.toggleMcp'; sessionId: string; name: string; enabled: boolean }
   | { kind: 'permission.respond'; requestId: string; response: PermissionResponse }
   | { kind: 'workspaces.list' }
   | { kind: 'workspaces.add'; path: string }

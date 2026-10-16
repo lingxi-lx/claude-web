@@ -120,3 +120,9 @@
 .mm-subrow:hover, .mm-subrow:focus-visible { background: var(--layer-hover); color: var(--fg-1); }
 .mm-subrow .l { flex: none; }
 .mm-subrow .v { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-4); text-align: right; }
+/* phase 6 §4: the rows' numbers (1–9 pick them with nothing typed), and 强度 › / 快速模式 under 子代理 */
+.mm-num { flex: none; min-width: 16px; padding: 0 4px; border-radius: var(--r-xs); font: 500 10px/16px var(--font-mono); color: var(--ink-4); background: var(--layer-hover); text-align: center; }
+.mm-row.active .mm-num { color: var(--ink-2); }
+.mm-subrow + .mm-subrow { margin-top: 0; border-top: 0; }
+.mm-subrow:disabled { cursor: default; opacity: 0.6; }
+.mm-subrow:disabled:hover { background: none; color: var(--ink-2); }

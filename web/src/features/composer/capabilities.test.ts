@@ -121,7 +121,7 @@ describe('+ menu sections', () => {
     expect(s.goal).toBe(false);
   });
   it('plusMenuIds: every row id the menu can draw', () => {
-    expect(plusMenuIds()).toEqual(['files', 'folder', 'reference', 'chrome', 'computerUse', 'coordinator', 'proactive', 'brief', 'channels', 'goal']);
+    expect(plusMenuIds()).toEqual(['files', 'folder', 'reference', 'slash', 'connectors', 'chrome', 'computerUse', 'coordinator', 'proactive', 'brief', 'channels', 'goal']);
   });
 });
 

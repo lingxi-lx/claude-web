@@ -115,7 +115,7 @@ export function withoutTag(f: SessionFeatures, key: CapabilityTag['key']): Sessi
   return key === 'channels' ? withChannels(f, []) : withFeature(f, key, false);
 }
 
-export interface AttachItem { id: typeof PLUS_ID.files | typeof PLUS_ID.folder | typeof PLUS_ID.reference; label: string; icon: IconName; note?: string; disabled?: string }
+export interface AttachItem { id: typeof PLUS_ID.files | typeof PLUS_ID.folder | typeof PLUS_ID.reference; label: string; icon: IconName; note?: string; disabled?: string; /** with Ctrl / ⌘ */ key?: string }
 
 /**
  * Under 「这次对话可以…」 in a running conversation: the switches show what it was started with, read-only — the note
@@ -133,7 +133,7 @@ export function plusSections(o: { claude: boolean; live: boolean; remote?: boole
   const remoteNote = tr('其它机器上的对话只收图片（文件在本机，那边读不到）');
   return {
     attach: [
-      { id: PLUS_ID.files, label: tr('添加文件或图片'), icon: 'attach', note: o.remote ? remoteNote : tr('或拖进来') },
+      { id: PLUS_ID.files, label: tr('添加文件或图片'), icon: 'attach', note: o.remote ? remoteNote : undefined, key: o.remote ? undefined : 'U' },
       { id: PLUS_ID.folder, label: tr('添加文件夹'), icon: 'folder', disabled: o.remote ? remoteNote : undefined },
       { id: PLUS_ID.reference, label: tr('引用另一个对话'), icon: 'quote' },
     ],
@@ -147,7 +147,7 @@ export function plusSections(o: { claude: boolean; live: boolean; remote?: boole
 /** Every data-id the + menu can render (attachments, capability switches, goal, channels). */
 export function plusMenuIds(): string[] {
   const s = plusSections({ claude: true, live: false });
-  return [...s.attach.map((a) => a.id), ...FEATURE_KEYS, PLUS_ID.channels, PLUS_ID.goal];
+  return [...s.attach.map((a) => a.id), PLUS_ID.slash, PLUS_ID.connectors, ...FEATURE_KEYS, PLUS_ID.channels, PLUS_ID.goal];
 }
 
 /**

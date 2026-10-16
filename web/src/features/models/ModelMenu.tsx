@@ -53,6 +53,10 @@ export interface ModelMenuProps {
    * (2026-10-15: the user looked for it here, in the model menu, and did not see the chip next to it).
    */
   subagentRow?: { label: string; onOpen: () => void };
+  /** a row opening the 强度 chip's menu (phase 6 §4: the official menu has Effort › in it) */
+  effortRow?: { label: string; onOpen: () => void };
+  /** 快速模式: only where the CLI reported it; `note` says why it can't be on now */
+  fast?: { on: boolean; note?: string; onToggle: (on: boolean) => void };
 }
 
 export interface SubagentMenuOptions {
@@ -198,6 +202,8 @@ export function ModelMenu(p: ModelMenuProps) {
     // Enter picks only from the search box: on a focused star (or the footer buttons) it is that button's click
     else if (e.key === 'Enter' && e.target === input.current) { e.preventDefault(); const x = flat[active]; if (x) void pick(x.it); }
     else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); p.onClose(); }
+    // 1–9 with nothing typed yet: that row, like the official menu's numbers (a search starting with a digit is rare)
+    else if (/^[1-9]$/.test(e.key) && !q && e.target === input.current && !e.altKey && !e.ctrlKey && !e.metaKey) { const x = flat[Number(e.key) - 1]; if (x) { e.preventDefault(); void pick(x.it); } }
   };
 
   let idx = -1;
@@ -250,6 +256,7 @@ export function ModelMenu(p: ModelMenuProps) {
                   </span>
                   {it.profileDefault && !sub && <span className="badge">{tr('默认')}</span>}
                   {it.hint && <span className="mm-hint">{it.hint}</span>}
+                  {!q && i < 9 && <span className="mm-num" aria-hidden>{i + 1}</span>}
                   {!it.isDefault && !it.agent && !sub && (
                     <button className={clsx('mm-star', it.favorite && 'on')} aria-label={it.favorite ? tr('取消收藏') : tr('收藏')} title={it.favorite ? tr('取消收藏') : tr('收藏（置顶）')} onClick={(e) => { e.stopPropagation(); toggleFav(it); }}>
                       <Icon name="star" size={12} />
@@ -279,6 +286,22 @@ export function ModelMenu(p: ModelMenuProps) {
           <span className="l">{tr('子代理用的模型')}</span>
           <span className="v">{p.subagentRow.label}</span>
           <Icon name="chevronRight" size={12} />
+        </button>
+      )}
+      {p.effortRow && !p.subagent && (
+        <button type="button" className="mm-subrow" data-id={MODEL_MENU_ID.effort} onClick={() => { p.onClose(); p.effortRow!.onOpen(); }}>
+          <Icon name="gauge" size={13} />
+          <span className="l">{TERMS.effort}</span>
+          <span className="v">{p.effortRow.label}</span>
+          <Icon name="chevronRight" size={12} />
+        </button>
+      )}
+      {p.fast && !p.subagent && (
+        <button type="button" className="mm-subrow mm-fast" data-id={MODEL_MENU_ID.fast} role="menuitemcheckbox" aria-checked={p.fast.on} disabled={!!p.fast.note && !p.fast.on} title={p.fast.note || tr('同一个模型，回答得更快，按更高的价格计费')} onClick={() => p.fast!.onToggle(!p.fast!.on)}>
+          <Icon name="bolt" size={13} />
+          <span className="l">{tr('快速模式')}</span>
+          <span className="v">{p.fast.note ?? ''}</span>
+          <span className={clsx('toggle sm', p.fast.on && 'on')} aria-hidden />
         </button>
       )}
       <div className="mm-foot">

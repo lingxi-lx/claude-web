@@ -747,6 +747,8 @@ export const EN_SERVER: Record<string, string> = {
   "这个对话刚刚换了供应商，这次选的模型没有用上，请在模型菜单里重新选": "This conversation just changed provider, so the model you picked this time wasn't used. Pick it again in the model menu",
   "这个对话是新版 Codex 存的，本机的 codex 命令（{version}）太旧、读不了。把 Codex 命令行更新到最新（npm i -g @openai/codex@latest），或在 设置 → Agents 里把 Codex 的命令换成 Codex 应用自带的那个。": "This conversation was saved by a newer Codex, and the codex command on this computer ({version}) is too old to read it. Update the Codex command line (npm i -g @openai/codex@latest), or in Settings → Agents point Codex's command at the one that comes with the Codex app.",
   "这个对话没有可用的目录": "This conversation has no usable folder",
+  "这个对话的 Agent 不能在对话里开关连接器": "This conversation's agent can't switch connectors on and off in a conversation",
+  "这个对话的 Agent 没有快速模式": "This conversation's agent has no fast mode",
   "这个对话的来源没有加入对话库": "This conversation's source isn't in the conversation library",
   "这个对话的进程出错退出了{v}\n再发一次会重新打开它；还是不行的话，到 设置 → 供应商 点「测试连接」看看。": "This conversation's process exited with an error{v}\nSending again will reopen it; if that doesn't work, go to Settings → Providers and click “Test connection”.",
   "这个对话的进程已经关闭。再发一次会重新打开它。": "This conversation's process has closed. Sending again will reopen it.",

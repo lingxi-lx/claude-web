@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { EffortLevel } from '@shared';
 import { clsx } from '@/util';
 import { Icon } from '@/ui/icons';
@@ -17,6 +17,8 @@ export interface EffortChipProps {
   ultracode?: { on: boolean; onChange: (on: boolean) => void; disabled?: boolean };
   compact?: boolean;
   disabled?: boolean;
+  /** bumped by the model menu's 强度 › row: open this chip's menu */
+  openSignal?: number;
 }
 
 /**
@@ -27,9 +29,15 @@ export interface EffortChipProps {
  *
  * Nothing to choose (no levels, no 深度编排) → no chip.
  */
-export function EffortChip({ intelligence, ultracode, compact, disabled }: EffortChipProps) {
+export function EffortChip({ intelligence, ultracode, compact, disabled, openSignal }: EffortChipProps) {
   const [open, setOpen] = useState(false);
   const chip = useRef<HTMLButtonElement>(null);
+  const seen = useRef(openSignal);
+  useEffect(() => {
+    if (openSignal === seen.current) return;
+    seen.current = openSignal;
+    if (openSignal) setOpen(true);
+  }, [openSignal]);
   const levels = intelligence?.levels ?? [];
   if (!levels.length && !ultracode) return null;
   const ultra = !!ultracode?.on;

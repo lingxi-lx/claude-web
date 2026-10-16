@@ -512,6 +512,7 @@ export class SessionRunner extends EventEmitter {
           this.info.supportsUltracode = supportsUltracode('claude');
           this.info.agents = agents.map((a) => ({ name: a.name, description: a.description, model: a.model }));
           this.info.mcpServers = mcp.map((m) => ({ name: m.name, status: m.status, error: m.error, tools: m.tools }));
+          if (im.fast_mode_state) { this.info.fastMode = im.fast_mode_state; if (im.fast_mode_disabled_reason) this.info.fastModeOff = im.fast_mode_disabled_reason; }
           this.emit('info', this.info);
         } catch {
           /* non-fatal */
@@ -572,6 +573,7 @@ export class SessionRunner extends EventEmitter {
       if (!busy) this.setState('idle');
     }
     this.trackBackground(m);
+    if ((m.type === 'result' || (m.type === 'system' && m.subtype === 'init')) && (m as any).fast_mode_state) this.noteFast((m as any).fast_mode_state, (m as any).fast_mode_disabled_reason);
     if (m.type === 'system' && m.subtype === 'session_state_changed') {
       this.setState(m.state === 'running' ? 'running' : m.state === 'requires_action' ? 'waiting' : 'idle');
     }
@@ -975,6 +977,31 @@ export class SessionRunner extends EventEmitter {
     }
     if (this.info.models) this.info.models = this.info.models.map((e) => (e.value === model ? { ...e, effortMode: 'prompt' } : e));
     this.emit('info', this.info);
+  }
+
+  private noteFast(state: 'off' | 'cooldown' | 'on', reason?: string) {
+    if (this.info.fastMode === state && this.info.fastModeOff === reason) return;
+    this.info.fastMode = state;
+    if (reason) this.info.fastModeOff = reason;
+    else delete this.info.fastModeOff;
+    this.emit('info', this.info);
+  }
+
+  /** 快速模式 (phase 6 §4): a flag setting of the running process, like the effort level; the CLI says what it became. */
+  async setFastMode(on: boolean) {
+    await this.q?.applyFlagSettings({ fastMode: on });
+    this.noteFast(on ? 'on' : 'off', this.info.fastModeOff);
+  }
+
+  /** A connector on / off for this conversation (the + menu's 连接器 ›): the CLI's own switch, then its new list. */
+  async toggleMcp(name: string, enabled: boolean) {
+    if (!this.q) throw new Error('not running');
+    await this.q.toggleMcpServer(name, enabled);
+    const mcp = await this.q.mcpServerStatus().catch(() => null);
+    if (mcp) {
+      this.info.mcpServers = mcp.map((m) => ({ name: m.name, status: m.status, error: m.error, tools: m.tools }));
+      this.emit('info', this.info);
+    }
   }
 
   async stopTask(taskId: string) {

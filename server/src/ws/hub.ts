@@ -708,6 +708,18 @@ export class Hub {
         return s.meta.draft(req.key);
       case 'export.save':
         return s.files.saveExport(req.name, req.html);
+      case 'session.fastMode': {
+        const r = this.runner(req.sessionId);
+        if (!r.setFastMode) throw new Error(tr('这个对话的 Agent 没有快速模式'));
+        await r.setFastMode(req.on);
+        return null;
+      }
+      case 'session.toggleMcp': {
+        const r = this.runner(req.sessionId);
+        if (!r.toggleMcp) throw new Error(tr('这个对话的 Agent 不能在对话里开关连接器'));
+        await r.toggleMcp(req.name, req.enabled);
+        return null;
+      }
       case 'session.stopTask':
         await this.runner(req.sessionId).stopTask?.(req.taskId);
         return null;
