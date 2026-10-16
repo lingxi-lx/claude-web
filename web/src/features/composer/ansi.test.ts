@@ -15,4 +15,11 @@ describe('statusLine ANSI', () => {
     expect(parseAnsi(`${E}]8;;https://x${ST}link${E}]8;;${ST}${E}[2K end`)).toEqual([{ text: 'link end', style: {} }]);
     expect(parseAnsi('plain')).toEqual([{ text: 'plain', style: {} }]);
   });
+  it('tput sgr0 (ESC ( B, then ESC [ m) resets without leaving text behind', () => {
+    expect(parseAnsi(`${E}[32mgreen${E}(B${E}[m x`)).toEqual([{ text: 'green', style: { fg: 'var(--ansi-2)' } }, { text: ' x', style: {} }]);
+  });
+  it('colon-form colours stay one colour (38:2::R:G:B, 38:2:R:G:B, 38:5:N)', () => {
+    expect(parseAnsi(`${E}[38:2::10:20:30mA${E}[38:2:1:2:0mB${E}[38:5:21mC`).map((r) => r.style.fg)).toEqual(['rgb(10,20,30)', 'rgb(1,2,0)', 'rgb(0,0,255)']);
+    expect(parseAnsi(`${E}[1;38:2::0:0:30mX`)[0].style).toEqual({ bold: true, fg: 'rgb(0,0,30)' });
+  });
 });

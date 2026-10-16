@@ -995,7 +995,7 @@ export class SessionRunner extends EventEmitter {
 
   /** A connector on / off for this conversation (the + menu's 连接器 ›): the CLI's own switch, then its new list. */
   async toggleMcp(name: string, enabled: boolean) {
-    if (!this.q) throw new Error('not running');
+    if (!this.q) throw new Error(tr('对话没在运行，连接器要在它运行时才能开关'));
     await this.q.toggleMcpServer(name, enabled);
     const mcp = await this.q.mcpServerStatus().catch(() => null);
     if (mcp) {

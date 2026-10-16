@@ -114,7 +114,8 @@ const TOOLS: { panel: PanelId; icon: 'diff' | 'browser' | 'files'; local: boolea
   { panel: 'explorer', icon: 'files', local: true, label: () => tr('文件'), title: () => tr('文件：项目的文件树') },
 ];
 
-function SessionHeader({ tile, paneId }: { tile: ChatTileModel; paneId: string }) {
+/** `infoShown`: the info column is on screen (on, and the pane wide enough) — else the header keeps the +N −M. */
+function SessionHeader({ tile, paneId, infoShown }: { tile: ChatTileModel; paneId: string; infoShown: boolean }) {
   const sid = tile.sessionId!;
   const active = useStore((s) => s.open[sid]);
   const meta = useStore((s) => s.sessions.find((x) => x.sessionId === sid));
@@ -192,12 +193,12 @@ function SessionHeader({ tile, paneId }: { tile: ChatTileModel; paneId: string }
       <span className="sh-actions">
         {/* phone (UI refresh §8): ☰ · title · +N −M (when there are changes) · ··· — 终端 / 任务 and the other views
             are in ··· and open the bottom drawer (whose own tabs switch between 审阅 · 文件 · 终端 · 任务) */}
-        {stat && stat.files > 0 && (mobile || !infoOn) && (
+        {stat && stat.files > 0 && (mobile || !infoShown) && (
           <button className="sh-diff" title={tr("这个对话改了 {files} 个文件：+{added} 行 −{removed} 行\n点击{v}审阅这些改动", { files: stat.files, added: stat.added, removed: stat.removed, v: mobile ? '' : tr('在右侧') })} onClick={() => openReview({ scope: 'session' })}>
             <span className="add">+{stat.added}</span><span className="del">−{stat.removed}</span>
           </button>
         )}
-        {!mobile && <button className={clsx('icon-btn', infoOn && 'active')} title={tr('对话信息：环境、上下文、连接器、改动、后台任务')} aria-label={tr('对话信息')} aria-pressed={infoOn} onClick={() => void useStore.getState().setSetting('ui.infoPanel', !infoOn)}><Icon name={'info'} size={16} /></button>}
+        {!mobile && <button className={clsx('icon-btn', infoShown && 'active')} title={infoOn && !infoShown ? tr('对话信息：这里太窄，先收起了（窗口拉宽或关掉右侧面板就回来）；点一下关掉') : tr('对话信息：环境、上下文、连接器、改动、后台任务')} aria-label={tr('对话信息')} aria-pressed={infoShown} onClick={() => void useStore.getState().setSetting('ui.infoPanel', !infoOn)}><Icon name={'info'} size={16} /></button>}
         {!peer && !mobile && <button className={clsx('icon-btn', terminalOn && 'active')} title={tr('终端 ({modKey}+`)', { modKey })} aria-label={tr('终端')} onClick={() => (terminalOn ? dispatch({ t: 'dock.set', patch: { open: false } }) : dispatch({ t: 'dock.show', panel: 'terminal' }))}><Icon name="terminal" size={16} /></button>}
         {!mobile && TOOLS.filter((t) => !peer || !t.local).map((t) => {
           const on = dockShown && !dock.minimized && dock.active === t.panel;
@@ -258,7 +259,7 @@ export function ChatTile({ tile, paneId, visible }: { tile: ChatTileModel; paneI
   );
   return (
     <div className="chat-tile">
-      <SessionHeader tile={tile} paneId={paneId} />
+      <SessionHeader tile={tile} paneId={paneId} infoShown={infoShown && !mobile && tile.wb === 'live'} />
       {deleted && <div className="deleted-banner" role="status"><Icon name="trash" size={13} /> {tr('这个对话已被删除（备份在 ~/.claude-web/library-trash），这里只剩最后看到的内容。')}</div>}
       {tile.wb === 'live' && (mobile ? live : (
         <div className="chat-split" ref={split}>

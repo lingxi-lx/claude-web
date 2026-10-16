@@ -167,7 +167,7 @@ function NewTabPage({ tab, front }: { tab: BrowserTab; front: boolean }) {
   );
 }
 
-interface LaunchItem { name: string; port: number; url?: string }
+interface LaunchItem { name: string; port: number; command: string; url?: string }
 
 /**
  * The project's dev servers (phase 6 §7, as the official browser's empty page): what `.claude/launch.json` in the
@@ -205,17 +205,18 @@ function LaunchList({ tab, front }: { tab: BrowserTab; front: boolean }) {
     <div className="bw-recent bw-launch" data-id="launch">
       {configs.length > 0 && <div className="bw-h">{tr('开发服务器')}</div>}
       {shown.map((c) => (
-        <div key={c.name} className="bw-srv" data-srv={c.name}>
+        <div key={c.name} className="bw-srv" data-srv={c.name} title={c.command}>
           <span className={clsx('dot', c.url && 'on')} aria-hidden />
           <span className="n">{c.name}</span>
-          <span className="p">{c.url ? c.url.replace(/^https?:\/\//, '') : `:${c.port}`}</span>
+          {/* what ▶ runs is said before it runs: a cloned project's launch.json is someone else's command */}
+          <span className="p">{c.url ? c.url.replace(/^https?:\/\//, '') : `${c.command} · :${c.port}`}</span>
           <button className="icon-btn" disabled={busy === c.name} title={c.url ? tr('打开') : tr('启动并打开')} aria-label={c.url ? tr('打开 {name}', { name: c.name }) : tr('启动 {name}', { name: c.name })} onClick={() => void start(c)}>
             {busy === c.name ? <span className="spinner" /> : <Icon name={c.url ? 'external' : 'play'} size={14} />}
           </button>
         </div>
       ))}
       {configs.length > 4 && !all && <button className="link bw-all" onClick={() => setAll(true)}>{tr('查看全部（{n}）', { n: configs.length })}</button>}
-      {list?.error && <p className="bw-tip err">{list.error}</p>}
+      {list?.error && <p className="bw-tip err">{tr('.claude/launch.json 读不了：{e}', { e: list.error })}</p>}
       <p className="bw-tip"><Icon name="play" size={13} />{tr('启动一个开发服务器来预览你的应用，或者在上面输入网址。这个列表在项目的 .claude/launch.json 里改。')}</p>
     </div>
   );

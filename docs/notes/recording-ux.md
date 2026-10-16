@@ -8,7 +8,8 @@
 - 对话右边一列 288px 的卡片：环境 / 上下文 / 连接器 / 改动 / 后台任务。放在 `ChatTile` 里（每个对话自己一列），不是右侧面板的一个标签。
   结构：`.chat-split > .chat-main + aside.info-col > section.info-card[data-card]`。
 - 手机不进这层：`phone.css` 依赖 `.chat-tile > .sess-head + .chat` 的平铺结构，`mobile` 时直接渲染原来那几块。
-- 窄了自己让开：`ResizeObserver` 看 `.chat-split`，宽度 < 560 + 288 就不画（右侧面板开着时常见）。开关是设置 `ui.infoPanel`
+- 窄了自己让开：`ResizeObserver` 看 `.chat-split`，宽度 < 560 + 288 就不画（右侧面板开着时常见）。这时标题栏的「+N −M」要回来、ⓘ 不算按下：
+  `SessionHeader` 拿的是 `infoShown`（真的画出来了），不是设置值（验证时抓到：窄窗格里改动数哪儿都看不到）。开关是设置 `ui.infoPanel`
   （默认开，标题栏 ⓘ 和 设置 → 外观 都能关）；关掉后标题栏的「+N −M」回来（信息栏开着时它在「改动」卡里）。
 - 卡片顺序 / 折叠存 `ui.infoCards`（`info-model.ts` 的 `normInfoLayout`：未知的丢掉、新卡补在后面，上下文默认折叠）。拖抓手换位置，
   标题上 Alt+↑↓ 也能挪。
@@ -42,11 +43,15 @@
   Git Bash（`CLAUDE_CODE_GIT_BASH_PATH` 或常见路径），找不到才用 cmd。5 秒超时（`killTree`，不然脚本卡住每 10 秒漏一个进程），最多 20 行。
 - 前端：打开对话时、一轮结束时、在跑时每 10 秒问一次 `session.statusLine`；ANSI 颜色 → span（`ansi.ts`，16 色是 `--ansi-N`，
   暗色 / 亮色两套在 `.cmp-statusline` 上），光标移动、OSC 链接这些转义丢掉。设置 `ui.statusLine` 关掉。
+- 验证时抓到的：`tput sgr0` 写的是 `ESC ( B ESC [ m`，字符集那段（`ESC ( B`）也要丢；冒号写法的颜色 `38:2::R:G:B` 是一组参数，
+  按 `;` 分组、组里按 `:` 分（以前全按 `[;:]` 拆，后面的数被当成新代码）。脚本留了个后台进程占着 stdout 时 `close` 等不到：
+  进程 `exit` 后 150ms 就拿已有输出、杀掉整棵树。Git Bash 也在 PATH 上找（跳过 System32 的 bash.exe，那是 WSL）。
 - bash heredoc 写测试会吃掉 `\\`：带反斜杠的文件用 Write 写。
 
 ## 模型菜单和 + 菜单
 
-- 模型菜单的行有 1–9 的号，搜索框空着时按数字直接选（`flat` 的顺序，收藏 / 最近也算）。
+- 模型菜单的行有 1–9 的号，搜索框空着时按数字直接选（`flat` 的顺序，收藏 / 最近也算）。代价：搜索不能以数字开头（「4o」要打「gpt-4o」），
+  官方菜单没有搜索框，所以没这个问题；选错了能马上换回来，就照官方。
 - 「智能程度 ›」一行打开旁边强度 chip 的菜单（`EffortChip` 的 `openSignal`，和子代理那行一样的做法）。
 - 快速模式：CLI 在 init / result 里报 `fast_mode_state`（和 `fast_mode_disabled_reason`）才有这一行；`not_first_party`（中转）和
   `disabled_by_env` 永远不画。开关走 `session.fastMode` → `applyFlagSettings({ fastMode })`。
@@ -61,7 +66,8 @@
 - 计划卡（`TodoBody`）：发丝边框、行间细线；进行中是转的弧、待办是虚线圈、完成是勾 + 删除线。右侧任务面板里的计划不加框。
 - 回复下面的操作多了「分叉」（`forkAt(sessionId, it.uuid)`，从这条回复之后）和「2 分钟前」（7 天以上显示日期）。
 - 浏览器的空白页列出对话目录 `.claude/launch.json` 里的开发服务器（`preview.list`，在跑的带地址），▶ 启动并打开（`preview.start`，
-  第 5 期的 `PreviewService`）。别的机器上的对话不列。
+  第 5 期的 `PreviewService`）。别的机器上的对话不列。每行写出 ▶ 会跑的命令（别人仓库的 launch.json 就是别人的命令）。
+  `PreviewService` 的键按 `rootKey`：Windows 上路径不分大小写（同一个文件夹大小写写法不同，以前算两个项目，第二个启动报端口被占）。
 - 官方「文件」面板的「打开的文件会显示在这里」没做：我们打开的文件是窗格里的标签，不在面板里。
 
 ## 测试

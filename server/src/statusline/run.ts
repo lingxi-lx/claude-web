@@ -45,6 +45,13 @@ function windowsBash(): string | undefined {
     const p = base && path.join(base, 'Git', 'bin', 'bash.exe');
     if (p && existsSync(p)) return p;
   }
+  // on PATH (Scoop, a portable Git) — but not System32's bash.exe, which is WSL's
+  const sys = path.resolve(process.env.SystemRoot ?? 'C:/Windows').toLowerCase();
+  for (const dir of (process.env.PATH ?? '').split(path.delimiter)) {
+    if (!dir || path.resolve(dir).toLowerCase().startsWith(sys)) continue;
+    const p = path.join(dir, 'bash.exe');
+    if (existsSync(p)) return p;
+  }
   return undefined;
 }
 
@@ -70,6 +77,14 @@ export function runStatusLine(cmd: string, input: unknown, cwd: string, timeoutM
     child.stdout!.on('data', (d: string) => { if (out.length < MAX_OUT) out += d; });
     child.on('error', () => finish(null));
     child.on('close', (code) => { const t = clipStatus(out); finish(code === 0 && t ? t : null); });
+    // a script that leaves something running in the background keeps stdout open after it exits: what it printed is
+    // the answer, a moment after the exit (the rest of the tree goes)
+    child.on('exit', (code) => setTimeout(() => {
+      if (done) return;
+      const t = clipStatus(out);
+      void killTree(child);
+      finish(code === 0 && t ? t : null);
+    }, 150));
     child.stdin!.on('error', () => { /* a command that does not read stdin closes it early */ });
     child.stdin!.end(JSON.stringify(input));
   });

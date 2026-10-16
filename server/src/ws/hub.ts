@@ -726,7 +726,7 @@ export class Hub {
       case 'preview.list':
         return s.previews?.list(req.cwd) ?? null;
       case 'preview.start': {
-        if (!s.previews) throw new Error('no preview service');
+        if (!s.previews) throw new Error(tr('这里没有预览服务器'));
         return s.previews.start(req.cwd, req.name);
       }
       case 'session.stopTask':

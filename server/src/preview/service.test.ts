@@ -31,7 +31,9 @@ describe('preview servers', () => {
     expect(r).toMatchObject({ name: 'web', port, url: `http://localhost:${port}` });
     expect(await (await fetch(`http://127.0.0.1:${port}/`)).text()).toBe('hello preview');
     expect((await svc.start(root, 'web')).already).toBe(true);
-    expect(svc.list(root)).toEqual({ configs: [{ name: 'web', port, url: `http://localhost:${port}` }] });
+    expect(svc.list(root)).toEqual({ configs: [{ name: 'web', port, command: 'node server.js', url: `http://localhost:${port}` }] });
+    // another spelling of the same folder (Windows: case) is the same project
+    if (process.platform === 'win32') expect((await svc.start(root.toUpperCase(), 'web')).already).toBe(true);
     expect(svc.logs(root)).toContain(`listening on ${port}`);
     expect(await svc.stop(root, 'web')).toBe(true);
     await expect.poll(() => portFree(port), { timeout: 5000 }).toBe(true);
@@ -117,6 +119,6 @@ describe('the browser page lists them', () => {
     roots.push(bare);
     expect(svc.list(bare)).toBeNull();
     const root = project([{ name: 'web', program: 'server.js', port: 4321 }, { name: 'docs', program: 'server.js', port: 4322 }]);
-    expect(svc.list(root)).toEqual({ configs: [{ name: 'web', port: 4321 }, { name: 'docs', port: 4322 }] });
+    expect(svc.list(root)).toEqual({ configs: [{ name: 'web', port: 4321, command: 'node server.js' }, { name: 'docs', port: 4322, command: 'node server.js' }] });
   });
 });

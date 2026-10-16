@@ -22,4 +22,11 @@ describe('statusLine', () => {
     expect(await runStatusLine(`${node} -e ""`, {}, os.tmpdir())).toBeNull();
     expect(await runStatusLine(`${node} -e "setTimeout(()=>{},5000)"`, {}, os.tmpdir(), 300)).toBeNull();
   }, 20000);
+  it('a script that leaves something in the background holding stdout still answers with what it printed', async () => {
+    const node = JSON.stringify(process.execPath.replace(/\\/g, '/'));
+    const bg = `${node} -e "require('child_process').spawn(process.execPath,['-e','setTimeout(()=>{},4000)'],{stdio:['ignore','inherit','ignore']}).unref();console.log('hi')"`;
+    const t0 = Date.now();
+    expect(await runStatusLine(bg, {}, os.tmpdir(), 3000)).toBe('hi');
+    expect(Date.now() - t0).toBeLessThan(2500);
+  }, 20000);
 });

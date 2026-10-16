@@ -50,6 +50,12 @@ function connectsTo(port: number, host: string): Promise<boolean> {
   });
 }
 
+/** One project however its path is spelled (Windows paths are case-insensitive: `c:\x` and `C:\X` are one folder). */
+function rootKey(root: string): string {
+  const r = path.resolve(root);
+  return process.platform === 'win32' ? r.toLowerCase() : r;
+}
+
 export class PreviewService {
   private running = new Map<string, Running>();
   /** a start on its way, per project + configuration: a second preview_start meanwhile waits for the same one */
@@ -68,7 +74,7 @@ export class PreviewService {
   /** Starts it (or says it already runs) and waits for its port. */
   async start(root: string, name?: string): Promise<{ name: string; url: string; port: number; already?: boolean }> {
     const c = this.pick(root, name);
-    const key = `${path.resolve(root)}|${c.name}`;
+    const key = `${rootKey(root)}|${c.name}`;
     const was = this.running.get(key);
     if (was && was.exited === undefined) return { name: c.name, url: was.url, port: was.port, already: true };
     const going = this.starting.get(key);
@@ -119,7 +125,7 @@ export class PreviewService {
   }
 
   private find(root: string, name?: string): Running | undefined {
-    const base = `${path.resolve(root)}|`;
+    const base = `${rootKey(root)}|`;
     if (name) return this.running.get(base + name);
     return [...this.running.values()].find((r) => r.key.startsWith(base) && r.exited === undefined);
   }
@@ -133,7 +139,7 @@ export class PreviewService {
   }
 
   logs(root: string, name?: string, lines = 200): string {
-    const r = this.find(root, name) ?? (name ? undefined : [...this.running.values()].find((x) => x.key.startsWith(`${path.resolve(root)}|`)));
+    const r = this.find(root, name) ?? (name ? undefined : [...this.running.values()].find((x) => x.key.startsWith(`${rootKey(root)}|`)));
     if (!r) return 'No preview server of this project is running.';
     const head = `${r.name} — ${r.url}${r.exited !== undefined ? ` (exited, code ${r.exited})` : ''}`;
     return `${head}\n${r.log.slice(-Math.max(1, Math.min(lines, LOG_LINES))).join('\n')}`;
@@ -143,14 +149,15 @@ export class PreviewService {
    * The project's configurations for the browser's empty page (phase 6 §7): name, port, and the address of the ones
    * running. No launch.json → null; one that does not parse → its error, for the page to say.
    */
-  list(root: string): { configs: { name: string; port: number; url?: string }[]; error?: string } | null {
+  list(root: string): { configs: { name: string; port: number; command: string; url?: string }[]; error?: string } | null {
     let f;
     try { f = readLaunch(root); } catch (e) { return { configs: [], error: (e as Error).message }; }
     if (!f) return null;
     return {
       configs: f.configurations.map((c) => {
-        const r = this.running.get(`${path.resolve(root)}|${c.name}`);
-        return { name: c.name, port: c.port, ...(r && r.exited === undefined ? { url: r.url } : {}) };
+        const r = this.running.get(`${rootKey(root)}|${c.name}`);
+        const { cmd, args } = commandOf(c);
+        return { name: c.name, port: c.port, command: [cmd, ...args].join(' '), ...(r && r.exited === undefined ? { url: r.url } : {}) };
       }),
     };
   }

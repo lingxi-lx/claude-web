@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 /** Every query() the runner starts: end / fail its message stream, push a message into it, react to interrupt(). */
-interface FakeQuery { options: any; end: () => void; fail: (e: Error) => void; push: (m: any) => void; onInterrupt?: () => void; flags: any[]; sides: any[]; sideAnswer?: any }
+interface FakeQuery { options: any; end: () => void; fail: (e: Error) => void; push: (m: any) => void; onInterrupt?: () => void; flags: any[]; sides: any[]; sideAnswer?: any; toggles: [string, boolean][]; mcp?: any[] }
 const queries: FakeQuery[] = [];
 
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
@@ -16,13 +16,14 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
       if (err) { waiter = null; w.rej(err); } else if (buf.length) { waiter = null; w.res({ value: buf.shift(), done: false }); } else if (ended) { waiter = null; w.res({ value: undefined, done: true }); }
     };
     const next = () => new Promise<IteratorResult<any>>((res, rej) => { waiter = { res, rej }; settle(); });
-    const h: FakeQuery = { options, end: () => { ended = true; settle(); }, fail: (e) => { err = e; settle(); }, push: (m) => { buf.push(m); settle(); }, flags: [], sides: [] };
+    const h: FakeQuery = { options, end: () => { ended = true; settle(); }, fail: (e) => { err = e; settle(); }, push: (m) => { buf.push(m); settle(); }, flags: [], sides: [], toggles: [] };
     const q: any = {
       initializationResult: async () => ({}),
       supportedCommands: async () => [],
       supportedModels: async () => cli.models,
       supportedAgents: async () => [],
-      mcpServerStatus: async () => [],
+      mcpServerStatus: async () => h.mcp ?? [],
+      toggleMcpServer: async (name: string, enabled: boolean) => { h.toggles.push([name, enabled]); },
       [Symbol.asyncIterator]: () => ({ next }),
       return: async () => { h.end(); return { value: undefined, done: true }; },
       setModel: async () => { throw new Error('unsupported'); },
@@ -344,6 +345,34 @@ describe('SessionRunner Stop (interrupt)', () => {
     expect(await r.askSide('again?', [])).toEqual({ text: null });
     expect(msgs).toEqual([]);
     expect(r.state).toBe('idle');
+    await r.close();
+  });
+
+  it('快速模式: what the CLI reports (init, result) is the info; switching is a flag setting', async () => {
+    queries.length = 0;
+    const r = new SessionRunner({ sessionId: 'fast-1', cwd: '/x' } as any);
+    await tick();
+    expect(r.info.fastMode).toBeUndefined();
+    queries[0].push({ type: 'system', subtype: 'init', session_id: 'fast-1', model: 'm', tools: [], fast_mode_state: 'off', fast_mode_disabled_reason: 'preference' });
+    await tick();
+    expect([r.info.fastMode, r.info.fastModeOff]).toEqual(['off', 'preference']);
+    await r.setFastMode(true);
+    expect(queries[0].flags).toContainEqual({ fastMode: true });
+    expect(r.info.fastMode).toBe('on');
+    queries[0].push({ type: 'result', subtype: 'success', session_id: 'fast-1', fast_mode_state: 'cooldown', usage: {}, total_cost_usd: 0 });
+    await tick();
+    expect(r.info.fastMode).toBe('cooldown');
+    await r.close();
+  });
+
+  it('连接器 ›: a connector switched with the CLI’s own toggle, then its list read again', async () => {
+    queries.length = 0;
+    const r = new SessionRunner({ sessionId: 'mcp-1', cwd: '/x' } as any);
+    await tick();
+    queries[0].mcp = [{ name: 'web', status: 'disabled' }];
+    await r.toggleMcp('web', false);
+    expect(queries[0].toggles).toEqual([['web', false]]);
+    expect(r.info.mcpServers).toEqual([{ name: 'web', status: 'disabled', error: undefined, tools: undefined }]);
     await r.close();
   });
 

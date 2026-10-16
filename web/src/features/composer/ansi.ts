@@ -17,10 +17,13 @@ function color256(n: number): string | undefined {
   return `rgb(${c(Math.floor(i / 36))},${c(Math.floor(i / 6) % 6)},${c(i % 6)})`;
 }
 
-function applySgr(st: AnsiStyle, params: number[]): AnsiStyle {
+/** `groups`: the `;`-separated parameters, each split on `:` (ITU form `38:2::R:G:B` keeps a colour in one group). */
+function applySgr(st: AnsiStyle, groups: number[][]): AnsiStyle {
   const s = { ...st };
+  const params = groups.map((g) => g[0]);
   for (let i = 0; i < params.length; i++) {
     const p = params[i];
+    const sub = groups[i];
     if (p === 0) { for (const k of Object.keys(s)) delete s[k as keyof AnsiStyle]; }
     else if (p === 1) s.bold = true;
     else if (p === 2) s.dim = true;
@@ -35,6 +38,15 @@ function applySgr(st: AnsiStyle, params: number[]): AnsiStyle {
     else if (p >= 40 && p <= 47) s.bg = BASIC[p - 40];
     else if (p >= 100 && p <= 107) s.bg = BASIC[p - 100 + 8];
     else if (p === 49) delete s.bg;
+    else if ((p === 38 || p === 48) && sub.length > 1) {
+      // colon form: 38:5:N, 38:2:R:G:B, or 38:2:<colour space>:R:G:B
+      const key = p === 38 ? 'fg' : 'bg';
+      if (sub[1] === 5) { const c = color256(sub[2]); if (c) s[key] = c; }
+      else if (sub[1] === 2 && sub.length >= 5) {
+        const [r, g, b] = sub.slice(-3);
+        if ([r, g, b].every((x) => x >= 0 && x <= 255)) s[key] = `rgb(${r},${g},${b})`;
+      }
+    }
     else if (p === 38 || p === 48) {
       const key = p === 38 ? 'fg' : 'bg';
       if (params[i + 1] === 5) { const c = color256(params[i + 2]); if (c) s[key] = c; i += 2; }
@@ -48,9 +60,9 @@ function applySgr(st: AnsiStyle, params: number[]): AnsiStyle {
   return s;
 }
 
-// CSI … final byte | OSC … BEL / ST | a lone two-byte escape
+// CSI … final byte | OSC … BEL / ST | a character set (`tput sgr0` writes ESC ( B before ESC [ m) | a lone two-byte escape
 // eslint-disable-next-line no-control-regex
-const ESC = /\x1b\[([0-9;:?]*)([@-~])|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-Z\\-_]/g;
+const ESC = /\x1b\[([0-9;:?]*)([@-~])|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[()*+-./][ -~]|\x1b[@-Z\\-_]/g;
 
 export function parseAnsi(input: string): AnsiRun[] {
   const out: AnsiRun[] = [];
@@ -65,7 +77,7 @@ export function parseAnsi(input: string): AnsiRun[] {
   for (const m of input.matchAll(ESC)) {
     push(input.slice(last, m.index));
     last = m.index! + m[0].length;
-    if (m[2] === 'm') style = applySgr(style, (m[1] || '0').split(/[;:]/).map((x) => (x === '' ? 0 : Number(x))));
+    if (m[2] === 'm') style = applySgr(style, (m[1] || '0').split(';').map((g) => g.split(':').map((x) => (x === '' ? 0 : Number(x)))));
   }
   push(input.slice(last));
   return out;
