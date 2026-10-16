@@ -8,6 +8,7 @@ import { ChatView } from '@/features/chat/ChatView';
 import { TrajectoryView } from '@/features/trajectory/TrajectoryView';
 import { Composer } from '@/features/composer/Composer';
 import { GoalBar } from '@/features/goals/GoalBar';
+import { PrBar } from '@/features/vcs/PrBar';
 import { ReviewView } from '../ReviewView';
 import { SchedulesView } from '@/features/automation/SchedulesView';
 import { shareConversation } from '@/features/chat/MessageActions';
@@ -212,6 +213,7 @@ export function ChatTile({ tile, paneId, visible }: { tile: ChatTileModel; paneI
       {tile.wb === 'live' && (
         <>
           <GoalBar sessionId={sid} />
+          <PrBar sessionId={sid} />
           {tile.view === 'chat' ? <ChatView key={sid} /> : <TrajectoryView key={sid} />}
           <Composer key={`c-${sid}`} disabled={deleted} visible={visible} />
         </>

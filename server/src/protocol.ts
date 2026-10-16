@@ -314,7 +314,7 @@ export interface AttachmentRef { kind: 'image' | 'text' | 'file' | 'folder'; nam
 export interface MessageFeedback { rating: 'up' | 'down' | null; note?: string; at: number }
 
 export interface Workspace { id: string; path: string; name: string; addedAt: number; order: number }
-export interface SessionMeta { /** 代码审查卡: findings dismissed here, `<toolUseId>#<index>` */ reviewDismissed?: string[]; pinned?: boolean; archived?: boolean; workspaceId?: string; tags?: string[]; providerId?: string; /** sidebar grouping directory when it differs from the cwd (orchestration worktrees) */ groupCwd?: string; /** prompt-cache route key when it is not the session's own id (forks keep their root's) */ cacheKey?: string; /** the model its subagents run on, picked for this provider ('' = the main model) */ subagent?: { providerId: string; model: string }; /** the permission mode it last ran with: a resume without a pick comes back in it (the SDK never says it) */ permissionMode?: PermissionMode }
+export interface SessionMeta { /** 代码审查卡: findings dismissed here, `<toolUseId>#<index>` */ reviewDismissed?: string[]; /** PR 监控条: 自动修 CI on, and the failures it already asked about */ prAutoFix?: boolean; prFixed?: string[]; pinned?: boolean; archived?: boolean; workspaceId?: string; tags?: string[]; providerId?: string; /** sidebar grouping directory when it differs from the cwd (orchestration worktrees) */ groupCwd?: string; /** prompt-cache route key when it is not the session's own id (forks keep their root's) */ cacheKey?: string; /** the model its subagents run on, picked for this provider ('' = the main model) */ subagent?: { providerId: string; model: string }; /** the permission mode it last ran with: a resume without a pick comes back in it (the SDK never says it) */ permissionMode?: PermissionMode }
 export interface Schedule { id: string; name: string; cwd: string; prompt: string; everyMinutes: number; cron?: string; enabled: boolean; lastRunAt?: number; nextRunAt?: number; sessionId?: string; model?: string; permissionMode?: string; freshSession?: boolean; lastError?: string; runs?: number }
 export interface LimitWindow { label: string; percent: number; resetsAt: string | null; active: boolean; severity?: string }
 // ---- remote access / phones / IM (phase 6) ----
@@ -345,6 +345,10 @@ export interface ImKindDef { kind: ImKind; name: string; icon: string; inbound: 
 
 // ---- phase 7: issue / PR boards, goals, android ----
 export interface VcsRepo { provider: 'github' | 'gitlab'; host: string; owner: string; repo: string; url: string; authOk: boolean; user: string; error: string; cli: 'gh' | 'glab'; defaultBranch?: string; openIssues?: number; private?: boolean }
+/** PR 监控条: a pull request's checks, summed up (`failures`: where to look — `runId` for `gh run view --log-failed`). */
+export interface PrChecks { total: number; passed: number; failed: number; pending: number; failures: { name: string; url: string; runId?: number }[] }
+/** PR 监控条: the pull request of a conversation's branch. `sha`: its head commit (a new push re-arms the CI auto-fix). */
+export interface BranchPr { id: string; number: number; title: string; url: string; state: 'open' | 'closed' | 'merged'; draft: boolean; mergeable?: boolean; autoMerge: boolean; sha: string; checks: PrChecks }
 export interface VcsItem { number: number; title: string; state: 'open' | 'closed' | 'merged'; isPr: boolean; draft?: boolean; author: string; labels: { name: string; color: string }[]; assignees: string[]; comments: number; createdAt: string; updatedAt: string; url: string; milestone?: string; head?: string; base?: string; additions?: number; deletions?: number; changedFiles?: number; reviewDecision?: string; checks?: 'success' | 'failure' | 'pending' | 'none'; mergeable?: boolean }
 export interface VcsDetail extends VcsItem { body: string; comments: any; commentsList: { id: string; author: string; body: string; createdAt: string; url: string }[]; reviews?: { author: string; state: string; submittedAt: string }[]; files?: { path: string; additions: number; deletions: number; status: string }[]; checkRuns?: { name: string; status: string; conclusion: string; url: string }[]; mergeableState?: string }
 export type GoalStatus = 'draft' | 'active' | 'paused' | 'complete' | 'blocked' | 'max_turns';
@@ -580,6 +584,10 @@ export type ClientRequest =
   | { kind: 'vcs.assign'; cwd: string; repo?: string; number: number; isPr: boolean; assignees: string[] }
   | { kind: 'vcs.labels'; cwd: string; repo?: string; number: number; isPr: boolean; labels: string[] }
   | { kind: 'vcs.merge'; cwd: string; repo?: string; number: number; method: 'merge' | 'squash' | 'rebase' }
+  /** PR 监控条: the newest pull request whose head is this folder's branch → `{ pr?: BranchPr; why?: string }` */
+  | { kind: 'vcs.prForBranch'; cwd: string }
+  /** squash-merge on its own once the checks pass (GitHub auto-merge; the repository must allow it) */
+  | { kind: 'vcs.autoMerge'; cwd: string; prId: string; on: boolean }
   | { kind: 'vcs.create'; cwd: string; repo?: string; title: string; body?: string; isPr?: boolean; head?: string; base?: string; draft?: boolean; labels?: string[] }
   | { kind: 'vcs.checkout'; cwd: string; repo?: string; number: number; worktree?: boolean }
   | { kind: 'goals.list' }

@@ -904,6 +904,8 @@ export class Hub {
       case 'vcs.assign': await s.vcs.assign(req.cwd, req.number, req.assignees, req.isPr, req.repo); return null;
       case 'vcs.labels': await s.vcs.labels(req.cwd, req.number, req.labels, req.isPr, req.repo); return null;
       case 'vcs.merge': await s.vcs.merge(req.cwd, req.number, req.method, req.repo); return null;
+      case 'vcs.prForBranch': return s.vcs.prForBranch(req.cwd);
+      case 'vcs.autoMerge': await s.vcs.autoMerge(req.cwd, req.prId, req.on); return null;
       case 'vcs.create': return s.vcs.create(req.cwd, { title: req.title, body: req.body, isPr: req.isPr, head: req.head, base: req.base, draft: req.draft, labels: req.labels }, req.repo);
       case 'vcs.checkout': return s.vcs.checkout(req.cwd, req.number, { worktree: req.worktree, repo: req.repo });
       case 'goals.list': return s.goals.list();

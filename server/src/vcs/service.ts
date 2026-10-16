@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { GitService } from '../git/service.js';
-import type { VcsDetail, VcsItem, VcsRepo } from '../protocol.js';
+import type { BranchPr, VcsDetail, VcsItem, VcsRepo } from '../protocol.js';
+import { summarizeChecks } from './pr-status.js';
 import { tr } from '../i18n/index.js';
 
 const execFileAsync = promisify(execFile);
@@ -204,6 +205,34 @@ export class VcsService {
     if (t.provider === 'github') return this.api(t, `/repos/${t.owner}/${t.repo}/issues/${number}`, { method: 'PATCH', body: { labels } });
     return this.api(t, `/projects/${this.pid(t)}/${isPr ? 'merge_requests' : 'issues'}/${number}`, { method: 'PUT', body: { labels: labels.join(',') } });
   }
+  /**
+   * PR 监控条 (spec 2026-10-16 review-pr §3): the newest pull request of this folder's current branch, with its checks.
+   * GitHub only; anything that stops it (no repo / remote / login, a GitLab remote, a detached HEAD) is a `why`, not
+   * an error — the bar simply does not show.
+   */
+  async prForBranch(cwd: string): Promise<{ pr?: BranchPr; why?: string }> {
+    let branch = '';
+    try { branch = (await execFileAsync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd, windowsHide: true, timeout: 10_000 })).stdout.trim(); } catch { return { why: 'not-a-repo' }; }
+    if (!branch || branch === 'HEAD') return { why: 'detached' };
+    let t: Target;
+    try { t = await this.target(cwd); } catch { return { why: 'no-remote' }; }
+    if (t.provider !== 'github') return { why: 'not-github' };
+    try { if (!(await this.token(t))) return { why: 'not-logged-in' }; } catch { return { why: 'not-logged-in' }; }
+    const d = await this.graphql<any>(t, `query($owner:String!,$name:String!,$head:String!){ repository(owner:$owner,name:$name){ pullRequests(headRefName:$head,first:1,orderBy:{field:UPDATED_AT,direction:DESC}){ nodes{ id number title url state isDraft mergeable autoMergeRequest{ enabledAt } commits(last:1){ nodes{ commit{ oid statusCheckRollup{ contexts(first:100){ nodes{ __typename ... on CheckRun{ name status conclusion detailsUrl checkSuite{ workflowRun{ databaseId } } } ... on StatusContext{ context state targetUrl } } } } } } } } } } }`, { owner: t.owner, name: t.repo, head: branch });
+    const p = d.repository?.pullRequests?.nodes?.[0];
+    if (!p) return { why: 'no-pr' };
+    const c = p.commits?.nodes?.[0]?.commit;
+    return { pr: { id: p.id, number: p.number, title: p.title, url: p.url, state: p.state === 'MERGED' ? 'merged' : p.state === 'OPEN' ? 'open' : 'closed', draft: !!p.isDraft, mergeable: p.mergeable === 'MERGEABLE' ? true : p.mergeable === 'CONFLICTING' ? false : undefined, autoMerge: !!p.autoMergeRequest, sha: c?.oid ?? '', checks: summarizeChecks(c?.statusCheckRollup?.contexts?.nodes ?? []) } };
+  }
+
+  /** GitHub auto-merge (squash) on or off for a pull request (its node id, from `prForBranch`). */
+  async autoMerge(cwd: string, prId: string, on: boolean): Promise<void> {
+    const t = await this.target(cwd);
+    if (t.provider !== 'github') throw new Error(tr('只支持 GitHub 的自动合并'));
+    if (on) await this.graphql(t, 'mutation($id:ID!){ enablePullRequestAutoMerge(input:{ pullRequestId:$id, mergeMethod:SQUASH }){ clientMutationId } }', { id: prId });
+    else await this.graphql(t, 'mutation($id:ID!){ disablePullRequestAutoMerge(input:{ pullRequestId:$id }){ clientMutationId } }', { id: prId });
+  }
+
   async merge(cwd: string, number: number, method: 'merge' | 'squash' | 'rebase', repo?: string) {
     const t = await this.target(cwd, repo);
     if (t.provider === 'github') return this.api(t, `/repos/${t.owner}/${t.repo}/pulls/${number}/merge`, { method: 'PUT', body: { merge_method: method } });

@@ -256,3 +256,20 @@ div.code { border: 0; border-radius: var(--r-lg); background-color: var(--surfac
 .fd-scn { padding-left: 40px; font-size: var(--fs-small); color: var(--ink-2); white-space: pre-wrap; }
 .fd-acts { display: flex; gap: 6px; padding-left: 40px; }
 .fd-foot { display: flex; justify-content: flex-end; }
+
+/* PR 监控条 (spec 2026-10-16 review-pr §3): like the goal bar, one row over the conversation */
+.pr-bar { display: flex; align-items: center; gap: 8px; flex: none; min-height: 32px; padding: 0 12px 0 16px; border-bottom: var(--hairline) solid var(--edge-subtle); background: var(--surface-1); font-size: 13px; color: var(--ink-2); }
+.pr-bar > svg { flex: none; color: var(--ink-3); }
+.pr-bar .pr-n { flex: none; color: var(--ink-1); font-weight: var(--fw-strong); text-decoration: none; }
+.pr-bar .pr-n:hover { text-decoration: underline; }
+.pr-bar .pr-t { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-3); }
+.pr-bar .pr-state { flex: none; font-size: var(--fs-micro); padding: 0 6px; border-radius: var(--r-xs); background: var(--layer-hover); color: var(--ink-3); }
+.pr-bar.merged .pr-state { color: var(--accent-text); }
+.pr-bar .pr-checks { flex: none; display: inline-flex; gap: 8px; font-variant-numeric: tabular-nums; }
+.pr-bar .pr-checks > span { display: inline-flex; align-items: center; gap: 2px; }
+.pr-bar .pr-checks .ok { color: var(--green); }
+.pr-bar .pr-checks .bad { color: var(--red); }
+.pr-bar .pr-checks .wait { color: var(--yellow); }
+.pr-bar .pr-ci { flex: none; display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: var(--r-sm); color: var(--ink-2); font-size: var(--fs-small); }
+.pr-bar .pr-ci:hover, .pr-bar .pr-ci[aria-expanded='true'] { background: var(--layer-hover); }
+.pr-bar .pr-ci.on { color: var(--accent-text); }
