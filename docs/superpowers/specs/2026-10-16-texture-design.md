@@ -54,7 +54,7 @@
 
 ### 2.1 生成脚本
 
-`scripts/gen-springs.mjs`：输入 `(stiffness, damping, mass)`，按阻尼谐振子解析解采样到落定（位移误差 < 0.001 且速度足够小），输出：
+`scripts/gen-springs.ts`（`npx tsx` 跑，和 `subset-heading-font.ts` 一样）：输入 `(stiffness, damping, mass)`，按阻尼谐振子解析解采样到落定（位移误差 < 0.001 且速度足够小），输出：
 
 - `linear(...)` 字符串（采样点 ≤ 40 个，按曲率自适应取点，坐标保留 3 位小数）；
 - 落定时间（毫秒，取整到 10）。
@@ -104,7 +104,7 @@
 - 在顶部时上沿不渐隐、往下滚出 `--fade` 后上沿渐隐到满；离底部 `--fade` 以内下沿渐隐逐渐消失。内容不够滚时两边都不渐隐。
 - 渐变用约 7 个停点的缓出 alpha（0 → 0.03 → 0.1 → 0.25 → 0.5 → 0.78 → 1 这类），不是一条硬线。
 - `animation-range` 用长度还是百分比、两条动画分别作用于两个属性：实施时先写一个最小页面在 Electron 44 里验证，不行退到「顶 / 底各一个 scroll() 动画 + `animation-range: 0% 5%` / `95% 100%`」。
-- **用在**：`.chat`、`.welcome`、`.sb-list`、`.sb-attn-list`、`.menu`（可滚的那些：`.sess-menu`、`.sb-menu`、`.tab-add-menu`）、`.cmdk .list`、`.dirmenu-list`、`.branch-menu .list`、`.ft-body`、`.git-body`、`.rv-git-body`、`.search-results`、`.memory-list`。横向的 `.dock-tablist` 已有自己的渐隐，不动。
+- **用在**：`.chat`、`.welcome`、`.sb-list`、`.sb-attn-list`、`.cmdk .list`、`.dirmenu-list`、`.branch-menu .list`、`.ft-body`、`.git-body`、`.rv-git-body`、`.search-results`、`.memory-list`。横向的 `.dock-tablist` 已有自己的渐隐，不动。`.menu` 本身有进场动画（`fl-menu-in`），再写一条 `animation` 会把它盖掉，所以整份菜单可滚的（`.sess-menu`、`.sb-menu`、`.tab-add-menu`）不套，只套菜单里面的列表。
 - `.chat` 的下沿渐隐不能盖住紧贴输入框的最后一行太多：`.chat` 用更短的 `--fade: 16px`。
 - **已知副作用**：遮罩也会让滚动条两端淡出，接受。
 - 加类名优先直接在 CSS 里给这些选择器套用（`.chat, .sb-list, … { … }`），不改组件 JSX。
