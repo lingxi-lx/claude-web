@@ -61,4 +61,51 @@ describe('preview servers', () => {
     fs.copyFileSync(path.join(root, 'boom.js'), path.join(dies, 'boom.js'));
     await expect(svc.start(dies)).rejects.toThrow(/exited \(code 3\)[\s\S]*cannot start/);
   }, 30_000);
+
+  it('a port taken on ::1 or the wildcard counts as taken', async () => {
+    const port = await freePort();
+    const v6 = net.createServer();
+    const ok = await new Promise<boolean>((res) => { v6.once('error', () => res(false)); v6.listen(port, '::1', () => res(true)); });
+    if (!ok) return; // no IPv6 here
+    try { expect(await portFree(port)).toBe(false); } finally { v6.close(); }
+  });
+
+  it('a server that listens on ::1 only (Vite on localhost) is seen when its port opens', async () => {
+    const port = await freePort();
+    const probe = net.createServer();
+    const v6 = await new Promise<boolean>((res) => { probe.once('error', () => res(false)); probe.listen(0, '::1', () => res(true)); });
+    probe.close();
+    if (!v6) return;
+    const root = project([{ name: 'v6', program: 'v6.js', port }]);
+    fs.writeFileSync(path.join(root, 'v6.js'), "require('http').createServer((q,s)=>s.end('v6')).listen(Number(process.env.PORT), '::1')");
+    expect((await svc.start(root)).port).toBe(port);
+    await svc.stop(root);
+  }, 30_000);
+
+  it('two starts at once: one server, the second is told it is already running', async () => {
+    const root = project([{ name: 'web', program: 'server.js', port: await freePort(), autoPort: true }]);
+    const [a, b] = await Promise.all([svc.start(root), svc.start(root)]);
+    expect(a.port).toBe(b.port);
+    expect([a.already, b.already].filter(Boolean)).toHaveLength(1);
+    await svc.stop(root);
+    await expect.poll(() => portFree(a.port), { timeout: 5000 }).toBe(true);
+  }, 30_000);
+
+  it('a cwd outside the project is refused', async () => {
+    const root = project([{ name: 'out', program: 'server.js', port: await freePort(), cwd: '../..' }]);
+    await expect(svc.start(root)).rejects.toThrow(/inside the project/);
+  });
+
+  it.runIf(process.platform === 'win32')('Windows: a .cmd program (npm-style) starts, and an & in its arguments stays an argument', async () => {
+    const port = await freePort();
+    const root = project([{ name: 'cmd', runtimeExecutable: 'run.cmd', runtimeArgs: ['a&echo INJECTED>injected.txt'], port }]);
+    fs.writeFileSync(path.join(root, 'run.cmd'), '@echo off\r\nnode "%~dp0server.js" %*\r\n');
+    const prevPath = process.env.PATH;
+    process.env.PATH = `${root};${prevPath}`;
+    try {
+      expect((await svc.start(root)).port).toBe(port);
+      expect(fs.existsSync(path.join(root, 'injected.txt'))).toBe(false);
+      await svc.stop(root);
+    } finally { process.env.PATH = prevPath; }
+  }, 30_000);
 });

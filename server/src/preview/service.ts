@@ -13,13 +13,19 @@ const LOG_LINES = 2000;
 
 interface Running { key: string; root: string; name: string; port: number; url: string; child: ChildProcess; log: string[]; exited?: number | null }
 
-/** Can something be bound on `port` on this machine's loopback? */
-export function portFree(port: number): Promise<boolean> {
+function bindable(port: number, host: string): Promise<boolean> {
   return new Promise((res) => {
     const s = net.createServer();
-    s.once('error', () => res(false));
-    s.listen({ port, host: '127.0.0.1', exclusive: true }, () => s.close(() => res(true)));
+    // no IPv6 on this machine: that address cannot be taken either
+    s.once('error', (e: NodeJS.ErrnoException) => res(e.code === 'EADDRNOTAVAIL' || e.code === 'EAFNOSUPPORT'));
+    s.listen({ port, host, exclusive: true }, () => s.close(() => res(true)));
   });
+}
+
+/** Nothing listens on `port`, on either loopback or the wildcard addresses (Vite on `localhost` is ::1 on Windows). */
+export async function portFree(port: number): Promise<boolean> {
+  for (const host of ['127.0.0.1', '::1', '0.0.0.0', '::']) if (!(await bindable(port, host))) return false;
+  return true;
 }
 
 async function freePort(): Promise<number> {
@@ -30,9 +36,13 @@ async function freePort(): Promise<number> {
   });
 }
 
-function connects(port: number): Promise<boolean> {
+async function connects(port: number): Promise<boolean> {
+  return (await connectsTo(port, '127.0.0.1')) || connectsTo(port, '::1');
+}
+
+function connectsTo(port: number, host: string): Promise<boolean> {
   return new Promise((res) => {
-    const c = net.connect({ port, host: '127.0.0.1' });
+    const c = net.connect({ port, host });
     const done = (ok: boolean) => { c.destroy(); res(ok); };
     c.once('connect', () => done(true));
     c.once('error', () => done(false));
@@ -42,6 +52,8 @@ function connects(port: number): Promise<boolean> {
 
 export class PreviewService {
   private running = new Map<string, Running>();
+  /** a start on its way, per project + configuration: a second preview_start meanwhile waits for the same one */
+  private starting = new Map<string, Promise<{ name: string; url: string; port: number; already?: boolean }>>();
   constructor(private o: { waitMs?: number } = {}) {}
 
   private pick(root: string, name?: string): LaunchConfig {
@@ -59,6 +71,14 @@ export class PreviewService {
     const key = `${path.resolve(root)}|${c.name}`;
     const was = this.running.get(key);
     if (was && was.exited === undefined) return { name: c.name, url: was.url, port: was.port, already: true };
+    const going = this.starting.get(key);
+    if (going) return going.then((r) => ({ ...r, already: true }));
+    const p = this.launch(root, c, key).finally(() => this.starting.delete(key));
+    this.starting.set(key, p);
+    return p;
+  }
+
+  private async launch(root: string, c: LaunchConfig, key: string): Promise<{ name: string; url: string; port: number }> {
     let port = c.port;
     if (!(await portFree(port))) {
       if (c.autoPort === true) port = await freePort();
@@ -68,8 +88,13 @@ export class PreviewService {
     const { cmd, args } = commandOf(c);
     const sp = resolveSpawn(cmd, args);
     const cwd = c.cwd ? path.resolve(root, c.cwd) : root;
+    const rel = path.relative(path.resolve(root), cwd);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) throw new Error(`"${c.name}": cwd must be inside the project (${c.cwd})`);
     const child = spawn(sp.command, sp.args, {
       cwd,
+      // an npm-style .cmd runs through cmd.exe with the quoting resolveSpawn made: Node must not escape it again
+      // (it would turn the quotes into \" — the command is then not found, and an & in an argument runs)
+      windowsVerbatimArguments: sp.via === 'cmd',
       env: { ...process.env, ...localEnv(), ...(c.env ?? {}), ...sp.env, PORT: String(port) },
       windowsHide: true,
       shell: false,
