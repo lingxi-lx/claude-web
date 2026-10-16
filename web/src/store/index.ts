@@ -948,6 +948,7 @@ export const useStore = create<State>((set, get) => ({
     set((s) => bump(s, sessionId, (x) => {
       x.conv.items.push({ kind: 'user', id: uuid, ts: new Date().toISOString(), text: shown.text, images: (images ?? []).map((im) => `data:${im.mediaType};base64,${im.data}`), attachments: echoAttachments, meta: false });
       x.state = 'running';
+      x.conv.suggestion = undefined; // the SDK never echoes the user message: the guess at it is spent here
       x.error = undefined; // an earlier failure's reason, from before this send reopened the conversation
       x.lastSent = { id: uuid, text, images, attachments };
       x.conv.lastEventAt = Date.now();

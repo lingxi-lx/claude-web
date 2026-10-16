@@ -50,6 +50,7 @@ const CONTROLS: Record<EntryId, (e: EntryMeta) => ReactNode> = {
   'ui.defaultMode': (e) => <Select k={e.id} def="default" label={e.label} options={DEFAULT_MODES.map((m) => ({ id: m, l: MODE_LABEL[m] }))} />,
   autoContinueOnReset: (e) => <Toggle k={e.id} label={e.label} />,
   'ui.showThinking': (e) => <Toggle k={e.id} label={e.label} />,
+  'ui.promptSuggestions': (e) => <Toggle k={e.id} label={e.label} def />,
   'ui.diffMode': (e) => <Seg k={e.id} def="unified" label={e.label} options={[{ id: 'unified', l: tr('上下对照') }, { id: 'split', l: tr('左右并排') }]} />,
   'ui.inlineDiffs': (e) => <Toggle k={e.id} label={e.label} />,
   'ui.workbench': (e) => <Toggle k={e.id} label={e.label} />,

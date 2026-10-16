@@ -147,6 +147,9 @@ export interface Conversation {
   lastTs?: string;
   /** the last turn is still running in another program (Codex's own app / CLI): the read ended with `cw_elsewhere` */
   elsewhere?: { agent: string };
+  /** the engine's guess at the next prompt (SDK `prompt_suggestion`, after a turn) — grey in the empty composer, Tab
+   *  takes it; the next user message clears it. Not an item: it is not part of the conversation */
+  suggestion?: string;
 }
 
 /** The marker a read ends with when another program is in the middle of its last turn (server `codex-items.ts`). */
@@ -187,6 +190,10 @@ function contentImages(content: unknown): string[] {
     else if (s.type === 'url' && s.url) out.push(s.url);
   }
   return out;
+}
+
+function isToolResultOnly(content: unknown): boolean {
+  return Array.isArray(content) && content.length > 0 && content.every((b: any) => b?.type === 'tool_result');
 }
 
 function findItem(c: Conversation, parent: string | null | undefined, pred: (i: Item) => boolean): Item | undefined {
@@ -236,7 +243,11 @@ function dispatch(c: Conversation, m: any): void {
       if (i.status === 'rejected') c.items.push({ kind: 'system', id: m.uuid ?? `rl-${clock()}`, subtype: 'rate_limit', level: 'warn', text: tr('额度已用尽（{labelLimit}）{v}', { labelLimit: labelLimit(i.rateLimitType), v: i.resetsAt ? ` · ${resetText(i.resetsAt)}` : '' }), data: i });
       return;
     }
+    case 'prompt_suggestion':
+      c.suggestion = typeof m.suggestion === 'string' && m.suggestion.trim() ? m.suggestion.trim() : undefined;
+      return;
     case 'conversation_reset':
+      c.suggestion = undefined;
       c.items = [];
       c.toolIndex.clear();
       c.streaming.clear();
@@ -499,6 +510,8 @@ export function decodeAttachments(text: string): { text: string; attachments: At
 
 function applyUser(c: Conversation, m: any) {
   if (m.uuid && c.retracted.has(m.uuid)) return;
+  // someone said something (here or in another window): the guess at it is spent. A tool result is not someone.
+  if (!m.parent_tool_use_id && !m.isMeta && !isToolResultOnly(m.message?.content)) c.suggestion = undefined;
   // the server's copy of a message sent from wherever (hub `cw_echo`): the window that sent it already shows it under
   // the same uuid (store `send`); every other window — the phone's, the computer's — shows it now instead of only the
   // answer. A steer joins the turn already running: it does not restart its clock.

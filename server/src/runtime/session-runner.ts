@@ -102,6 +102,10 @@ interface PendingPermission {
   resolve: (r: PermissionResult) => void;
 }
 
+let promptSuggestionsOn = true;
+/** Settings → 下一句提示 (`ui.promptSuggestions`); a query started from now on asks for them or not. */
+export function setPromptSuggestions(on: boolean) { promptSuggestionsOn = on; }
+
 export interface RunnerEvents {
   message: (m: SDKMessage) => void;
   state: (s: RunnerState, error?: string) => void;
@@ -393,6 +397,8 @@ export class SessionRunner extends EventEmitter {
       ...(allowed.length ? { allowedTools: allowed } : {}),
       ...(noEngineSearch ? { disallowedTools: [ENGINE_SEARCH_TOOL] } : {}),
       includePartialMessages: true,
+      // 下一句提示: one `prompt_suggestion` after a turn (the composer shows it grey; settings → ui.promptSuggestions)
+      promptSuggestions: promptSuggestionsOn,
       includeHookEvents: true,
       forwardSubagentText: true,
       agentProgressSummaries: true,

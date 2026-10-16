@@ -293,6 +293,11 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   const docked = !welcome && !disabled && active ? active.pending[0] : undefined;
   const dockAgent = agentWord(active?.info);
   const hasAttachments = imgs.length > 0 || atts.length > 0 || files.length > 0 || refs.length > 0;
+  // 下一句提示 (phase 2 spec §2): the engine's guess, grey in the empty box; Tab takes it, Esc / typing puts it away
+  const suggestionRaw = useStore((s) => (active ? s.open[active.sessionId]?.conv.suggestion : undefined));
+  const [dismissed, setDismissed] = useState<string | undefined>(undefined);
+  const suggestion = !welcome && !disabled && !docked && !busy && !text && !hasAttachments && suggestionRaw && suggestionRaw !== dismissed ? suggestionRaw : undefined;
+  const takeSuggestion = () => { if (!suggestion) return; onChange(suggestion); requestAnimationFrame(() => { const el = ta.current; if (el) { el.focus(); el.setSelectionRange(suggestion.length, suggestion.length); } }); };
   const dockScope = pane ? `${pane.paneId}|${pane.tileId}` : 'none';
   // when the card on top came, and whether the box had words then (recorded as it first renders: that is when it shows)
   const seenRef = useRef<DockSeen | null>(null);
@@ -527,6 +532,10 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   };
 
   const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (suggestion && !imeComposing(e.nativeEvent)) {
+      if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); takeSuggestion(); return; }
+      if (e.key === 'Escape') { e.preventDefault(); setDismissed(suggestion); return; }
+    }
     if (matches.length && slashQuery !== null && !imeComposing(e.nativeEvent)) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setPalIdx((i) => (i + 1) % matches.length); return; }
       if (e.key === 'ArrowUp') { e.preventDefault(); setPalIdx((i) => (i - 1 + matches.length) % matches.length); return; }
@@ -924,12 +933,14 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
               {upload && <span className="att-chip"><span className="spinner" /> {tr('上传 {done}/{total} · {name}', { done: upload.done + 1, total: upload.total, name: upload.name })}</span>}
             </div>
           )}
+          {suggestion && mobile && <button className="cmp-suggest" onClick={takeSuggestion}><Icon name="sparkle" size={12} /> {tr('用这句')}</button>}
           <textarea
             ref={ta}
+            data-suggestion={suggestion ? '' : undefined}
             rows={1}
             value={text}
             disabled={disabled}
-            placeholder={disabled ? tr('对话已被删除，不能继续') : docked ? DOCK_PLACEHOLDER[dockKind(docked)](dockAgent) : welcome && !ultraOn ? tr('描述一个任务，或者问个问题。输入 / 查看命令，拖入文件作为附件') : busy ? tr('运行中，输入会排队 · Esc 中断') : ultraOn ? ULTRACODE.placeholder : active?.state === 'history' ? tr('发送即可继续这个对话…') : tr('回复 {agentName}… 输入 / 查看命令，拖入文件作为附件', { agentName: info?.agentName && info.agent !== 'claude' ? info.agentName : 'Claude' })}
+            placeholder={suggestion ? `${suggestion}   ${tr('Tab 采用')}` : disabled ? tr('对话已被删除，不能继续') : docked ? DOCK_PLACEHOLDER[dockKind(docked)](dockAgent) : welcome && !ultraOn ? tr('描述一个任务，或者问个问题。输入 / 查看命令，拖入文件作为附件') : busy ? tr('运行中，输入会排队 · Esc 中断') : ultraOn ? ULTRACODE.placeholder : active?.state === 'history' ? tr('发送即可继续这个对话…') : tr('回复 {agentName}… 输入 / 查看命令，拖入文件作为附件', { agentName: info?.agentName && info.agent !== 'claude' ? info.agentName : 'Claude' })}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={onKey}
             onPaste={onPaste}

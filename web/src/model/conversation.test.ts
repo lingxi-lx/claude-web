@@ -531,3 +531,33 @@ describe('a result made from the record (server sessions/history.ts)', () => {
     expect(groupTurns(c.items).map((t) => [t.user?.id, t.result?.id])).toEqual([['u1', 'cw-turn-u1'], ['u2', 'cw-turn-u2']]);
   });
 });
+
+describe('prompt suggestions (phase 2 spec §2)', () => {
+  it('a prompt_suggestion is kept on the conversation, not in the tree', () => {
+    const c = createConversation();
+    applyMessage(c, { type: 'prompt_suggestion', suggestion: 'run the tests', uuid: 'ps1', session_id: 's' });
+    expect(c.suggestion).toBe('run the tests');
+    expect(c.items).toHaveLength(0);
+  });
+  it('the next user message clears it, also one sent from another window', () => {
+    const c = createConversation();
+    applyMessage(c, { type: 'prompt_suggestion', suggestion: 'run the tests', uuid: 'ps1', session_id: 's' });
+    applyMessage(c, { type: 'user', uuid: USER_UUID, cw_echo: true, message: { role: 'user', content: 'something else' }, parent_tool_use_id: null });
+    expect(c.suggestion).toBeUndefined();
+  });
+  it('a tool result (a user message from the engine) does not clear it', () => {
+    const c = createConversation();
+    applyMessage(c, { type: 'prompt_suggestion', suggestion: 'run the tests', uuid: 'ps1', session_id: 's' });
+    applyMessage(c, { type: 'user', uuid: 'u2', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }] }, parent_tool_use_id: null });
+    expect(c.suggestion).toBe('run the tests');
+  });
+  it('an empty suggestion clears it; a conversation reset clears it', () => {
+    const c = createConversation();
+    applyMessage(c, { type: 'prompt_suggestion', suggestion: 'a', uuid: 'ps1', session_id: 's' });
+    applyMessage(c, { type: 'prompt_suggestion', suggestion: '  ', uuid: 'ps2', session_id: 's' });
+    expect(c.suggestion).toBeUndefined();
+    applyMessage(c, { type: 'prompt_suggestion', suggestion: 'b', uuid: 'ps3', session_id: 's' });
+    applyMessage(c, { type: 'conversation_reset', uuid: 'r', session_id: 's' });
+    expect(c.suggestion).toBeUndefined();
+  });
+});

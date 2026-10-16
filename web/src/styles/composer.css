@@ -246,3 +246,7 @@
   .run-card:not(.waiting) .what { color: var(--ink-2); }
   .run-card .rc-words { color: inherit; background: none; animation: none; }
 }
+
+/* 下一句提示 on a phone (no Tab key): a small button above the box takes the grey suggestion */
+.cmp-suggest { display: inline-flex; align-items: center; gap: 4px; margin: 0 0 6px 4px; padding: 3px 10px; border-radius: var(--r-pill, 999px); font-size: var(--fs-sm); color: var(--ink-2); background: var(--layer-hover); }
+.cmp-suggest:active { transform: var(--press); }

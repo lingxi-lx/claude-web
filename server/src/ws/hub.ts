@@ -1,7 +1,7 @@
 import type { WebSocket, WebSocketServer } from 'ws';
 import { CLAUDE_PROVIDER_ID, type ClientRequest, type OpenSessionParams, type RemoteStatus, type ServerEvent, type WireDown, type WireUp } from '../protocol.js';
 import { RunnerPool } from '../runtime/pool.js';
-import { SessionRunner } from '../runtime/session-runner.js';
+import { SessionRunner, setPromptSuggestions } from '../runtime/session-runner.js';
 import { cacheParentFor } from '../runtime/cache-key.js';
 import { SessionService } from '../sessions/service.js';
 import { ConfigService } from '../config/service.js';
@@ -459,6 +459,7 @@ export class Hub {
         if (req.key === LANGUAGE_KEY) applyLanguage(req.value);
         // takes effect on the next session start — running children keep the servers they were given
         if (req.key === 'memory.mcp') setMemoryMcpEnabled(req.value !== false);
+        if (req.key === 'ui.promptSuggestions') setPromptSuggestions(req.value !== false);
         if (req.key === 'web.mcp') setWebMcpEnabled(req.value !== false);
         if (req.key.startsWith('web.')) s.web.settingsChanged(); // web.status reads differently now
         // 在外面也能用: brokers / STUN / the shell address / on-off / keep-awake (restarts only when it has to)

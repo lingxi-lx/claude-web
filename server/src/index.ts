@@ -34,6 +34,7 @@ import { AgentTranscripts } from './agents/transcript.js';
 import { CanonicalLog } from './session/canonical.js';
 import { MemoryService } from './memory/service.js';
 import { setMemoryMcpEnabled } from './memory/launcher.js';
+import { setPromptSuggestions } from './runtime/session-runner.js';
 import { RemoteService, pairPage } from './remote/service.js';
 import { AnywhereService } from './remote/anywhere/service.js';
 import { reportKeepAwake } from './remote/keep-awake.js';
@@ -303,6 +304,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   const canonical = new CanonicalLog();
   const memory = new MemoryService();
   setMemoryMcpEnabled(meta.settings()['memory.mcp'] !== false);
+  setPromptSuggestions(meta.settings()['ui.promptSuggestions'] !== false);
   // 联网: web search here, the browser tools in whichever desktop window hosts the built-in browser (web/service.ts).
   // Its own fetches wait for the proxy's look like every other request that goes out, and never reach this server.
   web = new WebService({
