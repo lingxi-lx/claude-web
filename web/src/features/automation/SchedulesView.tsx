@@ -4,7 +4,7 @@ import { ws } from '@/ws/client';
 import { basename, clsx, fmtMs } from '@/util';
 import { dlg } from '@/ui/dialog';
 import type { PermissionMode, Schedule, ScheduleRun } from '@shared';
-import { EMPTY, MODE_LABEL } from '@/ui/terms';
+import { EMPTY, MODE_LABEL, TERMS } from '@/ui/terms';
 import { EmptyState } from '@/ui/EmptyState';
 import { agoText } from '@/features/home/model';
 import { isWithin } from '@/features/paths';
@@ -38,7 +38,8 @@ export function SchedulesView({ compact = false, page = false, newSignal = 0 }: 
   const toast = useStore((s) => s.toast);
   const loadHistory = useStore((s) => s.loadHistory);
   const [editing, setEditing] = useState<Partial<Schedule> | null>(null);
-  const [mode, setMode] = useState<'interval' | 'cron'>('cron');
+  // 手动 (the official app's Manual): no schedule, only 立即运行 starts it
+  const [mode, setMode] = useState<'interval' | 'cron' | 'manual'>('cron');
   const [templates, setTemplates] = useState<Template[]>([]);
   const [runs, setRuns] = useState<ScheduleRun[]>([]);
   const [showRuns, setShowRuns] = useState<string | null>(null);
@@ -62,7 +63,9 @@ export function SchedulesView({ compact = false, page = false, newSignal = 0 }: 
     const cwd = e.cwd?.trim() || defaultCwd();
     if (!cwd) return toast(tr('先选一个项目文件夹'));
     const patch: Partial<Schedule> = { ...e, cwd, name: e.name?.trim() || e.prompt!.slice(0, 30), enabled: e.enabled ?? true };
-    if (mode === 'cron') { if (!e.cron?.trim()) return toast(tr('需要 cron 表达式')); patch.cron = e.cron.trim(); }
+    patch.manual = mode === 'manual';
+    if (mode === 'manual') { /* the timing it had stays, for switching back */ }
+    else if (mode === 'cron') { if (!e.cron?.trim()) return toast(tr('需要 cron 表达式')); patch.cron = e.cron.trim(); }
     // '' not undefined: undefined is dropped by JSON and the server merges the patch, so a cron schedule
     // switched to an interval kept its cron (which wins over everyMinutes)
     else { patch.cron = ''; patch.everyMinutes = Number(e.everyMinutes) || 60; }
@@ -91,13 +94,15 @@ export function SchedulesView({ compact = false, page = false, newSignal = 0 }: 
       <textarea className="field sf-full" rows={3} placeholder={tr('每次运行发送给 Claude 的提示词')} value={editing.prompt ?? ''} onChange={(e) => setEditing({ ...editing, prompt: e.target.value })} />
       <div className="sf-row">
         <span className="sf-l">{tr('时间')}</span>
-        <span className="seg mini"><button className={mode === 'cron' ? 'active' : ''} onClick={() => setMode('cron')} title={tr('cron 表达式：分 时 日 月 周')}>{tr('按时间')}</button><button className={mode === 'interval' ? 'active' : ''} onClick={() => setMode('interval')}>{tr('间隔')}</button></span>
+        <span className="seg mini"><button className={mode === 'cron' ? 'active' : ''} onClick={() => setMode('cron')} title={tr('cron 表达式：分 时 日 月 周')}>{tr('按时间')}</button><button className={mode === 'interval' ? 'active' : ''} onClick={() => setMode('interval')}>{tr('间隔')}</button><button className={mode === 'manual' ? 'active' : ''} onClick={() => setMode('manual')} title={tr('不定时，只在点「立即运行」时跑')}>{tr('手动')}</button></span>
         {mode === 'cron' ? (
           <>
             <input className="field mono sf-cron" placeholder={tr('分 时 日 月 周')} value={editing.cron ?? ''} onChange={(e) => setEditing({ ...editing, cron: e.target.value })} />
             <select className="field sf-pick" value="" onChange={(e) => e.target.value && setEditing({ ...editing, cron: e.target.value })}><option value="">{tr('常用…')}</option>{PRESET_CRONS.map((p) => <option key={p.v} value={p.v}>{p.l}</option>)}</select>
             {period && <span className="sf-hint">{period}</span>}
           </>
+        ) : mode === 'manual' ? (
+          <span className="sf-hint">{tr('只在点「立即运行」时跑')}</span>
         ) : (
           <>{tr('每')} <input className="field sf-num" type="number" min={1} value={editing.everyMinutes ?? 60} onChange={(e) => setEditing({ ...editing, everyMinutes: Number(e.target.value) })} /> {tr('分钟')}</>
         )}
@@ -112,7 +117,8 @@ export function SchedulesView({ compact = false, page = false, newSignal = 0 }: 
         <span className="sf-l">{tr('权限')}</span>
         <select className="field sf-pick" value={editing.permissionMode ?? 'acceptEdits'} onChange={(e) => setEditing({ ...editing, permissionMode: e.target.value })}>{Object.entries(MODE_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
       </div>
-      <label className="sf-check"><input type="checkbox" checked={!!editing.freshSession} onChange={(e) => setEditing({ ...editing, freshSession: e.target.checked })} /> {tr('每次新开对话（不累积上下文）')}</label>
+      <label className="sf-check"><input type="checkbox" checked={!!editing.freshSession} onChange={(e) => setEditing({ ...editing, freshSession: e.target.checked, ...(e.target.checked ? {} : { worktree: false }) })} /> {tr('每次新开对话（不累积上下文）')}</label>
+      {editing.freshSession && <label className="sf-check"><input type="checkbox" checked={!!editing.worktree} onChange={(e) => setEditing({ ...editing, worktree: e.target.checked })} /> {tr('每次在独立的{worktree}里跑（不碰你工作区里没提交的改动）', { worktree: TERMS.worktree })}</label>}
       <div className="sf-row"><button className="btn sm primary" onClick={save}>{tr('保存')}</button><button className="btn sm" onClick={() => setEditing(null)}>{tr('取消')}</button></div>
     </div>
   );
@@ -193,7 +199,7 @@ export function SchedulesView({ compact = false, page = false, newSignal = 0 }: 
               </div>
               {sc.sessionId && <button className="btn sm ghost" title={tr('打开它的对话')} onClick={() => loadHistory(sc.sessionId!)}>{tr('对话')}</button>}
               <button className="btn sm ghost" title={tr('历史')} onClick={() => { setShowRuns(sc.id); setTab('history'); }}>{tr('历史')}</button>
-              <button className="btn sm ghost" title={tr('编辑')} onClick={() => { setMode(sc.cron ? 'cron' : 'interval'); setEditing({ ...sc }); }}><Icon name="edit" size={13} /></button>
+              <button className="btn sm ghost" title={tr('编辑')} onClick={() => { setMode(sc.manual ? 'manual' : sc.cron ? 'cron' : 'interval'); setEditing({ ...sc }); }}><Icon name="edit" size={13} /></button>
               <button className="btn sm ghost" title={tr('立即运行')} onClick={() => ws.request({ kind: 'schedules.runNow', id: sc.id }).catch((e) => toast(e.message))}><Icon name="play" size={12} /></button>
               <button className="btn sm ghost danger" title={tr('删除')} onClick={async () => { if (await dlg.confirm(tr('删除定时任务「{name}」？', { name: sc.name }), { danger: true })) void ws.request({ kind: 'schedules.remove', id: sc.id }); }}><Icon name="trash" size={13} /></button>
             </div>

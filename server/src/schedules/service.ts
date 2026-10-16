@@ -3,6 +3,8 @@ import type { RunnerPool } from '../runtime/pool.js';
 import type { PermissionMode, ScheduleRun } from '../protocol.js';
 import { nextCron } from './cron.js';
 import { tr } from '../i18n/index.js';
+import { EventEmitter } from 'node:events';
+import { missedRun } from './catch-up.js';
 
 /** Ready-made schedules users can start from (the UI fills cwd). */
 export const SCHEDULE_TEMPLATES: { id: string; name: string; cron: string; prompt: string; permissionMode: PermissionMode; freshSession?: boolean }[] = [
@@ -13,6 +15,13 @@ export const SCHEDULE_TEMPLATES: { id: string; name: string; cron: string; promp
   { id: 'todo', name: tr('TODO 巡查'), cron: '0 11 * * 3', prompt: tr('搜索代码里的 TODO / FIXME / HACK 注释，按文件归类，估计每条的优先级，输出一份清单。'), permissionMode: 'default', freshSession: true },
   { id: 'tests', name: tr('跑测试'), cron: '0 */4 * * *', prompt: tr('运行项目的测试套件，只汇报失败的用例和可能的原因；全部通过就一句话。'), permissionMode: 'acceptEdits' },
 ];
+
+/** MMDDHHmm, local time: a run's worktree name stays short and sorts by time. */
+function runStamp(t: number): string {
+  const d = new Date(t);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(d.getMonth() + 1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}`;
+}
 
 function computeNext(s: Schedule, from = Date.now()): number {
   if (s.cron) return nextCron(s.cron, new Date(from)).getTime();
@@ -28,16 +37,17 @@ function safeNext(s: Schedule, from = Date.now()): { next?: number; error?: stri
  * Local scheduler: interval (`everyMinutes`) or cron (`cron`). Each schedule keeps one session so context
  * accumulates like /loop, unless `freshSession` asks for a new one per run. Every run is logged (meta.scheduleRuns).
  */
-export class ScheduleService {
+export class ScheduleService extends EventEmitter {
   private timer: NodeJS.Timeout;
   private running = new Set<string>();
   constructor(private meta: MetaStore, private pool: RunnerPool) {
+    super();
     this.timer = setInterval(() => void this.tick(), 30_000);
     this.timer.unref();
-    // recompute cron schedules whose next run is stale (e.g. laptop slept)
+    // a time missed more than seven days ago is dropped (catch-up.ts); within seven days the next tick runs it once.
     // (an invalid cron used to throw here and take the whole server down at startup)
     for (const s of this.meta.schedules()) {
-      if (!s.enabled || !s.cron || (s.nextRunAt && s.nextRunAt >= Date.now() - 12 * 3600_000)) continue;
+      if (!s.enabled || s.manual || missedRun(s.nextRunAt, Date.now()) !== 'drop') continue;
       const n = safeNext(s);
       void this.meta.touchSchedule(s.id, n.error ? { lastError: n.error } : { nextRunAt: n.next }).catch(() => {});
     }
@@ -48,23 +58,29 @@ export class ScheduleService {
   private async tick() {
     const now = Date.now();
     for (const s of this.meta.schedules()) {
-      if (!s.enabled || this.running.has(s.id)) continue;
+      if (!s.enabled || s.manual || this.running.has(s.id)) continue;
       if ((s.nextRunAt ?? 0) > now) continue;
+      // asleep for more than a week: drop what was missed (the same rule as at startup; the tick is what sees a wake)
+      const missed = missedRun(s.nextRunAt, now);
+      if (missed === 'drop') { const d = safeNext(s, now); await this.meta.touchSchedule(s.id, d.error ? { lastError: d.error } : { nextRunAt: d.next }).catch(() => {}); continue; }
       // a cron that can't produce a next time would otherwise fire the prompt on every 30s tick
       const n = safeNext(s, now);
       if (n.error) { if (s.lastError !== n.error) await this.meta.touchSchedule(s.id, { lastError: n.error }).catch(() => {}); continue; }
-      await this.run(s).catch(() => {});
+      if (missed === 'catch-up') this.emit('notice', { text: tr('补跑定时任务「{name}」：电脑睡着或应用关着时错过了', { name: s.name }), notify: true });
+      await this.run(s, false, missed === 'catch-up').catch(() => {});
     }
   }
 
-  async run(s: Schedule, manual = false) {
+  async run(s: Schedule, manual = false, catchUp = false) {
     this.running.add(s.id);
     const started = Date.now();
     const runId = `${s.id}-${started.toString(36)}`;
     try {
       // before anything is sent: a throw here must not leave a prompt delivered with nextRunAt still in the past
       const next = manual ? s.nextRunAt ?? computeNext(s, started) : computeNext(s, started);
-      const runner = this.pool.open({ sessionId: s.freshSession ? undefined : s.sessionId, cwd: s.cwd, model: s.model, permissionMode: (s.permissionMode as PermissionMode) ?? 'acceptEdits' });
+      // each run in its own worktree: only for a new conversation per run (a kept conversation stays where it is)
+      const worktree = s.freshSession && s.worktree ? `sched-${s.id.replace(/[^\w-]/g, '').slice(0, 6)}-${runStamp(started)}` : undefined;
+      const runner = this.pool.open({ sessionId: s.freshSession ? undefined : s.sessionId, cwd: s.cwd, model: s.model, permissionMode: (s.permissionMode as PermissionMode) ?? 'acceptEdits', worktree });
       for (let i = 0; i < 60 && runner.state === 'starting'; i++) await new Promise((r) => setTimeout(r, 500));
       if (runner.state === 'running' || runner.state === 'waiting') {
         await this.meta.touchSchedule(s.id, { nextRunAt: Date.now() + 60_000, lastError: tr('对话正忙，1 分钟后重试') });
@@ -82,7 +98,7 @@ export class ScheduleService {
         const off = () => runner.off('message', onMsg);
         runner.on('message', onMsg);
       });
-      const run: ScheduleRun = { id: runId, scheduleId: s.id, at: started, sessionId: runner.sessionId, ok: outcome.ok, durationMs: Date.now() - started, summary: outcome.summary, error: outcome.error };
+      const run: ScheduleRun = { id: runId, scheduleId: s.id, at: started, sessionId: runner.sessionId, ok: outcome.ok, durationMs: Date.now() - started, summary: outcome.summary, error: outcome.error, ...(catchUp ? { catchUp } : {}) };
       await this.meta.addScheduleRun(run);
       if (!outcome.ok) await this.meta.touchSchedule(s.id, { lastError: outcome.error });
     } catch (e: any) {

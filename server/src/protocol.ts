@@ -317,7 +317,7 @@ export interface MessageFeedback { rating: 'up' | 'down' | null; note?: string; 
 
 export interface Workspace { id: string; path: string; name: string; addedAt: number; order: number }
 export interface SessionMeta { /** 代码审查卡: findings dismissed here, `<toolUseId>#<index>` */ reviewDismissed?: string[]; /** 任务 chip: suggestions dismissed (tool use ids), and started (tool use id → the new conversation) */ taskDismissed?: string[]; taskStarted?: Record<string, string>; /** PR 监控条: 自动修 CI on, and the failures it already asked about */ prAutoFix?: boolean; prFixed?: string[]; pinned?: boolean; archived?: boolean; workspaceId?: string; tags?: string[]; providerId?: string; /** sidebar grouping directory when it differs from the cwd (orchestration worktrees) */ groupCwd?: string; /** prompt-cache route key when it is not the session's own id (forks keep their root's) */ cacheKey?: string; /** the model its subagents run on, picked for this provider ('' = the main model) */ subagent?: { providerId: string; model: string }; /** the permission mode it last ran with: a resume without a pick comes back in it (the SDK never says it) */ permissionMode?: PermissionMode }
-export interface Schedule { id: string; name: string; cwd: string; prompt: string; everyMinutes: number; cron?: string; enabled: boolean; lastRunAt?: number; nextRunAt?: number; sessionId?: string; model?: string; permissionMode?: string; freshSession?: boolean; lastError?: string; runs?: number }
+export interface Schedule { id: string; name: string; cwd: string; prompt: string; everyMinutes: number; cron?: string; enabled: boolean; lastRunAt?: number; nextRunAt?: number; sessionId?: string; model?: string; permissionMode?: string; freshSession?: boolean; lastError?: string; runs?: number; /** 手动: only 立即运行 starts it */ manual?: boolean; /** each run in its own worktree (with freshSession) */ worktree?: boolean }
 export interface LimitWindow { label: string; percent: number; resetsAt: string | null; active: boolean; severity?: string }
 // ---- remote access / phones / IM (phase 6) ----
 export interface DeviceInfo { id: string; name: string; createdAt: number; lastSeenAt: number; ip?: string; ua?: string }
@@ -673,6 +673,8 @@ export type ServerEvent =
   /** an agent said what it offers and that changed (AgentInfo.reportedModels): ask agents.list again */
   | { kind: 'agents.changed' }
   | { kind: 'meta.changed' }
+  /** something the server did on its own that the user should hear about (a scheduled catch-up run); `notify`: also the OS */
+  | { kind: 'notice'; text: string; notify?: boolean; sessionId?: string }
   | { kind: 'remote.changed' }
   | { kind: 'im.changed' }
   | { kind: 'tunnel.changed' }
@@ -733,7 +735,7 @@ export interface RegistryServer { name: string; description: string; repo?: stri
 export interface SecretsStatus { scheme: 'dpapi' | 'keychain' | 'plain'; total: number; protected: number }
 /** One model call as seen from the runner (per `result` / assistant message). */
 export interface LedgerEntry { ts: number; sessionId: string; model: string; durationMs: number; apiMs?: number; input: number; output: number; cacheRead: number; cacheWrite: number; costUsd: number; ok: boolean; error?: string; turns?: number; providerId?: string; kind?: 'gateway'; gateway?: GatewayLedgerInfo; /** cost not known (non-Claude model, gateway / shim call): costUsd is 0 but must not read as $0 */ costUnknown?: boolean }
-export interface ScheduleRun { id: string; scheduleId: string; at: number; sessionId?: string; ok: boolean; durationMs?: number; summary?: string; error?: string }
+export interface ScheduleRun { id: string; scheduleId: string; at: number; sessionId?: string; ok: boolean; durationMs?: number; summary?: string; error?: string; /** run for a time missed while the app was closed / asleep */ catchUp?: boolean }
 
 export type WireDown = { type: 'reply'; reply: ReplyEnvelope } | { type: 'event'; event: ServerEvent };
 export type WireUp = { type: 'request'; request: RequestEnvelope };

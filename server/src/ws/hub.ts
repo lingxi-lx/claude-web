@@ -158,6 +158,7 @@ export class Hub {
     s.pool.on('state', (sessionId, state) => { if (state === 'closed' || state === 'error') s.computer.drop(sessionId); });
     s.sessions.on('changed', () => this.broadcast({ kind: 'sessions.changed' }));
     s.meta.on('changed', () => this.broadcast({ kind: 'meta.changed' }));
+    s.schedules.on?.('notice', (n: { text: string; notify?: boolean; sessionId?: string }) => this.broadcast({ kind: 'notice', ...n }));
     const pushLimits = () => s.limits.get().then((limits) => this.broadcast({ kind: 'limits', limits })).catch(() => {});
     setInterval(pushLimits, 5 * 60_000).unref();
     let lastIdlePush = 0;
@@ -449,7 +450,8 @@ export class Hub {
       case 'schedules.runNow': {
         const sc = s.meta.schedules().find((x) => x.id === req.id);
         if (!sc) throw new Error('schedule not found');
-        await s.schedules.run(sc);
+        // manual: the next scheduled time stays as it was (it used to move to "now + one period" on every click)
+        await s.schedules.run(sc, true);
         return null;
       }
       case 'limits.get':

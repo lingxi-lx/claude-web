@@ -597,6 +597,11 @@ export const useStore = create<State>((set, get) => ({
           // the sidebar banner reads detected && !joined && !dismissed from the sources
           void get().loadLibrarySources().catch(() => {});
           break;
+        case 'notice':
+          // the server did something on its own (a scheduled catch-up run): say so, and to the OS when not looking
+          get().toast(e.text, true, 6000);
+          if (e.notify && desktop && !document.hasFocus()) desktop.notify('Claude Web', e.text, e.sessionId);
+          break;
         case 'meta.changed':
           void get().loadMeta();
           void get().loadProviders().catch(() => {});

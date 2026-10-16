@@ -677,6 +677,7 @@ export const EN_SERVER: Record<string, string> = {
   "节点还没结束": "The node hasn't finished yet",
   "草稿": "Draft",
   "草稿已存：{name}（{id}）。下面是它的样子：正面、背面、走路 4 帧、敲键盘、吃泡面。对照用户要的再看一遍；用户在网吧的「角色库」里能看到它在动。满意了用 character_save。": "Draft saved: {name} ({id}). Below is how it looks: front, back, 4 walking frames, typing, eating instant noodles. Compare it with what the user asked for and look again; the user can see it moving in the café's Character library. When you're happy with it, use character_save.",
+  "补跑定时任务「{name}」：电脑睡着或应用关着时错过了": "Catching up on the scheduled task “{name}”: it was missed while the computer slept or the app was closed",
   "被结束": "Was killed",
   "被驳回{v}": "Rejected{v}",
   "要求验证，或者没有给出结果页。可以用 browser_open 打开 {url} ，请用户在内置浏览器里完成验证后再搜": "It asked for verification, or gave no results page. You can open {url} with browser_open and ask the user to complete the verification in the built-in browser, then search again",
