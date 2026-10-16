@@ -3,14 +3,14 @@
    the mask reads them. Nothing to scroll → the timeline is inactive → both stay 0 → no fade. Browsers without
    scroll-driven animations get no fade. An element that already runs an animation must list it alongside (see
    .welcome) — a second `animation` declaration replaces the first; the .menu family (fl-menu-in) is left out for that
-   reason. The mask fades the scrollbar's ends too. */
+   reason. The list is :where() (no specificity) so the per-element overrides below win. The mask fades the scrollbar's ends too. */
 @property --sf-t { syntax: '<length>'; inherits: false; initial-value: 0px; }
 @property --sf-b { syntax: '<length>'; inherits: false; initial-value: 0px; }
 @keyframes sf-top { from { --sf-t: 0px; } to { --sf-t: var(--fade); } }
 @keyframes sf-bottom { from { --sf-b: var(--fade); } to { --sf-b: 0px; } }
 
 @supports (animation-timeline: scroll()) {
-  :is(.chat, .welcome, .sb-list, .sb-attn-list, .cmdk .list, .dirmenu-list, .branch-menu .list, .ft-body, .git-body, .rv-git-body, .search-results, .memory-list) {
+  :where(.chat, .welcome, .sb-list, .sb-attn-list, .cmdk .list, .dirmenu-list, .branch-menu .list, .ft-body, .git-body, .rv-git-body, .search-results, .memory-list) {
     --fade: 24px;
     animation: sf-top linear both, sf-bottom linear both;
     animation-timeline: scroll(self), scroll(self);
