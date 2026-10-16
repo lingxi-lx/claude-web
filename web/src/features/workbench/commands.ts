@@ -10,6 +10,7 @@ import { offerGroupToNewWindow } from './windows';
 import { underCovers } from './cover-commands';
 import { changeZoom } from '@/ui/zoom';
 import { tr } from '@/i18n';
+import { nextViewMode, normViewMode, viewModeLabel } from '@/features/chat/view-mode';
 
 export function runCommand(id: string): boolean {
   const st = useStore.getState();
@@ -53,6 +54,12 @@ export function runCommand(id: string): boolean {
       return true;
     case 'sidebar': useStore.setState((s) => ({ sidebarOpen: !s.sidebarOpen })); return true;
     case 'shortcuts': useStore.setState({ shortcutsOpen: true }); return true;
+    case 'view.cycle': {
+      const next = nextViewMode(normViewMode(st.settings['ui.viewMode']));
+      st.setSetting('ui.viewMode', next);
+      st.toast(tr('查看模式：{label}', { label: viewModeLabel(next) }), true, 1600, 'view-mode');
+      return true;
+    }
     // 界面缩放 (desktop app; a browser's own zoom keys never get here)
     case 'zoom.in': changeZoom('in'); return true;
     case 'zoom.out': changeZoom('out'); return true;

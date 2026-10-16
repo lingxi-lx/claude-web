@@ -39,6 +39,7 @@ import { coverApp } from './cover';
 import { WebSettings } from '@/features/browser/WebSettings';
 import { tr, trAs } from '@/i18n';
 import { CustomCssSection } from './CustomCssSection';
+import { VIEW_MODES, viewModeLabel } from '@/features/chat/view-mode';
 
 export { Row } from './controls';
 
@@ -50,6 +51,7 @@ const CONTROLS: Record<EntryId, (e: EntryMeta) => ReactNode> = {
   'ui.defaultMode': (e) => <Select k={e.id} def="default" label={e.label} options={DEFAULT_MODES.map((m) => ({ id: m, l: MODE_LABEL[m] }))} />,
   autoContinueOnReset: (e) => <Toggle k={e.id} label={e.label} />,
   'ui.showThinking': (e) => <Toggle k={e.id} label={e.label} />,
+  'ui.viewMode': (e) => <Select k={e.id} def="normal" label={e.label} options={VIEW_MODES.map((id) => ({ id, l: viewModeLabel(id) }))} />,
   'ui.promptSuggestions': (e) => <Toggle k={e.id} label={e.label} def />,
   'ui.diffMode': (e) => <Seg k={e.id} def="unified" label={e.label} options={[{ id: 'unified', l: tr('上下对照') }, { id: 'split', l: tr('左右并排') }]} />,
   'ui.inlineDiffs': (e) => <Toggle k={e.id} label={e.label} />,

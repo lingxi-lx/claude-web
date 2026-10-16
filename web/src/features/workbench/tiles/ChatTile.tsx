@@ -32,6 +32,7 @@ import { TERMS } from '@/ui/terms';
 import { imeComposing } from '@/ui/ime';
 import { showUsageCard } from '@/features/composer/ContextMeter';
 import { tr } from '@/i18n';
+import { normViewMode, viewModeLabel } from '@/features/chat/view-mode';
 
 type ChatTileModel = Extract<Tile, { kind: 'chat' }>;
 
@@ -45,6 +46,7 @@ type ChatTileModel = Extract<Tile, { kind: 'chat' }>;
 function HeaderMenu({ tile, paneId, s, live, remote, gone, onClose }: { tile: ChatTileModel; paneId: string; s: SessionSummary; live: boolean; remote: boolean; gone: boolean; onClose: () => void }) {
   const pinned = useStore((st) => !!st.sessionMeta[s.sessionId]?.pinned);
   const mobile = useStore((st) => st.mobile);
+  const viewMode = useStore((st) => normViewMode(st.settings['ui.viewMode']));
   const caps = effectiveCaps(s);
   const act = (fn: () => unknown) => () => { onClose(); void fn(); };
   const st = () => useStore.getState();
@@ -57,6 +59,8 @@ function HeaderMenu({ tile, paneId, s, live, remote, gone, onClose }: { tile: Ch
       </button>
       {/* the old stats bar: the composer's card (the ring in its corner shows up only from 60 %; final review I3) */}
       <button data-act="usage" onClick={act(() => { if (tile.wb !== 'live') patch({ wb: 'live' }); requestAnimationFrame(() => showUsageCard(tile.id)); })}><Icon name="usage" size={14} /> {tr('本对话用量')}</button>
+      {/* 查看模式 is for every conversation (one setting); here because the header is where you look for it */}
+      <button data-act="view-mode" onClick={act(() => runCommand('view.cycle'))} title={tr('普通 → 详细 → 精简')}><Icon name="eye" size={14} /> <span style={{ flex: 1 }}>{tr('查看模式：{label}', { label: viewModeLabel(viewMode) })}</span><span className="kbd">{modKey}+O</span></button>
       <div className="menu-label">{tr('查看这个对话的')}</div>
       <div className="menu-grid" role="group" aria-label={tr('查看这个对话的')}>
         {viewsFor(remote).map((v) => (

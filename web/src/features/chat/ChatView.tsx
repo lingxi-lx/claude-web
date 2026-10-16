@@ -29,6 +29,9 @@ import { Fold, onScreen, reducedMotion, useEntrance, useFold } from './Fold';
 import { stepBusy, stepState } from './step-view';
 import { COUNT_UP_MS, countAt, splitNumbers } from './count-up';
 import { tr } from '@/i18n';
+import { normViewMode, type ViewMode } from './view-mode';
+
+const useViewMode = (): ViewMode => useStore((s) => normViewMode(s.settings['ui.viewMode']));
 
 const EDIT_STEPS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit']);
 const NO_PENDING: PermissionRequestEvent[] = [];
@@ -122,13 +125,14 @@ function Steps({ tools, version }: { tools: ToolUseBlock[]; version: number }) {
   const waiting = useContext(WaitingCtx);
   const touch = useContext(TurnTouchCtx);
   const inlineDiffs = useStore((s) => s.settings['ui.inlineDiffs'] === true);
+  const verbose = useViewMode() === 'verbose';
   const running = tools.some((t) => t.status === 'running' || t.status === 'pending' || t.status === 'streaming');
   const failed = tools.some((t) => t.status === 'error' && !t.stopped);
   // by step id; a merged row is `g:<its first step's id>`
   const [opened, setOpened] = useState<Record<string, boolean>>({});
   const [all, setAll] = useState(false);
   const moves = useMoves();
-  const isOpen = (t: ToolUseBlock) => all || (opened[t.id] ?? (inlineDiffs && EDIT_STEPS.has(t.name) && t.status === 'done'));
+  const isOpen = (t: ToolUseBlock) => all || (opened[t.id] ?? (verbose || (inlineDiffs && EDIT_STEPS.has(t.name) && t.status === 'done')));
   const toggle = (id: string, open: boolean, by: ToggleBy) => {
     moves.current = by === 'pointer';
     setAll(false);
@@ -172,7 +176,8 @@ function Steps({ tools, version }: { tools: ToolUseBlock[]; version: number }) {
  */
 function Thinking({ b, streaming }: { b: ThinkingBlock; streaming: boolean }) {
   const pref = useStore((s) => s.settings['ui.showThinking']);
-  const mode = pref === true || pref === 'expanded' ? 'expanded' : pref === 'hidden' ? 'hidden' : 'collapsed';
+  const view = useViewMode();
+  const mode = view === 'summary' ? 'hidden' : view === 'verbose' || pref === true || pref === 'expanded' ? 'expanded' : pref === 'hidden' ? 'hidden' : 'collapsed';
   const touch = useContext(TurnTouchCtx);
   const [open, setOpen] = useState<boolean | null>(null);
   const moves = useMoves();
@@ -461,12 +466,13 @@ function TurnView({ turn, last, live, version, sessionId, cwd }: { turn: Turn; l
   const fold = done && parts.work;
   // 后台: a workflow this turn started may still run after the turn ended — its agents stay in sight when the turn folds
   const workflows = useMemo(() => (fold ? [...walkTools(parts.process)].filter((x) => x.depth === 0 && x.tool.name === 'Workflow').map((x) => x.tool.id) : []), [fold, parts.process]);
+  const view = useViewMode();
   const key = `${sessionId}|${turn.id}`;
   const [choice, setChoice] = useState<boolean | undefined>(() => foldMemory.get(key));
   const moves = useMoves();
   const setOpen = (v: boolean, move = false) => { moves.current = move; foldMemory.set(key, v); setChoice(v); };
   const touch = useCallback(() => { if (!foldMemory.has(key)) { foldMemory.set(key, true); setChoice(true); } }, [key]);
-  const open = fold ? choice ?? false : true;
+  const open = fold ? choice ?? (view === 'verbose') : true;
   const body = useRef<HTMLDivElement>(null);
   // The first time this turn is seen folded. Drawn folded from the start: nothing plays. Folded later, in view: the
   // end of a turn the user watched — `ended` for a moment (the line's fade and count-up), and the fold below moves.
@@ -493,8 +499,8 @@ function TurnView({ turn, last, live, version, sessionId, cwd }: { turn: Turn; l
     el.addEventListener('cw:open-fold', on);
     return () => el.removeEventListener('cw:open-fold', on);
   }, [key]);
-  const finals = parts.final;
-  const lastFinal = finals[finals.length - 1];
+  const lastFinal = parts.final[parts.final.length - 1];
+  const finals = view === 'summary' ? (lastFinal ? [lastFinal] : []) : parts.final;
   const answerActions = !!lastFinal && !lastFinal.streaming && lastFinal.blocks.some((b) => b.type === 'text' && b.text.trim());
   return (
     <div className={clsx('turn', fold && 'folded', fold && open && 'open')} data-turn={turn.id}>
@@ -536,9 +542,10 @@ function TurnView({ turn, last, live, version, sessionId, cwd }: { turn: Turn; l
 /** The conversation as turns (top level only — a subagent's messages and the detail panel use `ItemList`). */
 function TurnList({ items, version, live, sessionId, cwd }: { items: Item[]; version: number; live: boolean; sessionId: string; cwd: string }) {
   const turns = useMemo(() => groupTurns(items), [items, version]);
+  const view = useViewMode();
   // keyed by the conversation too: a fork has its parent's message ids, and a turn's view (what it saw of its end,
   // whether the user opened it) belongs to one conversation
-  return <>{turns.map((t, i) => <TurnView key={`${sessionId}|${t.id}`} turn={t} last={i === turns.length - 1} live={live} version={version} sessionId={sessionId} cwd={cwd} />)}</>;
+  return <>{turns.map((t, i) => <TurnView key={`${sessionId}|${t.id}|${view}`} turn={t} last={i === turns.length - 1} live={live} version={version} sessionId={sessionId} cwd={cwd} />)}</>;
 }
 
 export function ChatView() {
