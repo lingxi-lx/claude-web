@@ -45,7 +45,7 @@
   暗色 / 亮色两套在 `.cmp-statusline` 上），光标移动、OSC 链接这些转义丢掉。设置 `ui.statusLine` 关掉。
 - 验证时抓到的：`tput sgr0` 写的是 `ESC ( B ESC [ m`，字符集那段（`ESC ( B`）也要丢；冒号写法的颜色 `38:2::R:G:B` 是一组参数，
   按 `;` 分组、组里按 `:` 分（以前全按 `[;:]` 拆，后面的数被当成新代码）。脚本留了个后台进程占着 stdout 时 `close` 等不到：
-  进程 `exit` 后 150ms 就拿已有输出、杀掉整棵树。Git Bash 也在 PATH 上找（跳过 System32 的 bash.exe，那是 WSL）。
+  进程 `exit` 后 150ms 就拿已有输出（它留下的后台进程管不到了：bash 一退，taskkill /T 找不到它们）。Git Bash 也在 PATH 上找（跳过 System32 的 bash.exe，那是 WSL）。
 - bash heredoc 写测试会吃掉 `\\`：带反斜杠的文件用 Write 写。
 
 ## 模型菜单和 + 菜单

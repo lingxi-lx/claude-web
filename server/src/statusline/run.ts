@@ -78,11 +78,10 @@ export function runStatusLine(cmd: string, input: unknown, cwd: string, timeoutM
     child.on('error', () => finish(null));
     child.on('close', (code) => { const t = clipStatus(out); finish(code === 0 && t ? t : null); });
     // a script that leaves something running in the background keeps stdout open after it exits: what it printed is
-    // the answer, a moment after the exit (the rest of the tree goes)
+    // the answer, a moment after the exit (what it left running is its own: once bash is gone the tree cannot be reached)
     child.on('exit', (code) => setTimeout(() => {
       if (done) return;
       const t = clipStatus(out);
-      void killTree(child);
       finish(code === 0 && t ? t : null);
     }, 150));
     child.stdin!.on('error', () => { /* a command that does not read stdin closes it early */ });
