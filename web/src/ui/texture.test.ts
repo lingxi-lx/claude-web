@@ -38,3 +38,22 @@ describe('texture tokens', () => {
     expect(bad.map(([f, n]) => `${f}:${n}`)).toEqual([]);
   });
 });
+
+describe('type and radii', () => {
+  const fonts = readFileSync(new URL('../fonts.css', import.meta.url), 'utf8');
+  it('Inter Dark: a thin face below 400 and a strong face from 501, so 400 lands on the thin one', () => {
+    expect(fonts).toMatch(/font-family: 'Inter Dark';[\s\S]*?font-weight: 350 380/);
+    expect(fonts).toMatch(/font-family: 'Inter Dark';[\s\S]*?font-weight: 501 900/);
+  });
+  it('dark themes put Inter Dark first and keep Inter Variable as the fallback', () => {
+    expect(tokens).toMatch(/--font: 'Inter Dark', 'Inter Variable'/);
+  });
+  it('no CSS asks for weight 500 (it would fall to the thin face in dark themes)', () => {
+    const bad = cssFiles(SRC).filter((f) => /font-weight:\s*500\b/.test(readFileSync(f, 'utf8')));
+    expect(bad).toEqual([]);
+  });
+  it('radii', () => {
+    expect(tokens).toMatch(/--r-bubble:\s*18px/);
+    expect(tokens).toMatch(/--r-composer:\s*20px/);
+  });
+});

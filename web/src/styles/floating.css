@@ -59,7 +59,7 @@
    ui/Toasts.tsx: ink pills at the top of the main column (just under its header), centred on it (the sidebar and the right panel are not
    what a toast is about), the newest lowest and in front; up to three, each older one (`--depth`) above it, a little smaller
    and fainter; `.over` waits behind them. In: down from under the header + scale with a little overshoot, 360ms. Out (`.out`): 200ms.
-   The radius is 20px (--r-bubble): one line is 36px tall, so that is a full pill; text that wraps (a failure with its
+   The radius is 18px (--r-bubble): one line is 36px tall, so that is a full pill; text that wraps (a failure with its
    explanation and the original underneath) comes out a rounded card without anything measuring it. They are at the
    top because the bottom belongs to the input box, its status tab and a docked approval card: a toast there covered
    the card's buttons. They never take a click. `ok` shows a tick, anything else the alert mark: the shape is the

@@ -9,6 +9,8 @@ body { background: var(--surface-1); color: var(--ink-1); font: var(--fs-base)/1
 html { font-optical-sizing: auto; font-feature-settings: 'cv11', 'ss03', 'calt'; font-synthesis-weight: none; text-autospace: normal; }
 button, input, textarea, select { font: inherit; color: inherit; }
 button { background: none; border: none; cursor: pointer; padding: 0; }
+/* an icon in running text sits on the text's optical centre, not on its baseline; flex rows ignore this, any rule wins */
+:where(svg) { vertical-align: -0.125em; }
 a { color: var(--info); }
 code, pre, kbd, .mono { font-family: var(--mono); font-size: var(--fs-code); font-variant-ligatures: none; font-feature-settings: 'calt' 0; text-autospace: no-autospace; }
 pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
@@ -404,7 +406,7 @@ button.link:hover { text-decoration: underline; }
 /* ---------- composer ---------- */
 .composer { padding: 6px 24px 10px; }
 .composer-inner { max-width: 720px; margin: 0 auto; position: relative; }
-.composer-box { background: var(--surface-elev); border-radius: var(--r-2xl); padding: 10px 12px 8px; box-shadow: var(--elev-composer); transition: border-color var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out); }
+.composer-box { background: var(--surface-elev); border-radius: var(--r-composer); padding: 10px 12px 8px; box-shadow: var(--elev-composer); transition: border-color var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out); }
 .composer-box:focus-within { border-color: var(--ink-3); }
 .composer textarea { width: 100%; background: transparent; border: none; resize: none; max-height: 280px; min-height: 26px; line-height: 1.55; padding: 2px 4px; font-size: 15px; }
 .composer textarea::placeholder { color: var(--ink-4); }
@@ -717,7 +719,7 @@ input.field:focus-visible, select.field:focus-visible, textarea.field:focus-visi
 .sh-view > svg:last-child { color: var(--ink-3); margin-left: 1px; }
 .sh-view:hover { background: var(--layer-active); }
 .sh-actions { display: inline-flex; align-items: center; gap: 2px; flex: none; }
-.sh-diff { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; margin-right: 4px; border-radius: var(--r-md); background: var(--surface-2); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; font-weight: 500; transition: background var(--dur-2) var(--ease-out); }
+.sh-diff { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; margin-right: 4px; border-radius: var(--r-md); background: var(--surface-2); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; font-weight: var(--fw-strong); transition: background var(--dur-2) var(--ease-out); }
 .sh-diff:hover { background: var(--surface-3); }
 .sh-diff .add { color: var(--ok); }
 .sh-diff .del { color: var(--err); }

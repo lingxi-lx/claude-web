@@ -33,7 +33,7 @@
   position: relative;
   padding: 10px 10px 10px 12px;
   border: 0;
-  border-radius: var(--r-2xl);
+  border-radius: var(--r-composer);
   background: var(--surface-elev);
   box-shadow: var(--elev-composer), 0 0 0 4px transparent;
   transition: box-shadow var(--dur-base) var(--ease-out);
