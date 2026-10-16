@@ -2,6 +2,7 @@
 // (sessions-mcp `suggest_task`); one click starts it in a new conversation beside this one — in its own git worktree
 // when the folder is a repository — and this conversation carries on. Started / dismissed is remembered (meta.json).
 import { useState } from 'react';
+import { parsePeerId } from '@shared';
 import type { ToolUseBlock } from '@/model/conversation';
 import { useScopedSessionId, useStore } from '@/store';
 import { Icon } from '@/ui/icons';
@@ -35,7 +36,9 @@ export function TaskChipBody({ t }: { t: ToolUseBlock }) {
       // beside this conversation: a new split, then the conversation opens in it (the focused pane)
       const g = st.layout;
       st.dispatchLayout({ t: 'pane.split', paneId: (g.groups.find((x) => x.id === g.activeGroupId) ?? g.groups[0]).focusedPaneId, dir: 'row' });
-      const id = await st.openSession({ cwd, worktree: useWorktree ? taskWorktreeName(title) : undefined });
+      // a conversation on another machine: the task starts there too (its folder is on that disk)
+      const peer = parsePeerId(sid)?.peerId;
+      const id = await st.openSession({ cwd, peer, worktree: useWorktree ? taskWorktreeName(title, t.id) : undefined });
       await st.send(id, prompt);
       await st.setSessionMeta(sid, { taskStarted: { ...started, [t.id]: id } });
     } catch (e: any) {
