@@ -1,0 +1,56 @@
+/* Scroll edges (spec 2026-10-16 texture §3): a list fades out at an edge only while there is more to scroll past it.
+   Scroll-driven: two animations on the element's own scroll timeline move --sf-t / --sf-b between 0 and --fade, and
+   the mask reads them. Nothing to scroll → the timeline is inactive → both stay 0 → no fade. Browsers without
+   scroll-driven animations get no fade. An element that already runs an animation must list it alongside (see
+   .welcome) — a second `animation` declaration replaces the first; the .menu family (fl-menu-in) is left out for that
+   reason. The mask fades the scrollbar's ends too. */
+@property --sf-t { syntax: '<length>'; inherits: false; initial-value: 0px; }
+@property --sf-b { syntax: '<length>'; inherits: false; initial-value: 0px; }
+@keyframes sf-top { from { --sf-t: 0px; } to { --sf-t: var(--fade); } }
+@keyframes sf-bottom { from { --sf-b: var(--fade); } to { --sf-b: 0px; } }
+
+@supports (animation-timeline: scroll()) {
+  :is(.chat, .welcome, .sb-list, .sb-attn-list, .cmdk .list, .dirmenu-list, .branch-menu .list, .ft-body, .git-body, .rv-git-body, .search-results, .memory-list) {
+    --fade: 24px;
+    animation: sf-top linear both, sf-bottom linear both;
+    animation-timeline: scroll(self), scroll(self);
+    animation-range: 0 var(--fade), calc(100% - var(--fade)) 100%;
+    -webkit-mask-image: linear-gradient(to bottom,
+      rgba(0, 0, 0, 0) 0,
+      rgba(0, 0, 0, 0.03) calc(var(--sf-t) * 0.17),
+      rgba(0, 0, 0, 0.1) calc(var(--sf-t) * 0.33),
+      rgba(0, 0, 0, 0.25) calc(var(--sf-t) * 0.5),
+      rgba(0, 0, 0, 0.5) calc(var(--sf-t) * 0.67),
+      rgba(0, 0, 0, 0.78) calc(var(--sf-t) * 0.83),
+      #000 var(--sf-t),
+      #000 calc(100% - var(--sf-b)),
+      rgba(0, 0, 0, 0.78) calc(100% - var(--sf-b) * 0.83),
+      rgba(0, 0, 0, 0.5) calc(100% - var(--sf-b) * 0.67),
+      rgba(0, 0, 0, 0.25) calc(100% - var(--sf-b) * 0.5),
+      rgba(0, 0, 0, 0.1) calc(100% - var(--sf-b) * 0.33),
+      rgba(0, 0, 0, 0.03) calc(100% - var(--sf-b) * 0.17),
+      rgba(0, 0, 0, 0) 100%);
+    mask-image: linear-gradient(to bottom,
+      rgba(0, 0, 0, 0) 0,
+      rgba(0, 0, 0, 0.03) calc(var(--sf-t) * 0.17),
+      rgba(0, 0, 0, 0.1) calc(var(--sf-t) * 0.33),
+      rgba(0, 0, 0, 0.25) calc(var(--sf-t) * 0.5),
+      rgba(0, 0, 0, 0.5) calc(var(--sf-t) * 0.67),
+      rgba(0, 0, 0, 0.78) calc(var(--sf-t) * 0.83),
+      #000 var(--sf-t),
+      #000 calc(100% - var(--sf-b)),
+      rgba(0, 0, 0, 0.78) calc(100% - var(--sf-b) * 0.83),
+      rgba(0, 0, 0, 0.5) calc(100% - var(--sf-b) * 0.67),
+      rgba(0, 0, 0, 0.25) calc(100% - var(--sf-b) * 0.5),
+      rgba(0, 0, 0, 0.1) calc(100% - var(--sf-b) * 0.33),
+      rgba(0, 0, 0, 0.03) calc(100% - var(--sf-b) * 0.17),
+      rgba(0, 0, 0, 0) 100%);
+  }
+  /* the last line sits right above the composer: a shorter fade */
+  .chat { --fade: 16px; }
+  .welcome {
+    animation: fadein 0.25s, sf-top linear both, sf-bottom linear both;
+    animation-timeline: auto, scroll(self), scroll(self);
+    animation-range: normal, 0 var(--fade), calc(100% - var(--fade)) 100%;
+  }
+}

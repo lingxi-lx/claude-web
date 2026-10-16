@@ -14,6 +14,7 @@ import './styles/chat.css';
 import './styles/composer.css';
 import './styles/floating.css';
 import './styles/extras.css';
+import './styles/scroll-fade.css';
 import './styles/review-phone.css';
 import './styles/phone.css';
 import './styles/phone-sheet.css';
