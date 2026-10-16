@@ -10,6 +10,12 @@ describe('directory menu keyboard', () => {
     expect(menuKey('Home', 2, 3)).toEqual({ focus: 0 });
     expect(menuKey('End', 0, 3)).toEqual({ focus: 2 });
   });
+  it('1–9 pick the Nth row; a digit past the last row does nothing', () => {
+    expect(menuKey('1', -1, 3)).toEqual({ pick: 0 });
+    expect(menuKey('3', 0, 3)).toEqual({ pick: 2 });
+    expect(menuKey('4', 0, 3)).toBeNull();
+    expect(menuKey('0', 0, 3)).toBeNull();
+  });
 
   it('Esc and Tab close the menu and hand focus back to the chip', () => {
     expect(menuKey('Escape', 1, 3)).toEqual({ close: true, refocus: true });

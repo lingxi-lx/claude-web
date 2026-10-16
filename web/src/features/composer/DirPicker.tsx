@@ -107,6 +107,7 @@ function DirMenu({ anchor, cwd, dirs, onPick, onBrowse, onClose, footer }: { anc
     e.preventDefault(); // Tab too: focus goes back to the chip, not into whatever follows <body>'s portal
     e.stopPropagation();
     if ('focus' in act) rows[act.focus]?.focus();
+    else if ('pick' in act) rows[act.pick]?.click();
     else onClose(act.refocus);
   };
   if (!pos && !sheet) return null;

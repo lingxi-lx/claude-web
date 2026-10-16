@@ -1,8 +1,10 @@
 import { placeMenu, samePlacement, type Placement } from '@/features/models/place';
 
 /** Keyboard of the working-directory menu: which row to focus, or close (handing focus back to the chip). */
-export function menuKey(key: string, index: number, count: number): { focus: number } | { close: true; refocus: true } | null {
+/** `pick`: 1–9 choose the Nth row (the official app's menu digits; a text field in the menu keeps its digits). */
+export function menuKey(key: string, index: number, count: number): { focus: number } | { pick: number } | { close: true; refocus: true } | null {
   if (!count) return key === 'Escape' || key === 'Tab' ? { close: true, refocus: true } : null;
+  if (/^[1-9]$/.test(key)) return Number(key) <= count ? { pick: Number(key) - 1 } : null;
   switch (key) {
     case 'ArrowDown': return { focus: index < 0 ? 0 : (index + 1) % count };
     case 'ArrowUp': return { focus: index < 0 ? count - 1 : (index - 1 + count) % count };

@@ -10,7 +10,7 @@ export const SHORTCUTS: Shortcut[] = [
   { id: 'palette', label: tr('搜索对话 / 命令面板'), desktop: 'Ctrl+K', browser: 'Ctrl+K', group: tr('全局') },
   { id: 'sidebar', label: tr('收起 / 展开侧栏'), desktop: 'Ctrl+B', browser: 'Ctrl+B', group: tr('全局') },
   { id: 'find', label: tr('在对话中查找'), desktop: 'Ctrl+F', browser: 'Ctrl+F', group: tr('全局') },
-  { id: 'shortcuts', label: tr('快捷键速查'), desktop: 'F1', browser: '?', group: tr('全局') },
+  { id: 'shortcuts', label: tr('快捷键速查'), desktop: 'Ctrl+/', browser: 'Ctrl+/', group: tr('全局') },
   // 界面缩放: the desktop shell's own (remembered, every window — desktop/src/zoom.ts); in a browser these keys are the
   // browser's zoom, which `matchBrowserKey` leaves alone
   { id: 'zoom.in', label: tr('放大界面'), desktop: 'Ctrl+=', browser: 'Ctrl+=', group: tr('全局') },
@@ -116,5 +116,7 @@ export function matchBrowserKey(e: KeyboardEvent): string | null {
   if (alt && !ctrl && k === ',') return 'tile.prev';
   if (k === 'F2') return 'group.rename';
   if (!inField && k === '?') return 'shortcuts';
+  // Ctrl+/ (the official key; F1 and ? still work) — but not in the code editor or the terminal, where it is theirs
+  if (ctrl && !alt && !shift && (k === '/' || e.code === 'Slash') && !(e.target as HTMLElement)?.closest?.('.monaco-editor, .xterm')) return 'shortcuts';
   return null;
 }

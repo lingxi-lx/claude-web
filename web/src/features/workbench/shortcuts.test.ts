@@ -47,6 +47,14 @@ describe('matchBrowserKey', () => {
     expect(matchBrowserKey(ev({ key: 'I', code: 'KeyI', ctrlKey: true, shiftKey: true }))).toBeNull();
   });
 
+  it('Ctrl+/ shows the shortcuts anywhere but the code editor and the terminal (there it toggles a comment)', () => {
+    const inside = (sel: string) => ({ closest: (q: string) => (q.split(', ').includes(sel) ? {} : null), tagName: 'TEXTAREA' });
+    expect(matchBrowserKey(ev({ key: '/', code: 'Slash', ctrlKey: true }))).toBe('shortcuts');
+    expect(matchBrowserKey(ev({ key: '/', code: 'Slash', ctrlKey: true, target: { closest: () => null, tagName: 'TEXTAREA' } as any }))).toBe('shortcuts');
+    expect(matchBrowserKey(ev({ key: '/', code: 'Slash', ctrlKey: true, target: inside('.monaco-editor') as any }))).toBeNull();
+    expect(matchBrowserKey(ev({ key: '/', code: 'Slash', ctrlKey: true, target: inside('.xterm') as any }))).toBeNull();
+  });
+
   it('Ctrl+\\ closes the focused split (by the physical key too)', () => {
     expect(matchBrowserKey(ev({ key: '\\', code: 'Backslash', ctrlKey: true }))).toBe('pane.close');
     expect(matchBrowserKey(ev({ key: '#', code: 'Backslash', ctrlKey: true }))).toBe('pane.close');

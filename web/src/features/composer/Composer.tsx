@@ -599,7 +599,8 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
 
   const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (suggestion && !imeComposing(e.nativeEvent)) {
-      if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); takeSuggestion(); return; }
+      // Tab or → (the official keys); → only does it while the box is empty, which is when the suggestion shows
+      if ((e.key === 'Tab' && !e.shiftKey) || (e.key === 'ArrowRight' && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey)) { e.preventDefault(); takeSuggestion(); return; }
       if (e.key === 'Escape') { e.preventDefault(); setDismissed(suggestion); return; }
     }
     if (e.key === 'Tab' && e.shiftKey && !text && !imeComposing(e.nativeEvent) && permCycle.current) { e.preventDefault(); permCycle.current(); return; }

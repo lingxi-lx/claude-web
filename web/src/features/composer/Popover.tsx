@@ -137,6 +137,7 @@ export function Popover({ anchor, onClose, prefer = 'up', align = 'left', classN
     e.preventDefault();
     e.stopPropagation();
     if ('focus' in act) rows[act.focus]?.focus();
+    else if ('pick' in act) rows[act.pick]?.click();
     else onClose(act.refocus);
   };
   if (sheet) {
