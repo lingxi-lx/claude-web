@@ -236,3 +236,23 @@ div.code { border: 0; border-radius: var(--r-lg); background-color: var(--surfac
 .rv-comments .t { font-weight: var(--fw-strong); }
 .rv-comments .grow { flex: 1; }
 .rv-comments .kbd { margin-left: 4px; }
+
+/* 代码审查卡 (spec 2026-10-16 review-pr §2): ReportFindings, grouped by file */
+.findings { display: flex; flex-direction: column; gap: 10px; padding: 4px 0; }
+.fd-empty { display: flex; align-items: center; gap: 6px; color: var(--ink-3); font-size: var(--fs-small); padding: 4px 0; }
+.fd-file { display: flex; flex-direction: column; gap: 6px; }
+.fd-path { font-family: var(--mono); font-size: var(--fs-small); color: var(--ink-2); }
+.fd-item { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border-radius: var(--r-md); background: var(--surface-1); }
+.fd-item.done { opacity: 0.55; }
+.fd-row { display: flex; align-items: baseline; gap: 8px; }
+.fd-line { font-family: var(--mono); font-size: var(--fs-micro); color: var(--ink-3); min-width: 32px; }
+.fd-sum { flex: 1; color: var(--ink-1); }
+.fd-tag { font-size: var(--fs-micro); padding: 0 6px; border-radius: var(--r-xs); background: var(--layer-hover); color: var(--ink-3); white-space: nowrap; }
+.fd-tag.soft { color: var(--ink-4); }
+.fd-tag.ok { color: var(--green); }
+.fd-why { display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; font-size: var(--fs-small); color: var(--ink-3); padding-left: 40px; }
+.fd-why .chev { transition: transform var(--dur-fast) var(--ease-out); }
+.fd-why[aria-expanded='true'] .chev { transform: rotate(90deg); }
+.fd-scn { padding-left: 40px; font-size: var(--fs-small); color: var(--ink-2); white-space: pre-wrap; }
+.fd-acts { display: flex; gap: 6px; padding-left: 40px; }
+.fd-foot { display: flex; justify-content: flex-end; }

@@ -225,6 +225,7 @@ describe('SessionRunner Stop (interrupt)', () => {
     await tick();
     expect(queries[0].options.promptSuggestions).toBe(true);
     expect(queries[0].options.env?.CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION).toBe('1');
+    expect(queries[0].options.env?.CLAUDE_CODE_REPORT_FINDINGS).toBe('1'); // 代码审查卡
     await a.close();
     setPromptSuggestions(false);
     try {

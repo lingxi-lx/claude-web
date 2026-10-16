@@ -7,6 +7,7 @@ import { ShellBody } from './ShellTool';
 import { WebFetchBody, WebSearchBody, SkillBody } from './WebTools';
 import { AgentBody, TodoBody, PlanBody, AskUserBody, ArtifactBody, GoalBody, WorkflowBody } from './AgentTool';
 import { GenericBody } from './McpTool';
+import { FindingsBody } from './FindingsTool';
 import { WEB_TOOLS, webToolLabel, webToolOf, type WebTool } from '@/features/browser/web-tools';
 import { COMPUTER_TOOLS, computerToolLabel, computerToolOf, type ComputerTool } from '@/features/computer/computer-tools';
 import { tr } from '@/i18n';
@@ -42,6 +43,8 @@ const DEFS: Record<string, ToolDef> = {
   TodoWrite: { icon: 'todo', category: 'other', label: (i) => ({ verb: tr('更新计划'), arg: tr('{todosCount} 项', { todosCount: (i.todos as any[])?.length ?? 0 }) }), Body: TodoBody },
   Agent: { icon: 'agent', category: 'agent', standalone: true, label: (i) => ({ verb: i.subagent_type ? `[${i.subagent_type}]` : tr('子代理'), arg: s(i, 'description') || s(i, 'prompt').slice(0, 80) }), Body: AgentBody },
   Task: { icon: 'agent', category: 'agent', standalone: true, label: (i) => ({ verb: i.subagent_type ? `[${i.subagent_type}]` : tr('任务'), arg: s(i, 'description') || s(i, 'prompt').slice(0, 80) }), Body: AgentBody },
+  // /code-review's findings (CLAUDE_CODE_REPORT_FINDINGS, set by the runner): a card of its own in the conversation
+  ReportFindings: { icon: 'approval', category: 'other', standalone: true, label: (i) => ({ verb: tr('代码审查'), arg: Array.isArray(i.findings) ? (i.findings.length ? tr('{n} 个发现', { n: i.findings.length }) : tr('没发现问题')) : '' }), Body: FindingsBody },
   ExitPlanMode: { icon: 'plan', category: 'plan', standalone: true, label: () => ({ verb: tr('请求批准计划'), arg: '' }), Body: PlanBody },
   EnterPlanMode: { icon: 'plan', category: 'plan', label: () => ({ verb: tr('进入计划模式'), arg: '' }), Body: GenericBody },
   AskUserQuestion: { icon: 'question', category: 'plan', standalone: true, label: (i) => ({ verb: tr('提问'), arg: (i.questions as any[])?.map((q) => q.question).join(' / ') ?? '' }), Body: AskUserBody },
