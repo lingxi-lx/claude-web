@@ -62,7 +62,7 @@ npm run dev          # 开发：server tsx watch + vite :5173（代理 /ws 到 3
 | [agent-config](docs/notes/agent-config.md) | 其它 agent 的配置中心（2026-09-28） | Codex/Gemini/Qwen/OpenCode 配置编辑、备份、CLI 的坑 |
 | [federation](docs/notes/federation.md) | 跨机器会话 / 联邦（2026-09-28） | peer 连接、id 前缀、路由表、防环、远端文件保护 |
 | [orchestra](docs/notes/orchestra.md) | 多 agent 编排（2026-09-28） | 编排引擎、worktree / 比选、不毁用户的东西、竞态 |
-| [models](docs/notes/models.md) | 多模型管理（2026-09-28） | 拉模型列表、统一菜单、会话内切换路由、子代理模型、挑要用的模型、Codex 报的列表 |
+| [models](docs/notes/models.md) | 多模型管理（2026-09-28） | 拉模型列表、统一菜单、会话内切换路由、子代理模型（含别家的模型）、挑要用的模型、Codex 报的列表 |
 | [ui-redesign-0-1](docs/notes/ui-redesign-0-1.md) | 界面改版 阶段 0–1：令牌 / 文案 / 外框按需出现（2026-09-28） | 令牌 / 对比度测试、术语表、外框按需出现、会话头、桌面标题栏、外框控件计数 |
 | [ui-redesign-2-right-panel](docs/notes/ui-redesign-2-right-panel.md) | 界面改版 阶段 2：右侧面板（2026-09-28） | 右侧面板：固定标签、审阅、文件、标签行、ui-smoke 段 |
 | [ui-redesign-3-composer](docs/notes/ui-redesign-3-composer.md) | 界面改版 阶段 3：输入框 + 模型 / 权限菜单（2026-09-28） | 输入框一行、+ 菜单、项目 / 分支 / 权限 chip、模型菜单、上下文小环、没在跑的对话的 chip |
@@ -87,7 +87,8 @@ npm run dev          # 开发：server tsx watch + vite :5173（代理 /ws 到 3
 | [review-pr](docs/notes/review-pr.md) | 审阅与 PR：diff 行评论 / 代码审查卡 / PR 监控条（2026-10-16） | DiffView comments、CLAUDE_CODE_REPORT_FINDINGS 与 ReportFindings、vcs.prForBranch / autoMerge、自动修 CI、自动归档 |
 | [sessions-env](docs/notes/sessions-env.md) | 环境与对话：跨对话工具 / 任务 chip / 选机器 / worktree 设置 / 文件右键 / 本机环境变量 / 深链接（2026-10-16） | sessions MCP（进程内）、ccb 的 ExecuteExtraTool、<cw-from>、新对话选机器、.worktreeinclude、shell.editors、local-env.json、claude-web:// |
 | [pages](docs/notes/pages.md) | 页面与入口：总览栏 / 定时任务补跑 / 预览服务器 / 更新内容 / 只聊天 / 跨对话生成文件 / 快捷键（2026-10-16） | MissionPanel 的待审 / 落地中、missedRun、.claude/launch.json 与 preview_*、app.changelog、tools: [] + strictMcpConfig、artifacts.list、Ctrl+/ |
-| [recording-ux](docs/notes/recording-ux.md) | 照官方桌面版录屏改的界面（2026-10-16，用户要求） | 信息栏、标题栏工具 / ⋮、一行输入框 + 框下一行、Ctrl+Enter 插话、statusLine、模型菜单数字 / 快速模式、+ 菜单连接器、运行行、计划卡、浏览器空白页的开发服务器；第二轮（10-17）：sharp、官方技能插件、队列里的后台结束、改名被写回、SDK 列表漏长首句、新 logo、动态背景、☰ ← →、钉住 / 朗读 |
+| [recording-ux](docs/notes/recording-ux.md) | 照官方桌面版录屏改的界面（2026-10-16，用户要求） | 信息栏、标题栏工具 / ⋮、一行输入框 + 框下一行、Ctrl+Enter 插话、statusLine、模型菜单数字 / 快速模式、+ 菜单连接器、运行行、计划卡、浏览器空白页的开发服务器；第二轮（10-17）：sharp、官方技能插件、队列里的后台结束、改名被写回、SDK 列表漏长首句、logo、动态背景、☰ ← →、钉住 / 朗读；第三轮：Claude 思考为空（thinking.display）、思考标题 / 四点、对话统计条、☰ 叠放、手机标题 |
+| [import](docs/notes/import.md) | 从其它工具导入（2026-10-17，用户要求） | Hermes / CC Switch / Codex / OpenCode / Continue / IDE 的供应商和 MCP、只读、key 不上 wire、Mirasim 读不了 |
 | [zoom](docs/notes/zoom.md) | 界面缩放（2026-10-10 用户要求：台式机分辨率高，界面看着小） | 桌面版页面缩放 |
 | [rail-sections-web](docs/notes/rail-sections-web.md) | 图标栏 / 分区 / 联网（2026-10-10，界面第二轮） | 图标栏、分区页、扩展页、强度按钮、浏览器标签、web MCP |
 | [search-computer](docs/notes/search-computer.md) | 搜索在内置浏览器里 / 网页上的鼠标键盘 / 操控电脑（2026-10-10，用户要求） | 浏览器里搜索、browser_computer、操控电脑（computer MCP） |

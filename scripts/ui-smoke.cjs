@@ -828,6 +828,16 @@ function driver() {
       }
       // 2026-09-30 user reports: settings → Agents gives every other agent 「新对话用」 (its own login, the providers it
       // can use, 添加供应商…); an IM bot has 「用哪个供应商」 (跟新对话一样 / the account / the providers)
+      // 从其它工具导入: the dialog reads the other tools' settings (read-only), shows no key, and goes away on 取消
+      phase = 'settings:import';
+      await js(`window.__store.getState().openSettings({ section: 'providers' })`);
+      await waitFor(`!!document.querySelector('.modal.settings [data-act="import"]')`, 8000);
+      await js(`document.querySelector('.modal.settings [data-act="import"]')?.click()`);
+      const impDone = await waitFor(`!!document.querySelector('.import-dialog .imp-list, .import-dialog .imp-empty')`, 15000);
+      const imp = await js(`({ title: document.querySelector('.import-dialog h3')?.textContent, keys: /sk-[A-Za-z0-9]{6}/.test(document.querySelector('.import-dialog')?.textContent || ''), rows: document.querySelectorAll('.import-dialog .imp-row').length })`);
+      check('settings · 供应商: 从其它工具导入 lists what other tools have, without a key in the page', impDone && imp.title === '从其它工具导入' && !imp.keys, JSON.stringify(imp));
+      await js(`[...document.querySelectorAll('.import-dialog .qc-foot button')].find((b) => b.textContent === '取消')?.click()`);
+      check('settings · 从其它工具导入: 取消 closes it', await waitFor(`!document.querySelector('.import-dialog')`, 3000));
       if (E.SMOKE_READONLY !== '1') {
         phase = 'settings:agent-provider';
         const tmpProv = await srvReq({ kind: 'providers.upsert', provider: { name: 'Smoke 中转', type: 'openai', baseUrl: 'http://127.0.0.1:9', apiKey: 'smoke-placeholder-not-a-key', models: ['smoke-m1'], defaultModel: 'smoke-m1' } }).catch(() => null);

@@ -9,3 +9,11 @@
 - **账本**：`LedgerEntry.kind:'gateway'` + `gateway{group,inbound,member,outbound,upstreamStatus,switches,firstByteMs,stream}`，`sessionId` 取 Claude Code 的 `x-claude-code-session-id` 头。经网关的 Claude 会话会同时有 `result` 行和网关行，账本「来源」过滤分开看。
 - **已知限制**：不走系统代理（node:http 不认 `HTTPS_PROXY`）；只开放 spec 的 6 个转换方向（Gemini 入 → OpenAI、Responses → Gemini 返回 400）；Codex 的 `-c model_providers` 与 Gemini 的系统设置覆盖只按官方文档 / 安装包源码核对过，没用真 agent 跑。
 - 测试：`gateway/convert.test.ts`（六个方向的请求 / 非流式 / 流式序列）、`failover.test.ts`（冷却 / 轮询 / 映射 / 透传保字节保头）、`review.test.ts` + `service.test.ts`（假上游：客户端中途断开、并发 429、非流式长生成、529→下一个、429+retry-after、401 停用、400 不切、首字节超时、流开始后不切、全员冷却、cwRemote 404）；`server/ws-phase16.mjs` 起一个 Anthropic 形状（首个请求 529）+ 一个 OpenAI 形状的假上游跑全链路。调试：`curl -H "x-api-key: <网关密钥>" http://127.0.0.1:<port>/gateway/<组>/v1/models` 看组能否鉴权 / 列出模型；响应头 `x-cw-gateway-member` 看走了谁。
+
+## 子代理分流路由 `/gateway/~s/<token>`（2026-10-17）
+
+- 给「子代理用别家的模型」用（`models` 笔记）。`splitEndpoint(main, sub, model)` 返回 base + key（`cwx-` + HMAC(进程随机密钥, token)，不落盘）；
+  token 是三元组的哈希，同一组合同一个地址。**不看网关总开关**；回环之外 404。
+- 每个请求：`model` 等于选的子代理模型 → 临时组只有 `sub` 一个成员（`model` 钉住，跨协议就翻译）；其它 → 只有 `main` 一个成员，同协议**原样透传**
+  （字节、头顺序都不动，只原位换 key）。复用 `run()`，所以 count_tokens / 流式 / 账本都和普通组一样（账本里同一对话的网关行在统计里会被去重）。
+- 每个请求后 `states.reset`：一个成员没处可切，上游的 429 / 5xx 原样回给引擎（它自己会重试），不能让网关的冷却把后面的请求也拒掉。

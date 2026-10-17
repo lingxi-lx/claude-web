@@ -24,3 +24,14 @@
 - **挑模型**：`web/src/features/settings/ModelPicker.tsx`（搜索、全选 / 全不选、勾选；`withPicked` / `pickedOf` 是纯函数，`model-picker.test.ts`）。写的是现成的 `ui.disabledModels`（`<providerId>:<model>`，和 设置 → 模型 的开关同一份），不另起一份允许名单——所以以后刷新多出来的模型默认是显示的。入口在供应商编辑页「用哪些模型」（`ConfigPanel.tsx`，网关档案没有）；**新加的供应商**「测试连接」成功且模型多于 3 个时自动弹一次。新供应商还没有 id：挑的结果先放在表单里，保存拿到 id 再写。`probe.ok` 为假（对话测试没过）时表单本来就不存列表，所以也不弹。
 - **Codex 报的列表**：目录里写死的 Codex 模型会过时（2026-10-15 本机 0.162 报的是 gpt-6-luna / gpt-5.6-terra / gpt-5.6-luna，目录里还是 5.6 Sol / Pro）。`server/src/agents/reported-models.ts`：`askCodexModels` 起一个短命的 `codex app-server`（initialize → model/list 翻页 → kill，不开 thread），`codexReported` 去掉 hidden。`AgentRegistry`（`agents/types.ts`）：存在设置 `agents.reportedModels`（`{ codex: { at, models } }`，空列表不覆盖），`list()` 时装了且超过 6 小时（或 `refresh`）就后台问一次，变了发 `agents.changed`，前端重拉 `agents.list`；Codex 对话启动时 driver 自己的 model/list 也经 `onModels` 写进去（走网关 / 供应商时不写——那是供应商的列表）。`AgentInfo.reportedModels` → `menu.ts agentModels()` 先用它，再目录；`Composer.tsx` 的 `wBuiltin`、设置 → 模型「按供应商」也一样。`CW_NO_MODEL_REFRESH` 时不自动问。
 - **真机验证的坑**：本机的 `codex.cmd` 启动的是 `%USERPROFILE%\.codex\cli-app-sync\launch.cjs`，临时 HOME 里 Codex 根本起不来（`codex --version` 也失败）——验证 Codex 列表得用真的用户目录 + 临时 `CLAUDE_WEB_DIR`。
+
+## 子代理用别家的模型（2026-10-17，用户要求「我想要什么模型都能调用，不只是 claude 模型」）
+
+- 对话在 **Anthropic 格式的供应商**（中转 / API）上时，子代理菜单除了这个供应商，还列出其它所有网关能转过去的供应商（anthropic / openai /
+  grok / gemini 类型；`subagent-label.ts` 的 `crossProviders`），主供应商排第一。用 Claude 账号登录的对话没有可以替它转发的 key，只列账号的
+  模型，菜单里有一句说明；OpenAI / Gemini 格式的对话也一样只列自己的。
+- 选了别家的模型，存成 `cw-x:<供应商 id>:<模型>`（`models/subagent.ts` 的 `crossValue` / `crossPick`）——和普通选择同一个字段，存 / 默认 /
+  重开 / 联邦都不用改。runner 启动时解开：`ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` 换成网关的分流路由（`gateway/split.ts` →
+  `GatewayService.splitEndpoint`），`CLAUDE_CODE_SUBAGENT_MODEL` 给原样的模型 id。分流路由见 `gateway` 笔记。
+- 测试：`gateway/service.test.ts` 的 subagent split、`runtime/session-runner.test.ts`（换地址、给原样模型 id、OpenAI 格式对话不分流）、
+  `models/subagent.test.ts`、web `subagent-cross.test.ts`。没有真中转 + 真子代理的端到端实测。

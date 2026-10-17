@@ -21,3 +21,5 @@
 - **允许 = 必须带 updatedInput**（2026-10-14 社区用户报告：中转 + Claude 5.5 Sonnet，改文件 / 跑命令全失败，读文件正常，模型说「请求体里少了 updatedInput」）：claude-web-engine（ccb）`structuredIO` 用 `PermissionPromptToolResultSchema` 校验 SDK 的回答，`updatedInput` 是必填；我们的「允许一次」/ 手机 / IM / 总览只发 `{behavior:'allow'}`，校验失败被当成 `Tool permission request failed` 拒掉。官方二进制不要求，所以以前在官方二进制上没事。`respondPermission()` 统一补 `updatedInput: event.input`。e2e phase 27 两个引擎都测（默认权限模式下 Write，回一个光秃秃的 allow，文件要写出来）。
 - **引擎缺原生 sharp**（2026-10-17）：ccb 包里有 sharp 的 JS、没有 `@img/sharp-<平台>`，大图缩放失败。根依赖 `sharp` 必须和引擎打包的版本一致
   （升级引擎后核对），asarUnpack 带 `sharp` / `@img`。官方桌面版下载的 `anthropic-skills` 插件由 `runtime/desktop-skills.ts` 作为本地插件加载。
+- **思考的 display**（cw.5，2026-10-17）：`CLAUDE_WEB_THINKING_DISPLAY=summarized|omitted` → 请求的 `thinking.display`（adaptive 和固定预算都带，关掉思考时不发）。
+  claude-web 给 ccb 设 `summarized`，官方二进制用 `--thinking-display summarized`。原因见 `recording-ux` 笔记「第三轮」。**cw.5 还没发 Release**（fork 提交 ad1fc7e9、tgz 已打）。

@@ -128,3 +128,28 @@
   `pool.stateOf` 是空或 `closed`，server 中途退出留下的 `pendingTitle` 在下次启动时写回。官方技能插件改成加载一个**镜像**
   （`<dataDir>/runtime/plugins/anthropic-skills`，同名，技能是指向官方目录的 junction / 符号链接），去掉只在官方 App 里才有工具的那些
   （`APP_ONLY`：内置浏览器、Chrome、操控电脑、记忆、docs、定时任务、引导…）；清理镜像时先 `lstat`，链接只 unlink / rmdir，绝不递归进去。
+
+## 第三轮（2026-10-17：用户截图 + 一段录屏）
+
+- **Claude 的思考一直是空的**（别家模型有）：接口的 `thinking.display` 在现在的 Claude 模型上默认 `omitted`，思考块只有签名。ccb 只发
+  `{type:'adaptive'}`，官方二进制被 SDK 调时还明确发 `omitted`。用假端点记录请求体查实（`$TEMP/req-spy-server.cjs` 的做法：
+  `ANTHROPIC_BASE_URL` 指本机、回 401、只记 `anthropic-beta` 和除 messages/system/tools 以外的字段）。修法：官方二进制加
+  `--thinking-display summarized`（runner 的 extraArgs；`noThinking` 时不加），ccb 读 `CLAUDE_WEB_THINKING_DISPLAY`（引擎 cw.5，
+  ccb 遇到 `--thinking-display` 会 `unknown option` 退出）。`redact-thinking-2026-02-12` 那个 beta 只在交互式终端发，不是原因。
+  **cw.5 只在 fork 里提交、打了包，没发 Release；发之前 claude-web 用的 cw.4 不认这个变量（忽略，不出错）。**
+- 思考行的标题用摘要里的粗体小标题（`chat/thinking-title.ts`：在想时取最后一个，想完取第一个），用时放在后面；正在做的那一步是四个点轮流亮
+  （`WorkDots`，强调色，减少动效时不动）。
+- 输入框下面一行中间：这个对话的「几轮 · 几步 · tok/s · 总 token · 缓存命中」（`model/conv-stats.ts` + `composer/ConvStatsLine.tsx`，
+  按每轮的 result 加总；tok/s = 输出 token ÷ `duration_api_ms`，历史轮没有这个时间就不算速度）。放不下的整项藏掉（换行到被裁掉的第二行）。
+- 欢迎页背景：字在内容列（`.home-col`）附近渐隐、里面只留一点，整体更暗（`AsciiField` 的 `calm()`）。
+- logo 换回用户给的那张（见上面「第二轮」里的那条）。
+- 界面 bug：
+  - 图标栏顶上的 ☰ 和收起侧栏并排放不下（☰ 被窗口左边切掉一半），改成上下叠放。
+  - 欢迎页框下一行太挤、权限和模型按钮重叠，改成右边那组换到第二行。
+  - 手机上标题压在右边的圆按钮上（iOS Safari，用户截图），我在 Chromium 和 Playwright WebKit 里都没复现。做了两层防护：
+    - 标题区 `contain: paint`，按钮在上层；目标细条加上裁剪；
+    - 手机壳的 iframe 用 `width:1px; min-width:100%`，防止 iOS 把 iframe 按内容撑宽。
+  - 手机欢迎页横向滚动的建议按钮在边上渐隐，不再被硬切。
+  - 扫描工具：`$TEMP/pw/sweep.cjs` / `sweep2.cjs`（Playwright Chromium，几种宽度、两种主题，报出屏、互相压、硬切的字），`$TEMP/pw/phone.cjs`（WebKit，iPhone 尺寸）。
+- 子代理可以用任何供应商的模型：见 `models` 笔记「子代理用别家的模型」。
+- 从其它工具导入：见 `import` 笔记。
