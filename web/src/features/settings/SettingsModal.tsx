@@ -58,6 +58,7 @@ const CONTROLS: Record<EntryId, (e: EntryMeta) => ReactNode> = {
   'ui.sidebarFolded': (e) => <Toggle k={e.id} label={e.label} def />,
   'ui.statusLine': (e) => <Toggle k={e.id} label={e.label} def />,
   'sessions.mcp': (e) => <Toggle k={e.id} label={e.label} def />,
+  'claude.desktopSkills': (e) => <Toggle k={e.id} label={e.label} def />,
   'worktree.dir': (e) => <TextSetting k={e.id} label={e.label} placeholder=".claude/worktrees/" mono />,
   'worktree.prefix': (e) => <TextSetting k={e.id} label={e.label} placeholder="worktree-" mono />,
   'ui.promptSuggestions': (e) => <Toggle k={e.id} label={e.label} def />,

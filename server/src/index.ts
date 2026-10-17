@@ -37,6 +37,7 @@ import { setMemoryMcpEnabled } from './memory/launcher.js';
 import { setPromptSuggestions } from './runtime/session-runner.js';
 import { LocalEnvStore } from './runtime/local-env.js';
 import { setSessionsDeps, setSessionsMcpEnabled } from './sessions-mcp/tools.js';
+import { setDesktopSkillsEnabled } from './runtime/desktop-skills.js';
 import { PreviewService } from './preview/service.js';
 import { setPreviewDeps } from './preview/tools.js';
 import { sendWhenIdle } from './sessions-mcp/deliver.js';
@@ -311,6 +312,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   setMemoryMcpEnabled(meta.settings()['memory.mcp'] !== false);
   setPromptSuggestions(meta.settings()['ui.promptSuggestions'] !== false);
   setSessionsMcpEnabled(meta.settings()['sessions.mcp'] !== false);
+  setDesktopSkillsEnabled(meta.settings()['claude.desktopSkills'] !== false);
   const localEnvStore = new LocalEnvStore(path.join(dataDir(), 'local-env.json'), secrets);
   await localEnvStore.load();
   // 联网: web search here, the browser tools in whichever desktop window hosts the built-in browser (web/service.ts).

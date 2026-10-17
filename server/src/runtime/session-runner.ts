@@ -6,6 +6,7 @@ import { statSync } from 'node:fs';
 import { withExplanation } from '../errors/explain.js';
 import { findClaudeTranscript, hasClaudeTranscript, hasEntry, lastCostState, lastHumanPrompt, repairLeaf } from './transcript-file.js';
 import { ownSubagentOverride, settingsOverride, userAnthropicEnv } from './user-env.js';
+import { desktopSkillsPlugin } from './desktop-skills.js';
 import { writeFlagSettings, type FlagSettings } from './flag-settings.js';
 import { resolveEngine, spawnClaude } from '../claude-exe.js';
 import { loopbackNoProxy, providerEnv, type SessionProvider } from '../providers/service.js';
@@ -412,7 +413,13 @@ export class SessionRunner extends EventEmitter {
       ...(chatOnly ? { tools: [], strictMcpConfig: true } : {}),
       // 网吧's cafe-character skill, as a local plugin (both runtimes load it: 2026-10-13), only while the `web` server
       // that answers its character_* tools is handed out
-      ...(!chatOnly && webMcpEnabled() && cafePluginDir() ? { plugins: [{ type: 'local' as const, path: cafePluginDir()! }] } : {}),
+      // + the official app's download of Anthropic's skills (desktop-skills.ts), so its conversations' anthropic-skills:*
+      // names work here
+      ...(() => {
+        if (chatOnly) return {};
+        const dirs = [webMcpEnabled() ? cafePluginDir() : null, desktopSkillsPlugin()].filter((d): d is string => !!d);
+        return dirs.length ? { plugins: dirs.map((p) => ({ type: 'local' as const, path: p })) } : {};
+      })(),
       // searching only reads: 每步询问 does not ask for every search (the browser tools follow the permission mode).
       // The computer tools are not asked about one by one either: the user approves the applications, in the app
       // (computer/access.ts), and the server's own gate holds every action to that.

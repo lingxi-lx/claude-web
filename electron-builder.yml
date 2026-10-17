@@ -51,6 +51,10 @@ asarUnpack:
   # WebRTC (phone reaches the PC from anywhere): the JS package plus its per-platform prebuilt .node
   - "**/node_modules/node-datachannel/**"
   - "**/node_modules/@node-datachannel/**"
+  # the engine bundles sharp's JS but not its native binary (a dev dependency upstream): images over 2000 px failed
+  # 「Could not load the "sharp" module」; sharp in our dependencies brings the per-platform @img/sharp-* it requires
+  - "**/node_modules/sharp/**"
+  - "**/node_modules/@img/**"
 # 深链接 (claude-web://new?folder=…&q=…): Windows registers it in the installer, macOS in Info.plist
 protocols:
   - name: Claude Web

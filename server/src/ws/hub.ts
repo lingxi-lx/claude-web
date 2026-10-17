@@ -5,6 +5,7 @@ import { CLAUDE_PROVIDER_ID, type ClientRequest, type OpenSessionParams, type Re
 import { RunnerPool } from '../runtime/pool.js';
 import { SessionRunner, setPromptSuggestions } from '../runtime/session-runner.js';
 import { setSessionsMcpEnabled } from '../sessions-mcp/tools.js';
+import { setDesktopSkillsEnabled } from '../runtime/desktop-skills.js';
 import { listProjectFiles, rankFiles } from '../files/find.js';
 import { copyWorktreeIncludes, resolveWorktreeDir } from '../git/worktree-include.js';
 import { readChangelog } from '../app/changelog.js';
@@ -501,6 +502,7 @@ export class Hub {
         if (req.key === 'memory.mcp') setMemoryMcpEnabled(req.value !== false);
         if (req.key === 'ui.promptSuggestions') setPromptSuggestions(req.value !== false);
         if (req.key === 'sessions.mcp') setSessionsMcpEnabled(req.value !== false);
+        if (req.key === 'claude.desktopSkills') setDesktopSkillsEnabled(req.value !== false);
         if (req.key === 'web.mcp') setWebMcpEnabled(req.value !== false);
         if (req.key.startsWith('web.')) s.web.settingsChanged(); // web.status reads differently now
         // 在外面也能用: brokers / STUN / the shell address / on-off / keep-awake (restarts only when it has to)
