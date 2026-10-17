@@ -1,15 +1,16 @@
 import { useEffect, useRef } from 'react';
 import { makeNoise } from './ascii-noise';
-import { ambient, moteAlpha, moteCount, splash, step, typed, type Mote } from './letter-flow';
+import { LETTERS, ambient, moteAlpha, moteCount, splash, step, typed, type Mote } from './letter-flow';
 
 /**
  * 字流 (letter-flow.ts): letters drifting like ink in slow water, a short trail behind each, the pointer parting
  * them, a click splashing accent letters, and what is typed in the box floating out of it to join the stream.
  * 30 fps while the page is on screen and the window visible; one still frame when motion is reduced.
- * Cheap: a few hundred letters a frame, and one fill that lets the trails fade.
+ * Cheap: the field's letters are stamped from a sheet drawn once (no text layout per frame); only the few accent
+ * letters (typed, splashed — any script) are drawn as text; one fill a frame lets the trails fade.
  */
 
-const FPS = 30;
+const FPS = 24;
 /** the field's ink at its strongest; quieter behind the page's words */
 const INK = 0.36;
 const QUIET_PAD = 10;
@@ -30,12 +31,30 @@ export function LetterFlow() {
     let w = 0, h = 0, dpr = 1;
     let motes: Mote[] = [];
     let ink = '#888', lit = '#d97757', mono = 'ui-monospace, monospace';
+    // the field's letters, drawn once in the ink colour at 10px: one cell per letter
+    const sheet = document.createElement('canvas');
+    const sctx = sheet.getContext('2d');
+    const CELL = 14;
+    const cellOf = new Map<string, number>();
+    const drawSheet = () => {
+      if (!sctx) return;
+      sheet.width = LETTERS.length * CELL * dpr;
+      sheet.height = CELL * dpr;
+      sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      sctx.clearRect(0, 0, LETTERS.length * CELL, CELL);
+      sctx.font = `10px ${mono}`;
+      sctx.textAlign = 'center';
+      sctx.textBaseline = 'middle';
+      sctx.fillStyle = ink;
+      [...LETTERS].forEach((c, i) => { cellOf.set(c, i); sctx.fillText(c, i * CELL + CELL / 2, CELL / 2); });
+    };
     let pointer: { x: number; y: number } | null = null;
     const readColors = () => {
       const cs = getComputedStyle(canvas);
       ink = cs.getPropertyValue('--ink-3').trim() || cs.getPropertyValue('--fg-2').trim() || ink;
       lit = cs.getPropertyValue('--accent-text').trim() || lit;
       mono = cs.getPropertyValue('--font-mono').trim() || mono;
+      drawSheet();
     };
     const resize = () => {
       const r = canvas.getBoundingClientRect();
@@ -76,21 +95,23 @@ export function LetterFlow() {
       ctx.textAlign = 'center';
       calmAt.update();
       let font = '';
+      const sw = CELL * dpr;
       for (const m of motes) {
         const a = moteAlpha(m);
         if (a <= 0.01) continue;
-        const f = `${Math.round(m.size)}px ${mono}`;
-        if (f !== font) { ctx.font = f; font = f; }
-        if (m.accent > 0.04) {
-          // typed / splashed: the accent, over the page's words too (it comes out of them)
-          ctx.globalAlpha = a * (0.25 + 0.75 * m.accent);
-          ctx.fillStyle = lit;
-        } else {
-          ctx.globalAlpha = a * INK * calmAt.at(m.x, m.y);
-          if (ctx.globalAlpha < 0.015) continue;
-          ctx.fillStyle = ink;
+        const cell = cellOf.get(m.ch);
+        if (m.accent > 0.04 || cell === undefined || sctx === null) {
+          // typed / splashed (any script): the accent, as text
+          const f = `${Math.round(m.size)}px ${mono}`;
+          if (f !== font) { ctx.font = f; font = f; }
+          ctx.globalAlpha = a * (m.accent > 0.04 ? 0.25 + 0.75 * m.accent : INK);
+          ctx.fillStyle = m.accent > 0.04 ? lit : ink;
+          ctx.fillText(m.ch, m.x, m.y);
+          continue;
         }
-        ctx.fillText(m.ch, m.x, m.y);
+        ctx.globalAlpha = a * INK * calmAt.at(m.x, m.y);
+        if (ctx.globalAlpha < 0.015) continue;
+        ctx.drawImage(sheet, cell * sw, 0, sw, sw, m.x - CELL / 2, m.y - CELL / 2, CELL, CELL);
       }
       ctx.globalAlpha = 1;
     };
@@ -140,7 +161,8 @@ export function LetterFlow() {
       const guests = motes.filter((m) => m.guest);
       if (guests.length > 160) { const drop = new Set(guests.slice(0, guests.length - 160)); motes = motes.filter((m) => !drop.has(m)); }
     };
-    const onInput = (e: Event) => { const ie = e as InputEvent; if (ie.inputType === 'insertText' && !ie.isComposing) emit(e.target, ie.data); };
+    // a typed character (an input method's composing text comes as insertCompositionText, its result below)
+    const onInput = (e: Event) => { const ie = e as InputEvent; if (ie.inputType === 'insertText') emit(e.target, ie.data); };
     // an input method (Chinese, Japanese…): what it commits, once
     const onCompose = (e: CompositionEvent) => emit(e.target, e.data);
     tile?.addEventListener('pointermove', move, { passive: true });

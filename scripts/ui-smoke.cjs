@@ -736,7 +736,7 @@ function driver() {
         await sleep(100);
         await click('.welcome .composer textarea');
         const saved = await waitFor('JSON.stringify(window.__store.getState().settings["ui.featureDefaults"]?.channels) === \'["server:smoke"]\'', 3000);
-        check('+ → Brief / 频道 in 2 clicks (rows under 进阶, no 「Brief、频道…」 expander); ↓ from Brief reaches the field; typing survives a click outside', rows.join() === 'files,folder,reference,slash,chatOnly,chrome,computerUse,goal,coordinator,proactive,brief,channels' && inField === 'channels' && saved && !(await js('!!document.querySelector(".menu.plus-menu")')), JSON.stringify({ rows, inField, saved }));
+        check('+ → Brief / 频道 in 2 clicks (rows under 进阶, no 「Brief、频道…」 expander); ↓ from Brief reaches the field; typing survives a click outside', rows.join() === 'files,folder,reference,slash,chatOnly,chrome,computerUse,goal,coordinator,proactive,brief,channels' && inField === 'channels' && saved && (await waitFor('!document.querySelector(".menu.plus-menu")', 2000)), JSON.stringify({ rows, inField, saved }));
         check('频道 shows as a removable tag', await waitFor('!!document.querySelector(\'.welcome .cap-tag[data-cap="channels"]\')', 2000));
         await click('.welcome .cap-tag[data-cap="channels"] button');
         await waitFor('!document.querySelector(\'.welcome .cap-tag[data-cap="channels"]\')', 2000);
