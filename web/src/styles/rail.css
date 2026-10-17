@@ -6,6 +6,9 @@
 .app.has-rail.no-sidebar:not(.mobile) { padding-left: var(--rail); }
 
 .rail { position: fixed; left: 0; top: 0; bottom: 0; width: var(--rail); z-index: 3; display: flex; flex-direction: column; align-items: center; padding: var(--shell-gap) 0 calc(var(--shell-gap) + 4px); }
+/* a menu out of the rail (account, ···) goes over a full page (z 6: 扩展 / 后台 / 自动化…), still under modals (50+) —
+   2026-10-17 user report: the account menu was cut off by the 扩展 page */
+.rail:has(.menu) { z-index: 40; }
 .rail-top { height: var(--h-head); flex: none; display: flex; align-items: center; }
 .rail-main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; padding-top: 2px; }
 .rail-foot { flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; }
