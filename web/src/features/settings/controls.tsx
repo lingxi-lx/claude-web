@@ -50,10 +50,10 @@ export function NumberSelect({ k, def, options, label }: { k: string; def: numbe
 }
 
 /** A segmented choice for two or three short options (改动的显示方式: 上下对照 / 左右并排). */
-export function Seg({ k, def, options, label }: { k: string; def: string; options: { id: string; l: string }[]; label?: string }) {
+export function Seg({ k, def, options, label, norm }: { k: string; def: string; options: { id: string; l: string }[]; label?: string; /** an older stored value → one of the options */ norm?: (v: unknown) => string }) {
   const v = useStore((s) => s.settings[k]);
   const set = useStore((s) => s.setSetting);
-  const cur = String(v ?? def);
+  const cur = norm ? norm(v) : String(v ?? def);
   return (
     <Segmented className="sp-seg" label={label ?? ''} arrows value={cur} options={options.map((o) => ({ value: o.id, label: o.l }))} onChange={(id) => { if (id !== cur) void set(k, id); }} />
   );

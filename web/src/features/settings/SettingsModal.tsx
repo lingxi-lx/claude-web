@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { backdropStyle } from '@/features/home/letter-flow';
 import { useStore } from '@/store';
 import { clsx } from '@/util';
 import { ws } from '@/ws/client';
@@ -56,7 +57,7 @@ const CONTROLS: Record<EntryId, (e: EntryMeta) => ReactNode> = {
   'ui.autoArchivePr': (e) => <Toggle k={e.id} label={e.label} />,
   'ui.infoPanel': (e) => <Toggle k={e.id} label={e.label} def />,
   'ui.sidebarFolded': (e) => <Toggle k={e.id} label={e.label} def />,
-  'ui.welcomeBackdrop': (e) => <Toggle k={e.id} label={e.label} def />,
+  'ui.welcomeBackdrop': (e) => <Seg k={e.id} def="flow" label={e.label} norm={backdropStyle} options={[{ id: 'flow', l: tr('字流') }, { id: 'field', l: tr('字场') }, { id: 'off', l: tr('关') }]} />,
   'ui.welcomeLayout': (e) => <Seg k={e.id} def="under" label={e.label} options={[{ id: 'under', l: tr('框下一行') }, { id: 'inbox', l: tr('框里') }]} />,
   'ui.statusLine': (e) => <Toggle k={e.id} label={e.label} def />,
   'sessions.mcp': (e) => <Toggle k={e.id} label={e.label} def />,

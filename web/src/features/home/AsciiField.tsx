@@ -7,7 +7,7 @@ import { RIPPLE_MS, RIPPLE_REACH, bandLevel, makeNoise, rippleLevel } from './as
  * very dim letters and digits in soft diagonal bands that drift, the characters flickering now and then; every click on
  * the page sends out a ripple — a small disc of the theme's accent that opens into a ring and fades. Quieter near the
  * page's words. 8 fps (20 while a ripple runs) and only while the page is on screen and the window is visible; one still frame when motion is
- * reduced; off with 设置 → 外观 → 新对话页的动态背景.
+ * reduced; 设置 → 外观 → 新对话页的动态背景 → 字场 (the default is 字流, LetterFlow.tsx).
  *
  * Cheap per frame (drawing ten thousand letters one by one each frame took most of the main thread, 2026-10-17
  * review): the letters live on an offscreen layer where only the flickering few are redrawn; each frame that layer is
@@ -32,11 +32,10 @@ const CW = 7, CH = 13;
 
 export function AsciiField() {
   const ref = useRef<HTMLCanvasElement>(null);
-  const on = useStore((s) => s.settings['ui.welcomeBackdrop'] !== false);
   const theme = useStore((s) => s.settings['ui.theme']);
   useEffect(() => {
     const canvas = ref.current;
-    if (!on || !canvas) return;
+    if (!canvas) return;
     const ctx = canvas.getContext('2d');
     const layer = document.createElement('canvas');
     const lctx = layer.getContext('2d');
@@ -177,7 +176,6 @@ export function AsciiField() {
       io.disconnect();
       tile?.removeEventListener('pointerdown', down);
     };
-  }, [on, theme]);
-  if (!on) return null;
+  }, [theme]);
   return <canvas ref={ref} className="ascii-field" aria-hidden />;
 }

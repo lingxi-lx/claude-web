@@ -12,6 +12,8 @@ import { hintReady } from '@/features/sidebar/newcomer';
 import { SidebarReveal, usePaneEdge } from './pane-edge';
 import { tr } from '@/i18n';
 import { AsciiField } from '@/features/home/AsciiField';
+import { LetterFlow } from '@/features/home/LetterFlow';
+import { backdropStyle } from '@/features/home/letter-flow';
 
 /**
  * The start page — an empty chat tile (spec §5.8, mock-home.png): 「今天想做点什么？」 · the composer (it creates the
@@ -24,13 +26,17 @@ export function Welcome({ paneId, tileId }: { paneId: string; tileId: string }) 
   const dispatch = useStore((s) => s.dispatchLayout);
   const edge = usePaneEdge();
   const mobile = useStore((s) => s.mobile);
+  const backdrop = useStore((s) => backdropStyle(s.settings['ui.welcomeBackdrop']));
+  const theme = useStore((s) => s.settings['ui.theme']);
   const pick = (sid: string) => {
     dispatch({ t: 'session.assign', paneId, tileId, sessionId: sid });
     if (!open[sid]) void loadHistory(sid, { focus: false });
   };
   return (
     <div className="welcome-tile">
-      {!mobile && <AsciiField />}
+      {!mobile && backdrop === 'field' && <AsciiField />}
+      {/* keyed by the theme: its colours are read when it starts */}
+      {!mobile && backdrop === 'flow' && <LetterFlow key={String(theme)} />}
       {/* the empty page's top row: nothing but the sidebar reveal; on the desktop it is also the title bar (drag) */}
       <div className="welcome-top">{((edge.lead && !edge.strip) || mobile) && <SidebarReveal />}</div>
       <div className="welcome">
