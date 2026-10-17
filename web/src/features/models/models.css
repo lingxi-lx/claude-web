@@ -126,3 +126,14 @@
 .mm-subrow + .mm-subrow { margin-top: 0; border-top: 0; }
 .mm-subrow:disabled { cursor: default; opacity: 0.6; }
 .mm-subrow:disabled:hover { background: none; color: var(--ink-2); }
+
+/* 设置 → 模型 · 按供应商: each provider a fold (GitHub issue #4) */
+.fold-sec > summary { display: flex; align-items: center; gap: 6px; cursor: pointer; list-style: none; padding: 4px 4px; border-radius: var(--r-sm); }
+.fold-sec > summary::-webkit-details-marker { display: none; }
+.fold-sec > summary:hover { background: var(--layer-hover); }
+.fold-sec > summary:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.fold-sec > summary h5 { margin: 0; flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }
+.fold-sec > summary .fold-chev { color: var(--fg-3); transition: transform var(--dur-fast, 120ms) ease; flex-shrink: 0; }
+.fold-sec[open] > summary .fold-chev { transform: rotate(90deg); }
+.fold-sec > summary .cnt { color: var(--fg-3); font-size: 12px; flex-shrink: 0; }
+.fold-sec[open] > summary { margin-bottom: 4px; }

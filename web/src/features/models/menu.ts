@@ -348,7 +348,7 @@ export interface ModelRow {
 }
 
 /** Settings → Models, "by model": each model id once, with every profile that serves it. */
-export function modelTable(providers: Provider[], groups: GatewayGroup[] | undefined, query = ''): ModelRow[] {
+export function modelTable(providers: Provider[], groups: GatewayGroup[] | undefined, query = '', ownName = tr('Claude 账号')): ModelRow[] {
   const rows = new Map<string, ModelRow>();
   const add = (model: string, id: string, name: string, isDefault: boolean) => {
     let r = rows.get(model);
@@ -357,7 +357,7 @@ export function modelTable(providers: Provider[], groups: GatewayGroup[] | undef
     r.providers.push({ id, name, isDefault });
     r.keys.push(modelKey('claude', id, model));
   };
-  for (const m of modelsFor('claude')) add(m.value, OWN_PROVIDER, tr('Claude 账号'), false);
+  for (const m of modelsFor('claude')) add(m.value, OWN_PROVIDER, ownName, false);
   for (const p of providers) for (const m of profileModels(p, groups, providers)) add(m, p.id, p.name, m === p.defaultModel);
   const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
   return [...rows.values()]

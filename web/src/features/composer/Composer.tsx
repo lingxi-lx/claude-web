@@ -1,4 +1,5 @@
 import { cloneElement, isValidElement, useEffect, useMemo, useRef, useState } from 'react';
+import { ownClaudeName } from '@/store/auth';
 import { useScopedSession, useStore } from '@/store';
 import { ws } from '@/ws/client';
 import { desktop } from '@/desktop';
@@ -114,6 +115,7 @@ function fastOffText(reason: string): string {
 
 export function Composer({ welcome = false, target, disabled = false, visible = true }: { welcome?: boolean; target?: { paneId: string; tileId: string }; disabled?: boolean; visible?: boolean }) {
   const active = useScopedSession();
+  const ownName = useStore((s) => ownClaudeName(s.auth));
   const send = useStore((s) => s.send);
   const interrupt = useStore((s) => s.interrupt);
   const setDraft = useStore((s) => s.setDraft);
@@ -900,7 +902,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
         label={t.main}
         title={tr("{main}{v}\n用哪个模型：Agent、供应商、模型都在这里", { main: t.main, v: t.isDefault ? tr('（默认）') : '' })}
         builtin={wBuiltin}
-        builtinTitle={agent ? tr('{name} 账号', { name: agent.name }) : tr('Claude 账号')}
+        builtinTitle={agent ? tr('{name} 账号', { name: agent.name }) : ownName}
         agentDefault={agent?.model || undefined}
         otherAgents={otherAgents}
         onPick={pickWelcome}
@@ -930,7 +932,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
         label={remote ? remoteLabel : t.main}
         title={remote ? tr('模型（其它机器上的对话：换供应商请在那台机器上操作）') : tr("{main}{v}\n同一供应商直接换模型；换供应商会无感重启对话；选其它 Agent 的模型 = 交给它继续", { main: t.main, v: t.isDefault ? tr('（默认）') : '' })}
         builtin={(remote || liveProvider === 'claude') && info.models?.length ? info.models : undefined}
-        builtinTitle={remote ? info.providerName ?? info.agentName ?? tr('模型') : liveAgent === 'claude' ? tr('Claude 账号') : tr('{agentName} 账号', { agentName: info.agentName ?? liveAgent })}
+        builtinTitle={remote ? info.providerName ?? info.agentName ?? tr('模型') : liveAgent === 'claude' ? ownName : tr('{agentName} 账号', { agentName: info.agentName ?? liveAgent })}
         agentDefault={liveAgentDefault}
         lockProvider={remote ? 'claude' : undefined}
         lockNote={tr('其它机器上的对话：只能换模型，换供应商请在那台机器上操作')}
@@ -975,7 +977,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
         current={{ providerId: rProvider, model: v.model }}
         label={t.main}
         title={tr("{main}{v}{lastHint}\n对话没在运行：发送后用这里选的模型继续{v2}", { main: t.main, v: t.isDefault ? tr('（默认）') : '', lastHint, v2: remote ? '' : tr('；选其它 Agent 的模型 = 交给它继续') })}
-        builtinTitle={rAgent === 'claude' ? tr('Claude 账号') : tr('{name} 账号', { name: agents.find((a) => a.kind === rAgent)?.name ?? rAgent })}
+        builtinTitle={rAgent === 'claude' ? ownName : tr('{name} 账号', { name: agents.find((a) => a.kind === rAgent)?.name ?? rAgent })}
         agentDefault={resumeAgentDefault}
         lockProvider={remote ? 'claude' : undefined}
         lockNote={tr('其它机器上的对话：只能换模型，换供应商请在那台机器上操作')}

@@ -147,6 +147,10 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
   const folders = useMemo(() => splitFolders(grouped.other), [grouped]);
   const labels = useMemo(() => folderLabels(grouped.other.map(([cwd]) => cwd), workspaces.map((w) => w.name)), [grouped, workspaces]);
   const otherCollapsed = collapsed.__older ?? true;
+  // projects / folders / machines start folded (GitHub issue #3) unless the user opened them, or the current conversation
+  // is in there; a search shows every match
+  const foldDefault = useStore((s) => s.settings['ui.sidebarFolded'] !== false);
+  const folded = useCallback((k: string, items: SessionSummary[]) => collapsed[k] ?? (!ql && foldDefault && !items.some((s) => s.sessionId === activeId)), [collapsed, ql, foldDefault, activeId]);
   const busySet = useMemo(() => new Set(busy ? busy.split('|') : []), [busy]);
   const keep = useCallback((s: SessionSummary) => s.sessionId === activeId || busySet.has(s.sessionId) || s.live === 'running' || s.live === 'waiting', [activeId, busySet]);
   const kidsOf = useCallback((s: SessionSummary) => (expanded.has(s.sessionId) ? childrenOf(sessions, s.sessionId, { showArchived, meta: sessionMeta }) : []), [expanded, sessions, showArchived, sessionMeta]);
@@ -165,12 +169,12 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
   // selection (全选, Shift ranges) only ever covers rows that are on screen: expanded groups, within their page limit
   const rendered = useMemo(() => renderedRows([
     { key: '__pinned', items: pinned, collapsed: !!collapsed.__pinned },
-    ...workspaces.map((w) => ({ key: w.id, items: grouped.byWs.get(w.id) ?? [], collapsed: !!collapsed[w.id] })),
-    ...folders.recent.map(([cwd, arr]) => ({ key: cwd, items: arr, collapsed: !!collapsed[cwd] })),
-    ...folders.older.map(([cwd, arr]) => ({ key: cwd, items: arr, collapsed: otherCollapsed || !!collapsed[cwd] })),
+    ...workspaces.map((w) => ({ key: w.id, items: grouped.byWs.get(w.id) ?? [], collapsed: folded(w.id, grouped.byWs.get(w.id) ?? []) })),
+    ...folders.recent.map(([cwd, arr]) => ({ key: cwd, items: arr, collapsed: folded(cwd, arr) })),
+    ...folders.older.map(([cwd, arr]) => ({ key: cwd, items: arr, collapsed: otherCollapsed || folded(cwd, arr) })),
     { key: '__other_kept', items: otherKept, collapsed: false },
-    ...grouped.peers.map(([id, arr]) => ({ key: `peer:${id}`, items: arr, collapsed: !!collapsed[`peer:${id}`] })),
-  ], shown as Record<string, number>, PAGE_FIRST, { keep, kids: kidsOf }), [pinned, workspaces, grouped, folders, collapsed, otherCollapsed, otherKept, shown, keep, kidsOf]);
+    ...grouped.peers.map(([id, arr]) => ({ key: `peer:${id}`, items: arr, collapsed: folded(`peer:${id}`, arr) })),
+  ], shown as Record<string, number>, PAGE_FIRST, { keep, kids: kidsOf }), [pinned, workspaces, grouped, folders, collapsed, otherCollapsed, otherKept, shown, keep, kidsOf, folded]);
   const order = useMemo(() => rendered.map((s) => s.sessionId), [rendered]);
   const selected = useMemo(() => rendered.filter((s) => picked.has(s.sessionId)), [rendered, picked]);
   const allOn = rendered.length > 0 && selected.length === rendered.length;
@@ -207,8 +211,8 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
   };
   const groupProps = (k: string, items: SessionSummary[]) => ({
     k, items, ctx, keep, kidsOf,
-    collapsed: !!collapsed[k],
-    onToggle: () => toggleGroup(k),
+    collapsed: k === '__pinned' ? !!collapsed[k] : folded(k, items),
+    onToggle: () => toggleGroup(k, k === '__pinned' ? !!collapsed[k] : folded(k, items)),
     shown: shown[k],
     setShown: (n: number | undefined) => setShown((m) => ({ ...m, [k]: n })),
     busy: items.some(isBusy),

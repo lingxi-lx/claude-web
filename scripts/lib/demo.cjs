@@ -250,7 +250,7 @@ async function startServer(home, opts) {
   for (const k of Object.keys(env)) if (/^(ANTHROPIC_|CLAUDE_CODE_|OPENAI_|CLAUDE_WEB_DIST$)/.test(k) || /^(no_proxy|https?_proxy|all_proxy)$/i.test(k)) delete env[k];
   fs.mkdirSync(env.CLAUDE_WEB_DIR, { recursive: true });
   const metaFile = path.join(env.CLAUDE_WEB_DIR, 'meta.json');
-  if (!fs.existsSync(metaFile)) fs.writeFileSync(metaFile, JSON.stringify({ version: 1, settings: { 'ui.language': opts.lang, 'ui.theme': opts.theme ?? 'dark', ...(opts.settings ?? {}) } }));
+  if (!fs.existsSync(metaFile)) fs.writeFileSync(metaFile, JSON.stringify({ version: 1, settings: { 'ui.language': opts.lang, 'ui.theme': opts.theme ?? 'dark', 'ui.sidebarFolded': false, ...(opts.settings ?? {}) } }));
   const server = spawn(process.execPath, [path.join(ROOT, 'server', 'dist', 'index.js')], { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   let log = '';
   server.stderr.on('data', (d) => { log += d; });

@@ -2,7 +2,13 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { runClaudeCli } from '../claude-exe.js';
 import { claudeDir } from '../sessions/service.js';
+import { userAnthropicEnv } from '../runtime/user-env.js';
 import { Memo } from '../runtime/memo.js';
+
+/** A relay's host (`api.example.com`), or 'API Key' when only a key is set (the CLI then talks to Anthropic itself). */
+export function relayName(base: string | undefined): string {
+  try { return base ? new URL(base.trim()).host || base.trim() : 'API Key'; } catch { return base?.trim() || 'API Key'; }
+}
 
 /**
  * `claude mcp list` starts the engine AND every configured MCP server to health-check it (npx, uvx… each a
@@ -119,6 +125,9 @@ export class ConfigService {
       const r = await runClaudeCli(['auth', 'status']);
       const a = { ...tryJson<any>(r.stdout, { raw: r.stdout }), stderr: r.code ? r.stderr : undefined };
       if (typeof a.loggedIn === 'boolean') this.lastLoggedIn = a.loggedIn;
+      // the 「Claude 账号」 is really a relay set in settings.json / the environment: say where (GitHub issues #5, #6)
+      const own = userAnthropicEnv();
+      if (own.relay) a.relay = relayName(own.env.ANTHROPIC_BASE_URL);
       return a;
     }, force);
   }

@@ -28,9 +28,12 @@ describe('filterSessions', () => {
     expect(ids(filterSessions(all, { ...base, source: 'claude' }))).toEqual(['c1', 'c2']);
   });
 
-  it('query matches the title and the first prompt', () => {
+  it('query matches the title and the folder name — not the first prompt or the path above the folder', () => {
     expect(ids(filterSessions(all, { ...base, query: 'LOGIN' }))).toEqual(['c1']);
-    expect(ids(filterSessions(all, { ...base, query: 'parser' }))).toEqual(['c2']);
+    expect(ids(filterSessions(all, { ...base, query: 'parser' }))).toEqual([]);
+    const paths = [s('p1', { cwd: 'D:\\测试\\game' }), s('p2', { cwd: 'D:\\work\\测试新游戏\\' })];
+    expect(ids(filterSessions(paths, { ...base, query: '测试' }))).toEqual(['p2']);
+    expect(ids(filterSessions(paths, { ...base, query: 'game' }))).toEqual(['p1']);
   });
 
   it('archived (field or meta) is hidden unless showArchived', () => {

@@ -55,6 +55,7 @@ const CONTROLS: Record<EntryId, (e: EntryMeta) => ReactNode> = {
   'ui.viewMode': (e) => <Select k={e.id} def="normal" label={e.label} options={VIEW_MODES.map((id) => ({ id, l: viewModeLabel(id) }))} />,
   'ui.autoArchivePr': (e) => <Toggle k={e.id} label={e.label} />,
   'ui.infoPanel': (e) => <Toggle k={e.id} label={e.label} def />,
+  'ui.sidebarFolded': (e) => <Toggle k={e.id} label={e.label} def />,
   'ui.statusLine': (e) => <Toggle k={e.id} label={e.label} def />,
   'sessions.mcp': (e) => <Toggle k={e.id} label={e.label} def />,
   'worktree.dir': (e) => <TextSetting k={e.id} label={e.label} placeholder=".claude/worktrees/" mono />,

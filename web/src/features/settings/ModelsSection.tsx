@@ -11,6 +11,7 @@ import { agoText } from '@/features/models/ModelMenu';
 import '@/features/models/models.css';
 import { TERMS, ULTRACODE, effortLabel, effortTitle } from '@/ui/terms';
 import { tr } from '@/i18n';
+import { ownClaudeName } from '@/store/auth';
 
 /** stable fallback for the selectors below (a fresh `[]` per call re-renders forever: React #185) */
 const NONE: string[] = [];
@@ -41,7 +42,18 @@ export function ModelsSection() {
   const refresh = useRefreshRun();
   const [view, setView] = useState<'model' | 'profile'>('model');
   const [q, setQ] = useState('');
-  const rows = useMemo(() => modelTable(providers, groups, q), [providers, groups, q]);
+  const relay = useStore((s) => s.auth?.relay);
+  const ownName = ownClaudeName(relay ? { relay } : null);
+  const rows = useMemo(() => modelTable(providers, groups, q, ownName), [providers, groups, q, ownName]);
+  // 按供应商: each a fold, so a long list reads (GitHub issue #4); the first one starts open
+  const [openSec, setOpenSec] = useState<Record<string, boolean>>({});
+  const isOpen = (k: string, i: number) => openSec[k] ?? i === 0;
+  const fold = (k: string, i: number, head: React.ReactNode, count: number, body: React.ReactNode) => (
+    <details key={k} className="section fold-sec" open={isOpen(k, i)} onToggle={(e) => { const o = (e.currentTarget as HTMLDetailsElement).open; if (o !== isOpen(k, i)) setOpenSec((m) => ({ ...m, [k]: o })); }}>
+      <summary><Icon name="chevronRight" size={12} className="fold-chev" /><h5>{head}</h5><span className="cnt">{tr('{n} 个模型', { n: count })}</span></summary>
+      {body}
+    </details>
+  );
 
   const toggle = (id: string) => void setSetting('ui.disabledModels', disabled.includes(id) ? disabled.filter((x) => x !== id) : [...disabled, id]);
   // a model row covers one key per profile: it is shown / starred when any of them is
@@ -113,7 +125,7 @@ export function ModelsSection() {
                         const p = providers.find((pp) => pp.id === x.id);
                         return p
                           ? <button key={x.id} className={clsx('prov-chip', x.isDefault && 'def')} title={x.isDefault ? tr('「{name}」的默认模型', { name: p.name }) : tr('设为「{name}」的默认模型', { name: p.name })} onClick={() => void makeDefault(p, r.model)}>{x.isDefault && <Icon name="check" size={10} />}{x.name}</button>
-                          : <span key={x.id} className="prov-chip static" title={tr('claude.ai 登录（内置模型，没有默认模型可设）')}>{x.name}</span>;
+                          : <span key={x.id} className="prov-chip static" title={relay ? tr('Claude Code 内置的模型表，走 ~/.claude/settings.json 里设的中转 {host}', { host: relay }) : tr('claude.ai 登录（内置模型，没有默认模型可设）')}>{x.name}</span>;
                       })}
                     </td>
                     <td className="acts">
@@ -129,15 +141,14 @@ export function ModelsSection() {
         </div>
       ) : (
         <>
-          {AGENTS.map(({ kind, name }) => {
+          {AGENTS.map(({ kind, name }, i) => {
             const c = CATALOG[kind];
             // what the agent said it offers this account (Codex's model/list) before the built-in list, which goes stale
             const a = agents.find((x) => x.kind === kind);
             const reported = kind !== 'claude' && a?.reportedModels?.length ? a.reportedModels : undefined;
             const models = reported ?? modelsFor(kind);
-            return (
-              <div key={kind} className="section">
-                <h5><Icon name={AGENT_ICONS[kind] ?? 'agent'} size={13} /> {name}</h5>
+            return fold(kind, i, <><Icon name={AGENT_ICONS[kind] ?? 'agent'} size={13} /> {name}{kind === 'claude' && relay && <span className="badge" title={tr('~/.claude/settings.json 里设了中转地址，Claude Code 的模型走它')}>{tr('中转 {host}', { host: relay })}</span>}</>, models.length, (
+              <>
                 {reported && a?.reportedAt && <div className="sub" style={{ padding: '0 4px 4px' }}>{tr('{name} 自己报的列表（这个账号能用的）· {ago}', { name, ago: agoText(a.reportedAt) })}</div>}
                 <div className="list">
                   {models.map((m) => row(kind === 'claude' ? m.value : `${kind}:${m.value}`, m.displayName, m.description || undefined))}
@@ -155,20 +166,17 @@ export function ModelsSection() {
                   )}
                 </div>
                 {c?.note && <div className="sub" style={{ padding: '2px 4px' }}>{c.note}</div>}
-              </div>
-            );
+              </>
+            ));
           })}
           {providers.map((p) => {
             const models = profileModels(p, groups, providers);
-            return (
-              <div key={p.id} className="section">
-                <h5><Icon name={p.type === 'gateway' ? 'gateway' : 'cloud'} size={13} /> {p.name} <span className="badge">{p.type}</span></h5>
+            return fold(p.id, -1, <><Icon name={p.type === 'gateway' ? 'gateway' : 'cloud'} size={13} /> {p.name} <span className="badge">{p.type}</span></>, models.length, (
                 <div className="list">
                   {models.map((m) => row(`${p.id}:${m}`, m, p.defaultModel === m ? tr('默认') : undefined))}
                   {!models.length && <div className="empty">{p.type === 'gateway' ? tr('网关组的成员还没有模型列表') : tr('点上面的「刷新全部模型」拉取模型列表')}</div>}
                 </div>
-              </div>
-            );
+            ));
           })}
         </>
       )}

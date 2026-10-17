@@ -36,7 +36,9 @@ export const isArchived = (s: SessionSummary, meta: Record<string, SessionMeta>)
 
 /**
  * What the sidebar lists. Children (`parentId`) never show on their own — their parent carries
- * `childCount`. The query matches title, first prompt and directory, case-insensitively.
+ * `childCount`. The query matches the title and the folder's own name, case-insensitively — not the whole first prompt
+ * (a long plan mentions everything) nor the path's parents (GitHub issue #7: 「测试」 listed every conversation under a
+ * 测试 folder's parent and every plan that said 测试).
  */
 export function filterSessions(all: SessionSummary[], o: SessionFilter): SessionSummary[] {
   const q = o.query.trim().toLowerCase();
@@ -45,9 +47,11 @@ export function filterSessions(all: SessionSummary[], o: SessionFilter): Session
     if (o.source !== 'all' && agentOf(s) !== o.source) return false;
     if (o.machine && o.machine !== 'all' && machineOf(s) !== o.machine) return false;
     if (!o.showArchived && isArchived(s, o.meta)) return false;
-    return !q || `${s.title} ${s.firstPrompt ?? ''} ${s.cwd}`.toLowerCase().includes(q);
+    return !q || s.title.toLowerCase().includes(q) || folderName(s.cwd).toLowerCase().includes(q);
   });
 }
+
+const folderName = (cwd: string) => cwd.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? '';
 
 /** Sessions per agent kind (children excluded), for the source filter chips. */
 export function sourceCounts(all: SessionSummary[]): Record<string, number> {

@@ -84,7 +84,7 @@ function seedHome(home) {
   const { execFileSync } = require('node:child_process');
   // the smoke asserts Chinese texts: the interface language is pinned (scripts/i18n-smoke.cjs looks at the English one)
   fs.mkdirSync(path.join(home, '.claude-web'), { recursive: true });
-  fs.writeFileSync(path.join(home, '.claude-web', 'meta.json'), JSON.stringify({ version: 1, settings: { 'ui.language': 'zh' } }));
+  fs.writeFileSync(path.join(home, '.claude-web', 'meta.json'), JSON.stringify({ version: 1, settings: { 'ui.language': 'zh', 'ui.sidebarFolded': false } }));
   const repo = path.join(home, 'repo');
   fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
   fs.writeFileSync(path.join(repo, 'README.md'), '# smoke repo\n');
