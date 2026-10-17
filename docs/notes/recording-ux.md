@@ -122,3 +122,8 @@
 - 模型菜单的「更多模型 ›」：一个供应商超过 6 个模型时只先列 5 个（当前的那个总在），其余在这一行后面（`foldMenu`）。
 - 对话里的子代理颜色跟着主题的强调色（10 档深浅，`.chat-tile` / `.composer` 里覆盖 `--agent-N`）；后台页面还是彩色角色。
 - 截图 / 演示脚本和长期开着的演示服务器都用 `C:\work` 下的演示项目——**两个不能同时跑**（后一个的清理会删掉前一个的文件夹）。
+- 独立验证后补的（b7c570c）：Alt+← / Alt+→ 不在任何文本框里生效（macOS 的 Option+← 是按词移动光标）；后台补结束只认真正 `type` 为
+  `queue-operation` 的行，超过 32 MB 的一行直接跨过去；`last-prompt` 之前文件没以换行结尾就先补一个换行；进程结束后的两种补写都先确认
+  `pool.stateOf` 是空或 `closed`，server 中途退出留下的 `pendingTitle` 在下次启动时写回。官方技能插件改成加载一个**镜像**
+  （`<dataDir>/runtime/plugins/anthropic-skills`，同名，技能是指向官方目录的 junction / 符号链接），去掉只在官方 App 里才有工具的那些
+  （`APP_ONLY`：内置浏览器、Chrome、操控电脑、记忆、docs、定时任务、引导…）；清理镜像时先 `lstat`，链接只 unlink / rmdir，绝不递归进去。
