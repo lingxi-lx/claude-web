@@ -140,8 +140,11 @@
   cw.5 已经发了（`engine-providers` 笔记），依赖已换成 cw.5。
 - 思考行的标题用摘要里的粗体小标题（`chat/thinking-title.ts`：在想时取最后一个，想完取第一个），用时放在后面；正在做的那一步是四个点轮流亮
   （`WorkDots`，强调色，减少动效时不动）。
-- 输入框下面一行中间：这个对话的「几轮 · 几步 · tok/s · 总 token · 缓存命中」（`model/conv-stats.ts` + `composer/ConvStatsLine.tsx`，
-  按每轮的 result 加总；tok/s = 输出 token ÷ 这一轮的模型时间——引擎报的 `duration_api_ms` 是这个进程的累计值，一轮的时间是它涨了多少，变小了就是换了进程；历史轮没有这个时间就不算速度）。放不下的整项藏掉（换行到被裁掉的第二行）。
+- 输入框下面一行中间：这个对话的「几轮 · 几步 · tok/s · 缓存命中」（`model/conv-stats.ts` + `composer/ConvStatsLine.tsx`，按每轮的 result 加总）。
+  第四轮用户说「要的是 tok/s，不是 token——token 最右边那个圆环已经有了」：去掉了 token 总数。tok/s = 全部输出 token ÷ 模型时间；
+  引擎报的 `duration_api_ms` 是这个进程的累计值，服务端 `turnShare` 把它换成每一轮自己的（`RunningTotals.apiMs`，变小了就是换了进程），
+  账本也存每轮的；历史轮从账本带上 `duration_api_ms`；一轮没有模型时间（别的 agent）或者是旧账本里的累计值（比整轮还长）就用整轮的时间。
+  放不下的整项藏掉（换行到被裁掉的第二行）。
 - 欢迎页背景：字在内容列（`.home-col`）附近渐隐、里面只留一点，整体更暗（`AsciiField` 的 `calm()`）。
 - 第四轮（用户：「背景还是有一点丑」，又给了一段官方录屏）：改成满屏很暗的细小字母数字（每格都有一层底 `FIELD_BASE`，斜向的亮带 `bandLevel` 叠上去），
   字偶尔跳变；**每次点击页面放出一圈涟漪**（`rippleLevel`：主题强调色的小圆盘张开成环、淡出，1.3 s），没有鼠标悬停高亮了。
