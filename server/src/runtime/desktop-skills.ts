@@ -55,10 +55,14 @@ const unprefix = (p: string) => path.resolve(p.replace(/^\\\\\?\\/, ''));
  */
 export function mirrorSkills(src: string, dest: string): string | null {
   try {
-    fs.mkdirSync(path.join(dest, '.claude-plugin'), { recursive: true });
-    fs.copyFileSync(path.join(src, '.claude-plugin', 'plugin.json'), path.join(dest, '.claude-plugin', 'plugin.json'));
     const skills = path.join(dest, 'skills');
     fs.mkdirSync(skills, { recursive: true });
+    // the mirror (or a folder above it) turned into a link into the source: every "stray" entry would be the source's own
+    const srcReal = fs.realpathSync.native(src);
+    const inSrc = (p: string) => { const r = fs.realpathSync.native(p); return r === srcReal || r.startsWith(srcReal + path.sep); };
+    if (inSrc(dest) || inSrc(skills) || fs.lstatSync(dest).isSymbolicLink() || fs.lstatSync(skills).isSymbolicLink()) return null;
+    fs.mkdirSync(path.join(dest, '.claude-plugin'), { recursive: true });
+    fs.copyFileSync(path.join(src, '.claude-plugin', 'plugin.json'), path.join(dest, '.claude-plugin', 'plugin.json'));
     const want = new Map(fs.readdirSync(path.join(src, 'skills'), { withFileTypes: true }).filter((e) => e.isDirectory() && !APP_ONLY.has(e.name)).map((e) => [e.name, path.join(src, 'skills', e.name)] as const));
     for (const name of fs.readdirSync(skills)) {
       const p = path.join(skills, name);

@@ -61,5 +61,15 @@ describe('the mirror loaded here: the official plugin without the app-only skill
     expect(fs.readdirSync(path.join(dest, 'skills')).sort()).toEqual(['xlsx']);
     expect(fs.readdirSync(path.join(src, 'skills')).sort()).toEqual(['chrome-browser', 'computer-use', 'xlsx']);
     expect(fs.existsSync(path.join(src, 'skills', 'xlsx', 'SKILL.md'))).toBe(true);
+    // the mirror's own folders replaced by links into the source: refused, the source keeps its app-only skills
+    const kind = process.platform === 'win32' ? 'junction' : 'dir';
+    const viaSkills = path.join(root, 'd2');
+    fs.mkdirSync(viaSkills);
+    fs.symlinkSync(path.join(src, 'skills'), path.join(viaSkills, 'skills'), kind);
+    expect(mirrorSkills(src, viaSkills)).toBeNull();
+    const viaDest = path.join(root, 'd3');
+    fs.symlinkSync(src, viaDest, kind);
+    expect(mirrorSkills(src, viaDest)).toBeNull();
+    expect(fs.readdirSync(path.join(src, 'skills')).sort()).toEqual(['chrome-browser', 'computer-use', 'xlsx']);
   });
 });
