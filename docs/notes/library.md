@@ -32,3 +32,5 @@
 - `codex-source.ts`：`PAGINATED` 命中时 `read()` / `exportAll()` 换「Codex 桌面版自带的 codex」再读一次（`desktopCodexBin()`：Windows `%LOCALAPPDATA%\OpenAI\Codex\bin\<build>\codex.exe` 取最新的，macOS `Codex.app/Contents/Resources/codex`；`newerRpc()` 按 command+args+env 判断是不是同一个，懒启动、和主进程一起关）。没有桌面版就报一句能照做的话（更新 Codex 命令行，或在 设置 → Agents 把命令换成桌面版那个）。
 - 本机复现不了原话：0.159.2 / 0.162.1（npm 包解到临时目录，`CODEX_HOME` 指到 `~/.codex` 的**拷贝**）和桌面版 0.162-alpha 读本机的分页线程都正常（turns/list full / summary / notLoaded、`thread/read includeTurns`、`thread/items/list` 全通）；原话在二进制里只出现在 `thread_processor.rs` 的 fork / resume 一带。所以「旧命令行 + 新桌面版写的线程」是推断，测试用 mock 的 `MOCK_CODEX_NO_PAGINATED=1`（分页读和整条读都拒）覆盖。
 - 拷贝的 `CODEX_HOME` 上 `thread/resume` / `thread/fork` 测不了：线程记着当时的 model provider（`cwgw`，我们的网关）、rollout 路径指向真的 `~/.codex`（「must be in Codex home directory」）。
+- **SDK 的 `listSessions` 会整个漏掉第一句很长的对话**（2026-10-17 实测：头 64 KB 里没有可读的第一句、尾部又没有标题类的行）：`sessions/unlisted.ts`
+  扫目录补上，进程结束时补一行 `last-prompt` 让别的应用（Mirasim）也列得出。详见「照官方桌面版录屏改的界面」第二轮。

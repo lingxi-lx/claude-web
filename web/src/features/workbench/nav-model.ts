@@ -6,8 +6,10 @@ export interface NavState { back: string[]; forward: string[]; cur: string | nul
 
 /** Pure: the history after `next` came to the front (`moving` = it is the one back / forward is opening). */
 export function navVisit(n: NavState, next: string | null, moving: boolean): NavState {
-  if (!next || next === n.cur) return n;
+  if (next === n.cur) return n;
   if (moving) return { ...n, cur: next };
+  // the new-conversation page (no conversation in front) is a place too: ← from it is the conversation just left
+  if (!next) return { back: n.cur ? [...n.back.filter((x) => x !== n.cur), n.cur].slice(-MAX) : n.back, forward: [], cur: null };
   return { back: n.cur ? [...n.back.filter((x) => x !== n.cur), n.cur].slice(-MAX) : n.back, forward: [], cur: next };
 }
 

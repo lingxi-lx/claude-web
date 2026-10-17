@@ -15,3 +15,6 @@ spec 和实施记录：`docs/superpowers/specs/2026-10-12-background-office-desi
 - **停止 ≠ 失败**（2026-10-13）：子代理多了 `stopped` 状态（工作流被停 / 进程结束时没跑完的那些：灰色暂停徽章、半透明、进度条停在原处）；任务结束后晚到的进度列表不会把它们改回在跑。跑完文件的 `error` 是整段堆栈，只取第一行，用户停掉的（`status: 'killed'`）不显示原因。对话里被「停止」截断的步骤是「已停止」不是「失败」（`ToolUseBlock.stopped`，CLI 的 `[Request interrupted by user…]` 变成一行「已中断」），`result.errors` 里的 `[ede_diagnostic]` 不显示。
 - **前台的步骤不进后台**：官方 2.1.283 把这一轮前台跑的长命令（`local_bash`、`is_backgrounded: false`）和子代理自己的前台步骤也报成任务；登记表先扣着（`held`），被挪到后台（`task_updated patch.is_backgrounded`）才出现。这一轮的前台子代理照样算。
 - 子代理对话里，官方套在提示词外面的「[Workflow harness — computed task]」框架在抽屉里去掉（`unwrapHarness`）。
+- **一轮进行中结束的后台任务，流上没有 `task_notification`**（2026-10-17 用户报告「后台 · 19 条命令」）：CLI 把这种结束通知当附件塞进这一轮
+  （transcript 里 `queue-operation` enqueue 之后马上 remove），只在下一轮才处理的那种才走流。`BackgroundService.reconcile()` 每 5 秒读有在跑任务的
+  对话的 transcript 新增部分，只认 `"queue-operation"` 行里的 `<task-notification>`，补上结束。详见「照官方桌面版录屏改的界面」第二轮。

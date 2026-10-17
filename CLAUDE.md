@@ -87,7 +87,7 @@ npm run dev          # 开发：server tsx watch + vite :5173（代理 /ws 到 3
 | [review-pr](docs/notes/review-pr.md) | 审阅与 PR：diff 行评论 / 代码审查卡 / PR 监控条（2026-10-16） | DiffView comments、CLAUDE_CODE_REPORT_FINDINGS 与 ReportFindings、vcs.prForBranch / autoMerge、自动修 CI、自动归档 |
 | [sessions-env](docs/notes/sessions-env.md) | 环境与对话：跨对话工具 / 任务 chip / 选机器 / worktree 设置 / 文件右键 / 本机环境变量 / 深链接（2026-10-16） | sessions MCP（进程内）、ccb 的 ExecuteExtraTool、<cw-from>、新对话选机器、.worktreeinclude、shell.editors、local-env.json、claude-web:// |
 | [pages](docs/notes/pages.md) | 页面与入口：总览栏 / 定时任务补跑 / 预览服务器 / 更新内容 / 只聊天 / 跨对话生成文件 / 快捷键（2026-10-16） | MissionPanel 的待审 / 落地中、missedRun、.claude/launch.json 与 preview_*、app.changelog、tools: [] + strictMcpConfig、artifacts.list、Ctrl+/ |
-| [recording-ux](docs/notes/recording-ux.md) | 照官方桌面版录屏改的界面（2026-10-16，用户要求） | 信息栏、标题栏工具 / ⋮、一行输入框 + 框下一行、Ctrl+Enter 插话、statusLine、模型菜单数字 / 快速模式、+ 菜单连接器、运行行、计划卡、浏览器空白页的开发服务器 |
+| [recording-ux](docs/notes/recording-ux.md) | 照官方桌面版录屏改的界面（2026-10-16，用户要求） | 信息栏、标题栏工具 / ⋮、一行输入框 + 框下一行、Ctrl+Enter 插话、statusLine、模型菜单数字 / 快速模式、+ 菜单连接器、运行行、计划卡、浏览器空白页的开发服务器；第二轮（10-17）：sharp、官方技能插件、队列里的后台结束、改名被写回、SDK 列表漏长首句、新 logo、动态背景、☰ ← →、钉住 / 朗读 |
 | [zoom](docs/notes/zoom.md) | 界面缩放（2026-10-10 用户要求：台式机分辨率高，界面看着小） | 桌面版页面缩放 |
 | [rail-sections-web](docs/notes/rail-sections-web.md) | 图标栏 / 分区 / 联网（2026-10-10，界面第二轮） | 图标栏、分区页、扩展页、强度按钮、浏览器标签、web MCP |
 | [search-computer](docs/notes/search-computer.md) | 搜索在内置浏览器里 / 网页上的鼠标键盘 / 操控电脑（2026-10-10，用户要求） | 浏览器里搜索、browser_computer、操控电脑（computer MCP） |

@@ -25,6 +25,13 @@ describe('← → history', () => {
     expect(skip.to).toBe('a');
     expect(navStep(empty, -1, () => true)).toBeNull();
   });
+  it('the new-conversation page is a place: ← from it opens the conversation just left', () => {
+    const n = navVisit(visit('a', 'b'), null, false);
+    expect(n).toEqual({ back: ['a', 'b'], forward: [], cur: null });
+    const r = navStep(n, -1, () => true)!;
+    expect(r.to).toBe('b');
+    expect(r.state).toEqual({ back: ['a'], forward: [], cur: 'b' });
+  });
   it('going back to one visited earlier does not leave it twice in the history', () => {
     expect(visit('a', 'b', 'a', 'c').back).toEqual(['b', 'a']);
   });

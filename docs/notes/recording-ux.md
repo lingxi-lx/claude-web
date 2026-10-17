@@ -75,3 +75,50 @@
 - 单元：`info-model.test.ts`、`ansi.test.ts`、`statusline/run.test.ts`、`keep-awake.test.ts`（`also` / `recheck`）、`preview/service.test.ts`（`list`）。
 - ui-smoke 的 `recording-ux` 段：信息栏五张卡、上下文折叠存设置、ⓘ 开关、标题栏三个工具、⋮ 顶上两项、框下一行的位置、+ 菜单在对话里的
   reach、斜杠命令、模型菜单的号和强度 ›。截图脚本的做法：demo 数据 + 离屏 Electron（见 `scripts/readme-shots.cjs`）。
+
+## 第二轮（2026-10-17：用户的截图、反馈、第二段录屏、GitHub issue #3–#9）
+
+### 修掉的 bug（根因）
+
+- **大图片 / 截图失败「Could not load the "sharp" module」**：引擎（ccb fork）把 sharp 的 JS 打进了包，原生的 `@img/sharp-<平台>` 是上游的
+  devDependency，没跟着发；超过 2000px 的图一缩就失败。修法：根 package.json 依赖 `sharp`（**必须和引擎打包的版本一样，现在 0.34.5**：
+  `grep -o "0\.3[0-9]\.[0-9]*" node_modules/claude-web-engine/dist/chunks/lib-*.js`），npm 装本机平台的 `@img/sharp-*`，引擎的
+  `createRequire` 从 `dist/chunks` 往上找得到；`electron-builder.yml` 的 asarUnpack 加了 `sharp` 和 `@img`。Electron 当 node 跑也加载得了（N-API）。
+- **「Unknown skill: anthropic-skills:xlsx」**：官方桌面版把 Anthropic 的技能（xlsx / pdf / docx / pptx…）作为插件 `anthropic-skills` 下到
+  `%APPDATA%\Claude\local-agent-mode-sessions\skills-plugin\<账号>\<id>\`（mac `~/Library/Application Support/Claude/…`），在那边开始的对话
+  拿到这里接着聊，列表里有这些名字，引擎却没加载。`runtime/desktop-skills.ts` 找最新的那个目录，作为本地插件给 SDK（和网吧的插件一起），
+  设置 `claude.desktopSkills` 可关。只读用户自己的下载，不拷贝。实测引擎的 init 里列出了 `anthropic-skills:*`。
+- **「后台 · 19 条命令」不在跑也占着**：后台命令 / 子代理在**一轮进行中**结束时，CLI 把结束通知直接塞给模型（transcript 里一行
+  `queue-operation` enqueue + `<task-notification>`，紧接着 remove），**流上不发 `task_notification`**——只有等到下一轮才处理的那种才发。
+  登记表就一直「在跑」，pool 还因为它留着进程。`BackgroundService` 每 5 秒对有在跑任务的对话读 transcript 新增的部分（只认
+  `"queue-operation"` 行，别的行里引用的不算；从第一次有后台任务时的文件末尾开始读），把结束补上。
+- **改了名过一会又变回去**：CLI 进程把标题记在内存里，`reAppendSessionMetadata` 时只从文件尾部一段里刷新——改名那一行被一长轮挤出这一段后，
+  就把旧标题写回去。官方二进制有 `rename_session` 控制请求（`Query.renameSession`）；我们的引擎没有：hub 的 `renameKept` 把新名字记在
+  `SessionMeta.pendingTitle`，列表显示它，进程结束后再写一次。
+- **Mirasim 里看不到这边的对话 / 列表里少对话**：SDK 的 `listSessions` 只读每个 transcript 头尾各 64 KB；第一句很长（贴了截图——base64
+  在开头写两遍：queue-operation 行和 user 行）、尾部又没有标题类的行（`custom-title` / `ai-title` / `summary` / `last-prompt`，CLI 正常
+  退出才写，进程被杀就没有）的对话，**整个不列出来**（实测）。我们的列表另外扫目录补上（`sessions/unlisted.ts`，按大小 + mtime 缓存）；进程
+  结束时 SDK 还列不出的，补一行 CLI 正常退出会写的 `last-prompt`，别的用 SDK 读历史的应用（Mirasim）也看得到了。同一个原因让 issue #9 的
+  目录成了「(未知目录)」：`cwdFromTranscript` 往后读找第一个 `"cwd"`，进程在跑时用 runner 的 cwd 兜底。Mirasim 自己的代码是混淆过的，没去读。
+- 账号菜单被「扩展」等整页盖住：图标栏 z-index 3，整页 6；`.rail:has(.menu)` 升到 40（模态框 50 以下）。
+- 侧栏搜索只匹配标题和文件夹名（#7）；项目 / 文件夹默认收起、当前对话所在的打开（#3，设置 `ui.sidebarFolded`）；按供应商的模型列表可折叠
+  （#4）；settings.json 指向中转时内置 Claude 叫「Claude Code · 中转 host」（#5 #6，`config.auth` 带 `relay`）；没标题的新对话标签叫
+  「新对话」（#8）。
+- 「工具调用常失败」：扫了本机 4 天 2235 次调用、76 次失败——三分之一是「文件读过之后被改了，要重读」（编辑工具的正常保护），其余是普通的命令
+  错误；系统性的只有上面的 sharp 和技能两条。
+
+### 新加的界面
+
+- 新 logo：黑色圆角方块 + 方块字「c/w」+ 橙点（参考用户给的几何风格，没有用别人的标）。`web/public/icon.svg` 是唯一源，`node scripts/icons.cjs`
+  （sharp）出 PWA / 桌面 / 官网的图；侧栏内联画同样的形状（`ui/AppLogo.tsx`）。
+- 新对话页的动态背景（第二段录屏）：`features/home/AsciiField.tsx`（canvas，15 fps，看不见时不画，减少动效时静止，设置 `ui.welcomeBackdrop`），
+  数学在 `ascii-noise.ts`。
+- 新对话页的输入框：框里一行，框下一行是 代码 / 聊天（官方标题栏的 chat / code：这里就是「只聊天」）、电脑、文件夹、分支、权限，右边模型
+  （设置 `ui.welcomeLayout`，`inbox` 放回框里；ui-smoke 的首页那一大段用 `inbox`，新布局有自己的一条检查）。
+- ☰（图标栏最上面）：桌面版弹出原生应用菜单（`desktop:appMenu` → `Menu.getApplicationMenu().popup`，新加「前往」：后退 / 前进），浏览器里是
+  `rail/AppMenu.tsx`。← →：`workbench/nav-history.ts`（纯逻辑 `nav-model.ts`），看过的对话的历史，新对话页也算一个位置；Alt+← / Alt+→、
+  macOS 菜单 ⌘[ ⌘]（Windows 的菜单项只显示不注册，不然按一次走两步）、鼠标侧键。
+- 回复下面的「钉住」（`SessionMeta.pinnedMsgs`，信息栏「钉住的回复」卡，点一下滚过去并闪一下）和「朗读」（`speechSynthesis`，按文字判断中英）。
+- 模型菜单的「更多模型 ›」：一个供应商超过 6 个模型时只先列 5 个（当前的那个总在），其余在这一行后面（`foldMenu`）。
+- 对话里的子代理颜色跟着主题的强调色（10 档深浅，`.chat-tile` / `.composer` 里覆盖 `--agent-N`）；后台页面还是彩色角色。
+- 截图 / 演示脚本和长期开着的演示服务器都用 `C:\work` 下的演示项目——**两个不能同时跑**（后一个的清理会删掉前一个的文件夹）。
