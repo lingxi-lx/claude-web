@@ -137,7 +137,7 @@
   `--thinking-display summarized`（runner 的 extraArgs；`noThinking` 时、启动模型不是 Claude 时不加），ccb 读 `CLAUDE_WEB_THINKING_DISPLAY`（引擎 cw.5，
   每个请求按模型名只给 Claude 加；ccb 遇到 `--thinking-display` 会 `unknown option` 退出）。只给 Claude：中转后面的 DeepSeek / Kimi 这类
   Anthropic 格式接口可能不认这个字段。`redact-thinking-2026-02-12` 那个 beta 只在交互式终端发，不是原因。
-  **cw.5 只在 fork 里提交、打了包，没发 Release；发之前 claude-web 用的 cw.4 不认这个变量（忽略，不出错）。**
+  cw.5 已经发了（`engine-providers` 笔记），依赖已换成 cw.5。
 - 思考行的标题用摘要里的粗体小标题（`chat/thinking-title.ts`：在想时取最后一个，想完取第一个），用时放在后面；正在做的那一步是四个点轮流亮
   （`WorkDots`，强调色，减少动效时不动）。
 - 输入框下面一行中间：这个对话的「几轮 · 几步 · tok/s · 总 token · 缓存命中」（`model/conv-stats.ts` + `composer/ConvStatsLine.tsx`，

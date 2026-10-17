@@ -22,4 +22,6 @@
 - **引擎缺原生 sharp**（2026-10-17）：ccb 包里有 sharp 的 JS、没有 `@img/sharp-<平台>`，大图缩放失败。根依赖 `sharp` 必须和引擎打包的版本一致
   （升级引擎后核对），asarUnpack 带 `sharp` / `@img`。官方桌面版下载的 `anthropic-skills` 插件由 `runtime/desktop-skills.ts` 作为本地插件加载。
 - **思考的 display**（cw.5，2026-10-17）：`CLAUDE_WEB_THINKING_DISPLAY=summarized|omitted` → 请求的 `thinking.display`（adaptive 和固定预算都带，关掉思考时不发）。
-  claude-web 给 ccb 设 `summarized`，官方二进制用 `--thinking-display summarized`。原因见 `recording-ux` 笔记「第三轮」。**cw.5 还没发 Release**（fork 提交 ad1fc7e9 + d0c44dec，tgz 已打）。
+  claude-web 给 ccb 设 `summarized`，官方二进制用 `--thinking-display summarized`。原因见 `recording-ux` 笔记「第三轮」。cw.5 已发（2026-10-17 预发布 Release `engine-v2.8.4-cw.5`，fork 提交 ad1fc7e9 + d0c44dec 已推；不登录下载的 sha512 和 lock 一致，`releases/latest` 仍是 v0.2.6）。
+  真中转实测：两个中转都回思考文字（官方二进制 + super-nb.me、cw.5 + aizhongzhuan.cc）；aizhongzhuan.cc 用 cw.4 也回——那个中转自己就给摘要，
+  空思考只出在直连 Anthropic 的路上（官方 Key 当时余额不足，没能拿真回答对照；请求里带上 display 是用假接口确认的）。super-nb.me 只收官方客户端（ccb 被它判成「请求被改写」）。
