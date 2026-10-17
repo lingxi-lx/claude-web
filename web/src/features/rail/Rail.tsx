@@ -1,4 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
+import { AppMenu } from './AppMenu';
+import { desktop } from '@/desktop';
 import { useStore } from '@/store';
 import { clsx } from '@/util';
 import { Icon, type IconName } from '@/ui/icons';
@@ -107,9 +109,9 @@ export function Rail() {
   const waiting = useStore((s) => Object.values(s.open).some((o) => o.pending.length > 0));
   const orchFull = useOrch((s) => s.full);
   const orchWaiting = useMemo(() => waitingOf(orchFull).length, [orchFull]);
-  const [menu, setMenu] = useState<'more' | 'account' | null>(null);
-  const toggle = (k: 'more' | 'account') => (e: React.MouseEvent) => { e.stopPropagation(); setMenu((m) => (m === k ? null : k)); };
-  const close = useCallback((k: 'more' | 'account') => setMenu((m) => (m === k ? null : m)), []);
+  const [menu, setMenu] = useState<'more' | 'account' | 'app' | null>(null);
+  const toggle = (k: 'more' | 'account' | 'app') => (e: React.MouseEvent) => { e.stopPropagation(); setMenu((m) => (m === k ? null : k)); };
+  const close = useCallback((k: 'more' | 'account' | 'app') => setMenu((m) => (m === k ? null : m)), []);
   const who = accountName(auth, providers);
   const worst = worstWindow(limits);
   const top = (x: TopId) => x;
@@ -118,6 +120,22 @@ export function Rail() {
   return (
     <nav className="rail" aria-label={tr('分区')}>
       <div className="rail-top">
+        {/* ☰ (the official title bar's application menu): the desktop pops up its native menu, a browser our own */}
+        <span className="rail-anchor">
+          <RailBtn
+            id={top('app-menu')}
+            icon="menu"
+            tip={tr('菜单')}
+            on={menu === 'app'}
+            aria-haspopup="menu"
+            aria-expanded={menu === 'app'}
+            onClick={(e) => {
+              if (desktop?.showAppMenu) { const r = e.currentTarget.getBoundingClientRect(); const z = desktop.getZoom?.() ?? 1; setMenu(null); desktop.showAppMenu(r.right * z, r.top * z); return; }
+              toggle('app')(e);
+            }}
+          />
+          {menu === 'app' && <AppMenu onClose={() => close('app')} />}
+        </span>
         <RailBtn
           id={top('collapse')}
           icon="sidebar"

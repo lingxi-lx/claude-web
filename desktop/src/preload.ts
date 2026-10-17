@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('desktop', {
   version: process.env.CLAUDE_WEB_VERSION ?? '',
   platform: process.platform,
   pickDir: () => ipcRenderer.invoke('desktop:pickDir'),
+  showAppMenu: (x: number, y: number) => ipcRenderer.send('desktop:appMenu', { x, y }),
   openPath: (p: string) => ipcRenderer.invoke('desktop:openPath', p),
   openExternal: (url: string) => ipcRenderer.invoke('desktop:openExternal', url),
   notify: (title: string, body: string, sessionId?: string) => ipcRenderer.send('desktop:notify', { title, body, sessionId }),

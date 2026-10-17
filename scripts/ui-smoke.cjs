@@ -2081,7 +2081,7 @@ function driver() {
           // every id of entries.ts PLACES must be seen in the DOM, each in its own place, at some point of this phase
           const PLACES = inv.sidebar;
           const SCOPES = {
-            top: '.rail .rail-top > [data-id], .rail .rail-main > [data-id]:not(.pinned), .rail .rail-main > .rail-anchor > [data-id], .sidebar .sb-top [data-id], .sidebar .sb-nav [data-id]',
+            top: '.rail .rail-top > [data-id], .rail .rail-top > .rail-anchor > [data-id], .rail .rail-main > [data-id]:not(.pinned), .rail .rail-main > .rail-anchor > [data-id], .sidebar .sb-top [data-id], .sidebar .sb-nav [data-id]',
             automation: ':is(.auto-page .auto-tabs, .sb-sect:not([hidden]) .auto-side .sect-nav) [data-id]',
             section: '.sidebar .sb-sec[data-id], .sidebar .sb-group[data-id]',
             head: '.sidebar [data-id="projects"] > .sb-sec-h [data-id]',

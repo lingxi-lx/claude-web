@@ -9,6 +9,9 @@ export const SHORTCUTS: Shortcut[] = [
   { id: 'new', label: tr('新对话'), desktop: 'Ctrl+N', browser: 'Alt+N', group: tr('全局') },
   { id: 'palette', label: tr('搜索对话 / 命令面板'), desktop: 'Ctrl+K', browser: 'Ctrl+K', group: tr('全局') },
   { id: 'sidebar', label: tr('收起 / 展开侧栏'), desktop: 'Ctrl+B', browser: 'Ctrl+B', group: tr('全局') },
+  // ← →: the conversations brought to the front before / after this one (workbench/nav-history.ts)
+  { id: 'nav.back', label: tr('后退（上一个看过的对话）'), desktop: 'Alt+Left', browser: 'Alt+Left', group: tr('全局') },
+  { id: 'nav.forward', label: tr('前进'), desktop: 'Alt+Right', browser: 'Alt+Right', group: tr('全局') },
   { id: 'find', label: tr('在对话中查找'), desktop: 'Ctrl+F', browser: 'Ctrl+F', group: tr('全局') },
   { id: 'shortcuts', label: tr('快捷键速查'), desktop: 'Ctrl+/', browser: 'Ctrl+/', group: tr('全局') },
   // 界面缩放: the desktop shell's own (remembered, every window — desktop/src/zoom.ts); in a browser these keys are the
@@ -115,6 +118,8 @@ export function matchBrowserKey(e: KeyboardEvent): string | null {
   if (alt && !ctrl && k === '[') return 'pane.prev';
   if (alt && !ctrl && k === '.') return 'tile.next';
   if (alt && !ctrl && k === ',') return 'tile.prev';
+  // not in the code editor / terminal, where Alt+← moves by word
+  if (alt && !ctrl && !shift && (k === 'ArrowLeft' || k === 'ArrowRight') && !(e.target as HTMLElement)?.closest?.('.monaco-editor, .xterm')) return k === 'ArrowLeft' ? 'nav.back' : 'nav.forward';
   if (k === 'F2') return 'group.rename';
   if (!inField && k === '?') return 'shortcuts';
   // Ctrl+/ (the official key; F1 and ? still work) — but not in the code editor or the terminal, where it is theirs

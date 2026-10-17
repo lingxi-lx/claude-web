@@ -241,3 +241,10 @@ html.desktop.mac .app.has-rail .sb-top, html.desktop.mac .app.has-rail .sect-top
 .menu.cm .cm-it.na .cm-l, .menu.cm .cm-it.na .cm-ic { opacity: 0.6; }
 .menu.cm .cm-it.na .cm-d { white-space: normal; overflow: visible; line-height: 1.45; }
 .menu.cm .cm-na { flex: none; align-self: flex-start; margin-top: 1px; padding: 0 7px; border-radius: var(--r-pill); background: var(--layer-selected); color: var(--ink-3); font-size: var(--fs-micro); line-height: 18px; white-space: nowrap; }
+
+/* ← → in the sidebar's top row (the official title bar's back / forward) */
+.sb-top .sb-nav-arrows { display: inline-flex; gap: 2px; }
+.sb-top .sb-nav-arrows .icon-btn { width: 26px; height: 26px; }
+.sb-top .sb-nav-arrows .icon-btn:disabled { opacity: 0.35; cursor: default; background: none; }
+/* ☰ in a browser: our own menu with headings */
+.menu.app-menu { min-width: 240px; }

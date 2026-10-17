@@ -11,6 +11,7 @@ import { dropOrder } from './reorder';
 const PROJECT_DRAG = 'application/x-cw-project';
 import type { AgentKind, SessionSummary } from '@shared';
 import { AppLogo } from '@/ui/AppLogo';
+import { navGo, useNav } from '@/features/workbench/nav-history';
 import { Icon } from '@/ui/icons';
 import { projectFor } from '@/features/paths';
 import { agentOf, childrenOf, filterSessions, filterSummary, isArchived, machineCounts, renderedRows, sourceCounts } from './filter';
@@ -246,6 +247,7 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
     <>
       <div className="sb-top">
         <span className="brand"><span className="logo"><AppLogo size={20} /></span>Claude Web</span>
+        {!mobile && <NavButtons />}
         {mobile
           ? <button className="icon-btn" data-id={top('collapse')} title={tr('收起侧栏 ({modKey}+B)', { modKey })} aria-label={tr('收起侧栏')} onClick={() => useStore.setState({ sidebarOpen: false })}><Icon name="sidebar" size={16} /></button>
           : <button className="icon-btn sb-find" data-id={top('search')} title={tr('搜索对话、命令和设置 ({modKey}+K)', { modKey })} aria-label={tr('搜索')} onClick={() => useStore.setState({ paletteOpen: true })}><Icon name="search" size={16} /></button>}
@@ -412,5 +414,17 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
       {pending.length > 0 && hintOk && <DiscoveryHint pending={pending} />}
       {mobile && <AccountRow open={menu === 'account'} setOpen={(v) => (v ? setMenu('account') : closeMenu('account'))} />}
     </>
+  );
+}
+
+/** ← →: the conversations looked at before / after this one (workbench/nav-history.ts); the official title bar's pair. */
+function NavButtons() {
+  const back = useNav((n) => n.back.length > 0);
+  const fwd = useNav((n) => n.forward.length > 0);
+  return (
+    <span className="sb-nav-arrows">
+      <button className="icon-btn" data-id={'back' satisfies TopId} disabled={!back} title={tr('后退 (Alt+←)')} aria-label={tr('后退')} onClick={() => navGo(-1)}><Icon name="arrowLeft" size={15} /></button>
+      <button className="icon-btn" data-id={'forward' satisfies TopId} disabled={!fwd} title={tr('前进 (Alt+→)')} aria-label={tr('前进')} onClick={() => navGo(1)}><Icon name="arrowRight" size={15} /></button>
+    </span>
   );
 }

@@ -3,6 +3,8 @@ export interface DesktopBridge {
   version: string;
   platform: string;
   pickDir(): Promise<string | null>;
+  /** ☰: the application menu (对话 / 工作台 / 视图 / 前往 / 编辑 / 帮助) as a popup at x, y (page coordinates); older shells lack it */
+  showAppMenu?(x: number, y: number): void;
   openPath(p: string): Promise<void>;
   openExternal(url: string): Promise<void>;
   notify(title: string, body: string, sessionId?: string): void;

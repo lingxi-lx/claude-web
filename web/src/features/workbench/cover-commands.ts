@@ -7,7 +7,7 @@
 export type Cover = 'settings' | 'automation';
 
 /** Commands that act on the tabs, panes, groups or the conversation under a page. */
-const UNDER = /^(tile\.|pane\.|group\.|tab$|new$|interrupt$|close$|side$|menu\.|window\.new$)/;
+const UNDER = /^(tile\.|pane\.|group\.|nav\.|tab$|new$|interrupt$|close$|side$|menu\.|window\.new$)/;
 
 /**
  * What to do with command `id` while `open` pages are up: `close` = the pages to put away first (top one first:

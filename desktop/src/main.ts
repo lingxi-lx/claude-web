@@ -427,6 +427,18 @@ function buildMenu() {
       ],
     },
     {
+      // 前往 (the official app's Go menu): back / forward through the conversations looked at (web nav-history.ts).
+      // Alt+←/→ is the page's own key on Windows / Linux (shown, not registered: it would fire twice); ⌘[ / ⌘] on macOS
+      label: tr('前往'),
+      submenu: [
+        { label: tr('后退'), accelerator: isMac ? 'Cmd+[' : 'Alt+Left', registerAccelerator: isMac, click: () => sendCommand('nav.back') },
+        { label: tr('前进'), accelerator: isMac ? 'Cmd+]' : 'Alt+Right', registerAccelerator: isMac, click: () => sendCommand('nav.forward') },
+        { type: 'separator' },
+        cmd(tr('搜索对话'), undefined, 'palette'),
+        cmd(tr('设置'), undefined, 'settings'),
+      ],
+    },
+    {
       label: tr('编辑'),
       submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }],
     },
@@ -551,6 +563,11 @@ function scheduleUpdateChecks() {
 }
 
 // ---------- IPC ----------
+ipcMain.on('desktop:appMenu', (e, at: { x: number; y: number }) => {
+  const w = BrowserWindow.fromWebContents(e.sender);
+  const m = Menu.getApplicationMenu();
+  if (w && m) m.popup({ window: w, x: Math.round(at?.x ?? 0), y: Math.round(at?.y ?? 0) });
+});
 ipcMain.handle('desktop:pickDir', async (e) => {
   const w = BrowserWindow.fromWebContents(e.sender) ?? focusedWin();
   const r = await dialog.showOpenDialog(w!, { properties: ['openDirectory', 'createDirectory'], title: tr('选择工作目录') });

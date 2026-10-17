@@ -12,6 +12,7 @@ import { changeZoom } from '@/ui/zoom';
 import { tr } from '@/i18n';
 import { nextViewMode, normViewMode, viewModeLabel } from '@/features/chat/view-mode';
 import { openSideChat } from '@/features/chat/side-chat';
+import { navGo } from './nav-history';
 
 export function runCommand(id: string): boolean {
   const st = useStore.getState();
@@ -48,6 +49,8 @@ export function runCommand(id: string): boolean {
   }
   switch (id) {
     case 'new': st.openInPane(null, workbench ? 'tab' : 'replace'); return true;
+    case 'nav.back': navGo(-1); return true;
+    case 'nav.forward': navGo(1); return true;
     case 'palette':
       // 入门清单 「试试 Ctrl K」: the shortcut itself (the sidebar's 搜索 does not count)
       if (!st.paletteOpen) markChecklist('palette');

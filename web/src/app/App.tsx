@@ -48,6 +48,7 @@ import { AddAccountHost } from '@/features/settings/ClaudeAccounts';
 import { FileMenu } from '@/features/files/FileMenu';
 import { fillComposer } from '@/features/composer/fill';
 import { WhatsNewModal, useWhatsNewOnUpdate } from '@/features/update/WhatsNew';
+import { startNavHistory } from '@/features/workbench/nav-history';
 
 /** Width of the right panel minimized to its icon rail. */
 const MIN_RAIL = 36;
@@ -95,6 +96,8 @@ export function App() {
   // phone width lives in the store: the workbench chrome, the session header and the panel commands all follow it
   const mobile = useStore((s) => s.mobile);
   useEffect(() => { const on = () => useStore.setState({ mobile: MOBILE.matches }); on(); MOBILE.addEventListener('change', on); return () => MOBILE.removeEventListener('change', on); }, []);
+  // ← → (workbench/nav-history.ts): follow the conversation in front from the start
+  useEffect(() => { startNavHistory(); }, []);
   // (before the paint: a phone never shows the drawer — or its scrim, which would fade — open for a frame on the way)
   useLayoutEffect(() => { if (mobile) useStore.setState({ sidebarOpen: false }); }, [mobile]);
   // the palette / the shortcut sheet opened from the keyboard on a phone: the drawer (z 60) makes way (final review M4)
