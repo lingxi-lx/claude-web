@@ -116,3 +116,22 @@ describe('listTitle', () => {
     expect(listTitle({ sessionId: '24f2b165-07d7' })).toBe('24f2b165');
   });
 });
+
+describe('the folder of a conversation whose first prompt is long (issue #9)', () => {
+  it('is read past the head the SDK reads: message before cwd, a queue line carrying the whole prompt', async () => {
+    const { cwdFromTranscript } = await import('./service.js');
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'cw-cwd-'));
+    const f = path.join(dir, 't.jsonl');
+    const big = 'x'.repeat(300_000);
+    const lines = [
+      { type: 'queue-operation', operation: 'enqueue', content: big },
+      { parentUuid: null, type: 'user', message: { role: 'user', content: big }, uuid: 'u', cwd: 'D:/work/xiaodao-rpa', sessionId: 's' },
+    ];
+    await fs.writeFile(f, lines.map((l) => JSON.stringify(l)).join('\n') + '\n', 'utf8');
+    expect(cwdFromTranscript(f)).toBe('D:/work/xiaodao-rpa');
+    expect(cwdFromTranscript(null)).toBe('');
+    await fs.writeFile(f, JSON.stringify({ type: 'ai-title', aiTitle: 'x' }) + '\n', 'utf8');
+    expect(cwdFromTranscript(f)).toBe('');
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+});

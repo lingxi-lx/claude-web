@@ -5,7 +5,8 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import type { SessionSummary } from '../protocol.js';
 import { watchTree, type TreeWatcher } from '../runtime/watch-tree.js';
-import { hasClaudeTranscript } from '../runtime/transcript-file.js';
+import { findClaudeTranscript, hasClaudeTranscript } from '../runtime/transcript-file.js';
+import { closeSync, openSync, readSync } from 'node:fs';
 import { BRIEFING_HEAD } from '../session/handoff.js';
 import { tr } from '../i18n/index.js';
 
@@ -30,11 +31,36 @@ export function listTitle(s: Pick<SDKSessionInfo, 'sessionId' | 'customTitle' | 
   return real || (said.length ? tr('交接的对话') : s.sessionId.slice(0, 8));
 }
 
+/**
+ * The folder a transcript ran in, read past the SDK's head: our engine writes a user line's `message` before its `cwd`
+ * and the queue-operation line before it carries the whole prompt, so a long first prompt (pasted text, an image) puts
+ * the first `"cwd"` beyond the 64 KB the SDK reads — the list said 「(未知目录)」 (GitHub issue #9).
+ */
+export function cwdFromTranscript(file: string | null, maxBytes = 16 * 1024 * 1024): string {
+  if (!file) return '';
+  let fd: number | undefined;
+  try {
+    fd = openSync(file, 'r');
+    const chunk = Buffer.alloc(1 << 20);
+    let carry = '';
+    for (let pos = 0; pos < maxBytes; ) {
+      const n = readSync(fd, chunk, 0, chunk.length, pos);
+      if (n <= 0) break;
+      pos += n;
+      const text = carry + chunk.toString('utf8', 0, n);
+      const m = /"cwd":("(?:[^"\\]|\\.)*")/.exec(text);
+      if (m) return JSON.parse(m[1]) as string;
+      carry = text.slice(-4096); // a key split across two reads
+    }
+  } catch { /* unreadable: unknown */ } finally { if (fd !== undefined) closeSync(fd); }
+  return '';
+}
+
 function toSummary(s: SDKSessionInfo): SessionSummary {
   return {
     sessionId: s.sessionId,
     title: listTitle(s),
-    cwd: s.cwd ?? '',
+    cwd: s.cwd || cwdFromTranscript(findClaudeTranscript(s.sessionId)),
     lastModified: s.lastModified,
     createdAt: s.createdAt,
     gitBranch: s.gitBranch,

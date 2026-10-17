@@ -45,7 +45,7 @@ export function MissionPanel() {
       const lastTool = tools.length ? tools[tools.length - 1].tool : undefined;
       const running = o.conv.runningTool;
       const cost = o.conv.lastResult?.costUsd ?? 0;
-      return { o, meta, peer: sessionPeer(o.sessionId, sessions), lane, title: meta?.title ?? o.sessionId.slice(0, 8), cwd: o.cwd, lastTool, running, quietMs: o.conv.lastEventAt ? now - o.conv.lastEventAt : 0, cost, turns: o.conv.items.filter((i) => i.kind === 'user').length, sched: schedules.find((s) => s.sessionId === o.sessionId), pr };
+      return { o, meta, peer: sessionPeer(o.sessionId, sessions), lane, title: meta?.title || tr('新对话'), cwd: o.cwd, lastTool, running, quietMs: o.conv.lastEventAt ? now - o.conv.lastEventAt : 0, cost, turns: o.conv.items.filter((i) => i.kind === 'user').length, sched: schedules.find((s) => s.sessionId === o.sessionId), pr };
     });
   }, [open, sessions, schedules, prs]);
   const lanes: { id: Lane; l: string; hint: string }[] = [

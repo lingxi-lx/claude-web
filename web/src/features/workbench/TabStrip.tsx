@@ -14,7 +14,8 @@ export function tileTitle(t: Tile, sessions: { sessionId: string; title: string 
   const icon = iconFor(t);
   if (t.title) return { icon, text: t.title };
   switch (t.kind) {
-    case 'chat': return { icon, text: t.sessionId ? sessions.find((s) => s.sessionId === t.sessionId)?.title ?? t.sessionId.slice(0, 8) : tr('新对话') };
+    // a conversation not in the list yet has no transcript yet: it is a new one (issue #8 — its id was the tab's name)
+    case 'chat': return { icon, text: (t.sessionId && sessions.find((s) => s.sessionId === t.sessionId)?.title) || tr('新对话') };
     case 'doc': return { icon, text: basename(t.path) };
     case 'diff': return { icon, text: basename(t.path) };
     case 'term': return { icon, text: tr('终端 · {basename}', { basename: basename(t.cwd) || t.cwd }) };

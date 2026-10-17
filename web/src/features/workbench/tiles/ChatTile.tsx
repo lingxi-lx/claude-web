@@ -128,7 +128,7 @@ function SessionHeader({ tile, paneId, infoShown }: { tile: ChatTileModel; paneI
   const mobile = useStore((s) => s.mobile);
   const [editing, setEditing] = useState<string | null>(null);
   const [menu, setMenu] = useState(false);
-  const title = meta?.title ?? sid.slice(0, 8);
+  const title = meta?.title || tr('新对话');
   const sessions = useStore((s) => s.sessions);
   const peer = sessionPeer(sid, sessions);
   const cwd = active?.cwd || meta?.cwd || '';

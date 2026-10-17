@@ -329,7 +329,8 @@ export class Hub {
       case 'sessions.list': {
         const all = await s.library.list();
         const list = req.limit ? all.slice(0, req.limit) : all;
-        return list.map((x) => ({ ...x, live: s.pool.stateOf(x.sessionId) }));
+        // a folder the list could not read (issue #9) is known to the conversation's own process while it runs
+        return list.map((x) => ({ ...x, cwd: x.cwd || s.pool.get(x.sessionId)?.cwd || '', live: s.pool.stateOf(x.sessionId) }));
       }
       case 'sessions.projects':
         return s.sessions.projects();
