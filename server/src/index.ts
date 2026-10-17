@@ -414,7 +414,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   const importer = new ImportService({
     providers: { hasSame: (t, b, k) => providers.hasSame(t, b, k), upsert: (p) => providers.upsert(p) },
     mcp: {
-      names: async () => { const m = await config.mcp(); return new Set([...Object.keys(m.userServers ?? {}), ...m.servers.map((x) => x.name)]); },
+      names: () => config.mcpUserNames(),
       add: (name, json) => config.mcpAdd(name, json, 'user'),
     },
   });

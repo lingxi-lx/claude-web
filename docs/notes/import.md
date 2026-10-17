@@ -6,6 +6,7 @@
 
 - 入口两个：设置 → 供应商 的「从其它工具导入…」（`ConfigPanel.tsx` 的 `ProviderProfiles`，先勾供应商），扩展 → 连接器 的同名按钮（`Connectors.tsx`，先勾 MCP）。同一个对话框 `web/src/features/providers/ImportDialog.tsx`：按工具分组，每行一个供应商或 MCP 服务器，已经有的标「已有」不能勾，其余默认勾上（只勾打开它的那一类）。
 - 请求：`import.scan`（只给名字、地址 / 命令行、有没有 key、模型数、是否已有——**key 不上 wire**）、`import.run { keys }`（服务端重新扫一遍，按 key 导入；导入的供应商随后拉一次模型列表再回答）。都在 `GOES_OUT`。
+  「已有哪些 MCP」只读 `~/.claude.json` 的 `mcpServers` 名字（`ConfigService.mcpUserNames`）——别用 `config.mcp()`：它跑 `claude mcp list`，会把每个服务器都起一遍检查，负载高时超过 15 s，对话框一直空着（ui-smoke 抓到的）。
 - 导到哪：供应商 → `ProviderService.upsert`（key 照常加密存）；MCP → `ConfigService.mcpAdd(name, json, 'user')`，也就是 `claude mcp add-json -s user`（所有项目可用，新对话起生效）。同名的 MCP、同类型 + 同地址（`sameBase`：大小写、结尾 `/`、结尾 `/v1` 不算不同）+ 同 key 的供应商算「已有」，跳过，不覆盖。
 
 ## 来源（`server/src/import/scan.ts` 的 `SOURCES`，全部只读）

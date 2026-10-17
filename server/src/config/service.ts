@@ -106,6 +106,14 @@ export class ConfigService {
     const projectCfg = cwd ? await readJson(path.join(cwd, '.mcp.json')) : null;
     return { servers, userServers: userCfg?.mcpServers ?? {}, projectServers: projectCfg?.mcpServers ?? {}, stderr: r.code ? r.stderr : undefined };
   }
+  /**
+   * The MCP servers configured for every project (user scope) — the names only, read from the file: no `claude mcp
+   * list`, which starts every server to check it (seconds; 从其它工具导入 only needs to know what is taken).
+   */
+  async mcpUserNames(): Promise<Set<string>> {
+    const userCfg = (await readJson(path.join(claudeDir, '.claude.json'))) ?? (await readJson(path.join(path.dirname(claudeDir), '.claude.json')));
+    return new Set(Object.keys(userCfg?.mcpServers ?? {}));
+  }
   async mcpAdd(name: string, json: string, scope: string, cwd?: string) {
     return runClaudeCli(['mcp', 'add-json', name, json, '-s', scope], { cwd }).finally(forgetMcpList);
   }
