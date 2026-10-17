@@ -65,7 +65,7 @@ const isMac = /mac|darwin/i.test(desktop?.platform ?? (typeof navigator !== 'und
 export const modKey = isMac ? '⌘' : 'Ctrl';
 /** ← → on the macOS desktop are the menu's ⌘[ ⌘] (Option+← moves by word in text there). */
 const MAC_DESKTOP: Record<string, string> = { 'nav.back': 'Cmd+[', 'nav.forward': 'Cmd+]' };
-export const keyLabel = (s: Shortcut) => (isDesktop ? (isMac ? MAC_DESKTOP[s.id] ?? s.desktop.replace(/Ctrl/g, 'Cmd') : s.desktop) : s.browser);
+export const keyLabel = (s: Shortcut) => (isDesktop ? (isMac ? MAC_DESKTOP[s.id] ?? s.desktop.replace(/\bCtrl\b/g, 'Cmd') : s.desktop) : s.browser);
 
 // physical key → the character the table means; used when a modifier changed `e.key`
 const CODE_KEYS: Record<string, string> = { BracketLeft: '[', BracketRight: ']', Period: '.', Comma: ',', Backquote: '`' };

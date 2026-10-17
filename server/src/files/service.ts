@@ -213,7 +213,7 @@ export class FilesService extends EventEmitter {
   async saveExport(name: string, html: string): Promise<string> {
     const dir = path.join(dataDir(), 'exports');
     await fs.mkdir(dir, { recursive: true });
-    const safe = name.replace(/[<>:"/\\|?* -]/g, '_').slice(0, 80) || 'conversation';
+    const safe = name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').slice(0, 80) || 'conversation';
     const file = path.join(dir, `${safe}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '')}.html`);
     await fs.writeFile(file, html, 'utf8');
     return file;

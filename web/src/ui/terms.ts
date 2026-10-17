@@ -105,7 +105,7 @@ export const CLAUDE_LOGIN_CMD = 'claude auth login';
  */
 export interface EmptyTerm { what: string; when: string; subject?: string }
 /** English nouns come capitalised from the catalogs (they are also headings): in the middle of a sentence they are not. */
-const inSentence = (s: string) => (getLocale() === 'en' && /^[A-Z][a-z]/.test(s) && !/^(Claude|Codex|Git|GitHub)/.test(s) ? s[0].toLowerCase() + s.slice(1) : s);
+const inSentence = (s: string) => (getLocale() === 'en' && /^[A-Z][a-z]/.test(s) && !/^(Claude|Codex|Git|GitHub)\b/.test(s) ? s[0].toLowerCase() + s.slice(1) : s);
 export function emptyText(e: EmptyTerm): string {
   const what = inSentence(e.what);
   return e.subject ? tr('还没有{what}。{when}之后，{subject}会出现在这里。', { what, when: e.when, subject: e.subject }) : tr('还没有{what}。{when}之后会出现在这里。', { what, when: e.when });
