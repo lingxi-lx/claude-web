@@ -10,6 +10,7 @@ import { dropOrder } from './reorder';
 /** What a dragged project header carries (session rows carry their own type, so they never land here). */
 const PROJECT_DRAG = 'application/x-cw-project';
 import type { AgentKind, SessionSummary } from '@shared';
+import { AppLogo } from '@/ui/AppLogo';
 import { Icon } from '@/ui/icons';
 import { projectFor } from '@/features/paths';
 import { agentOf, childrenOf, filterSessions, filterSummary, isArchived, machineCounts, renderedRows, sourceCounts } from './filter';
@@ -244,7 +245,7 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
   return (
     <>
       <div className="sb-top">
-        <span className="brand"><span className="logo"><Icon name="claude" size={18} /></span>Claude Web</span>
+        <span className="brand"><span className="logo"><AppLogo size={20} /></span>Claude Web</span>
         {mobile
           ? <button className="icon-btn" data-id={top('collapse')} title={tr('收起侧栏 ({modKey}+B)', { modKey })} aria-label={tr('收起侧栏')} onClick={() => useStore.setState({ sidebarOpen: false })}><Icon name="sidebar" size={16} /></button>
           : <button className="icon-btn sb-find" data-id={top('search')} title={tr('搜索对话、命令和设置 ({modKey}+K)', { modKey })} aria-label={tr('搜索')} onClick={() => useStore.setState({ paletteOpen: true })}><Icon name="search" size={16} /></button>}
