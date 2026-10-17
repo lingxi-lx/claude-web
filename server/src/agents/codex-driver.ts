@@ -165,7 +165,7 @@ export class CodexDriver extends EventEmitter implements AgentDriver {
     } catch (e: any) {
       const tail = this.rpc?.stderrTail ?? '';
       // its configuration could not be read: what is wrong and how to fix it, not the raw log
-      const hint = codexConfigHint(`${e.message}\n${tail}`);
+      const hint = codexConfigHint(e.message, tail);
       this.setState('error', hint ?? tr('Codex 启动失败：{message}{v}', { message: e.message, v: tail ? `\n${tail.slice(-800)}` : '' }));
     }
   }

@@ -16,7 +16,7 @@ export function ConvStatsLine({ sessionId }: { sessionId: string }) {
   const parts: { text: string; title: string }[] = [
     { text: tr('{turns} 轮', { turns: st.turns }), title: tr('这个对话发出过 {turns} 轮', { turns: st.turns }) },
     { text: tr('{steps} 步', { steps: st.steps }), title: tr('模型一共走了 {steps} 步（每次调用模型算一步）', { steps: st.steps }) },
-    ...(st.tokPerSec !== null ? [{ text: `${st.tokPerSec >= 10 ? Math.round(st.tokPerSec) : st.tokPerSec.toFixed(1)} tok/s`, title: tr('输出速度：输出的 token ÷ 模型生成用的时间') }] : []),
+    ...(st.tokPerSec !== null ? [{ text: `${st.tokPerSec >= 9.95 ? Math.round(st.tokPerSec) : st.tokPerSec.toFixed(1)} tok/s`, title: tr('输出速度：输出的 token ÷ 模型生成用的时间') }] : []),
     ...(st.cacheHit !== null ? [{ text: tr('缓存命中 {pct}', { pct: pct(st.cacheHit) }), title: tr('全部输入里从提示缓存读的比例') }] : []),
   ];
   return (

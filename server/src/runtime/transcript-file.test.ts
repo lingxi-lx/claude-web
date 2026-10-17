@@ -121,6 +121,10 @@ describe('lastCostState: the totals the official binary continues from', () => {
     expect(lastCostState(file(ENGINE_SWITCH.slice(5)), 's')).toBeNull();
     expect(lastCostState(null, 's')).toBeNull();
   });
+  it('carries the model time it saved (the first turn after a resume is that much less, not the whole running total)', () => {
+    const f = file([{ type: 'cost-state', sessionId: 's', totalCostUSD: 1, totalAPIDuration: 5_739_096, modelUsage: {} }]);
+    expect(lastCostState(f, 's')).toEqual({ cost: 1, models: {}, apiMs: 5_739_096 });
+  });
 });
 
 describe('lastHumanPrompt: the last thing a person typed', () => {

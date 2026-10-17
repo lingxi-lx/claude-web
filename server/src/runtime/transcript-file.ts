@@ -1,4 +1,4 @@
-import { appendFileSync, closeSync, existsSync, fstatSync, openSync, readFileSync, readdirSync, readSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, closeSync, existsSync, fstatSync, openSync, readFileSync, readdirSync, readSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -63,7 +63,7 @@ const parse = (line: string): any => { try { return JSON.parse(line); } catch { 
  * The running totals the official binary restores when it resumes this transcript: it saves a `cost-state` after every
  * turn and continues counting from the last one (ccb 2.8.4 neither writes nor reads it). Null when there is none.
  */
-export function lastCostState(file: string | null, sessionId: string): { cost: number; models: Record<string, Record<string, number>> } | null {
+export function lastCostState(file: string | null, sessionId: string): { cost: number; models: Record<string, Record<string, number>>; apiMs?: number } | null {
   if (!file) return null;
   let found: any = null;
   scanBack(file, (line) => {
@@ -76,7 +76,7 @@ export function lastCostState(file: string | null, sessionId: string): { cost: n
   if (!found || typeof found.totalCostUSD !== 'number') return null;
   const models: Record<string, Record<string, number>> = {};
   for (const [m, u] of Object.entries<any>(found.modelUsage ?? {})) models[m] = Object.fromEntries(Object.entries(u ?? {}).filter(([, v]) => typeof v === 'number')) as Record<string, number>;
-  return { cost: found.totalCostUSD, models };
+  return { cost: found.totalCostUSD, models, ...(typeof found.totalAPIDuration === 'number' ? { apiMs: found.totalAPIDuration } : {}) };
 }
 
 /** Whether an entry with this uuid is in the transcript (looked for from the end, where a fresh one is). */
@@ -160,15 +160,17 @@ const emptyText = (b: any) => b?.type === 'text' && typeof b.text === 'string' &
  * Takes empty text blocks out of a transcript's messages (2026-10-17: a message that was only a picture went out as
  * [image, text ""] — every later turn of that conversation was refused with 400 「cache_control cannot be set for empty
  * text blocks」 / 「text content blocks must be non-empty」, for good: the engine sends its history again each time).
- * A message left with nothing gets a placeholder. Only while no process has the file (before a resume); the file is
- * rewritten through a temporary one, and not at all when there is nothing to fix. Returns how many messages changed.
+ * A message left with nothing gets a placeholder. Only after that 400 (it reads the whole file) and while no process of
+ * ours has the file (before the resume); rewritten through a temporary one, not at all when there is nothing to fix or
+ * when the file changed while it was read (another program writing to it). Returns how many messages changed.
  */
 export function dropEmptyText(file: string | null): number {
   if (!file) return 0;
   let text: string;
+  let before: { size: number; mtimeMs: number };
   try {
-    // a quick look first: the usual transcript has no empty text at all
-    if (statSync(file).size > 512 * 1024 * 1024) return 0;
+    before = statSync(file);
+    if (before.size > 512 * 1024 * 1024) return 0;
     text = readFileSync(file, 'utf8');
   } catch { return 0; }
   if (!/"text":"\s*"/.test(text)) return 0;
@@ -186,8 +188,12 @@ export function dropEmptyText(file: string | null): number {
   });
   if (!changed) return 0;
   const tmp = `${file}.cw-${process.pid}.tmp`;
+  // something else wrote to it since it was read (the same conversation in a terminal): its lines would be lost
+  const same = () => { try { const now = statSync(file); return now.size === before.size && now.mtimeMs === before.mtimeMs; } catch { return false; } };
   try {
+    if (!same()) return 0;
     writeFileSync(tmp, lines.join('\n'));
+    if (!same()) { try { unlinkSync(tmp); } catch { /* left behind */ } return 0; }
     renameSync(tmp, file);
     return changed;
   } catch {

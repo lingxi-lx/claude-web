@@ -165,6 +165,8 @@ export class SessionRunner extends EventEmitter {
   private planKey = '';
   /** a restart asked for during a turn: done when that turn's result arrives */
   private respawnPending = false;
+  /** the next start takes empty text blocks out of the transcript first (dropEmptyText): set by that 400 */
+  private repairEmptyText = false;
   /** the CLI's running totals (`total_cost_usd` / `modelUsage` are cumulative per process): each result is turned into its own turn's share */
   private totals: RunningTotals = { cost: 0, models: {} };
   /** the CLI process of `q`, and the end of what it wrote to stderr */
@@ -332,12 +334,15 @@ export class SessionRunner extends EventEmitter {
     // on ccb) and continues the cost totals it saved; ccb starts every process from zero
     const resumeId = typeof extra.resume === 'string' ? extra.resume : undefined;
     const file = resumeId ? findClaudeTranscript(resumeId) : null;
-    // a message that went out with an empty text block (a picture alone, before 2026-10-17) made every turn after it a
-    // 400: no process has the file yet, take those blocks out
-    if (file && dropEmptyText(file)) console.warn(`[runner] ${resumeId}: empty text blocks taken out of the transcript`);
+    // refused for an empty text block in the history (a picture sent alone, before 2026-10-17): no process has the
+    // file now, take those blocks out (only then — it reads the whole file)
+    if (file && this.repairEmptyText) {
+      this.repairEmptyText = false;
+      if (dropEmptyText(file)) console.warn(`[runner] ${resumeId}: empty text blocks taken out of the transcript`);
+    }
     if (engine.kind === 'claude' && resumeId && !extra.forkSession) repairLeaf(file, resumeId);
     const saved = engine.kind === 'claude' && resumeId ? lastCostState(file, resumeId) : null;
-    this.totals = saved ? { cost: saved.cost, models: saved.models } : { cost: 0, models: {} };
+    this.totals = saved ? { cost: saved.cost, models: saved.models, ...(saved.apiMs !== undefined ? { apiMs: saved.apiMs } : {}) } : { cost: 0, models: {} };
     const onDisk = lastHumanPrompt(file);
     if (onDisk) this.known.add(onDisk);
     const exe = engine.file;
@@ -625,7 +630,7 @@ export class SessionRunner extends EventEmitter {
       // refused for an empty text block in the history: the process keeps that history in memory and would be refused
       // again on every turn — start it over, so the resume reads the transcript with the block taken out (dropEmptyText)
       const said = `${(m as any).result ?? ''} ${JSON.stringify((m as any).errors ?? '')}`;
-      if ((m as any).is_error && /empty text blocks|text content blocks must be non-empty/.test(said)) this.respawnPending = true;
+      if ((m as any).is_error && /empty text blocks|text content blocks must be non-empty/.test(said)) { this.repairEmptyText = true; this.respawnPending = true; }
       this.setState('idle');
     }
     // keep history bounded to avoid unbounded memory in very long sessions; partial events are dropped from history

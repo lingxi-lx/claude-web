@@ -11,9 +11,12 @@ export const stripAnsi = (s: string) => s.replace(ANSI, '');
  * does every Codex conversation, in this app and in its own CLI: say which setting, in which file, and how to get going
  * again. The file is the user's (or that tool's): nothing here changes it. null when the error is something else.
  */
-export function codexConfigHint(text: string): string | null {
-  const t = stripAnsi(text);
-  if (!/failed to (load|parse) configuration|Invalid configuration|failed to parse \w+ path|config\.toml/i.test(t)) return null;
+export function codexConfigHint(error: string, log = ''): string | null {
+  // the error the request failed with decides; the log only says more about it (Codex warns about config.toml in it
+  // on every start — an ignored setting — while failing for something else entirely)
+  const e = stripAnsi(error);
+  if (!/failed to (load|parse) configuration|error loading config(uration)?\b/i.test(e)) return null;
+  const t = `${e}\n${stripAnsi(log)}`;
   const catalog = /model_catalog_json path\s+`?([^`\n]+?)`?\s+as JSON:\s*([^\n]+?)(?:\s+at line \d+ column \d+)?\s*(?:\n|$)/i.exec(t);
   if (catalog) {
     const [, file, why] = catalog;
