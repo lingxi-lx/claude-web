@@ -37,3 +37,19 @@ export function withSubagentDefault(defaults: unknown, providerId: string | unde
   else delete next[key];
   return next;
 }
+
+/**
+ * A subagent model of another provider than the conversation's: kept in the same string field as any pick
+ * (`cw-x:<provider id>:<model>`), so it is saved, defaulted and resumed like one. The engine still sees the plain
+ * model id; the conversation's requests go through the gateway's split route (gateway/service.ts `splitEndpoint`),
+ * which sends that model's requests to its provider and the rest to the conversation's.
+ */
+const CROSS = 'cw-x:';
+export function crossPick(value: string | undefined): SubagentPick | null {
+  if (!value || !value.startsWith(CROSS)) return null;
+  const rest = value.slice(CROSS.length);
+  const i = rest.indexOf(':');
+  if (i <= 0 || i === rest.length - 1) return null;
+  return { providerId: decodeURIComponent(rest.slice(0, i)), model: rest.slice(i + 1) };
+}
+export const crossValue = (providerId: string, model: string): string => `${CROSS}${encodeURIComponent(providerId)}:${model}`;

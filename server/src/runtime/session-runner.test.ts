@@ -1165,4 +1165,35 @@ describe('the subagents model (the composer 子代理 chip)', () => {
     expect(queries[1].options.env.CLAUDE_CODE_SUBAGENT_MODEL).toBe('claude-haiku-4-5-20251001');
     await b.close();
   });
+
+  it('another provider’s model: the engine talks to the gateway’s split route and is given the plain model id', async () => {
+    const { setSplitHook } = await import('../gateway/split.js');
+    const { crossValue } = await import('../models/subagent.js');
+    const asked: string[][] = [];
+    setSplitHook((main, sub, model) => { asked.push([main, sub, model]); return { base: 'http://127.0.0.1:1/gateway/~s/t', key: 'cwx-k' }; });
+    try {
+      queries.length = 0;
+      const p = { id: 'p3', name: 'relay', type: 'anthropic', runtime: 'claude', baseUrl: 'https://relay.invalid', apiKey: 'k', models: ['claude-opus-5-5'] } as any;
+      const a = new SessionRunner({ sessionId: 'sub4', cwd: '/x', model: 'claude-opus-5-5', subagentModel: crossValue('ds', 'deepseek-chat') } as any, p);
+      await tick();
+      const env = queries[0].options.env;
+      expect(asked).toEqual([['p3', 'ds', 'deepseek-chat']]);
+      expect(env.ANTHROPIC_BASE_URL).toBe('http://127.0.0.1:1/gateway/~s/t');
+      expect(env.ANTHROPIC_AUTH_TOKEN).toBe('cwx-k');
+      expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+      expect(env.CLAUDE_CODE_SUBAGENT_MODEL).toBe('deepseek-chat');
+      await a.close();
+      // not on an Anthropic-format provider (here an OpenAI one, on ccb): no route, the subagents keep the main model
+      eng.kind = 'ccb';
+      const o = { id: 'p4', name: 'oa', type: 'openai', baseUrl: 'https://relay.invalid', apiKey: 'k', models: ['gpt-big'] } as any;
+      const b = new SessionRunner({ sessionId: 'sub5', cwd: '/x', model: 'gpt-big', subagentModel: crossValue('ds', 'deepseek-chat') } as any, o);
+      await tick();
+      expect(asked).toHaveLength(1);
+      expect(queries[1].options.env.CLAUDE_CODE_SUBAGENT_MODEL).toBeUndefined();
+      await b.close();
+    } finally {
+      eng.kind = 'claude';
+      setSplitHook(null);
+    }
+  });
 });

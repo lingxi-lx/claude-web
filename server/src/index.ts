@@ -59,6 +59,7 @@ import { CodexSource } from './library/codex-source.js';
 import { OpenCodeSource } from './library/opencode-source.js';
 import { AcpListSource } from './library/acp-source.js';
 import { GatewayService } from './gateway/service.js';
+import { setSplitHook } from './gateway/split.js';
 import { AgentConfigService } from './agent-config/service.js';
 import { FederationService } from './federation/service.js';
 import { swapAgent } from './session/swap.js';
@@ -342,6 +343,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   await gateway.init();
   providers.gatewayEndpoint = (groupId) => gateway.endpoint(groupId);
   providers.shimEndpoint = (providerId) => gateway.shimEndpoint(providerId);
+  setSplitHook((main, sub, model) => gateway.splitEndpoint(main, sub, model));
   remote = new RemoteService(meta, () => { const s = http.createServer(handler); s.on('upgrade', upgrade); return s; });
   // 在外面也能用: bridges phones' links to the remote-access listener above (never to this main one)
   const anywhere = new AnywhereService(meta, remote);

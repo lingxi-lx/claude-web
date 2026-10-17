@@ -67,6 +67,8 @@ type Attempt =
 
 const isLoopback = (a: string | undefined) => !!a && (a === '::1' || a.startsWith('127.') || a.startsWith('::ffff:127.'));
 const newKey = () => `cwg-${crypto.randomBytes(24).toString('hex')}`;
+/** the path segment of the subagent split route (/gateway/~s/<token>/…) */
+export const SPLIT_PREFIX = '~s';
 export const maskGatewayKey = (k: string) => (k ? `${k.slice(0, 4)}…${k.slice(-4)}` : '');
 
 /** Recognize the inbound API from the path below the group. */
@@ -94,6 +96,9 @@ export class GatewayService extends EventEmitter {
   /** openai / grok profiles' prompt-cache shim (/gateway/~p/…): works whether or not the gateway is enabled */
   readonly shim: CacheShim;
   private key = '';
+  /** subagent splits (/gateway/~s/<token>): token → the conversation's provider, the subagents' provider and model */
+  private splits = new Map<string, { main: string; sub: string; model: string }>();
+  private splitSecret = crypto.randomBytes(32);
   private firstByteMs: number;
   private nonStreamMs: number;
 
@@ -127,6 +132,20 @@ export class GatewayService extends EventEmitter {
   shimEndpoint(providerId: string): { base: string; key: string } | null {
     return this.port ? { base: `${this.baseUrl()}/~p/${encodeURIComponent(providerId)}`, key: this.shim.keyFor(providerId) } : null;
   }
+
+  /**
+   * A conversation whose subagents run on another provider's model (the composer's 子代理 chip): its engine talks to
+   * this route instead of its provider. A request for `model` goes to `sub` (translated when that provider speaks
+   * another API); everything else passes through to `main` byte for byte, as the engine would have sent it. Works
+   * whether or not the gateway is enabled; the key is per split (HMAC, never stored); null before listening.
+   */
+  splitEndpoint(main: string, sub: string, model: string): { base: string; key: string } | null {
+    if (!this.port) return null;
+    const token = crypto.createHash('sha256').update(`${main}\n${sub}\n${model}`).digest('hex').slice(0, 32);
+    this.splits.set(token, { main, sub, model });
+    return { base: `${this.baseUrl()}/${SPLIT_PREFIX}/${token}`, key: this.splitKey(token) };
+  }
+  private splitKey(token: string) { return `cwx-${crypto.createHmac('sha256', this.splitSecret).update(token).digest('hex')}`; }
 
   /**
    * A group that passes Claude Code through to a relay which only accepts the official client (an
@@ -208,6 +227,14 @@ export class GatewayService extends EventEmitter {
     if (url.pathname !== '/gateway' && !url.pathname.startsWith('/gateway/')) return false;
     // never reachable from the LAN listener (nor from anything that is not this machine)
     if ((req.socket as any).cwRemote || !isLoopback(req.socket.remoteAddress)) { res.writeHead(404).end(); return true; }
+    if (url.pathname.startsWith(`/gateway/${SPLIT_PREFIX}/`)) {
+      void this.serveSplit(req, res, url).catch((e) => {
+        console.error('[gateway split]', e);
+        if (!res.headersSent) res.writeHead(500, { 'content-type': 'application/json' }).end(JSON.stringify({ error: { message: String(e?.message ?? e) } }));
+        else res.destroy();
+      });
+      return true;
+    }
     if (url.pathname.startsWith(SHIM_PREFIX)) {
       void this.shim.serve(req, res, url).catch((e) => {
         console.error('[gateway shim]', e);
@@ -278,6 +305,56 @@ export class GatewayService extends EventEmitter {
     res.on('close', () => { if (!res.writableFinished) ac.abort(); });
     const ctx: Ctx = { req, res, group, route: { ...route, stream }, path: rest, search, raw, json, model: route.model ?? String(json?.model ?? ''), signal: ac.signal, t0: Date.now(), customTools: new Set() };
     return this.run(ctx);
+  }
+
+  /** The body of a request, or null when an error was sent (too big / not JSON). */
+  private async readJson(req: http.IncomingMessage, res: http.ServerResponse, inbound: GatewayProtocol): Promise<{ raw: Buffer; json: any } | null> {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const c of req) {
+      size += (c as Buffer).length;
+      if (size > BODY_LIMIT) { this.sendError(res, inbound, 413, tr('请求体过大')); return null; }
+      chunks.push(c as Buffer);
+    }
+    const raw = Buffer.concat(chunks);
+    try { return { raw, json: JSON.parse(raw.toString('utf8') || '{}') }; } catch { this.sendError(res, inbound, 400, tr('请求体不是合法 JSON')); return null; }
+  }
+
+  /** /gateway/~s/<token>/v1/…: the subagents' model to its provider, the rest to the conversation's (see splitEndpoint). */
+  private async serveSplit(req: http.IncomingMessage, res: http.ServerResponse, url: URL) {
+    const m = /^\/gateway\/~s\/([^/]+)(\/.*)?$/.exec(url.pathname);
+    const token = m?.[1] ?? '';
+    const split = this.splits.get(token);
+    let rest = m?.[2] ?? '/';
+    if (!/^\/v1(beta)?\//.test(rest)) rest = `/v1${rest === '/' ? '' : rest}`;
+    const route = routeOf(req.method ?? 'GET', rest, req.headers);
+    if (!split) return this.sendError(res, 'anthropic', 404, tr('没有这条子代理分流'));
+    const want = Buffer.from(this.splitKey(token));
+    if (!this.presentedKeys(req, url).some((k) => { const a = Buffer.from(k); return a.length === want.length && crypto.timingSafeEqual(a, want); })) return this.sendError(res, 'anthropic', 401, tr('子代理分流的密钥无效'));
+    if (!route || route.inbound !== 'anthropic') return this.sendError(res, 'anthropic', 404, tr('网关不支持这个接口：{method} {rest}', { method: req.method, rest }));
+    const groupFor = (toSub: boolean): GatewayGroup => ({
+      id: `${SPLIT_PREFIX}:${token}:${toSub ? 'sub' : 'main'}`,
+      name: toSub ? tr('子代理') : tr('主对话'),
+      strategy: 'failover',
+      members: [toSub ? { providerId: split.sub, model: split.model } : { providerId: split.main }],
+    });
+    if (route.op === 'models') return this.serveModels(res, groupFor(false), 'anthropic');
+    const body = await this.readJson(req, res, 'anthropic');
+    if (!body) return;
+    const model = String(body.json?.model ?? '');
+    const group = groupFor(model === split.model);
+    const params = new URLSearchParams(url.search);
+    params.delete('key');
+    const ac = new AbortController();
+    res.on('close', () => { if (!res.writableFinished) ac.abort(); });
+    const ctx: Ctx = { req, res, group, route: { ...route, stream: !!body.json?.stream }, path: rest, search: params.toString() ? `?${params}` : '', raw: body.raw, json: body.json, model, signal: ac.signal, t0: Date.now(), customTools: new Set() };
+    try {
+      await this.run(ctx);
+    } finally {
+      // one member and no one to switch to: an upstream error goes back to the engine as it came (it retries on its
+      // own); a cool-down here would refuse the next requests with an error the engine never got from its provider
+      this.states.reset(group.id, group.members[0].providerId);
+    }
   }
 
   private serveModels(res: http.ServerResponse, g: GatewayGroup, inbound: GatewayProtocol) {

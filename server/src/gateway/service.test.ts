@@ -462,3 +462,50 @@ describe('review regressions', () => {
     delete meta.provider('a')!.runtime;
   });
 });
+
+describe('subagent split (/gateway/~s/…): the subagents on another provider, the rest passed through', () => {
+  it('the picked model goes to its provider (translated), everything else to the conversation’s byte for byte; a 429 is not held against it', async () => {
+    const ep = gw.splitEndpoint('a', 'o', 'deepseek-chat')!;
+    expect(ep.base).toMatch(/\/gateway\/~s\/[0-9a-f]{32}$/);
+    expect(gw.splitEndpoint('a', 'o', 'deepseek-chat')).toEqual(ep);
+    O.handler.fn = (_q, res) => res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ id: 'c1', object: 'chat.completion', model: 'deepseek-chat', choices: [{ index: 0, message: { role: 'assistant', content: 'from O' }, finish_reason: 'stop' }], usage: { prompt_tokens: 4, completion_tokens: 1 } }));
+    const at = (p: string, body: string, k = ep.key) => fetch(`${ep.base}${p}`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${k}`, 'anthropic-version': '2023-06-01', 'user-agent': 'claude-cli/2.1.300 (external, cli)' }, body });
+    // the main model: to A, the same bytes, A's key in place of ours
+    const raw = '{"model":"claude-sonnet-4-5",  "max_tokens":8,"messages":[{"role":"user","content":"hi"}]}';
+    const r1 = await at('/v1/messages?beta=true', raw);
+    expect(r1.status).toBe(200);
+    expect(JSON.parse(await r1.text()).content[0].text).toBe('from A');
+    expect(A.hits[0].body).toBe(raw);
+    expect(A.hits[0].url).toBe('/v1/messages?beta=true');
+    expect(A.hits[0].headers.authorization).toBe('Bearer sk-a');
+    expect(A.hits[0].headers['user-agent']).toBe('claude-cli/2.1.300 (external, cli)');
+    // the subagents' model: to O, as Chat Completions
+    const r2 = await at('/v1/messages', JSON.stringify({ ...msg, model: 'deepseek-chat' }));
+    expect(r2.status).toBe(200);
+    expect(JSON.parse(await r2.text()).content[0].text).toBe('from O');
+    expect(O.hits[0].url).toBe('/v1/chat/completions');
+    expect(JSON.parse(O.hits[0].body).model).toBe('deepseek-chat');
+    expect(A.hits).toHaveLength(1);
+    // A rate-limits: the engine gets A's 429 as it came, and the very next request still goes to A
+    A.handler.fn = (_q, res) => res.writeHead(429, { 'content-type': 'application/json', 'retry-after': '30' }).end(JSON.stringify({ type: 'error', error: { type: 'rate_limit_error', message: 'slow down' } }));
+    const r3 = await at('/v1/messages', raw);
+    expect(r3.status).toBe(429);
+    A.handler.fn = anthropicOk('again');
+    expect((await at('/v1/messages', raw)).status).toBe(200);
+    // another key, an unknown split, the LAN listener
+    expect((await at('/v1/messages', raw, 'cwx-nope')).status).toBe(401);
+    expect((await fetch(`${base}/~s/${'0'.repeat(32)}/v1/messages`, { method: 'POST', headers: { authorization: `Bearer ${ep.key}` }, body: raw })).status).toBe(404);
+    expect((await fetch(`${ep.base.replace(base, remoteBase)}/v1/messages`, { method: 'POST', headers: { authorization: `Bearer ${ep.key}` }, body: raw })).status).toBe(404);
+  });
+  it('works with the gateway switched off (it is not a gateway group)', async () => {
+    await gw.setEnabled(false);
+    try {
+      const ep = gw.splitEndpoint('a', 'b', 'claude-haiku-4-5')!;
+      const r = await fetch(`${ep.base}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': ep.key, 'anthropic-version': '2023-06-01' }, body: JSON.stringify({ ...msg, model: 'claude-haiku-4-5' }) });
+      expect(r.status).toBe(200);
+      expect(JSON.parse(await r.text()).content[0].text).toBe('from B');
+    } finally {
+      await gw.setEnabled(true);
+    }
+  });
+});

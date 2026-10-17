@@ -19,3 +19,13 @@ describe('subagent model', () => {
     expect(subagentDefault('nope', 'p1')).toBe('');
   });
 });
+
+describe('a subagent model of another provider', () => {
+  it('round-trips provider and model (a model id may hold colons); plain picks are not one', async () => {
+    const { crossPick, crossValue } = await import('./subagent.js');
+    expect(crossPick(crossValue('p:1', 'org/model:free'))).toEqual({ providerId: 'p:1', model: 'org/model:free' });
+    expect(crossPick('claude-haiku-4-5')).toBeNull();
+    expect(crossPick('')).toBeNull();
+    expect(crossPick('cw-x:p:')).toBeNull();
+  });
+});

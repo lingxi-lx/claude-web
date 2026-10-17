@@ -66,6 +66,8 @@ export interface SubagentMenuOptions {
   /** the current pick is this provider's default for new conversations */
   isDefault: boolean;
   onToggleDefault: () => void;
+  /** other providers whose models are listed too (subagents on another provider: the gateway's split route) */
+  alsoProviders?: string[];
 }
 
 /**
@@ -136,11 +138,15 @@ export function ModelMenu(p: ModelMenuProps) {
   const menu = useMemo(() => {
     const m = buildModelMenu({ agent: p.agent, providers, gatewayGroups: gateway.groups, gatewayEnabled: gateway.enabled, engine, settings, current: p.current, builtin: p.builtin, builtinTitle: p.builtinTitle, agentDefault: p.agentDefault, otherAgents: p.lockProvider ? undefined : p.otherAgents });
     if (!p.lockProvider) return m;
-    const keep = (s: ModelMenuSection) => ({ ...s, items: s.items.filter((i) => i.providerId === p.lockProvider && !i.agent && !(sub && i.isDefault)) });
+    const also = new Set(p.subagent?.alsoProviders ?? []);
+    const keep = (s: ModelMenuSection) => ({ ...s, items: s.items.filter((i) => (i.providerId === p.lockProvider || also.has(i.providerId)) && !i.agent && !(sub && i.isDefault)) });
     // the 子代理 menu: one model of this provider each, no favourites / recents repeating them
     const own = sub ? m.sections.filter((s) => s.kind === 'builtin' || s.kind === 'provider') : m.sections;
-    return { ...m, sections: own.map(keep).filter((s) => s.items.length) };
-  }, [p.agent, providers, gateway, engine, settings, p.current.providerId, p.current.model, p.builtin, p.builtinTitle, p.agentDefault, p.lockProvider, p.otherAgents, sub]);
+    // the conversation's own provider first, the others after it in their usual order
+    const kept = own.map(keep).filter((s) => s.items.length);
+    const mine = (s: ModelMenuSection) => (s.items.some((i) => i.providerId === p.lockProvider) ? 0 : 1);
+    return { ...m, sections: [...kept].sort((a, b) => mine(a) - mine(b)) };
+  }, [p.agent, providers, gateway, engine, settings, p.current.providerId, p.current.model, p.builtin, p.builtinTitle, p.agentDefault, p.lockProvider, p.otherAgents, sub, p.subagent?.alsoProviders?.join('\n')]);
   // 更多模型 ›: long lists fold after the first few until opened (models/menu.ts foldMenu)
   const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set());
   const shown = useMemo(() => foldMenu(filterMenu(menu, q), opened, q), [menu, q, opened]);
