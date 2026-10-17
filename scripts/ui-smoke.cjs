@@ -298,7 +298,7 @@ function driver() {
   const finish = (code) => { res.seconds = Math.round((Date.now() - res.startedAt) / 1000); try { fs.writeFileSync(E.SMOKE_RESULT, JSON.stringify(res, null, 2)); } catch { /* ignore */ } app.exit(code); };
   process.on('uncaughtException', (e) => { log(`uncaught ${e.stack || e}`); check('driver', false, String(e.message || e)); finish(3); });
   // the right-panel (phase 2), sidebar (phase 4) and chat (phase 5) phases together take ~6 minutes on a busy machine
-  const hardStop = setTimeout(() => { check('driver finished in time', false); finish(6); }, (Number(E.SMOKE_IDLE || 0) + 480) * 1000);
+  const hardStop = setTimeout(() => { check('driver finished in time', false); finish(6); }, (Number(E.SMOKE_IDLE || 0) + 600) * 1000);
 
   app.whenReady().then(async () => {
     const show = E.SMOKE_SHOW === '1';
@@ -1245,7 +1245,7 @@ function driver() {
           await sleep(200);
           const r1 = await look();
           await click(`${bar} .mm-anchor > button.chip`);
-          const rowSel = `.menu.mm [data-sec="builtin"] .mm-row:not(.cur):not(.off)`;
+          const rowSel = `.menu.mm [data-sec="builtin"] .mm-row:not(.cur):not(.off):not(.mm-more)`;
           await waitFor(`[...document.querySelectorAll('${rowSel}')].length > 1`, 5000);
           const picked = await js(`(() => { const rows = [...document.querySelectorAll('${rowSel}')]; const r = rows[rows.length - 1]; r.scrollIntoView({ block: 'nearest' }); r.dataset.smokePick = '1'; return r.textContent; })()`);
           await click('.menu.mm [data-smoke-pick="1"]');
@@ -1367,6 +1367,66 @@ function driver() {
           await key('Escape');
           await sleep(200);
           check('model menu: rows numbered 1 2 3…; 强度 › opens the effort menu', JSON.stringify(mm.nums) === JSON.stringify(['1', '2', '3']) && mm.effort && depth, JSON.stringify({ mm, depth }));
+
+          // ---- 2026-10-17: the rest of the recording and the user's screenshots ----
+          // 钉住 under a reply → the info column's 钉住的回复 card; a click there scrolls to it; × unpins (card gone)
+          const pinBtn = '.pane.focused .msg-actions [data-act="pin"]';
+          const hasPin = await js(`!!document.querySelector(${JSON.stringify(pinBtn)})`);
+          let pins = null;
+          if (hasPin) {
+            await click(pinBtn);
+            const card = await waitFor(`!!document.querySelector('.pane.focused .info-card[data-card="pins"] .ic-pin')`, 3000);
+            const stored = await js(`(window.__store.getState().sessionMeta[${sidJs}]?.pinnedMsgs ?? []).length`);
+            await click('.pane.focused .info-card[data-card="pins"] .ic-pin .ic-row-btn');
+            const flashed = await waitFor(`!!document.querySelector('.pane.focused .msg.assistant.msg-flash')`, 2000);
+            await click('.pane.focused .info-card[data-card="pins"] .ic-pin .icon-btn');
+            const gone = await waitFor(`!document.querySelector('.pane.focused .info-card[data-card="pins"]')`, 3000);
+            pins = { card, stored, flashed, gone };
+          }
+          check('钉住 a reply: listed in the info column (SessionMeta.pinnedMsgs), a click there finds it, × unpins', hasPin && pins.card && pins.stored === 1 && pins.flashed && pins.gone, JSON.stringify({ hasPin, pins }));
+          const speak = await js(`!('speechSynthesis' in window) || !!document.querySelector('.pane.focused .msg-actions [data-act="speak"]')`);
+          check('朗读 sits in the reply row (where the browser can speak)', speak);
+          // ☰: the browser's own menu with the official groups
+          await click('[data-id="app-menu"]');
+          const appMenu = await waitFor(`!!document.querySelector('.menu.app-menu')`, 2000);
+          const groups = await js(`[...document.querySelectorAll('.menu.app-menu .menu-label')].map((e) => e.textContent)`);
+          await key('Escape');
+          await sleep(200);
+          check('☰ opens the application menu: 对话 · 编辑 · 视图 · 前往 · 帮助', appMenu && JSON.stringify(groups) === JSON.stringify(['对话', '编辑', '视图', '前往', '帮助']), JSON.stringify(groups));
+          // the account menu over a full page (扩展): nothing of it under the page (user report, macOS)
+          await js(`(() => { const b = [...document.querySelectorAll('.rail [data-id]')].find((e) => e.dataset.id === 'extensions'); b && b.click(); })()`);
+          await waitFor(`!!document.querySelector('.ext-page')`, 3000);
+          await click('.rail-acct');
+          await waitFor(`!!document.querySelector('.sb-acct-menu')`, 2000);
+          const onTop = await js(`(() => { const m = document.querySelector('.sb-acct-menu'); if (!m) return null; const b = m.getBoundingClientRect(); return [[b.right - 10, b.top + 16], [b.right - 10, b.bottom - 16], [b.left + 10, b.top + 16]].every(([x, y]) => m.contains(document.elementFromPoint(x, y))); })()`);
+          await key('Escape');
+          await js(`(() => { const b = [...document.querySelectorAll('.rail [data-id]')].find((e) => e.dataset.id === 'chat'); b && b.click(); })()`);
+          await waitFor(`!document.querySelector('.ext-page:not([hidden])') && !!document.querySelector('.sidebar .sb-list [data-sid]')`, 4000);
+          await js(`window.__store.setState({ sidebarOpen: true })`);
+          await sleep(300);
+          check('the account menu lies over the 扩展 page, not under it', onTop === true, String(onTop));
+          // projects / folders start folded (GitHub issue #3); the current conversation's stays open
+          await js(`window.__store.getState().setSetting('ui.sidebarFolded', true)`);
+          await sleep(500);
+          const fold = await js(`(() => { const gs = [...document.querySelectorAll('.sidebar [data-group]')].filter((g) => !g.classList.contains('sb-sec') && g.dataset.group !== '__other_kept'); const act = document.querySelector('.sidebar .sess.active')?.closest('.sb-group'); return { groups: gs.length, folded: gs.filter((g) => g.classList.contains('collapsed')).length, activeOpen: !!act && !act.classList.contains('collapsed') }; })()`);
+          await js(`window.__store.getState().setSetting('ui.sidebarFolded', false)`);
+          await sleep(300);
+          check('侧栏 folds projects and folders by default, the current conversation\'s open (issue #3)', fold.groups >= 1 && fold.activeOpen && (fold.groups === 1 || fold.folded >= 1), JSON.stringify(fold));
+          // the new-conversation page the official way: 代码 / 聊天, the folder… under a one-line box; the backdrop; ← back
+          await js(`window.__store.getState().setSetting('ui.welcomeLayout', 'under')`);
+          await js(`window.__store.getState().openInPane(null, 'replace')`);
+          const welcomeUp = await waitFor(`!!document.querySelector('.pane.focused .welcome .composer') && window.__store.getState().activeId == null`, 5000);
+          await sleep(500);
+          const wl = await js(`(() => { const c = document.querySelector('.pane.focused .welcome .composer'); const u = c?.querySelector('.composer-under'); return { under: !!u, mode: !!u?.querySelector('.cmp-mode [data-mode="chat"]'), folder: !!u?.querySelector('.dirpick'), boxChips: !!c?.querySelector('.composer-box .dirpick'), backdrop: !!document.querySelector('.pane.focused .welcome-tile > canvas.ascii-field') }; })()`);
+          await click('.pane.focused .composer-under .cmp-mode [data-mode="chat"]');
+          const chatOnly = await waitFor(`!!document.querySelector('.pane.focused .welcome .cap-tag[data-cap="chatOnly"]')`, 2000);
+          await click('.pane.focused .composer-under .cmp-mode [data-mode="code"]');
+          check('新对话页: the chips under a one-line box (代码 / 聊天 → 只聊天), the moving backdrop behind it', wl.under && wl.mode && wl.folder && !wl.boxChips && wl.backdrop && chatOnly, JSON.stringify({ wl, chatOnly }));
+          await click('[data-id="back"]');
+          const backTo = await waitFor(`window.__store.getState().activeId === ${sidJs}`, 4000);
+          await js(`window.__store.getState().setSetting('ui.welcomeLayout', 'inbox')`);
+          check('← goes back to the conversation looked at before (from the new-conversation page)', welcomeUp && backTo, JSON.stringify({ welcomeUp, backTo }));
+          await sleep(400);
           win.setSize(1360, 860);
           await sleep(500);
         }
@@ -2159,7 +2219,7 @@ function driver() {
           await click(':is(.rail, .sidebar) [data-id="automation"]');
           // a closed menu leaves an inert fading copy (.leaving, ui/ghost.ts) for ~120ms: not a menu
           await waitFor('!document.querySelector(".menu.sb-menu:not(.leaving), .menu.sess-menu:not(.leaving)")', 1000);
-          const one = { menus: await count('.menu.sb-menu:not(.leaving), .menu.sess-menu:not(.leaving)'), page: await waitFor(`(() => { const p = document.querySelector('.auto-page'); return !!p && !p.hidden; })()`, 3000), funnel: await exists('.menu.sb-filter'), inert: await exists('.pane-layer[inert]'), active: await exists('.rail [data-id="automation"].on') };
+          const one = { menus: await count('.menu.sb-menu:not(.leaving), .menu.sess-menu:not(.leaving)'), page: await waitFor(`(() => { const p = document.querySelector('.auto-page'); return !!p && !p.hidden; })()`, 3000), funnel: await exists('.menu.sb-filter:not(.leaving)'), inert: await exists('.pane-layer[inert]'), active: await exists('.rail [data-id="automation"].on') };
           check('自动化 opens the automation page (panes underneath inert, the entry marked) and closes the funnel', !one.menus && one.page && !one.funnel && one.inert && one.active, JSON.stringify(one));
           const am = await ids(':is(.auto-page .auto-tabs, .sb-sect:not([hidden]) .auto-side .sect-nav) [data-id]');
           const newBtn = await js(`document.querySelector('.auto-page .auto-head [data-new]')?.textContent ?? null`);
