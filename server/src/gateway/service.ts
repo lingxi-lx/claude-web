@@ -353,11 +353,17 @@ export class GatewayService extends EventEmitter {
       delete body.json.thinking.display;
       body.raw = Buffer.from(JSON.stringify(body.json));
     }
+    // from here on the subagents' request names the real model, so the answer does too (a translated answer echoes
+    // the model it was asked for — the alias showed on the subagent's messages, 2026-10-17 real relay)
+    if (toSub) {
+      body.json.model = split.model;
+      body.raw = Buffer.from(replaceTopLevelString(body.raw.toString('utf8'), 'model', split.model) ?? JSON.stringify(body.json));
+    }
     const params = new URLSearchParams(url.search);
     params.delete('key');
     const ac = new AbortController();
     res.on('close', () => { if (!res.writableFinished) ac.abort(); });
-    const ctx: Ctx = { req, res, group, route: { ...route, stream: !!body.json?.stream }, path: rest, search: params.toString() ? `?${params}` : '', raw: body.raw, json: body.json, model, signal: ac.signal, t0: Date.now(), customTools: new Set() };
+    const ctx: Ctx = { req, res, group, route: { ...route, stream: !!body.json?.stream }, path: rest, search: params.toString() ? `?${params}` : '', raw: body.raw, json: body.json, model: toSub ? split.model : model, signal: ac.signal, t0: Date.now(), customTools: new Set() };
     try {
       await this.run(ctx);
     } finally {

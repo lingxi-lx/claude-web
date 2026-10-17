@@ -482,7 +482,10 @@ describe('subagent split (/gateway/~s/…): the subagents on another provider, t
     // the subagents' model: to O, as Chat Completions
     const r2 = await at('/v1/messages', JSON.stringify({ ...msg, model: 'cw-sub/deepseek-chat' }));
     expect(r2.status).toBe(200);
-    expect(JSON.parse(await r2.text()).content[0].text).toBe('from O');
+    const j2 = JSON.parse(await r2.text());
+    expect(j2.content[0].text).toBe('from O');
+    // the answer names the real model, not the alias the engine asked with
+    expect(j2.model).toBe('deepseek-chat');
     expect(O.hits[0].url).toBe('/v1/chat/completions');
     expect(JSON.parse(O.hits[0].body).model).toBe('deepseek-chat');
     expect(A.hits).toHaveLength(1);

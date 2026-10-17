@@ -16,4 +16,7 @@
   token 是三元组的哈希，同一组合同一个地址。**不看网关总开关**；回环之外 404。
 - 每个请求：`model` 等于子代理模型的别名 `cw-sub/<模型>`（引擎拿到的就是别名，主对话永远不会用到）→ 临时组只有 `sub` 一个成员（`model` 钉住，跨协议就翻译）；其它 → 只有 `main` 一个成员，同协议**原样透传**
   （字节、头顺序都不动，只原位换 key）。`GET /v1/models` 不管带不带 `anthropic-version` 都回主供应商的列表。发给名字里没有 claude 的模型的请求去掉 `thinking.display`（官方二进制整个进程都带）。复用 `run()`，所以 count_tokens / 流式 / 账本都和普通组一样（账本里同一对话的网关行在统计里会被去重）。
+- 子代理的请求进来就把 body 的 model 换成真名（`ctx.model` 也是真名）：翻译过的回答会回显请求里的 model，以前子代理消息上显示的是别名
+  `cw-sub/…`（2026-10-17 真中转实测发现）。真中转实测：用户的 super-nb.me（官方二进制）/ aizhongzhuan.cc（cw.5）当主对话、官方 DeepSeek 当子代理，
+  两种引擎都答对；super-nb.me 的 DeepSeek 当时 503「All available accounts exhausted」，aizhongzhuan.cc 有一阵 503「No available accounts」，都是上游的事。
 - 每个请求后 `states.reset`：一个成员没处可切，上游的 429 / 5xx 原样回给引擎（它自己会重试），不能让网关的冷却把后面的请求也拒掉。
