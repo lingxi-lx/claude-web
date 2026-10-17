@@ -2098,6 +2098,8 @@ html.desktop.mac .app.no-sidebar .workbench:not(.gb) .over-head { padding-left: 
   .app.mobile .perm .actions .btn.danger { order: 4; }
   /* the start page on a phone: the starters scroll sideways in one row */
   .app.mobile .starters { justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; margin: var(--sp-3) calc(-1 * var(--sp-3)) 0; padding: 0 var(--sp-3) 2px; scrollbar-width: none; }
+  /* a row that scrolls sideways says so: the chip at the edge fades out instead of being cut */
+  .app.mobile .starters { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); }
   .app.mobile .chip.starter { flex: none; }
   .app.mobile .guide-row .prog { display: none; }
   .app.mobile .home-row { min-height: 54px; }
