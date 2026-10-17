@@ -109,7 +109,8 @@
 
 ### 新加的界面
 
-- 新 logo：黑色圆角方块 + 方块字「c/w」+ 橙点（参考用户给的几何风格，没有用别人的标）。`web/public/icon.svg` 是唯一源，`node scripts/icons.cjs`
+- logo 是**用户自己给的那张**（黑色超椭圆底 + 白色「r / b」+ 橙点 `#ff5a1f`；第三轮用户说「不要擅自换」——第二轮我自己画的 c/w 已撤掉）：
+  按原图量出的尺寸重画成矢量（超椭圆 n≈4.5）。`web/public/icon.svg` 是唯一源，`node scripts/icons.cjs`
   （sharp）出 PWA / 桌面 / 官网的图；侧栏内联画同样的形状（`ui/AppLogo.tsx`）。
 - 新对话页的动态背景（第二段录屏）：`features/home/AsciiField.tsx`（canvas，15 fps，看不见时不画，减少动效时静止，设置 `ui.welcomeBackdrop`），
   数学在 `ascii-noise.ts`。

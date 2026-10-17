@@ -1,5 +1,5 @@
-// The app's mark everywhere from one drawing, web/public/icon.svg (black rounded square, white block «c/w», an orange
-// dot — 2026-10-17):
+// The app's mark everywhere from one drawing, web/public/icon.svg (the user's logo: a black squircle, white «r / b», an
+// orange dot — 2026-10-17):
 //   node scripts/icons.cjs
 // writes web/public/icon-192.png and icon-512.png (PWA manifest, apple-touch-icon), desktop/build/icon.png (512: the
 // installer, the window and the tray; electron-builder makes .ico / .icns from it) and site/assets/icon.svg.
