@@ -4,6 +4,86 @@
 
 Every version's changes are recorded here; installers are on the [Releases](https://github.com/ypyik0669/claude-web/releases) page. Versions follow [semantic versioning](https://semver.org/).
 
+## [0.2.7] — 2026-10-18
+
+### Added
+
+- **The interface is laid out like the official desktop app.** A column of cards sits to the right of the conversation: environment, a breakdown of the context in use, connectors, changes (with Create PR), background tasks and pinned replies. You can fold the cards and drag them into another order. The conversation header has Review / Browser / Files buttons on the right, and ⋮ gains Side chat, Background tasks and Keep the computer awake. The input box is a single line (+ · text · mic · send); the permission, the model and thinking strength, and the context ring move to a line under it. **Ctrl+Enter cuts in** while a reply is running (Enter still queues). A statusLine set in `~/.claude/settings.json` is drawn above the box, in its own colours.
+- **The new-conversation page** has the same one-line box. Under it are Code / Chat, which computer to start on, the folder, the branch and the permission, with the model on the right.
+- **An animated backdrop on the new-conversation page: Drift.** Letters drift like ink on a slowly turning current. The pointer parts them, a click splashes a ring of accent-coloured letters, and what you type in the box floats out of it from the caret and joins the stream. The setting "Animated backdrop on the new-conversation page" switches it to Field (a dim field of letters with a ripple on every click) or off. With reduced motion on it is a still picture, and phones don't show it.
+- **Claude's thinking has content again.** Thinking rows used to open up empty, because current Claude models leave the thinking text out unless it is asked for. Both the official client and the built-in one ask for it now. A thinking row is titled by its summary's heading, and the step being worked on shows four dots lighting in turn.
+- **Stats for the conversation under the input box:** turns · steps · tok/s (generation speed, from each turn's own model time) · cache hit rate. When the window is narrow, whole items drop out.
+- **Subagents can use any provider's model.** When the conversation is on an Anthropic-format provider, the Subagent menu lists other providers' models (DeepSeek, for example). Subagent requests go to that provider, translated as needed, and the main conversation's requests still go to its own provider unchanged.
+- **Import from other tools** ("Import from other tools…" on the provider list and the connectors page). It reads the providers and MCP servers set up in Hermes, CC Switch, Codex, OpenCode, Continue, Cursor, Windsurf, Kiro, Claude Desktop, VS Code, Cline, Roo, Gemini / Qwen CLI, Zed, Goose and a running Ollama, and imports the ones you tick. It only reads, never changes their files, and skips what you already have. Mirasim and Cherry Studio keep their settings encrypted in a browser database, so they can't be read; the dialog tells you to copy the address and key across yourself.
+- **Next-prompt suggestions:** after a turn, the empty input box shows a grey guess at what you'll say next. Tab or → takes it. You can turn this off in settings.
+- **View modes:** Normal / Show thinking / Verbose. Switch with Ctrl+O or from the conversation header's menu.
+- **Side chat:** `/btw` or Ctrl+; asks something about the conversation without the conversation hearing it. "Add to conversation" puts the answer into the input box.
+- **@ files:** type @ to list the project's files (.gitignore respected); the one you pick goes into the message as @path.
+- **Keyboard shortcuts, matching the official app:**
+  - Ctrl+/ shows them all.
+  - Alt+M opens the model menu, and Ctrl+Shift+E the thinking strength.
+  - Shift+Tab in an empty box steps through the permission modes (only the safe ones).
+  - 1–9 pick a row in a menu.
+  - Ctrl+\ closes the current split, and Ctrl / Cmd + click on a conversation in the sidebar opens it in a split beside.
+  - Alt+← / → go back and forward through the conversations you've looked at (⌘[ ⌘] on macOS; the mouse's side buttons work too).
+- **Comments on diff lines in Review:** click a line to write a comment. Ctrl+Enter hands all the comments to Claude as one message.
+- **Code review card:** `/code-review` lists its findings by file. Each one has "Fix this" or "Ignore", and "Fix the open ones" handles the rest at once.
+- **PR status bar:** when the current branch has a PR, the bar above the conversation shows the PR and its checks. Its CI menu has "Fix CI failures automatically" (it asks the conversation to fix them once per push) and GitHub auto-merge. Once the PR is merged or closed, the conversation is archived (this can be turned off).
+- **Right-click a file path** to add it to the next message, open it in VS Code / Cursor / Zed (whichever are installed), show it in Explorer / Finder, or copy the path.
+- **Cross-conversation tools:** Claude can list, read, message and rename the other conversations on this computer, and archive them once you say yes. Tasks it suggests become a button that starts a new conversation in a worktree of its own.
+- **Local environment variables** (in settings) are stored encrypted on this computer. Every conversation and terminal this app starts gets them.
+- **Where worktrees go, and their branch prefix,** can be set. With either set, the files `.worktreeinclude` lists that git ignores are copied into a new worktree.
+- **Start a new conversation on another computer:** pick a connected computer on the new-conversation page, and the conversation runs there with that computer's own models and settings.
+- **Scheduled tasks:**
+  - A run missed in the last seven days runs once, and you're told about it; older ones are dropped.
+  - A new "Manual" kind runs only when you click Run now.
+  - Each run can have a worktree of its own.
+- **Chat only:** start a conversation from the + menu with no tools at all (none of the built-in ones, ours, or your own MCP servers).
+- **What's new:** after an update, the app shows once what this version changed, in the interface language. The command palette and Settings → App updates show it any time.
+- **Overview** gains three lanes: Awaiting review (an open PR waiting for review), Landing (approved, or set to merge itself) and Resolved (archived in the last week).
+- **Right panel → Files** lists the files generated in recent conversations: pages, documents, pictures and data Claude wrote in the 50 most recent conversations that are still on disk. Each one links back to the conversation that made it.
+- **Preview servers:** if the project has `.claude/launch.json` (the official format), Claude can start the dev server, read its logs and stop it, and opens it in the app's browser. The browser's empty page lists these servers too, and ▶ starts one.
+- **Under a reply:** Pin (pinned replies are listed in the right-hand column), Read aloud, Fork, and a time such as "2 minutes ago".
+- **☰ and ← → in the title bar:** ☰ opens the app menu, and the desktop app gains a Go menu with back / forward.
+- `claude-web://` links: `new?folder=…&q=…` opens a filled-in new-conversation page (it never sends by itself), and `session/<id>` opens a conversation. Only the installed app registers them.
+- The official desktop app's anthropic-skills plugin works here too (anthropic-skills:xlsx and the like in a conversation). A setting turns it off.
+
+### Changed
+
+- **Texture:**
+  - Menus, toasts, cards, switches, the right panel and phone sheets move on spring curves.
+  - Edges are hairlines on 2x screens; dark themes get a faintly lit inner ring, and menus and dialogs a contact shadow.
+  - Lists fade at an edge only while there is more to scroll past it.
+  - Latin text is lighter in dark themes (Chinese is unchanged).
+- **Sidebar:**
+  - Search matches conversation titles and folder names only (#7).
+  - Projects and folders start folded, with the current one open (#3).
+  - The By provider lists fold (#4).
+  - The built-in Claude reads "Claude Code · <relay host>" when settings.json points it at a relay (#5, #6).
+- The app icon is the new logo.
+- The desktop app no longer shows a microphone button: in Electron, speech recognition fails on every start.
+
+### Fixed
+
+- **After sending a picture on its own, every later turn of that conversation failed with a 400** (cache_control / non-empty text). The empty text block is no longer sent, and a conversation that already broke repairs its transcript and restarts once when that 400 comes back.
+- **Codex conversations failed to start.** When Codex can't read its own configuration (for example a model_catalog_json that codexmate wrote into config.toml, older than the installed Codex), the message now names the setting, the file, who wrote it and how to get going again, instead of a raw log. Your files are left untouched.
+- **A conversation whose first message was long (a pasted screenshot, say) vanished from the list**, in other apps such as Mirasim too, and its folder was lost (#9). Both are back. A new conversation not listed yet reads "New conversation" instead of its id (#8).
+- **A conversation renamed while it was running got its old name back.**
+- **Images over 2000 px failed with "Could not load the sharp module".**
+- **"Background · 19 commands":** background commands and subagents that ended during a turn kept counting as running.
+- The rail's account and ··· menus were cut off under a full page (Extensions, Background…).
+- Layout fixes:
+  - ☰ at the top of the rail was half cut off by the window's edge.
+  - The permission and model buttons overlapped when the row under the new-conversation box was crowded.
+  - On phones, the title ran under the buttons on the right.
+- tok/s in the stats used to be far too low (the model time came back as a running total).
+- With subagents on another provider's model, their messages showed an internal alias instead of the real model name.
+- @ completion could turn a plain word into a file name, Shift+Tab could step onto a hidden permission mode, and the PR bar could pick up a PR from someone else's fork with the same branch name.
+- On macOS, Ctrl now shows as Cmd in shortcuts, and English sentences keep Claude / GitHub capitalised.
+- A link's folder must be a full local path: a network path is never looked up, so Windows never logs in to that host. "Where worktrees go" also takes only a full local path.
+- A chat-only conversation stays without tools after a reopen, a fork, a message from another conversation, IM, a scheduled task or a provider switch.
+- Two conversations told to keep each other informed no longer answer each other forever: one conversation takes at most 10 messages every 10 minutes.
+
 ## [0.2.6] — 2026-10-16
 
 ### Added
