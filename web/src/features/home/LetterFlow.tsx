@@ -166,13 +166,18 @@ export function LetterFlow() {
     };
     // what is typed in the box: from where the caret is — a hidden copy of the box (same width, font, padding and
     // wrapping) with the text before the caret and a marker after it; the marker is where the caret is
+    // (a very long text would be laid out again on every key: past this many characters before the caret, the letters
+    // come from the top of the box instead)
+    const MIRROR_MAX = 4000;
     const caret = (ta: HTMLTextAreaElement) => {
       const r = ta.getBoundingClientRect();
+      const upto = ta.selectionStart ?? ta.value.length;
+      if (upto > MIRROR_MAX) return local(r.left + r.width / 2, r.top + 10);
       const cs = getComputedStyle(ta);
       const mirror = document.createElement('div');
       for (const p of ['boxSizing', 'width', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'letterSpacing', 'lineHeight', 'textTransform', 'wordSpacing', 'tabSize', 'textIndent'] as const) (mirror.style as any)[p] = (cs as any)[p];
       Object.assign(mirror.style, { position: 'fixed', left: '0', top: '0', visibility: 'hidden', whiteSpace: 'pre-wrap', overflowWrap: 'break-word', wordBreak: cs.wordBreak, borderStyle: 'solid' });
-      mirror.textContent = ta.value.slice(0, ta.selectionStart ?? ta.value.length);
+      mirror.textContent = ta.value.slice(0, upto);
       const mark = document.createElement('span');
       mark.textContent = '\u200b';
       mirror.appendChild(mark);
@@ -186,6 +191,11 @@ export function LetterFlow() {
     };
     const emit = (target: EventTarget | null, text: string | null | undefined) => {
       if (reduce || !text || !(target instanceof HTMLTextAreaElement) || !target.closest('.composer')) return;
+      // measured after the key's own frame is painted: the caret lookup is a layout, and the typed text shows first
+      requestAnimationFrame(() => setTimeout(() => spawnAt(target, text), 0));
+    };
+    const spawnAt = (target: HTMLTextAreaElement, text: string) => {
+      if (!target.isConnected) return;
       motes.push(...typed(text, caret(target), rand));
       // never more than a page's worth of guests
       const guests = motes.filter((m) => m.guest);
