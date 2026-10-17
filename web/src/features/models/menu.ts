@@ -46,6 +46,8 @@ export interface ModelMenuSection {
   id: string; // 'favorites' | 'recent' | 'builtin' | <providerId> | 'agent:<kind>'
   kind: 'favorites' | 'recent' | 'builtin' | 'provider' | 'agent';
   title: string;
+  /** 更多模型 ›: how many of its models wait behind that row (foldMenu) */
+  more?: number;
   providerId?: string;
   providerType?: ProviderType;
   /** kind 'agent': which agent */
@@ -345,6 +347,25 @@ export interface ModelRow {
   providers: { id: string; name: string; isDefault: boolean }[];
   /** the ui.disabledModels / ui.favoriteModels keys this row stands for */
   keys: string[];
+}
+
+/** How many of a long list show before 「更多模型 ›」 (the official menu's four, plus one). */
+export const FIRST_MODELS = 5;
+
+/**
+ * 更多模型 ›: a model list or account longer than FIRST_MODELS shows its first ones (and the current one wherever it is);
+ * the rest wait behind one row until it is opened. Searching shows everything. `more` on a section = how many wait.
+ */
+export function foldMenu<M extends { sections: ModelMenuSection[] }>(m: M, opened: ReadonlySet<string>, query: string): M {
+  if (query.trim()) return m;
+  return {
+    ...m,
+    sections: m.sections.map((s) => {
+      if ((s.kind !== 'builtin' && s.kind !== 'provider') || opened.has(s.id) || s.items.length <= FIRST_MODELS + 1) return s;
+      const keep = s.items.filter((it, i) => i < FIRST_MODELS || it.current);
+      return { ...s, items: keep, more: s.items.length - keep.length };
+    }),
+  };
 }
 
 /** Settings → Models, "by model": each model id once, with every profile that serves it. */

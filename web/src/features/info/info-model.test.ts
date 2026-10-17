@@ -3,13 +3,13 @@ import { connectorSummary, contextBreakdown, fmtTokens, moveCard, normInfoLayout
 
 describe('信息栏 layout', () => {
   it('a stored layout is repaired: unknown dropped, duplicates gone, new cards appended; context folded by default', () => {
-    expect(normInfoLayout(undefined)).toEqual({ order: ['env', 'context', 'connectors', 'changes', 'background'], collapsed: ['context'] });
-    expect(normInfoLayout({ order: ['changes', 'bogus', 'changes', 'env'], collapsed: ['env', 'x'] })).toEqual({ order: ['changes', 'env', 'context', 'connectors', 'background'], collapsed: ['env'] });
+    expect(normInfoLayout(undefined)).toEqual({ order: ['env', 'context', 'connectors', 'changes', 'background', 'pins'], collapsed: ['context'] });
+    expect(normInfoLayout({ order: ['changes', 'bogus', 'changes', 'env'], collapsed: ['env', 'x'] })).toEqual({ order: ['changes', 'env', 'context', 'connectors', 'background', 'pins'], collapsed: ['env'] });
   });
   it('drag to before another card, or to the end; Alt+arrows swap neighbours', () => {
     const l = normInfoLayout(undefined);
-    expect(moveCard(l, 'background', 'env').order).toEqual(['background', 'env', 'context', 'connectors', 'changes']);
-    expect(moveCard(l, 'env', null).order).toEqual(['context', 'connectors', 'changes', 'background', 'env']);
+    expect(moveCard(l, 'background', 'env').order).toEqual(['background', 'env', 'context', 'connectors', 'changes', 'pins']);
+    expect(moveCard(l, 'env', null).order).toEqual(['context', 'connectors', 'changes', 'background', 'pins', 'env']);
     expect(nudgeCard(l, 'context', -1).order.slice(0, 2)).toEqual(['context', 'env']);
     expect(nudgeCard(l, 'env', -1)).toBe(l);
     expect(toggleCard(toggleCard(l, 'env'), 'env').collapsed).toEqual(['context']);

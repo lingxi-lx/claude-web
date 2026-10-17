@@ -29,10 +29,12 @@ function useLayout(): [InfoLayout, (l: InfoLayout) => void] {
 export function InfoColumn({ sessionId }: { sessionId: string }) {
   const [layout, setLayout] = useLayout();
   const [drag, setDrag] = useState<InfoCard | null>(null);
-  const titles: Record<InfoCard, string> = { env: tr('环境'), context: tr('上下文'), connectors: tr('连接器'), changes: tr('改动'), background: tr('后台任务') };
+  const titles: Record<InfoCard, string> = { env: tr('环境'), context: tr('上下文'), connectors: tr('连接器'), changes: tr('改动'), background: tr('后台任务'), pins: tr('钉住的回复') };
+  // 钉住 is there once a reply is pinned
+  const pins = useStore((s) => s.sessionMeta[sessionId]?.pinnedMsgs?.length ?? 0);
   return (
     <aside className="info-col" aria-label={tr('对话信息')}>
-      {layout.order.map((card) => (
+      {layout.order.filter((card) => card !== 'pins' || pins > 0).map((card) => (
         <section
           key={card}
           className={clsx('info-card', layout.collapsed.includes(card) && 'folded', drag === card && 'dragging')}
@@ -73,6 +75,7 @@ function CardSummary({ card, sessionId }: { card: InfoCard; sessionId: string })
   if (card === 'connectors') return conns.broken ? <span className="warn">{tr('{n} 个要重连', { n: conns.broken })}</span> : conns.rows.length ? <span>{conns.rows.length}</span> : null;
   if (card === 'changes') return stat && stat.files ? <><span className="add">+{stat.added}</span> <span className="del">−{stat.removed}</span></> : null;
   if (card === 'background') return running ? <span>{running}</span> : null;
+  if (card === 'pins') return <PinCount sessionId={sessionId} />;
   return null;
 }
 
@@ -81,7 +84,40 @@ function CardBody({ card, sessionId }: { card: InfoCard; sessionId: string }) {
   if (card === 'context') return <ContextCard sessionId={sessionId} />;
   if (card === 'connectors') return <ConnectorsCard sessionId={sessionId} />;
   if (card === 'changes') return <ChangesCard sessionId={sessionId} />;
+  if (card === 'pins') return <PinsCard sessionId={sessionId} />;
   return <BackgroundCard sessionId={sessionId} />;
+}
+
+// ---------- 钉住 ----------
+
+const NO_PINS: { id: string; text: string }[] = [];
+
+function PinCount({ sessionId }: { sessionId: string }) {
+  const n = useStore((s) => s.sessionMeta[sessionId]?.pinnedMsgs?.length ?? 0);
+  return n ? <span>{n}</span> : null;
+}
+
+/** Pinned replies; a click scrolls the conversation to one (it lights up for a moment), × unpins. */
+function PinsCard({ sessionId }: { sessionId: string }) {
+  const pins = useStore((s) => s.sessionMeta[sessionId]?.pinnedMsgs ?? NO_PINS);
+  const jump = (id: string, at: HTMLElement) => {
+    const el = at.closest('.chat-tile')?.querySelector<HTMLElement>(`.msg.assistant[data-msg="${CSS.escape(id)}"]`);
+    if (!el) { useStore.getState().toast(tr('这条回复在折起来的一轮里，或者已经不在这段对话里了')); return; }
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el.classList.add('msg-flash');
+    setTimeout(() => el.classList.remove('msg-flash'), 1600);
+  };
+  const unpin = (id: string) => void useStore.getState().setSessionMeta(sessionId, { pinnedMsgs: pins.filter((p) => p.id !== id) });
+  return (
+    <>
+      {pins.map((p) => (
+        <div key={p.id} className="ic-row ic-pin">
+          <button className="ic-row-btn" onClick={(e) => jump(p.id, e.currentTarget)} title={tr('跳到这条回复')}><Icon name="pin" size={13} /><span className="ic-row-t">{p.text || tr('（没有文字的回复）')}</span></button>
+          <button className="icon-btn xs" onClick={() => unpin(p.id)} title={tr('取消钉住')} aria-label={tr('取消钉住')}><Icon name="close" size={11} /></button>
+        </div>
+      ))}
+    </>
+  );
 }
 
 const Row = ({ icon, children, title, end }: { icon: IconName; children: React.ReactNode; title?: string; end?: React.ReactNode }) => (

@@ -206,7 +206,7 @@ function Thinking({ b, streaming }: { b: ThinkingBlock; streaming: boolean }) {
 const Assistant = memo(function Assistant({ it, version }: { it: AssistantItem; version: number }) {
   const segs = useMemo(() => segment(it.blocks), [it.blocks, version]);
   return (
-    <div className="msg assistant">
+    <div className="msg assistant" data-msg={it.id}>
       {segs.map((s, idx) => {
         if (s.kind === 'text') return <div key={idx} className={clsx(it.streaming && idx === segs.length - 1 && 'cursor')}><Markdown text={(s.b as any).text} streaming={it.streaming && idx === segs.length - 1} /></div>;
         if (s.kind === 'thinking') return <Thinking key={idx} b={s.b as ThinkingBlock} streaming={it.streaming && idx === segs.length - 1} />;

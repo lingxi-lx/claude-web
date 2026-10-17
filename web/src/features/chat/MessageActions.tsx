@@ -77,8 +77,34 @@ export function UserActions({ it, sessionId, onEdit }: { it: UserItem; sessionId
   );
 }
 
+/** 朗读 (the official row's speaker): the reply's words, without the Markdown marks, in the voice of its language. */
+let speaking: string | null = null;
+function speak(id: string, text: string, onEnd: () => void): boolean {
+  const synth = window.speechSynthesis;
+  if (!synth) return false;
+  synth.cancel();
+  if (speaking === id) { speaking = null; return false; }
+  const plain = text.replace(/```[\s\S]*?```/g, ' ').replace(/[#>*_`~|-]+/g, ' ').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\s+/g, ' ').trim();
+  const u = new SpeechSynthesisUtterance(plain.slice(0, 8000));
+  u.lang = /[\u3400-\u9fff]/.test(plain) ? 'zh-CN' : 'en-US';
+  u.onend = u.onerror = () => { if (speaking === id) speaking = null; onEnd(); };
+  speaking = id;
+  synth.speak(u);
+  return true;
+}
+
+/** 钉住: a pinned reply is listed in the info column's 钉住 card (SessionMeta.pinnedMsgs), to come back to. */
+function togglePin(sessionId: string, id: string, text: string) {
+  const st = useStore.getState();
+  const cur = st.sessionMeta[sessionId]?.pinnedMsgs ?? [];
+  const next = cur.some((p) => p.id === id) ? cur.filter((p) => p.id !== id) : [...cur, { id, text: text.replace(/\s+/g, ' ').trim().slice(0, 120) }];
+  void st.setSessionMeta(sessionId, { pinnedMsgs: next });
+}
+
 export function AssistantActions({ it, sessionId }: { it: AssistantItem; sessionId: string }) {
   const st = useStore.getState;
+  const pinned = useStore((s) => !!s.sessionMeta[sessionId]?.pinnedMsgs?.some((p) => p.id === it.id));
+  const [talking, setTalking] = useState(false);
   const fb = useStore((s) => s.open[sessionId]?.feedback[it.id]?.rating ?? null);
   const setFeedback = useStore((s) => s.setFeedback);
   const text = it.blocks.filter((b) => b.type === 'text').map((b: any) => b.text).join('\n\n');
@@ -95,6 +121,8 @@ export function AssistantActions({ it, sessionId }: { it: AssistantItem; session
       <button className={clsx(fb === 'down' && 'on')} title={tr('差评')} aria-label={tr('差评')} aria-pressed={fb === 'down'} onClick={() => setFeedback(sessionId, it.id, fb === 'down' ? null : 'down')}><Icon name="thumbDown" size={14} /></button>
       <button title={tr('导出这一轮为 HTML')} aria-label={tr('分享本轮')} onClick={turn}><Icon name="share" size={14} /></button>
       {/* the official app's row also has 分叉 and when it was said (phase 6 §6) */}
+      <button data-act="pin" className={clsx(pinned && 'on')} title={pinned ? tr('取消钉住') : tr('钉住这条回复（在右边信息栏的「钉住的回复」里能找回）')} aria-label={pinned ? tr('取消钉住') : tr('钉住')} aria-pressed={pinned} onClick={() => togglePin(sessionId, it.id, text)}><Icon name={pinned ? 'pinFill' : 'pin'} size={14} /></button>
+      {'speechSynthesis' in window && text && <button data-act="speak" className={clsx(talking && 'on')} title={talking ? tr('停止朗读') : tr('朗读这条回复')} aria-label={talking ? tr('停止朗读') : tr('朗读')} aria-pressed={talking} onClick={() => setTalking(speak(it.id, text, () => setTalking(false)))}><Icon name={talking ? 'volumeOff' : 'volume'} size={14} /></button>}
       {it.uuid && <button data-act="fork" title={tr('从这条回复之后分叉出新对话（原对话不变）')} aria-label={tr('分叉')} onClick={() => st().forkAt(sessionId, it.uuid!).catch((e) => st().toast(e.message))}><Icon name="branch" size={14} /></button>}
       {it.ts && <span className="msg-time" title={new Date(it.ts).toLocaleString(dateLocale())}>{agoText(it.ts)}</span>}
     </div>

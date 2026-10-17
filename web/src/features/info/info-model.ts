@@ -1,7 +1,7 @@
 // 信息栏 (spec 2026-10-16 recording-ux §1; the official app's right column): what the cards are, in what order, which are
 // folded (meta.json `ui.infoCards`), and the context breakdown grouped for the 上下文 card. Pure.
 
-export const INFO_CARDS = ['env', 'context', 'connectors', 'changes', 'background'] as const;
+export const INFO_CARDS = ['env', 'context', 'connectors', 'changes', 'background', 'pins'] as const;
 export type InfoCard = (typeof INFO_CARDS)[number];
 export interface InfoLayout { order: InfoCard[]; collapsed: InfoCard[] }
 

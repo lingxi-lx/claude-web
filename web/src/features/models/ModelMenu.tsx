@@ -5,7 +5,7 @@ import { useStore } from '@/store';
 import { ago, clsx } from '@/util';
 import { AGENT_ICONS, Icon } from '@/ui/icons';
 import { TERMS } from '@/ui/terms';
-import { buildModelMenu, filterMenu, pushRecent, recentKey, type AgentSource, type ModelMenuItem, type ModelMenuSection } from './menu';
+import { buildModelMenu, filterMenu, foldMenu, pushRecent, recentKey, type AgentSource, type ModelMenuItem, type ModelMenuSection } from './menu';
 import { refreshAllModels, useGatewayStatus, useRefreshRun } from './data';
 import { placeMenu, samePlacement, withOrigin, type Placement } from './place';
 import { MODEL_MENU_ID, SUBAGENT_MENU_ID } from '@/features/composer/ids';
@@ -141,7 +141,9 @@ export function ModelMenu(p: ModelMenuProps) {
     const own = sub ? m.sections.filter((s) => s.kind === 'builtin' || s.kind === 'provider') : m.sections;
     return { ...m, sections: own.map(keep).filter((s) => s.items.length) };
   }, [p.agent, providers, gateway, engine, settings, p.current.providerId, p.current.model, p.builtin, p.builtinTitle, p.agentDefault, p.lockProvider, p.otherAgents, sub]);
-  const shown = useMemo(() => filterMenu(menu, q), [menu, q]);
+  // 更多模型 ›: long lists fold after the first few until opened (models/menu.ts foldMenu)
+  const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set());
+  const shown = useMemo(() => foldMenu(filterMenu(menu, q), opened, q), [menu, q, opened]);
   // keyboard / Enter only walk entries that can be picked (unavailable profiles are shown, not selectable)
   const flat = useMemo(() => shown.sections.flatMap((s) => s.items.filter((it) => !it.unavailable).map((it) => ({ s, it }))), [shown]);
 
@@ -265,6 +267,14 @@ export function ModelMenu(p: ModelMenuProps) {
                 </div>
               );
             })}
+            {!!s.more && (
+              <div role="option" aria-selected={false} data-id={MODEL_MENU_ID.more} className="mm-row mm-more" onClick={() => { setOpened((o) => new Set([...o, s.id])); input.current?.focus(); }} title={tr('列出这里其余的模型')}>
+                <span className="mm-check" />
+                <span className="mm-label"><span className="m">{tr('更多模型')}</span></span>
+                <span className="mm-num">{s.more}</span>
+                <Icon name="chevronRight" size={12} />
+              </div>
+            )}
           </div>
         ))}
         {!flat.length && <div className="mm-empty">{q ? tr('没有匹配「{q}」的模型', { q }) : tr('没有可选的模型')}</div>}

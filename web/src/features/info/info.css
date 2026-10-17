@@ -65,3 +65,8 @@
 .info-card .toggle.sm, .menu.sess-menu .toggle.sm { width: 28px; height: 16px; }
 .info-card .toggle.sm::after, .menu.sess-menu .toggle.sm::after { width: 12px; height: 12px; }
 .info-card .toggle.sm.on::after, .menu.sess-menu .toggle.sm.on::after { transform: translateX(12px); }
+
+/* 钉住: a pinned reply's row; the reply lights up when jumped to */
+.info-card .ic-pin .ic-row-btn { flex: 1; min-width: 0; }
+.msg.assistant.msg-flash { animation: msg-flash 1.6s var(--ease-out); border-radius: var(--r-md); }
+@keyframes msg-flash { 0%, 30% { background: color-mix(in oklab, var(--accent) 14%, transparent); } 100% { background: transparent; } }
