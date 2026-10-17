@@ -5,18 +5,23 @@ import { LETTERS, ambient, moteAlpha, moteCount, splash, step, typed, type Mote 
 /**
  * 字流 (letter-flow.ts): letters drifting like ink in slow water, a short trail behind each, the pointer parting
  * them, a click splashing accent letters, and what is typed in the box floating out of it to join the stream.
- * 30 fps while the page is on screen and the window visible; one still frame when motion is reduced.
+ * 20 fps while the page is on screen and the window visible; one still frame when motion is reduced.
  * Cheap: the field's letters are stamped from a sheet drawn once (no text layout per frame); only the few accent
  * letters (typed, splashed — any script) are drawn as text; one fill a frame lets the trails fade.
  */
 
-const FPS = 24;
+const FPS = 20;
 /** the field's ink at its strongest; quieter behind the page's words */
 const INK = 0.36;
 const QUIET_PAD = 10;
 const QUIET_RAMP = 70;
 const QUIET_FLOOR = 0.3;
-/** how much of the previous frame each frame takes away (the trail's length) */
+/**
+ * The trail: each frame first lays the page's own background colour over the last one at this strength. Not a fade
+ * to transparent (destination-out): that never reaches zero in 8-bit alpha — a haze of alpha 2/255 covered the
+ * whole page after a minute (2026-10-17 review). Towards an opaque colour, what is left is within a level of it.
+ * (Drawing each letter again behind itself instead cost six times the drawing.)
+ */
 const TRAIL_FADE = 0.24;
 
 export function LetterFlow() {
@@ -63,6 +68,7 @@ export function LetterFlow() {
       canvas.width = Math.max(1, Math.round(w * dpr));
       canvas.height = Math.max(1, Math.round(h * dpr));
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      fresh = true;
       const want = moteCount(w, h);
       const ambientNow = motes.filter((m) => !m.guest);
       motes = [...ambientNow.slice(0, want), ...Array.from({ length: Math.max(0, want - ambientNow.length) }, () => ambient(w, h, rand)), ...motes.filter((m) => m.guest)];
@@ -70,8 +76,12 @@ export function LetterFlow() {
     };
     const calmAt = (() => {
       let q: { l: number; t: number; r: number; b: number } | null = null;
+      let at = -1e9;
       return {
-        update() {
+        // where the page's words are, looked at twice a second (a layout read every frame forced a layout while typing)
+        update(now: number) {
+          if (now - at < 500) return;
+          at = now;
           const r = canvas.getBoundingClientRect();
           const col = canvas.parentElement?.querySelector('.home-col')?.getBoundingClientRect();
           q = col && col.width > 0 ? { l: col.left - r.left - QUIET_PAD, t: col.top - r.top - QUIET_PAD, r: col.right - r.left + QUIET_PAD, b: col.bottom - r.top + QUIET_PAD } : null;
@@ -83,17 +93,28 @@ export function LetterFlow() {
         },
       };
     })();
+    // the colour under the canvas: the first ancestor with a background (the pane's), looked at again now and then
+    let bg = '', bgAt = 0;
+    const background = (now: number) => {
+      if (bg && now - bgAt < 1000) return bg;
+      bgAt = now;
+      for (let e: HTMLElement | null = canvas.parentElement; e; e = e.parentElement) {
+        const c = getComputedStyle(e).backgroundColor;
+        if (c && c !== 'transparent' && !/rgba\(.*,\s*0\)$/.test(c)) { bg = c; return bg; }
+      }
+      bg = 'rgb(0,0,0)';
+      return bg;
+    };
+    let fresh = true;
     const draw = (trail: boolean) => {
-      if (trail) {
-        ctx.globalCompositeOperation = 'destination-out';
-        ctx.globalAlpha = 1;
-        ctx.fillStyle = `rgba(0,0,0,${TRAIL_FADE})`;
-        ctx.fillRect(0, 0, w, h);
-        ctx.globalCompositeOperation = 'source-over';
-      } else ctx.clearRect(0, 0, w, h);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = trail && !fresh ? TRAIL_FADE : 1;
+      ctx.fillStyle = background(performance.now());
+      ctx.fillRect(0, 0, w, h);
+      fresh = false;
       ctx.textBaseline = 'middle';
       ctx.textAlign = 'center';
-      calmAt.update();
+      calmAt.update(performance.now());
       let font = '';
       const sw = CELL * dpr;
       for (const m of motes) {
@@ -104,14 +125,17 @@ export function LetterFlow() {
           // typed / splashed (any script): the accent, as text
           const f = `${Math.round(m.size)}px ${mono}`;
           if (f !== font) { ctx.font = f; font = f; }
-          ctx.globalAlpha = a * (m.accent > 0.04 ? 0.25 + 0.75 * m.accent : INK);
+          const ta = a * (m.accent > 0.04 ? 0.25 + 0.75 * m.accent : INK);
           ctx.fillStyle = m.accent > 0.04 ? lit : ink;
+          ctx.globalAlpha = ta;
           ctx.fillText(m.ch, m.x, m.y);
           continue;
         }
-        ctx.globalAlpha = a * INK * calmAt.at(m.x, m.y);
-        if (ctx.globalAlpha < 0.015) continue;
-        ctx.drawImage(sheet, cell * sw, 0, sw, sw, m.x - CELL / 2, m.y - CELL / 2, CELL, CELL);
+        const fa = a * INK * calmAt.at(m.x, m.y);
+        if (fa < 0.015) continue;
+        const sx = cell * sw;
+        ctx.globalAlpha = fa;
+        ctx.drawImage(sheet, sx, 0, sw, sw, m.x - CELL / 2, m.y - CELL / 2, CELL, CELL);
       }
       ctx.globalAlpha = 1;
     };
