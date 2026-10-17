@@ -10,6 +10,8 @@ import { withLanguage } from './i18n/boot.js';
 import { LANGUAGE_KEY } from './i18n/core.js';
 import { RunnerPool } from './runtime/pool.js';
 import { SessionService } from './sessions/service.js';
+import { appendLastPrompt } from './sessions/unlisted.js';
+import { getSessionInfo } from '@anthropic-ai/claude-agent-sdk';
 import { ConfigService } from './config/service.js';
 import { UsageService } from './usage/service.js';
 import { providerTimeline } from './usage/timeline.js';
@@ -438,6 +440,19 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     setTimeout(() => {
       void library.rename(sid, title).catch(() => {}).finally(() => { void meta.setSessionMeta(sid, { pendingTitle: undefined }); sessionsSvc.emit('changed'); });
     }, 500).unref?.();
+  });
+  // a conversation whose process ended without the title lines a clean CLI exit writes, and whose first prompt is too
+  // long for the SDK's head read, is listed by no app that reads Claude Code's history through the SDK (Mirasim…):
+  // write the `last-prompt` line the CLI would have (sessions/unlisted.ts)
+  pool.on('state', (sid: string, state: string) => {
+    if (state !== 'closed' && state !== 'error') return;
+    setTimeout(() => {
+      void (async () => {
+        if (await getSessionInfo(sid).catch(() => undefined)) return;
+        const file = findClaudeTranscript(sid);
+        if (file && appendLastPrompt(file, sid)) sessionsSvc.emit('changed');
+      })().catch(() => {});
+    }, 1500).unref?.();
   });
   await anywhere.start();
   await im.startAll();

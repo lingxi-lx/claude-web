@@ -9,6 +9,7 @@ import { findClaudeTranscript, hasClaudeTranscript } from '../runtime/transcript
 import { closeSync, openSync, readSync } from 'node:fs';
 import { BRIEFING_HEAD } from '../session/handoff.js';
 import { tr } from '../i18n/index.js';
+import { summaryFromFile, unlistedTranscripts } from './unlisted.js';
 
 export const claudeDir = process.env.CLAUDE_CONFIG_DIR ?? path.join(os.homedir(), '.claude');
 export const projectsDir = path.join(claudeDir, 'projects');
@@ -133,7 +134,10 @@ export class SessionService extends EventEmitter {
     const fetchLimit = Math.max(2000, limit);
     const gen = this.gen;
     const all = await listSessions({ limit: fetchLimit });
-    const out = all.map(toSummary).sort((a, b) => b.lastModified - a.lastModified);
+    // + what the SDK skipped (a long first prompt and no title at the end: sessions/unlisted.ts)
+    const ids = new Set(all.map((s) => s.sessionId));
+    const extra = unlistedTranscripts(path.join(claudeDir, 'projects'), ids).map(summaryFromFile).filter((x): x is SessionSummary => !!x);
+    const out = [...all.map(toSummary), ...extra].sort((a, b) => b.lastModified - a.lastModified);
     // a write landed while we were scanning: this result may predate it, so don't pin it as the cache
     if (gen === this.gen) { this.cache = out; this.cacheLimit = fetchLimit; }
     return out.slice(0, limit);
