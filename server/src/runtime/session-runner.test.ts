@@ -132,7 +132,7 @@ describe('SessionRunner', () => {
     await r.setModel('opus'); // setModel fails → respawn
     await tick();
     expect(queries).toHaveLength(2);
-    expect(queries[1].options.extraArgs).toEqual({ chrome: null, worktree: 'wt' });
+    expect(queries[1].options.extraArgs).toEqual({ chrome: null, worktree: 'wt', 'thinking-display': 'summarized' });
     // the old query ending must not be reported as the session closing
     expect(states).not.toContain('closed');
     expect(r.state).toBe('idle');
@@ -605,6 +605,25 @@ describe('SessionRunner: the engine follows the model, effort on ccb, per-turn c
       await tick();
       expect('ultracode' in queries[2].options.extraArgs).toBe(false);
       await a.close();
+    } finally {
+      eng.kind = 'claude';
+    }
+  });
+
+  it('Claude’s thinking comes back as text: --thinking-display on the official binary, an env var on ccb (it refuses the flag)', async () => {
+    queries.length = 0;
+    const a = new SessionRunner({ sessionId: 'th1', cwd: '/x', model: 'claude-opus-5-5' } as any);
+    await tick();
+    expect(queries[0].options.extraArgs['thinking-display']).toBe('summarized');
+    expect(queries[0].options.env?.CLAUDE_WEB_THINKING_DISPLAY).toBeUndefined();
+    await a.close();
+    eng.kind = 'ccb';
+    try {
+      const b = new SessionRunner({ sessionId: 'th2', cwd: '/x', model: 'claude-sonnet-4-6' } as any, xy);
+      await tick();
+      expect('thinking-display' in queries[1].options.extraArgs).toBe(false);
+      expect(queries[1].options.env?.CLAUDE_WEB_THINKING_DISPLAY).toBe('summarized');
+      await b.close();
     } finally {
       eng.kind = 'claude';
     }

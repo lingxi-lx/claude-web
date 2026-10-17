@@ -316,6 +316,12 @@ export class SessionRunner extends EventEmitter {
     const args = { ...(extra.extraArgs ?? {}) };
     if (engine.kind === 'ccb' && this.info.ultracode) args.ultracode = null;
     else delete args.ultracode;
+    // Claude's thinking as text: the API's `thinking.display` defaults to "omitted" on current Claude models (the
+    // blocks come back as a bare signature) and the official binary even sends "omitted" when run by an SDK — other
+    // providers' models showed their thinking and Claude's never did. The official binary takes the flag; ccb would
+    // exit on it as an unknown option and reads CLAUDE_WEB_THINKING_DISPLAY instead (below)
+    if (engine.kind === 'claude' && !noThinking) args['thinking-display'] = 'summarized';
+    else delete args['thinking-display'];
     extra = { ...extra, extraArgs: args };
     // the transcript both engines share: the official binary resumes at its last recorded leaf (repair it after turns
     // on ccb) and continues the cost totals it saved; ccb starts every process from zero
@@ -330,6 +336,7 @@ export class SessionRunner extends EventEmitter {
     this.info.runtime = engine.kind;
     const fenv = this.featureEnv();
     if (noThinking && !('CLAUDE_CODE_DISABLE_THINKING' in fenv)) fenv.CLAUDE_CODE_DISABLE_THINKING = '1';
+    if (engine.kind === 'ccb' && !('CLAUDE_WEB_THINKING_DISPLAY' in fenv) && !process.env.CLAUDE_WEB_THINKING_DISPLAY) fenv.CLAUDE_WEB_THINKING_DISPLAY = 'summarized';
     // what each of the provider's models can do with thinking strength (claude-web-engine reads it: levels, whether it
     // reasons, models recorded as refusing the native parameter); the official binary ignores it
     if (engine.kind === 'ccb' && this.provider) {
