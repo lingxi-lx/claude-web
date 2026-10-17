@@ -56,3 +56,12 @@ describe('turnShare: a result becomes its own turn’s share of the CLI’s runn
     expect(turnShare(m, { cost: 1, models: {} }).total_cost_usd).toBe(3);
   });
 });
+
+describe('the model time per turn', () => {
+  it('duration_api_ms becomes each turn’s share of the running total; a drop starts over', async () => {
+    const { turnShare } = await import('./turn-cost.js');
+    const totals = { cost: 0, models: {} };
+    const r = (api: number, cost: number) => turnShare({ type: 'result', total_cost_usd: cost, duration_api_ms: api, modelUsage: { m: { outputTokens: 1, costUSD: cost } } } as any, totals).duration_api_ms;
+    expect([r(1181, 0.1), r(2222, 0.2), r(3240, 0.3), r(900, 0.05)]).toEqual([1181, 1041, 1018, 900]);
+  });
+});

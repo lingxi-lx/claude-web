@@ -11,12 +11,21 @@
 export interface RunningTotals {
   cost: number;
   models: Record<string, Record<string, number>>;
+  /** the process's model time so far (`duration_api_ms` is a running total too) */
+  apiMs?: number;
 }
 
 const NUMERIC = ['inputTokens', 'outputTokens', 'thinkingTokens', 'cacheReadInputTokens', 'cacheCreationInputTokens', 'webSearchRequests', 'costUSD'] as const;
 
-export function turnShare<T extends { type?: string; total_cost_usd?: number; modelUsage?: Record<string, any>; session_cost_usd?: number }>(m: T, totals: RunningTotals): T {
+export function turnShare<T extends { type?: string; total_cost_usd?: number; modelUsage?: Record<string, any>; session_cost_usd?: number; duration_api_ms?: number }>(m: T, totals: RunningTotals): T {
   if (m.type !== 'result') return m;
+  // the model time: the turn's own share (tok/s is output over it); a total that went down is a new process
+  const api = Number(m.duration_api_ms ?? 0);
+  if (api > 0) {
+    const prev = totals.apiMs ?? 0;
+    m.duration_api_ms = api >= prev ? api - prev : api;
+    totals.apiMs = api;
+  }
   const cost = Number(m.total_cost_usd ?? 0);
   const usage = m.modelUsage ?? {};
   if (!cost && !Object.keys(usage).length) return m; // zeroed: nothing to learn, nothing to subtract

@@ -3232,7 +3232,6 @@ export const EN_WEB: Record<string, string> = {
   "这个对话的更多操作：导出、步骤视图、改动 / Git / 文件…、重命名、分叉、归档、交给其它 Agent、删除": "More actions for this conversation: export, Steps view, changes / Git / files…, rename, fork, archive, hand off to another agent, delete",
   "这个对话的进程已经不在运行了（可能已被关闭，或服务重启过），这一轮已结束。直接发送新消息会重新接上。": "This conversation's process is no longer running (it may have been closed, or the service restarted), so this turn has ended. Sending a new message will reconnect it.",
   "这个对话的连接器（MCP）：开关、看状态": "This conversation's connectors (MCP): switch them on and off, see their status",
-  "这个对话读写的 token 总数（输入含缓存 + 输出）": "Tokens read and written in this conversation (input with cache + output)",
   "这个对话跑过的工作流": "Workflows this conversation has run",
   "这个对话还没有打开网页：先用 browser_open 打开一个网址。": "This conversation hasn't opened a web page yet: open a URL with browser_open first.",
   "这个对话还没有改文件": "This conversation hasn't changed any files yet",

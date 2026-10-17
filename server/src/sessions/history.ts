@@ -81,6 +81,9 @@ export function withTurnStats(msgs: Msg[], rows: LedgerEntry[], opts: { live?: b
     };
     if (mine.length) {
       result.duration_ms = mine.reduce((n, r) => n + num(r.durationMs), 0);
+      // the model time, for tok/s (rows before 2026-10-17 hold the process's running total: the page sees it is more
+      // than the turn took and counts the whole turn instead)
+      result.duration_api_ms = mine.reduce((n, r) => n + num(r.apiMs), 0);
       result.num_turns = mine.reduce((n, r) => n + (num(r.turns) || 1), 0);
       result.total_cost_usd = mine.reduce((n, r) => n + num(r.costUsd), 0);
       if (mine.some((r) => r.costUnknown)) result.cost_unknown = true;
