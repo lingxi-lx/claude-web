@@ -11,6 +11,7 @@ import { DiscoveryHint } from '@/features/sidebar/hint';
 import { hintReady } from '@/features/sidebar/newcomer';
 import { SidebarReveal, usePaneEdge } from './pane-edge';
 import { tr } from '@/i18n';
+import { AsciiField } from '@/features/home/AsciiField';
 
 /**
  * The start page — an empty chat tile (spec §5.8, mock-home.png): 「今天想做点什么？」 · the composer (it creates the
@@ -29,6 +30,7 @@ export function Welcome({ paneId, tileId }: { paneId: string; tileId: string }) 
   };
   return (
     <div className="welcome-tile">
+      {!mobile && <AsciiField />}
       {/* the empty page's top row: nothing but the sidebar reveal; on the desktop it is also the title bar (drag) */}
       <div className="welcome-top">{((edge.lead && !edge.strip) || mobile) && <SidebarReveal />}</div>
       <div className="welcome">
