@@ -431,6 +431,12 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   const busy = (st: string | undefined) => st === 'running' || st === 'waiting' || st === 'starting';
   const stopKeepAwake = reportKeepAwake(meta, (on) => parentPort?.postMessage({ type: 'keepAwake', on }), () => pool.list().some((r) => busy(r.state) && !!meta.sessionMeta(r.sessionId).keepAwake));
   pool.on('state', () => stopKeepAwake.recheck());
+  // no CLI process writes this conversation's transcript any more (closed, or never reopened since)
+  const processGone = (sid: string) => { const st = pool.stateOf(sid); return !st || st === 'closed'; };
+  // a name kept for a process that never got to end here (the server stopped while it ran): written now
+  for (const [sid, m] of Object.entries(meta.allSessionMeta())) {
+    if (m.pendingTitle) void library.rename(sid, m.pendingTitle).catch(() => {}).finally(() => { void meta.setSessionMeta(sid, { pendingTitle: undefined }); });
+  }
   // a rename made while the process ran (ws/hub.ts renameKept): the process wrote its old title back on the way out —
   // write the new one again, after it
   pool.on('state', (sid: string, state: string) => {
@@ -438,6 +444,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     const title = meta.sessionMeta(sid).pendingTitle;
     if (!title) return;
     setTimeout(() => {
+      if (!processGone(sid)) return;
       void library.rename(sid, title).catch(() => {}).finally(() => { void meta.setSessionMeta(sid, { pendingTitle: undefined }); sessionsSvc.emit('changed'); });
     }, 500).unref?.();
   });
@@ -448,6 +455,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     if (state !== 'closed' && state !== 'error') return;
     setTimeout(() => {
       void (async () => {
+        if (!processGone(sid)) return;
         if (await getSessionInfo(sid).catch(() => undefined)) return;
         const file = findClaudeTranscript(sid);
         if (file && appendLastPrompt(file, sid)) sessionsSvc.emit('changed');

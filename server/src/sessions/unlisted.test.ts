@@ -53,6 +53,15 @@ describe('conversations the SDK list skips (a long first prompt, no title at the
     expect(listed?.summary?.startsWith('fix the checkout page')).toBe(true);
   });
 
+  it('a transcript cut off mid-line (the process was killed) gets the last-prompt line on a line of its own', async () => {
+    const { id, file } = write(`fix the checkout page ${'x'.repeat(120_000)}`);
+    fs.appendFileSync(file, '{"type":"assistant","message":{"content":[{"type":"te');
+    expect(appendLastPrompt(file, id)).toBe(true);
+    const last = fs.readFileSync(file, 'utf8').trimEnd().split(/\n/).pop()!;
+    expect(JSON.parse(last)).toMatchObject({ type: 'last-prompt', sessionId: id });
+    expect((await listSessions()).some((s) => s.sessionId === id)).toBe(true);
+  });
+
   it('a user line that is a tool result, a command or meta is not a prompt', () => {
     expect(promptOf({ type: 'user', message: { content: 'hi  there' } })).toBe('hi there');
     expect(promptOf({ type: 'user', message: { content: [{ type: 'image' }, { type: 'text', text: 'look' }] } })).toBe('look');

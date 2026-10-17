@@ -33,6 +33,11 @@ export function noticesIn(text: string): { task_id: string; status: string; summ
   return out;
 }
 
+/** A transcript line that is the CLI's own queue operation (not a tool call or output that mentions one). */
+function isQueueLine(line: string): boolean {
+  try { return (JSON.parse(line) as { type?: unknown })?.type === 'queue-operation'; } catch { return false; }
+}
+
 /** The text as written inside a JSON string (\n, \", \\, \uXXXX), back to itself. */
 function unescapeJson(t: string): string {
   try { return JSON.parse(`"${t.replace(/(^|[^\\])"/g, '$1\\"')}"`) as string; } catch { return t; }
@@ -108,16 +113,17 @@ export class BackgroundService extends EventEmitter {
         const n = Math.min(size - at.pos, 32 * 1024 * 1024);
         const buf = Buffer.alloc(n);
         fs.readSync(fd, buf, 0, n, at.pos);
-        // up to the last whole line: a notification cut in half is read next time
+        // up to the last whole line: a notification cut in half is read next time; a line longer than the whole window
+        // (a pasted file as base64) is no queue operation — step over it instead of reading it again every sweep
         const end = buf.lastIndexOf(10);
-        if (end < 0) return false;
+        if (end < 0) { if (n === 32 * 1024 * 1024) at.pos += n; return false; }
         text = buf.toString('utf8', 0, end + 1);
         at.pos += end + 1;
       } finally { fs.closeSync(fd); }
     } catch { return false; }
     let changed = false;
     // only the CLI's own queue lines: a command's output or a reply that quotes a notification is not an end
-    const queued = text.split('\n').filter((l) => l.includes('"queue-operation"') && l.includes('<task-notification>')).join('\n');
+    const queued = text.split('\n').filter((l) => l.includes('<task-notification>') && isQueueLine(l)).join('\n');
     for (const n of noticesIn(queued)) if (applyBg(s, { type: 'system', subtype: 'task_notification', ...n }, this.now())) changed = true;
     if (changed) this.schedule(sessionId);
     return changed;

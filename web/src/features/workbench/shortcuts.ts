@@ -63,7 +63,9 @@ const isMac = /mac|darwin/i.test(desktop?.platform ?? (typeof navigator !== 'und
 /** The desktop menu uses `CmdOrCtrl+…` accelerators, so on macOS the cheat sheet must say Cmd, not Ctrl. */
 /** Label of the primary modifier for hints written inline (⌘ on macOS). */
 export const modKey = isMac ? '⌘' : 'Ctrl';
-export const keyLabel = (s: Shortcut) => (isDesktop ? (isMac ? s.desktop.replace(/Ctrl/g, 'Cmd') : s.desktop) : s.browser);
+/** ← → on the macOS desktop are the menu's ⌘[ ⌘] (Option+← moves by word in text there). */
+const MAC_DESKTOP: Record<string, string> = { 'nav.back': 'Cmd+[', 'nav.forward': 'Cmd+]' };
+export const keyLabel = (s: Shortcut) => (isDesktop ? (isMac ? MAC_DESKTOP[s.id] ?? s.desktop.replace(/Ctrl/g, 'Cmd') : s.desktop) : s.browser);
 
 // physical key → the character the table means; used when a modifier changed `e.key`
 const CODE_KEYS: Record<string, string> = { BracketLeft: '[', BracketRight: ']', Period: '.', Comma: ',', Backquote: '`' };
@@ -118,8 +120,8 @@ export function matchBrowserKey(e: KeyboardEvent): string | null {
   if (alt && !ctrl && k === '[') return 'pane.prev';
   if (alt && !ctrl && k === '.') return 'tile.next';
   if (alt && !ctrl && k === ',') return 'tile.prev';
-  // not in the code editor / terminal, where Alt+← moves by word
-  if (alt && !ctrl && !shift && (k === 'ArrowLeft' || k === 'ArrowRight') && !(e.target as HTMLElement)?.closest?.('.monaco-editor, .xterm')) return k === 'ArrowLeft' ? 'nav.back' : 'nav.forward';
+  // not in a text field, the code editor or the terminal: Option+← / Alt+← moves by word there (macOS, editors)
+  if (alt && !ctrl && !shift && (k === 'ArrowLeft' || k === 'ArrowRight') && !inField && !(e.target as HTMLElement)?.isContentEditable && !(e.target as HTMLElement)?.closest?.('.monaco-editor, .xterm')) return k === 'ArrowLeft' ? 'nav.back' : 'nav.forward';
   if (k === 'F2') return 'group.rename';
   if (!inField && k === '?') return 'shortcuts';
   // Ctrl+/ (the official key; F1 and ? still work) — but not in the code editor or the terminal, where it is theirs

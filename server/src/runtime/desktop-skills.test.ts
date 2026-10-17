@@ -35,3 +35,31 @@ describe('the official app’s anthropic-skills plugin', () => {
     expect(officialAppDir({}, 'linux', '/home/u')).toBe(path.join('/home/u', '.config', 'Claude'));
   });
 });
+
+describe('the mirror loaded here: the official plugin without the app-only skills', () => {
+  it('links every other skill, drops the app-only ones, follows the source, and never touches it', async () => {
+    const { mirrorSkills } = await import('./desktop-skills.js');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-dmirror-'));
+    tmp.push(root);
+    const src = path.join(root, 'src');
+    for (const s of ['xlsx', 'pdf', 'computer-use', 'chrome-browser']) {
+      fs.mkdirSync(path.join(src, 'skills', s), { recursive: true });
+      fs.writeFileSync(path.join(src, 'skills', s, 'SKILL.md'), `---\nname: ${s}\n---\n`);
+    }
+    fs.mkdirSync(path.join(src, '.claude-plugin'), { recursive: true });
+    fs.writeFileSync(path.join(src, '.claude-plugin', 'plugin.json'), JSON.stringify({ name: 'anthropic-skills' }));
+    const dest = path.join(root, 'dest');
+    expect(mirrorSkills(src, dest)).toBe(dest);
+    expect(fs.readdirSync(path.join(dest, 'skills')).sort()).toEqual(['pdf', 'xlsx']);
+    expect(fs.readFileSync(path.join(dest, 'skills', 'xlsx', 'SKILL.md'), 'utf8')).toContain('name: xlsx');
+    expect(JSON.parse(fs.readFileSync(path.join(dest, '.claude-plugin', 'plugin.json'), 'utf8')).name).toBe('anthropic-skills');
+    // again: nothing changes; a skill gone from the source goes here as a link only
+    expect(mirrorSkills(src, dest)).toBe(dest);
+    fs.rmSync(path.join(src, 'skills', 'pdf'), { recursive: true });
+    fs.mkdirSync(path.join(dest, 'skills', 'stray'));
+    mirrorSkills(src, dest);
+    expect(fs.readdirSync(path.join(dest, 'skills')).sort()).toEqual(['xlsx']);
+    expect(fs.readdirSync(path.join(src, 'skills')).sort()).toEqual(['chrome-browser', 'computer-use', 'xlsx']);
+    expect(fs.existsSync(path.join(src, 'skills', 'xlsx', 'SKILL.md'))).toBe(true);
+  });
+});

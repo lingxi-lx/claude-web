@@ -90,6 +90,12 @@ function tailTitles(text: string): Tail {
   return out;
 }
 
+function endsInNewline(file: string, size: number): boolean {
+  if (!size) return true;
+  const fd = fs.openSync(file, 'r');
+  try { const b = Buffer.alloc(1); fs.readSync(fd, b, 0, 1, size - 1); return b[0] === 10; } finally { fs.closeSync(fd); }
+}
+
 const clip = (t: string, n = 200) => (t.length > n ? `${t.slice(0, n - 1)}…` : t);
 
 const seen = new Map<string, { key: string; row: SessionSummary | null }>();
@@ -135,6 +141,8 @@ export function appendLastPrompt(file: string, sessionId: string): boolean {
   if (t.custom || t.ai || t.summary || t.lastPromptLine) return false;
   const prompt = t.lastPrompt || firstPrompt(file);
   if (!prompt) return false;
-  fs.appendFileSync(file, `${JSON.stringify({ type: 'last-prompt', lastPrompt: clip(prompt), sessionId })}\n`);
+  // a process killed mid-write leaves a half line: ours goes on a line of its own
+  const lead = endsInNewline(file, st.size) ? '' : '\n';
+  fs.appendFileSync(file, `${lead}${JSON.stringify({ type: 'last-prompt', lastPrompt: clip(prompt), sessionId })}\n`);
   return true;
 }
