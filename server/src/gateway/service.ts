@@ -345,7 +345,14 @@ export class GatewayService extends EventEmitter {
     const model = String(body.json?.model ?? '');
     // subagents ask for the alias (models/subagent.ts subAlias), never a model the main conversation can use; the pinned
     // member model sends their provider the real id
-    const group = groupFor(model === subAlias(split.model));
+    const toSub = model === subAlias(split.model);
+    const group = groupFor(toSub);
+    // the official binary asks for Claude's thinking as text for the whole process (session-runner): another maker's
+    // model behind an Anthropic-format relay gets a body without that field, which it may not know
+    if (!/claude/i.test(toSub ? split.model : model) && body.json?.thinking && typeof body.json.thinking === 'object' && 'display' in body.json.thinking) {
+      delete body.json.thinking.display;
+      body.raw = Buffer.from(JSON.stringify(body.json));
+    }
     const params = new URLSearchParams(url.search);
     params.delete('key');
     const ac = new AbortController();

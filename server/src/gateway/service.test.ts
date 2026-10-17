@@ -504,6 +504,11 @@ describe('subagent split (/gateway/~s/…): the subagents on another provider, t
     expect(JSON.parse(await (await at('cw-sub/claude-opus-5-5')).text()).content[0].text).toBe('from B');
     expect(JSON.parse(B.hits[0].body).model).toBe('claude-opus-5-5');
     expect(A.hits.map((h) => JSON.parse(h.body).model)).toEqual(['claude-opus-5-5']);
+    // another maker's model behind an Anthropic-format relay: the official binary's thinking.display is taken off
+    const ds = gw.splitEndpoint('a', 'b', 'deepseek-chat')!;
+    await fetch(`${ds.base}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': ds.key, 'anthropic-version': '2023-06-01' }, body: JSON.stringify({ ...msg, model: 'cw-sub/deepseek-chat', thinking: { type: 'adaptive', display: 'summarized' } }) });
+    expect(JSON.parse(B.hits[1].body)).toMatchObject({ model: 'deepseek-chat', thinking: { type: 'adaptive' } });
+    expect(JSON.parse(B.hits[1].body).thinking.display).toBeUndefined();
     // the model list answers too (an engine may ask without the anthropic-version header)
     expect((await fetch(`${ep.base}/v1/models`, { headers: { authorization: `Bearer ${ep.key}` } })).status).toBe(200);
   });
