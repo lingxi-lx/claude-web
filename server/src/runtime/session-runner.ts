@@ -1000,6 +1000,16 @@ export class SessionRunner extends EventEmitter {
     this.noteFast(on ? 'on' : 'off', this.info.fastModeOff);
   }
 
+  /**
+   * A rename while the process runs: it keeps the title in memory and writes it back into the transcript later, which
+   * undid a rename made in the list (2026-10-17 user report). The official binary takes the new title (`rename_session`);
+   * our engine does not know that request — the caller then keeps the name itself until the process ends.
+   */
+  async renameLive(title: string): Promise<boolean> {
+    if (!this.q) return false;
+    try { await (this.q as any).renameSession(title, this.sessionId); return true; } catch { return false; }
+  }
+
   /** A connector on / off for this conversation (the + menu's 连接器 ›): the CLI's own switch, then its new list. */
   async toggleMcp(name: string, enabled: boolean) {
     if (!this.q) throw new Error(tr('对话没在运行，连接器要在它运行时才能开关'));

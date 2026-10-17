@@ -42,6 +42,8 @@ export interface AgentDriver extends EventEmitter {
   contextUsage?(detail: 'summary' | 'full'): Promise<unknown>;
   setFastMode?(on: boolean): Promise<void>;
   toggleMcp?(name: string, enabled: boolean): Promise<void>;
+  /** retitle the running process (it keeps its title in memory); false = it does not take renames */
+  renameLive?(title: string): Promise<boolean>;
   respawn?(): Promise<void>;
 }
 

@@ -331,7 +331,10 @@ export class Hub {
         const all = await s.library.list();
         const list = req.limit ? all.slice(0, req.limit) : all;
         // a folder the list could not read (issue #9) is known to the conversation's own process while it runs
-        return list.map((x) => ({ ...x, cwd: x.cwd || s.pool.get(x.sessionId)?.cwd || '', live: s.pool.stateOf(x.sessionId) }));
+        return list.map((x) => {
+          const pending = s.meta.sessionMeta(x.sessionId).pendingTitle;
+          return { ...x, ...(pending ? { title: pending } : {}), cwd: x.cwd || s.pool.get(x.sessionId)?.cwd || '', live: s.pool.stateOf(x.sessionId) };
+        });
       }
       case 'sessions.projects':
         return s.sessions.projects();
@@ -517,7 +520,7 @@ export class Hub {
       case 'library.read':
         return s.library.read(req.sessionId, req.cursor, req.limit);
       case 'library.rename':
-        await s.library.rename(req.sessionId, req.title);
+        await renameKept(s, req.sessionId, req.title);
         return null;
       case 'library.archive':
         return s.library.archive(req.sessionIds, req.archived);
@@ -670,7 +673,7 @@ export class Hub {
 
       // legacy shapes, same routing as library.rename / library.delete — so every delete path backs up first
       case 'session.rename':
-        await s.library.rename(req.sessionId, req.title);
+        await renameKept(s, req.sessionId, req.title);
         s.sessions.emit('changed');
         return null;
       case 'session.delete': {
@@ -1044,4 +1047,16 @@ export class Hub {
     if (isGatewayRequest(req)) return handleGatewayRequest(s.gateway, req);
     throw new Error(`unknown request ${(req as any).kind}`);
   }
+}
+
+/**
+ * Rename, and keep the name while the conversation's process runs: the process holds the old title in memory and
+ * writes it back later (2026-10-17 user report: 「改了名字，一会它自己会改回去」). The official binary is told; for our
+ * engine the name waits in SessionMeta.pendingTitle — the list shows it, and it is written again when the process ends.
+ */
+async function renameKept(s: { library: { rename(id: string, title: string): Promise<void> }; pool: { get(id: string): { renameLive?(t: string): Promise<boolean> } | undefined }; meta: { setSessionMeta(id: string, patch: Record<string, unknown>): unknown } }, sessionId: string, title: string): Promise<void> {
+  await s.library.rename(sessionId, title);
+  const r = s.pool.get(sessionId);
+  const told = r?.renameLive ? await r.renameLive(title) : false;
+  await s.meta.setSessionMeta(sessionId, { pendingTitle: r && !told ? title : undefined });
 }

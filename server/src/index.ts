@@ -429,6 +429,16 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   const busy = (st: string | undefined) => st === 'running' || st === 'waiting' || st === 'starting';
   const stopKeepAwake = reportKeepAwake(meta, (on) => parentPort?.postMessage({ type: 'keepAwake', on }), () => pool.list().some((r) => busy(r.state) && !!meta.sessionMeta(r.sessionId).keepAwake));
   pool.on('state', () => stopKeepAwake.recheck());
+  // a rename made while the process ran (ws/hub.ts renameKept): the process wrote its old title back on the way out —
+  // write the new one again, after it
+  pool.on('state', (sid: string, state: string) => {
+    if (state !== 'closed' && state !== 'error') return;
+    const title = meta.sessionMeta(sid).pendingTitle;
+    if (!title) return;
+    setTimeout(() => {
+      void library.rename(sid, title).catch(() => {}).finally(() => { void meta.setSessionMeta(sid, { pendingTitle: undefined }); sessionsSvc.emit('changed'); });
+    }, 500).unref?.();
+  });
   await anywhere.start();
   await im.startAll();
   const eng = await engineInfo();
