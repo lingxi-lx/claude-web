@@ -140,7 +140,7 @@
 - 思考行的标题用摘要里的粗体小标题（`chat/thinking-title.ts`：在想时取最后一个，想完取第一个），用时放在后面；正在做的那一步是四个点轮流亮
   （`WorkDots`，强调色，减少动效时不动）。
 - 输入框下面一行中间：这个对话的「几轮 · 几步 · tok/s · 总 token · 缓存命中」（`model/conv-stats.ts` + `composer/ConvStatsLine.tsx`，
-  按每轮的 result 加总；tok/s = 输出 token ÷ `duration_api_ms`，历史轮没有这个时间就不算速度）。放不下的整项藏掉（换行到被裁掉的第二行）。
+  按每轮的 result 加总；tok/s = 输出 token ÷ 这一轮的模型时间——引擎报的 `duration_api_ms` 是这个进程的累计值，一轮的时间是它涨了多少，变小了就是换了进程；历史轮没有这个时间就不算速度）。放不下的整项藏掉（换行到被裁掉的第二行）。
 - 欢迎页背景：字在内容列（`.home-col`）附近渐隐、里面只留一点，整体更暗（`AsciiField` 的 `calm()`）。
 - logo 换回用户给的那张（见上面「第二轮」里的那条）。
 - 界面 bug：
