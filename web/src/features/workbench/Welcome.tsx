@@ -27,7 +27,7 @@ export function Welcome({ paneId, tileId }: { paneId: string; tileId: string }) 
   const edge = usePaneEdge();
   const mobile = useStore((s) => s.mobile);
   const backdrop = useStore((s) => backdropStyle(s.settings['ui.welcomeBackdrop']));
-  const theme = useStore((s) => s.settings['ui.theme']);
+  const theme = useStore((s) => s.theme);
   const pick = (sid: string) => {
     dispatch({ t: 'session.assign', paneId, tileId, sessionId: sid });
     if (!open[sid]) void loadHistory(sid, { focus: false });
@@ -35,7 +35,7 @@ export function Welcome({ paneId, tileId }: { paneId: string; tileId: string }) 
   return (
     <div className="welcome-tile">
       {!mobile && backdrop === 'field' && <AsciiField />}
-      {/* keyed by the theme: its colours are read when it starts */}
+      {/* keyed by the theme in effect (a system switch too): its colours are read when it starts */}
       {!mobile && backdrop === 'flow' && <LetterFlow key={String(theme)} />}
       {/* the empty page's top row: nothing but the sidebar reveal; on the desktop it is also the title bar (drag) */}
       <div className="welcome-top">{((edge.lead && !edge.strip) || mobile) && <SidebarReveal />}</div>

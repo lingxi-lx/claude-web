@@ -164,19 +164,25 @@ export function LetterFlow() {
       if (reduce || e.button !== 0) return;
       motes.push(...splash(local(e.clientX, e.clientY), rand));
     };
-    // what is typed in the box: from where the caret is (the text before it, measured in the box's own font)
-    const measure = document.createElement('canvas').getContext('2d');
+    // what is typed in the box: from where the caret is — a hidden copy of the box (same width, font, padding and
+    // wrapping) with the text before the caret and a marker after it; the marker is where the caret is
     const caret = (ta: HTMLTextAreaElement) => {
       const r = ta.getBoundingClientRect();
       const cs = getComputedStyle(ta);
-      const before = ta.value.slice(0, ta.selectionStart ?? ta.value.length);
-      const line = before.slice(before.lastIndexOf('\n') + 1);
-      let x = r.left + parseFloat(cs.paddingLeft || '0');
-      if (measure) { measure.font = cs.font; x += measure.measureText(line).width; }
-      const lines = before.split('\n').length - 1;
-      const lh = parseFloat(cs.lineHeight) || 20;
-      const y = r.top + parseFloat(cs.paddingTop || '0') + Math.min(lines * lh - ta.scrollTop, r.height - lh) + lh / 2;
-      return local(Math.min(x, r.right - 12), y);
+      const mirror = document.createElement('div');
+      for (const p of ['boxSizing', 'width', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'letterSpacing', 'lineHeight', 'textTransform', 'wordSpacing', 'tabSize', 'textIndent'] as const) (mirror.style as any)[p] = (cs as any)[p];
+      Object.assign(mirror.style, { position: 'fixed', left: '0', top: '0', visibility: 'hidden', whiteSpace: 'pre-wrap', overflowWrap: 'break-word', wordBreak: cs.wordBreak, borderStyle: 'solid' });
+      mirror.textContent = ta.value.slice(0, ta.selectionStart ?? ta.value.length);
+      const mark = document.createElement('span');
+      mark.textContent = '\u200b';
+      mirror.appendChild(mark);
+      document.body.appendChild(mirror);
+      const x = r.left + mark.offsetLeft;
+      const lh = mark.offsetHeight || parseFloat(cs.lineHeight) || 20;
+      const y = r.top + mark.offsetTop - ta.scrollTop + lh / 2;
+      mirror.remove();
+      // a caret scrolled out of the box: from the box's nearest edge
+      return local(Math.min(Math.max(x, r.left + 8), r.right - 12), Math.min(Math.max(y, r.top + lh / 2), r.bottom - lh / 2));
     };
     const emit = (target: EventTarget | null, text: string | null | undefined) => {
       if (reduce || !text || !(target instanceof HTMLTextAreaElement) || !target.closest('.composer')) return;
