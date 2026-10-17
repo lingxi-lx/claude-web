@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { codexConfigHint } from './codex-config-hint.js';
 import { modelLabel, modelsFor } from '../models/catalog.js';
 import { randomUUID } from 'node:crypto';
 import type { AgentKind, AttachmentRef, EffortLevel, OpenSessionParams, PermissionMode, PermissionRequestEvent, PermissionResponse, ReportedModel, RunnerState, SessionInfoSnapshot } from '../protocol.js';
@@ -162,7 +163,10 @@ export class CodexDriver extends EventEmitter implements AgentDriver {
       this.emit('info', this.info);
       this.flush();
     } catch (e: any) {
-      this.setState('error', tr('Codex 启动失败：{message}{v}', { message: e.message, v: this.rpc?.stderrTail ? `\n${this.rpc.stderrTail.slice(-800)}` : '' }));
+      const tail = this.rpc?.stderrTail ?? '';
+      // its configuration could not be read: what is wrong and how to fix it, not the raw log
+      const hint = codexConfigHint(`${e.message}\n${tail}`);
+      this.setState('error', hint ?? tr('Codex 启动失败：{message}{v}', { message: e.message, v: tail ? `\n${tail.slice(-800)}` : '' }));
     }
   }
 

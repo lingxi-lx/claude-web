@@ -13,3 +13,7 @@
   - 驱动页面用 `window.__store`（`main.tsx` 里挂的调试入口）：`__store.getState().loadHistory(sid)` / `openInPane(sid,'replace')` / `setTheme('nord')` / `dispatchLayout(...)` / `openSettings({section})` 比找按钮点可靠得多。
   - `server/ws-demo-session.mjs` 造一个带工具调用的 mock 会话，`server/ws-demo-running.mjs` 把一个会话停在**回合进行中**（用来截运行态）。都用 mock ACP agent，不花模型 token；截完记得删会话和 `acp:demo` / `acp:slow` 这两个临时 agent。
 - 打包后的桌面版有单实例锁，想在**不打扰用户已经开着的那个**的情况下冷启动验证：`electron-builder --config.directories.output=dist-desktop-p12` 换个输出目录，然后 `"…/Claude Web.exe" --user-data-dir=<临时目录>` 起第二个实例，端口在那个目录的 `server.log` 里。
+- **Codex 读不了自己的配置（2026-10-17 用户截图）**：`thread/start` 报 `failed to load configuration: failed to parse model_catalog_json path …codexmate\relay\codex_router_catalog.json as JSON: missing field supports_reasoning_summaries`。
+  `model_catalog_json` 是用户的 **codexmate（AiMaMi 路由）开路由时自己写进 `~/.codex/config.toml`** 的（它的日志 `~/.codex/codexmate/logs/aimami-debug.log` 里有 RouterOn / NativeOff 改这一项的记录），
+  它生成的目录文件比现在装的 Codex 少字段，Codex 自己的命令行也一样起不来。这个文件是用户 / 那个工具的，我们不改：`agents/codex-config-hint.ts` 把这类错误说成人话（哪个设置、哪个文件、
+  谁写的、怎么修：关 codexmate 路由 / 更新它 / 删那一行，然后点重试），其它配置错误给通用建议。顺带 `JsonRpcProcess.stderrTail` 去掉了颜色码（以前错误信息里是 `‖[2m…` 一堆乱码）。

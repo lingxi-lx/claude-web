@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { stripAnsi } from './codex-config-hint.js';
 import { EventEmitter } from 'node:events';
 import { resolveSpawn } from './resolve.js';
 import { killTree } from './kill-tree.js';
@@ -32,7 +33,8 @@ export class JsonRpcProcess extends EventEmitter {
       }
     });
     this.child.stderr!.setEncoding('utf8');
-    this.child.stderr!.on('data', (d: string) => { this.stderrTail = (this.stderrTail + d).slice(-4000); this.emit('stderr', d); });
+    // kept without colour codes: the tail ends up in error messages shown in the page
+    this.child.stderr!.on('data', (d: string) => { this.stderrTail = (this.stderrTail + stripAnsi(d)).slice(-4000); this.emit('stderr', d); });
     // EPIPE when the agent dies with a write in flight: a stream 'error' with no listener would crash the server
     this.child.stdin!.on('error', (e) => { this.stderrTail = (this.stderrTail + `\n[stdin] ${e.message}`).slice(-4000); });
     this.child.on('error', (e) => { const first = !this.exited; this.exited = true; this.failAll(e); if (first) this.emit('exit', -1, e.message); });
