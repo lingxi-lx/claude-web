@@ -101,3 +101,18 @@ span.bg-chip { padding: 0 2px 0 0; }
 
 :root[data-reduce-motion='1'] :is(.bg-pill, .bg-pill-dots i, .bg-wf.live .bg-wf-head .t::before) { animation: none; }
 @media (prefers-reduced-motion: reduce) { :is(.bg-pill, .bg-pill-dots i, .bg-wf.live .bg-wf-head .t::before) { animation: none; } }
+
+/* In a conversation the sub-agents follow the theme (2026-10-17 user feedback: 「这个建议不要用色彩」): one hue — the
+   theme's accent — in ten steps of ink, still told apart side by side. The 后台 page keeps its colours (characters). */
+.chat-tile, .composer {
+  --agent-1: var(--accent-text);
+  --agent-2: color-mix(in oklab, var(--accent-text) 62%, var(--fg-2));
+  --agent-3: color-mix(in oklab, var(--accent-text) 82%, var(--fg));
+  --agent-4: color-mix(in oklab, var(--accent-text) 45%, var(--fg-2));
+  --agent-5: color-mix(in oklab, var(--accent-text) 92%, var(--fg-2));
+  --agent-6: color-mix(in oklab, var(--accent-text) 55%, var(--fg));
+  --agent-7: color-mix(in oklab, var(--accent-text) 72%, var(--fg-2));
+  --agent-8: color-mix(in oklab, var(--accent-text) 38%, var(--fg));
+  --agent-9: color-mix(in oklab, var(--accent-text) 86%, var(--fg-3));
+  --agent-10: color-mix(in oklab, var(--accent-text) 50%, var(--fg-3));
+}

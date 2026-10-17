@@ -38,6 +38,7 @@ import { setPromptSuggestions } from './runtime/session-runner.js';
 import { LocalEnvStore } from './runtime/local-env.js';
 import { setSessionsDeps, setSessionsMcpEnabled } from './sessions-mcp/tools.js';
 import { setDesktopSkillsEnabled } from './runtime/desktop-skills.js';
+import { findClaudeTranscript } from './runtime/transcript-file.js';
 import { PreviewService } from './preview/service.js';
 import { setPreviewDeps } from './preview/tools.js';
 import { sendWhenIdle } from './sessions-mcp/deliver.js';
@@ -383,7 +384,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   fedHealth = (nonce, authed) => federation.healthInfo(nonce, authed);
   const goals = new GoalService(meta, pool);
   const orchestra = await createOrchestra({ pool, meta, canonical, transcripts, agents, git: gitSvc, goals, library, im });
-  const background = new BackgroundService({ pool });
+  const background = new BackgroundService({ pool, transcriptOf: findClaudeTranscript });
   characters = new CharacterService(path.join(dataDir(), 'characters'), { get: () => meta.settings()['cafe.assign'] as any, set: (a) => meta.setSetting('cafe.assign', a) });
   const customCss = new CustomCssService();
   customCss.watch();
