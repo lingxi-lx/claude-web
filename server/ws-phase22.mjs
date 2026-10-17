@@ -273,7 +273,9 @@ async function main() {
   check('gemini-3-pro on an OpenAI-format relay (a model of another format): no reasoning_effort, no thinking switches, the prompt way', ocm.length > 0 && ocm.every((h) => !('reasoning_effort' in h.body) && !('thinking' in h.body) && !('enable_thinking' in h.body) && turnText(h).includes('Reasoning depth: very high.')), ocm.map((h) => Object.keys(h.body).join('/')).join(' | ').slice(0, 200));
   const gt = await openOn(O.id, 'gpt-4o', { effort: 'high', permissionMode: 'bypassPermissions' });
   const gtr = await turn(gt.sessionId, 'AUTO-BASH GPT-TOOLS 运行一条命令');
-  const gtLast = hits.filter((h) => h.fmt === 'openai' && h.body.model === 'gpt-4o' && h.body.stream === true && JSON.stringify(h.body.messages ?? []).includes('GPT-TOOLS')).at(-1);
+  // the next-prompt suggestion after the turn carries the whole conversation too (and may or may not be in by now)
+  const suggestion = (h) => JSON.stringify((h.body.messages ?? []).at(-1)?.content ?? '').includes('[SUGGESTION MODE');
+  const gtLast = hits.filter((h) => h.fmt === 'openai' && h.body.model === 'gpt-4o' && h.body.stream === true && JSON.stringify(h.body.messages ?? []).includes('GPT-TOOLS') && !suggestion(h)).at(-1);
   const reminders = (JSON.stringify(gtLast?.body.messages ?? []).match(/Reasoning depth: high\./g) ?? []).length;
   check('the reminder goes with the user\'s message once, not again after the tool call', /auto:done/.test(gtr.result?.result ?? '') && (gtLast?.body.messages ?? []).at(-1)?.role === 'tool' && reminders === 1, `reminders=${reminders} · ${String(gtr.result?.result ?? '(no result)').slice(0, 40)}`);
 

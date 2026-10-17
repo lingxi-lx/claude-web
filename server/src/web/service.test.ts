@@ -453,7 +453,8 @@ describe('WebService: search, keys, status', () => {
       asked.push(new URL(String(u)).host);
       return new Response('<div class="result"><a class="result__a" href="https://d.example/">q fetched</a></div>', { status: 200 });
     }) as unknown as typeof fetch;
-    const { web } = make({ fetch: net, searchPageTimeoutMs: 30 });
+    // not much shorter: under a loaded full run the timer fired inside tick(), before the answer below was handed in
+    const { web } = make({ fetch: net, searchPageTimeoutMs: 250 });
     const w = win();
     web.setHost(w.key, true, w.send);
     const t0 = Date.now();
