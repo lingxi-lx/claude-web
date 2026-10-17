@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { ImportDialog } from '@/features/providers/ImportDialog';
 import type { McpHealth, RegistryServer } from '@shared';
 import { ws } from '@/ws/client';
 import { useScopedSession, useStore } from '@/store';
@@ -49,6 +50,7 @@ export function Connectors() {
   const [regBusy, setRegBusy] = useState(false);
   const [health, setHealth] = useState<Record<string, McpHealth> | null>(null);
   const [hBusy, setHBusy] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const reload = () => ws.request<{ servers: Configured[] }>({ kind: 'config.mcp' })
     .then((r) => { setConfigured(r.servers ?? []); setErr(''); })
@@ -113,7 +115,9 @@ export function Connectors() {
             <option value="local" disabled={!cwd}>{SCOPE_LABEL.local}</option>
           </select>
         </label>
+        <button type="button" className="btn sm" data-act="import" onClick={() => setImporting(true)} title={tr('把 Cursor、Claude Desktop、VS Code、Codex、Hermes 等工具里配好的 MCP 服务器拿过来（加给所有项目）')}>{tr('从其它工具导入…')}</button>
       </div>
+      {importing && <ImportDialog only="mcp" onClose={() => { setImporting(false); void reload(); }} />}
 
       {configured && configured.length > 0 && (
         <section className="cx-sec" data-id="connected">

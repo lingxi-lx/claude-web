@@ -135,6 +135,24 @@ export interface EngineInfo {
 /** `claude-account`: another Claude (Pro / Max) account — its long-lived token from `claude setup-token` in `apiKey` */
 export type ProviderType = 'anthropic' | 'openai' | 'gemini' | 'grok' | 'gateway' | 'claude-account';
 /** A third-party API endpoint profile. Stored in ~/.claude-web/meta.json; the key is injected into the session process env only. */
+/** 从其它工具导入 (server/src/import/): one thing another tool on this computer has configured. */
+export interface ImportItem {
+  key: string;
+  kind: 'provider' | 'mcp';
+  /** the tool it comes from (import/scan.ts SourceId) */
+  from: string;
+  name: string;
+  /** a provider's base URL, an MCP server's command line or URL */
+  detail: string;
+  type?: ProviderType;
+  hasKey?: boolean;
+  models?: number;
+  /** this app has it already (same endpoint and key / an MCP server of that name) */
+  already: boolean;
+}
+export interface ImportScan { items: ImportItem[]; unreadable: { from: string; reason: 'encrypted' | 'browser-db' }[]; scanned: string[] }
+export interface ImportResult { providers: string[]; mcp: string[]; skipped: string[]; failed: { key: string; error: string }[] }
+
 export interface Provider {
   id: string;
   name: string;
@@ -492,6 +510,8 @@ export type ClientRequest =
   | { kind: 'providers.remove'; id: string }
   | { kind: 'providers.probe'; id?: string; provider?: Partial<Provider>; listOnly?: boolean } // saved profile by id, or an unsaved draft; listOnly: the model list, no chat check
   | { kind: 'providers.refreshModels'; ids?: string[] } // pull /v1/models for these (default: every non-gateway) profiles
+  | { kind: 'import.scan' } // 从其它工具导入: what other tools on this computer have (no keys)
+  | { kind: 'import.run'; keys: string[] } // take the picked items in
   | { kind: 'settings.get' }
   | { kind: 'settings.set'; key: string; value: unknown }
   /** The outbound proxy in use (net/proxy.ts); `refresh` looks at the system again. Set it with settings.set 'network.proxy'. */

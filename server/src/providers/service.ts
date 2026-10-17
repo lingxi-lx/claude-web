@@ -1,4 +1,5 @@
 import os from 'node:os';
+import { sameBase } from '../import/service.js';
 import { CLAUDE_PROVIDER_ID, type AgentKind, type ModelRefreshResult, type Provider, type ProviderType, type RuntimeKind } from '../protocol.js';
 import type { MetaStore } from '../meta/store.js';
 import { resolveEngine, runClaudeCli } from '../claude-exe.js';
@@ -417,6 +418,13 @@ export class ProviderService {
 
   list(): Provider[] {
     return this.meta.providers().map(publicProvider);
+  }
+  /** A saved provider of this kind on this endpoint with this key (an import does not add it twice). */
+  hasSame(type: Provider['type'], baseUrl: string, apiKey: string): boolean {
+    return this.meta.providers().some((p) => {
+      if (p.type !== type || !sameBase(p.baseUrl, baseUrl)) return false;
+      try { return this.plainKey(p) === apiKey; } catch { return false; }
+    });
   }
   /** Resolve for a session: undefined = claude.ai login. */
   forSession(id: string | undefined): SessionProvider | undefined {

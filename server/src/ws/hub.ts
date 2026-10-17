@@ -1,4 +1,5 @@
 import path from 'node:path';
+import type { ImportService } from '../import/service.js';
 import fs from 'node:fs';
 import type { WebSocket, WebSocketServer } from 'ws';
 import { CLAUDE_PROVIDER_ID, type ClientRequest, type OpenSessionParams, type RemoteStatus, type ServerEvent, type WireDown, type WireUp } from '../protocol.js';
@@ -121,6 +122,8 @@ export interface Services {
   limits: LimitsService;
   schedules: ScheduleService;
   providers: ProviderService;
+  /** 从其它工具导入 (import/) */
+  importer: ImportService;
   version: string;
   /** Local model gateway (/gateway/<group>/…). */
   gateway: GatewayService;
@@ -131,7 +134,7 @@ export interface Services {
 }
 
 /** Requests after which something connects out: they wait for a fresh look at the proxy. (`web.search` waits inside WebService, like the agents' searches.) */
-const GOES_OUT = new Set<string>(['session.open', 'session.send', 'session.setProvider', 'session.switchAgent', 'providers.probe', 'providers.refreshModels', 'terminal.open', 'im.set', 'im.test', 'mcp.registry']);
+const GOES_OUT = new Set<string>(['session.open', 'session.send', 'session.setProvider', 'session.switchAgent', 'providers.probe', 'providers.refreshModels', 'import.run', 'terminal.open', 'im.set', 'im.test', 'mcp.registry']);
 
 export class Hub {
   private clients = new Set<WebSocket>();
@@ -484,6 +487,14 @@ export class Hub {
         return s.providers.probe(req.id, req.provider, { listOnly: req.listOnly });
       case 'providers.refreshModels':
         return s.providers.refreshModels(req.ids);
+      case 'import.scan':
+        return s.importer.scan();
+      case 'import.run': {
+        const r = await s.importer.run(req.keys);
+        // the new providers' model lists, pulled before answering (the window lists them right after)
+        if (r.providers.length) await s.providers.refreshModels(r.providers).catch(() => {});
+        return r;
+      }
       case 'settings.get':
         // the search engines' keys are stored protected and read as a mask here (web/service.ts)
         return maskWebSettings(s.meta.settings());

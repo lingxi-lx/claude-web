@@ -60,6 +60,7 @@ import { OpenCodeSource } from './library/opencode-source.js';
 import { AcpListSource } from './library/acp-source.js';
 import { GatewayService } from './gateway/service.js';
 import { setSplitHook } from './gateway/split.js';
+import { ImportService } from './import/service.js';
 import { AgentConfigService } from './agent-config/service.js';
 import { FederationService } from './federation/service.js';
 import { swapAgent } from './session/swap.js';
@@ -410,7 +411,14 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     archive: async (id) => { await library.archive([id], true); },
     isScheduled: (id) => meta.schedules().some((s) => s.sessionId === id) || meta.scheduleRuns(undefined, 300).some((r) => r.sessionId === id),
   });
-  const services = { customCss, orchestra, background, characters, remote, anywhere, tunnels, im, vcs: new VcsService(gitSvc), goals, android: new AndroidService(), pool, sessions: sessionsSvc, config, usage: new UsageService(async (sid) => providerTimeline(await canonical.providerSwitches(sid), meta.sessionMeta(sid).providerId, (id) => { const p = meta.provider(id); return p ? { type: p.type, name: p.name } : undefined; })), files, terminal, meta, limits: new LimitsService(), schedules: new ScheduleService(meta, pool), providers, git: gitSvc, search: new SearchService(), skills: new SkillsService(), mcp: new McpService(), diag: new DiagService(version), ledger, agents, transcripts, canonical, memory, library, version, federation, agentConfig: new AgentConfigService({ agents, backupDir: path.join(dataDir(), 'config-backups') }), gateway, web, computer, localEnv: localEnvStore, previews };
+  const importer = new ImportService({
+    providers: { hasSame: (t, b, k) => providers.hasSame(t, b, k), upsert: (p) => providers.upsert(p) },
+    mcp: {
+      names: async () => { const m = await config.mcp(); return new Set([...Object.keys(m.userServers ?? {}), ...m.servers.map((x) => x.name)]); },
+      add: (name, json) => config.mcpAdd(name, json, 'user'),
+    },
+  });
+  const services = { importer, customCss, orchestra, background, characters, remote, anywhere, tunnels, im, vcs: new VcsService(gitSvc), goals, android: new AndroidService(), pool, sessions: sessionsSvc, config, usage: new UsageService(async (sid) => providerTimeline(await canonical.providerSwitches(sid), meta.sessionMeta(sid).providerId, (id) => { const p = meta.provider(id); return p ? { type: p.type, name: p.name } : undefined; })), files, terminal, meta, limits: new LimitsService(), schedules: new ScheduleService(meta, pool), providers, git: gitSvc, search: new SearchService(), skills: new SkillsService(), mcp: new McpService(), diag: new DiagService(version), ledger, agents, transcripts, canonical, memory, library, version, federation, agentConfig: new AgentConfigService({ agents, backupDir: path.join(dataDir(), 'config-backups') }), gateway, web, computer, localEnv: localEnvStore, previews };
   new Hub(wss, services);
   // model lists older than a day (or never pulled) are refreshed in the background — list only, no tokens
   void providers.autoRefreshModels();

@@ -8,6 +8,7 @@ import { Icon } from '@/ui/icons';
 import { EnvEditor } from '@/features/settings/EnvEditor';
 import { ModelPicker, pickedOf, withPicked } from '@/features/settings/ModelPicker';
 import { connectModel } from '@/features/providers/ConnectModel';
+import { ImportDialog } from '@/features/providers/ImportDialog';
 import { REGION_BLOCKED, REGION_RE } from '@/features/providers/quick';
 import { contextWindowFor, contextWindowSource } from '../../../../server/src/models/context-window';
 import { tr } from '@/i18n';
@@ -273,6 +274,7 @@ const emptyDraft = (): Draft => ({ name: '', type: 'anthropic', baseUrl: '', api
 
 /** Third-party endpoint profiles. Keys live in ~/.claude-web/meta.json and are injected per session — settings.json is never touched. */
 export function ProviderProfiles() {
+  const [importing, setImporting] = useState(false);
   const all = useStore((s) => s.providers);
   // other Claude accounts are kept on 账号与登录 (their own dialog: a token, no endpoint, no model list)
   const providers = useMemo(() => all.filter((p) => p.type !== 'claude-account'), [all]);
@@ -376,7 +378,8 @@ export function ProviderProfiles() {
   };
   return (
     <div className="section">
-      <h5 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>{tr('全部供应商')} <span className="grow" /><button className="btn sm" data-act="quick" onClick={() => void connectModel({ reason: 'settings' })} title={tr('选来源、粘贴 Key：模型列表和接口格式自动读取')}>{tr('快速添加')}</button><button className="btn sm ghost" onClick={() => startEdit()} title={tr('所有选项：类型、地址、模型映射、缓存…')}><Icon name="plus" size={12} /> {tr('添加')}</button></h5>
+      <h5 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>{tr('全部供应商')} <span className="grow" /><button className="btn sm" data-act="quick" onClick={() => void connectModel({ reason: 'settings' })} title={tr('选来源、粘贴 Key：模型列表和接口格式自动读取')}>{tr('快速添加')}</button><button className="btn sm" data-act="import" onClick={() => setImporting(true)} title={tr('把 Hermes、CC Switch、Codex、OpenCode 等工具里配好的供应商和 MCP 服务器拿过来')}>{tr('从其它工具导入…')}</button><button className="btn sm ghost" onClick={() => startEdit()} title={tr('所有选项：类型、地址、模型映射、缓存…')}><Icon name="plus" size={12} /> {tr('添加')}</button></h5>
+      {importing && <ImportDialog only="provider" onClose={() => setImporting(false)} />}
       <div className="sub" style={{ marginBottom: 8 }}>{tr('每个对话用一个（输入框的模型菜单里换）。密钥只交给用它的那个对话，不写进')} <code>~/.claude/settings.json</code>{tr('，claude.ai 登录照常可用。')}</div>
       <div className="list">
         <div className="row">
