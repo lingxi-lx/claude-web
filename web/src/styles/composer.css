@@ -318,3 +318,9 @@ html .composer-under.cb.cb > .cb-left { flex-shrink: 1; min-width: 0; }
 html .composer-under.cb.cb > .cb-right { flex-shrink: 4; min-width: 0; }
 html .composer-under.cb.cb .cb-left .dirpick { flex-shrink: 0; }
 html .composer-under.cb.cb .cb-right .mm-anchor:not(.sub-anchor) .mm-chip-label { max-width: 160px; }
+/* the new-conversation page's row carries 代码 / 聊天, the folder and the branch too: when it cannot hold them all the
+   right-hand group (model, 子代理, 深入) goes to a second line instead of being squeezed under the permission chip */
+.composer-under.cb:has(.cmp-mode) { flex-wrap: wrap; row-gap: 2px; }
+html .composer-under.cb.cb:has(.cmp-mode) > .cb-left, html .composer-under.cb.cb:has(.cmp-mode) > .cb-right { flex-shrink: 0; max-width: 100%; }
+.composer-under.cb:has(.cmp-mode) > .cb-mid { flex-basis: 0; }
+.composer-under.cb:has(.cmp-mode) > .cb-right { margin-left: auto; }

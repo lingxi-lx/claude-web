@@ -2224,7 +2224,7 @@ html.desktop.mac .app.no-sidebar .workbench:not(.gb) .over-head { padding-left: 
 .cb .steer.deny { color: var(--ink-1); border-color: var(--edge-strong); }
 
 /* 「目标：… · 第 3 轮 · 查看」 on top of a conversation a goal drives */
-.goal-bar { display: flex; align-items: center; gap: 8px; flex: none; min-height: 32px; padding: 0 12px 0 16px; border-bottom: var(--hairline) solid var(--edge-subtle); background: var(--surface-1); font-size: 13px; color: var(--ink-2); }
+.goal-bar { display: flex; align-items: center; gap: 8px; flex: none; min-width: 0; overflow: hidden; min-height: 32px; padding: 0 12px 0 16px; border-bottom: var(--hairline) solid var(--edge-subtle); background: var(--surface-1); font-size: 13px; color: var(--ink-2); }
 .goal-bar .gb-ic { flex: none; color: var(--ink-3); }
 .goal-bar .gb-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .goal-bar .gb-r { flex: none; color: var(--ink-3); font-variant-numeric: tabular-nums; }

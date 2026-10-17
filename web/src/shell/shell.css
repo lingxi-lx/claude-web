@@ -146,7 +146,9 @@ h2 { margin: 28px 0 8px; font-size: 14px; line-height: 20px; font-weight: 600; c
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   background: var(--card);
 }
-.frame { flex: 1; width: 100%; border: 0; background: var(--card); }
+/* width: iOS Safari sizes an iframe to its content unless it is told its width this way: the app was laid out wider
+   than the phone, its header and goal strip ran off the right edge */
+.frame { flex: 1; width: 1px; min-width: 100%; max-width: 100%; border: 0; background: var(--card); }
 /* from the home screen on iOS the page draws under the status bar, whose text is white whatever is behind it
    (shell.html: black-translucent): on paper it gets ink behind it. Nothing where the inset is 0 (everywhere else) */
 @media (display-mode: standalone) and (prefers-color-scheme: light) {

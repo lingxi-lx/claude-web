@@ -27,8 +27,11 @@
   width: 40px; height: 40px; margin: 0; border-radius: 50%; background: var(--surface-elev); box-shadow: var(--elev-1); color: var(--ink-1);
 }
 .app.mobile .sess-head .sh-more > .icon-btn.active { background: var(--surface-2); }
-.app.mobile .sess-head .sh-main { flex: 1 1 0; min-width: 0; justify-content: center; }
-.app.mobile .sh-title { min-width: 0; font-size: var(--fs-body); text-align: center; }
+/* the title stays in its box whatever the engine makes of a long unbreakable path (iOS Safari drew one over the round
+   buttons on the right, 2026-10-17 user report): the middle clips its own painting, the buttons sit above it */
+.app.mobile .sess-head .sh-main { flex: 1 1 0; min-width: 0; justify-content: center; overflow: hidden; overflow: clip; contain: paint; }
+.app.mobile .sh-title { min-width: 0; max-width: 100%; font-size: var(--fs-body); text-align: center; }
+.app.mobile .sess-head > .sh-actions { position: relative; z-index: 1; }
 .app.mobile .sh-diff { height: 32px; padding: 0 12px; margin: 0; border-radius: var(--r-pill); background: var(--surface-elev); box-shadow: var(--elev-1); font-family: var(--mono); font-size: var(--fs-meta); letter-spacing: -0.02em; }
 .app.mobile .sh-actions { gap: var(--sp-2); }
 /* directly over the conversation: the header's lower edge is a fade the text scrolls under */

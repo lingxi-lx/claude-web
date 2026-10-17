@@ -9,7 +9,10 @@
 /* a menu out of the rail (account, ···) goes over a full page (z 6: 扩展 / 后台 / 自动化…), still under modals (50+) —
    2026-10-17 user report: the account menu was cut off by the 扩展 page */
 .rail:has(.menu) { z-index: 40; }
-.rail-top { height: var(--h-head); flex: none; display: flex; align-items: center; }
+/* ☰ in the title bar's row, the sidebar toggle under it: side by side the two did not fit the rail (☰ was cut off at
+   the window's left edge) */
+.rail-top { flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; padding-bottom: 4px; }
+.rail-top > .rail-anchor { height: var(--h-head); align-items: center; }
 .rail-main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; padding-top: 2px; }
 .rail-foot { flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .rail-anchor { position: relative; display: inline-flex; }
@@ -107,7 +110,7 @@ html.desktop .sect-top { -webkit-app-region: drag; }
 html.desktop .sect-top button { -webkit-app-region: no-drag; }
 /* macOS: the traffic lights sit over the rail's top and reach into the column after it */
 html.desktop.mac .rail { padding-top: calc(40px / var(--zoom, 1)); }
-html.desktop.mac .rail-top { height: 40px; }
+html.desktop.mac .rail-top > .rail-anchor { height: 40px; }
 html.desktop.mac .app.has-rail .sb-top, html.desktop.mac .app.has-rail .sect-top { padding-left: max(var(--sp-4), calc(84px / var(--zoom, 1) - var(--rail))); }
 
 /* ---- 想多深: its own chip next to the model's (spec §3). 深度编排 on: the chip takes the accent ---- */
