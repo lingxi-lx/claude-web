@@ -1,7 +1,7 @@
 import { tr } from '@/i18n';
 // Pure helpers that turn SDK error / timing signals into UI-facing health state. No DOM, no store.
 
-export type ErrorKind = 'throttled' | 'quota' | 'balance' | 'network' | 'credential' | 'context' | 'output_cap' | 'server' | 'refusal' | 'aborted' | 'unknown';
+export type ErrorKind = 'throttled' | 'quota' | 'balance' | 'network' | 'credential' | 'context' | 'output_cap' | 'server' | 'refusal' | 'aborted' | 'history' | 'unknown';
 
 export interface ErrorSignal {
   /** SDKAssistantMessageError / api_retry.error */
@@ -23,6 +23,9 @@ export function classifyError(s: ErrorSignal): ErrorKind {
   const tr = (s.terminalReason ?? '').toLowerCase();
   const text = (s.text ?? '').toLowerCase();
   const st = s.status ?? undefined;
+  // the history the engine sent holds an empty text block (a picture sent alone, before 2026-10-17): the server takes
+  // it out of the transcript and starts the process over (session-runner dropEmptyText) — a retry goes through
+  if (/empty text blocks|text content blocks must be non-empty/.test(text)) return 'history';
   if (s.rateLimitStatus === 'rejected' || s.rateLimitErrorCode === 'credits_required') return 'quota';
   // A provider account out of money is not a usage window that resets: say so, and point at topping up.
   if (/insufficient[_ ](?:\w+[_ ])?(?:balance|funds|credit)|credit balance is too low|余额不足|余额已用完/.test(text)) return 'balance';
@@ -50,6 +53,7 @@ export const ERROR_LABEL: Record<ErrorKind, string> = {
   server: tr('上游故障'),
   refusal: tr('模型拒答'),
   aborted: tr('已中断'),
+  history: tr('对话记录有误'),
   unknown: tr('未知错误'),
 };
 
@@ -64,6 +68,7 @@ export const ERROR_HINT: Record<ErrorKind, string> = {
   server: tr('上游 5xx / 过载，稍后重试通常就好。'),
   refusal: tr('模型拒绝了这个请求；换个说法或换模型。'),
   aborted: tr('这一轮被中断了，可以直接继续发消息。'),
+  history: tr('这个对话的记录里有一段空文字（以前只发一张图片时留下的），接口不收。已经自动修好了：点重试或再发一次就行。'),
   unknown: tr('看结果行里的原始错误文本。'),
 };
 

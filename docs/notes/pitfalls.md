@@ -8,3 +8,13 @@
 - **AskUserQuestion / ExitPlanMode 都走 `canUseTool`**：回答 = `{behavior:'allow', updatedInput:{...input, answers}}`。
 - **effort 没有运行时控制接口**：改 effort 走 `/effort <level>` 命令发进对话。
 - `web/tsconfig.json` 不能用 `baseUrl`（TS 5.9 移除），`paths` 必须是相对路径。
+
+## 只发一张图片 → 之后每一轮都 400（2026-10-17 用户截图）
+
+- `SessionRunner.send()` 以前总是在 content 末尾放 `{type:'text', text}`，只发图片时就是 `[image, {type:'text', text:''}]`。接口不收空文字块，
+  引擎还会给最后一块加 `cache_control`：`messages.N.content.1.text: cache_control cannot be set for empty text blocks` /
+  `text content blocks must be non-empty`。这条消息进了 transcript，**之后每一轮都带着它重发，对话就再也用不了**（截图里一连串 400）。
+- 修法三处：`send()` 只有图片时不加文字块；`transcript-file.ts` 的 `dropEmptyText()` 在 resume 前（还没有进程拿着文件）把 user / assistant
+  消息里的空文字块去掉（全空的消息换成 `…`），经临时文件 rename，没东西可修时不碰文件；进程还活着时它内存里有这段历史，
+  所以结果是这两种 400 之一时 runner 标 `respawnPending`，这一轮结束后重开进程（resume 读修过的文件）。前端 `classifyError` 新增 `history`
+  「对话记录有误」，提示点重试。

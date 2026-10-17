@@ -150,3 +150,34 @@ describe('hasEntry', () => {
     expect(hasEntry(null, 'a9')).toBe(false);
   });
 });
+
+describe('dropEmptyText: a picture sent alone left an empty text block that made every later turn a 400', () => {
+  it('takes empty text blocks out, leaves the rest of the file byte for byte, and does nothing when there is nothing to fix', async () => {
+    const { dropEmptyText } = await import('./transcript-file.js');
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-empty-'));
+    const file = path.join(dir, 's.jsonl');
+    const img = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } };
+    const lines = [
+      JSON.stringify({ type: 'user', uuid: 'u1', message: { role: 'user', content: 'hi' } }),
+      JSON.stringify({ type: 'user', uuid: 'u2', message: { role: 'user', content: [img, { type: 'text', text: '' }] } }),
+      JSON.stringify({ type: 'assistant', uuid: 'a1', message: { role: 'assistant', content: [{ type: 'text', text: '  ' }] } }),
+      JSON.stringify({ type: 'user', uuid: 'u3', message: { role: 'user', content: [img, { type: 'text', text: 'look' }] } }),
+      '{"type":"assistant","message":{"content":[{"type":"te',
+    ];
+    fs.writeFileSync(file, lines.join('\n'));
+    expect(dropEmptyText(file)).toBe(2);
+    const out = fs.readFileSync(file, 'utf8').split('\n');
+    expect(JSON.parse(out[1]).message.content).toEqual([img]);
+    expect(JSON.parse(out[2]).message.content).toEqual([{ type: 'text', text: '…' }]);
+    expect([out[0], out[3], out[4]]).toEqual([lines[0], lines[3], lines[4]]);
+    const before = fs.statSync(file).mtimeMs;
+    expect(dropEmptyText(file)).toBe(0);
+    expect(fs.statSync(file).mtimeMs).toBe(before);
+    expect(fs.readdirSync(dir)).toEqual(['s.jsonl']);
+    expect(dropEmptyText(null)).toBe(0);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});

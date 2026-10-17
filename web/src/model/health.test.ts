@@ -79,3 +79,12 @@ describe('compactionNotice', () => {
     expect(compactionNotice({ trigger: 'manual', pre_tokens: 5_000 })).toBe('上下文已压缩（5K tok）');
   });
 });
+
+describe('an empty text block in the history', () => {
+  it('is its own kind (the server repairs it; a retry goes through), not 未知错误', async () => {
+    const { classifyError, ERROR_LABEL } = await import('./health');
+    expect(classifyError({ status: 400, text: 'API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"messages.18.content.1.text: cache_control cannot be set for empty text blocks"}}' })).toBe('history');
+    expect(classifyError({ text: 'messages: text content blocks must be non-empty' })).toBe('history');
+    expect(ERROR_LABEL.history).toBe('对话记录有误');
+  });
+});

@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { statSync } from 'node:fs';
 import { withExplanation } from '../errors/explain.js';
-import { findClaudeTranscript, hasClaudeTranscript, hasEntry, lastCostState, lastHumanPrompt, repairLeaf } from './transcript-file.js';
+import { dropEmptyText, findClaudeTranscript, hasClaudeTranscript, hasEntry, lastCostState, lastHumanPrompt, repairLeaf } from './transcript-file.js';
 import { ownSubagentOverride, settingsOverride, userAnthropicEnv } from './user-env.js';
 import { crossPick, subAlias } from '../models/subagent.js';
 import { splitEndpoint } from '../gateway/split.js';
@@ -332,6 +332,9 @@ export class SessionRunner extends EventEmitter {
     // on ccb) and continues the cost totals it saved; ccb starts every process from zero
     const resumeId = typeof extra.resume === 'string' ? extra.resume : undefined;
     const file = resumeId ? findClaudeTranscript(resumeId) : null;
+    // a message that went out with an empty text block (a picture alone, before 2026-10-17) made every turn after it a
+    // 400: no process has the file yet, take those blocks out
+    if (file && dropEmptyText(file)) console.warn(`[runner] ${resumeId}: empty text blocks taken out of the transcript`);
     if (engine.kind === 'claude' && resumeId && !extra.forkSession) repairLeaf(file, resumeId);
     const saved = engine.kind === 'claude' && resumeId ? lastCostState(file, resumeId) : null;
     this.totals = saved ? { cost: saved.cost, models: saved.models } : { cost: 0, models: {} };
@@ -619,6 +622,10 @@ export class SessionRunner extends EventEmitter {
       turnShare(m as any, this.totals); // the CLI reports running totals; everything downstream adds turns up
       // ccb prices every model with Claude's table: for other vendors' models the number is fiction
       markUnknownCost(m as any, this.provider?.type);
+      // refused for an empty text block in the history: the process keeps that history in memory and would be refused
+      // again on every turn — start it over, so the resume reads the transcript with the block taken out (dropEmptyText)
+      const said = `${(m as any).result ?? ''} ${JSON.stringify((m as any).errors ?? '')}`;
+      if ((m as any).is_error && /empty text blocks|text content blocks must be non-empty/.test(said)) this.respawnPending = true;
       this.setState('idle');
     }
     // keep history bounded to avoid unbounded memory in very long sessions; partial events are dropped from history
@@ -704,7 +711,8 @@ export class SessionRunner extends EventEmitter {
       });
       text = `${text}\n\n${marks.join('\n')}`;
     }
-    content.push({ type: 'text', text });
+    // a picture alone: no text block — an empty one is refused by the API, and from the transcript on every later turn
+    if (text.trim() || !content.length) content.push({ type: 'text', text });
     const msg: SDKUserMessage = {
       type: 'user',
       message: { role: 'user', content: images?.length ? content : text },

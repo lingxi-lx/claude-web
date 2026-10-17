@@ -376,6 +376,37 @@ describe('SessionRunner Stop (interrupt)', () => {
     await r.close();
   });
 
+  it('a picture sent alone goes out without an empty text block (the API refuses one, on every later turn too)', async () => {
+    const r = new SessionRunner({ sessionId: 'img-1', cwd: '/x' } as any);
+    await tick();
+    const sent: any[] = [];
+    r.on('sent', (m: any) => sent.push(m));
+    const img = { mediaType: 'image/png', data: 'AAAA' };
+    r.send('', [img]);
+    r.send('  ', [img]);
+    r.send('look', [img]);
+    expect(sent.map((m) => m.message.content.map((b: any) => b.type))).toEqual([['image'], ['image'], ['image', 'text']]);
+    await r.close();
+  });
+
+  it('refused for an empty text block in the history: the process starts over once (its memory has the block, the file no longer)', async () => {
+    queries.length = 0;
+    const r = new SessionRunner({ sessionId: 'img-2', cwd: '/x' } as any);
+    await tick();
+    r.send('hi');
+    queries[0].push({ ...result(), is_error: true, result: 'API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"messages.18.content.1.text: cache_control cannot be set for empty text blocks"}}' });
+    await tick();
+    await tick();
+    expect(queries).toHaveLength(2);
+    // another error: no restart
+    r.send('again');
+    queries[1].push({ ...result(), is_error: true, result: 'API Error: 529 overloaded' });
+    await tick();
+    await tick();
+    expect(queries).toHaveLength(2);
+    await r.close();
+  });
+
   it('a CLI that ends the turn itself is not touched', async () => {
     queries.length = 0;
     const r = new SessionRunner({ sessionId: 'stop-1', cwd: '/x' } as any);

@@ -1,4 +1,4 @@
-import { appendFileSync, closeSync, existsSync, fstatSync, openSync, readdirSync, readSync } from 'node:fs';
+import { appendFileSync, closeSync, existsSync, fstatSync, openSync, readFileSync, readdirSync, readSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -150,5 +150,48 @@ export function repairLeaf(file: string | null, sessionId: string, opts: { ignor
     return true;
   } catch {
     return false;
+  }
+}
+
+/** A text block with nothing to read: the API refuses one (and one with cache_control on it) in any message. */
+const emptyText = (b: any) => b?.type === 'text' && typeof b.text === 'string' && !b.text.trim();
+
+/**
+ * Takes empty text blocks out of a transcript's messages (2026-10-17: a message that was only a picture went out as
+ * [image, text ""] — every later turn of that conversation was refused with 400 「cache_control cannot be set for empty
+ * text blocks」 / 「text content blocks must be non-empty」, for good: the engine sends its history again each time).
+ * A message left with nothing gets a placeholder. Only while no process has the file (before a resume); the file is
+ * rewritten through a temporary one, and not at all when there is nothing to fix. Returns how many messages changed.
+ */
+export function dropEmptyText(file: string | null): number {
+  if (!file) return 0;
+  let text: string;
+  try {
+    // a quick look first: the usual transcript has no empty text at all
+    if (statSync(file).size > 512 * 1024 * 1024) return 0;
+    text = readFileSync(file, 'utf8');
+  } catch { return 0; }
+  if (!/"text":"\s*"/.test(text)) return 0;
+  let changed = 0;
+  const lines = text.split('\n').map((line) => {
+    if (!/"text":"\s*"/.test(line)) return line;
+    let e: any;
+    try { e = JSON.parse(line); } catch { return line; }
+    const c = e?.message?.content;
+    if ((e?.type !== 'user' && e?.type !== 'assistant') || !Array.isArray(c) || !c.some(emptyText)) return line;
+    const kept = c.filter((b: any) => !emptyText(b));
+    e.message.content = kept.length ? kept : [{ type: 'text', text: '…' }];
+    changed++;
+    return JSON.stringify(e);
+  });
+  if (!changed) return 0;
+  const tmp = `${file}.cw-${process.pid}.tmp`;
+  try {
+    writeFileSync(tmp, lines.join('\n'));
+    renameSync(tmp, file);
+    return changed;
+  } catch {
+    try { if (existsSync(tmp)) renameSync(tmp, `${tmp}.failed`); } catch { /* left behind */ }
+    return 0;
   }
 }
