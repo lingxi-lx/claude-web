@@ -44,6 +44,7 @@ import { dlg, useDialogStore } from '@/ui/dialog';
 import { DOCK_BLOCKED, DOCK_CARRIED, DOCK_ENTER_IGNORED, DOCK_PLACEHOLDER, DOCK_REQUEUED, DOCK_SEND, EFFORT_LABEL, TERMS, ULTRACODE } from '@/ui/terms';
 import { showGoals } from '@/features/workbench/right-panel';
 import { ComposerBar, ComposerUnder } from './ComposerBar';
+import { ConvStatsLine } from './ConvStatsLine';
 import { StatusLine } from './StatusLine';
 import { PlusMenu } from './PlusMenu';
 import { PermissionChip } from './PermissionChip';
@@ -1161,7 +1162,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
             send={send_}
           />
         </div>
-        {under && <ComposerUnder lead={welcomeUnder ? <>{modeSwitch}{projectChips}{branchChip}</> : undefined} permission={permission} status={status} model={model} subagent={subagent} effort={effort} meter={meter} />}
+        {under && <ComposerUnder lead={welcomeUnder ? <>{modeSwitch}{projectChips}{branchChip}</> : undefined} permission={permission} stats={!welcome && active ? <ConvStatsLine sessionId={active.sessionId} /> : undefined} status={status} model={model} subagent={subagent} effort={effort} meter={meter} />}
       </div>
     </div>
   );

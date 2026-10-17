@@ -37,10 +37,12 @@ export function ComposerBar({ plus, project, branch, status, meter, model, subag
  * send; what the next turn runs with sits on a quiet line under it — permission on the left, model · effort and the
  * context ring on the right. Same chip classes as the bar (`.cb`), so every menu and chip behaves the same.
  */
-export function ComposerUnder({ lead, permission, status, model, subagent, effort, meter }: {
+export function ComposerUnder({ lead, permission, stats, status, model, subagent, effort, meter }: {
   /** the new-conversation page: 代码 / 聊天, the computer, the folder and the branch before the permission */
   lead?: ReactNode;
   permission?: ReactNode;
+  /** the conversation so far (ConvStatsLine), in the free middle of the row */
+  stats?: ReactNode;
   status?: ReactNode;
   model?: ReactNode;
   subagent?: ReactNode;
@@ -50,7 +52,8 @@ export function ComposerUnder({ lead, permission, status, model, subagent, effor
   return (
     <div className="composer-under cb">
       <div className="cb-left">{lead}{permission}</div>
-      <span className="grow" />
+      {/* the free middle of the row: the stats take what is left and drop whole items that do not fit */}
+      <span className="grow cb-mid">{stats}</span>
       <div className="cb-right">{status}{model}{subagent}{effort}{meter}</div>
     </div>
   );

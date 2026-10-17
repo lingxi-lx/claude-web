@@ -160,6 +160,12 @@
 /* the bar's container rules keep the model chip readable among project / branch chips; here it has the line to itself */
 html .composer-under.cb.cb .cb-right .mm-anchor:not(.sub-anchor) { min-width: 0; }
 .composer-under.cb .cb-status { padding: 0 6px; }
+/* ConvStatsLine in the row's free middle: items that do not fit wrap onto a second line that is cut off, so the row
+   shows as many whole items as there is room for and never pushes the chips */
+.composer-under .cb-mid { flex: 1 1 0; min-width: 0; display: flex; align-items: center; }
+.conv-stats { display: flex; flex-wrap: wrap; align-items: center; height: 18px; overflow: hidden; min-width: 0; margin: 0 8px; font-size: var(--fs-meta); line-height: 18px; color: var(--ink-4); font-variant-numeric: tabular-nums; }
+.conv-stats > span { white-space: nowrap; }
+.conv-stats > span + span::before { content: '·'; margin: 0 6px; color: var(--ink-5); }
 
 /* statusLine: the user's own command's output, its ANSI colours from the palette below (dark themes; light ones after) */
 .cmp-statusline {
