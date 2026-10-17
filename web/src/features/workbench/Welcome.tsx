@@ -26,7 +26,8 @@ export function Welcome({ paneId, tileId }: { paneId: string; tileId: string }) 
   const dispatch = useStore((s) => s.dispatchLayout);
   const edge = usePaneEdge();
   const mobile = useStore((s) => s.mobile);
-  const backdrop = useStore((s) => backdropStyle(s.settings['ui.welcomeBackdrop']));
+  // nothing until the settings are in: someone who turned it off would see the default flash for a second
+  const backdrop = useStore((s) => (s.metaLoaded ? backdropStyle(s.settings['ui.welcomeBackdrop']) : 'off'));
   const theme = useStore((s) => s.theme);
   const pick = (sid: string) => {
     dispatch({ t: 'session.assign', paneId, tileId, sessionId: sid });
