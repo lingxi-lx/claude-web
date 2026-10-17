@@ -160,9 +160,18 @@ export function LetterFlow() {
     const local = (x: number, y: number) => { const r = canvas.getBoundingClientRect(); return { x: x - r.left, y: y - r.top }; };
     const move = (e: PointerEvent) => { pointer = local(e.clientX, e.clientY); };
     const leave = () => { pointer = null; };
+    // never more than a page's worth of guests (typed and splashed): the oldest go first
+    const GUEST_CAP = 160;
+    const addGuests = (add: Mote[]) => {
+      motes.push(...add);
+      const guests = motes.filter((m) => m.guest);
+      if (guests.length > GUEST_CAP) { const drop = new Set(guests.slice(0, guests.length - GUEST_CAP)); motes = motes.filter((m) => !drop.has(m)); }
+    };
     const down = (e: PointerEvent) => {
       if (reduce || e.button !== 0) return;
-      motes.push(...splash(local(e.clientX, e.clientY), rand));
+      // a click into the box or another field is for typing, not a splash
+      if (e.target instanceof Element && e.target.closest('.composer, input, textarea, select, [contenteditable="true"]')) return;
+      addGuests(splash(local(e.clientX, e.clientY), rand));
     };
     // what is typed in the box: from where the caret is — a hidden copy of the box (same width, font, padding and
     // wrapping) with the text before the caret and a marker after it; the marker is where the caret is
@@ -196,10 +205,7 @@ export function LetterFlow() {
     };
     const spawnAt = (target: HTMLTextAreaElement, text: string) => {
       if (!target.isConnected) return;
-      motes.push(...typed(text, caret(target), rand));
-      // never more than a page's worth of guests
-      const guests = motes.filter((m) => m.guest);
-      if (guests.length > 160) { const drop = new Set(guests.slice(0, guests.length - 160)); motes = motes.filter((m) => !drop.has(m)); }
+      addGuests(typed(text, caret(target), rand));
     };
     // a typed character (an input method's composing text comes as insertCompositionText, its result below)
     const onInput = (e: Event) => { const ie = e as InputEvent; if (ie.inputType === 'insertText') emit(e.target, ie.data); };
