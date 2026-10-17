@@ -1029,8 +1029,20 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
 
   // the light around the box while this conversation runs (the stop button also shows while it waits or starts)
   const glow = glowing({ welcome, state: active?.state, visible });
-  // a conversation on a wide screen: the chips go on a line under the box (phase 6 §3); a phone keeps one row
-  const under = !welcome && !mobile;
+  // a conversation on a wide screen: the chips go on a line under the box (phase 6 §3); a phone keeps one row. The
+  // new-conversation page too (the official one: computer · folder · permission under the box, the model on the right),
+  // unless 设置 → 新对话页的输入框 puts them back in the box
+  const welcomeUnder = welcome && !mobile && settings['ui.welcomeLayout'] !== 'inbox';
+  const under = (!welcome && !mobile) || welcomeUnder;
+  const projectChips = welcome ? <><MachineChip peers={peers} value={wPeer} onPick={pickMachine} /><ProjectChip cwd={cwd} recent={recentDirs} onPick={setCwd} onBrowse={() => (wPeer ? toast(tr('别的电脑上的文件夹，从它最近用过的里面选')) : void pickDir())} worktree={wWorktree} onWorktree={setWWorktree} /></> : null;
+  const branchChip = welcome && !mobile && !wPeer ? <BranchChip cwd={cwd} /> : null;
+  // the official title bar's 💬 / </> switch: here it is 只聊天 (no tools) or not, for the conversation about to start
+  const modeSwitch = welcomeUnder && claudeHere && !wPeer ? (
+    <span className="seg cmp-mode" role="radiogroup" aria-label={tr('对话方式')}>
+      <button role="radio" aria-checked={!wChatOnly} className={clsx(!wChatOnly && 'active')} data-mode="code" title={tr('Claude 可以读写文件、运行命令')} onClick={() => setWChatOnly(false)}><Icon name="code" size={13} /> {tr('代码')}</button>
+      <button role="radio" aria-checked={wChatOnly} className={clsx(wChatOnly && 'active')} data-mode="chat" title={tr('只聊天：这个新对话不给 Claude 任何工具')} onClick={() => setWChatOnly(true)}><Icon name="chat" size={13} /> {tr('聊天')}</button>
+    </span>
+  ) : null;
 
   return (
     // data-paused: something lies over the conversation — the looping animations in here (the light, the tab's dot
@@ -1136,8 +1148,8 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
           <input ref={folderInput} type="file" multiple hidden {...{ webkitdirectory: '' }} onChange={(e) => { onFolderPicked(e.target.files); e.target.value = ''; }} />
           <ComposerBar
             plus={plus}
-            project={welcome ? <><MachineChip peers={peers} value={wPeer} onPick={pickMachine} /><ProjectChip cwd={cwd} recent={recentDirs} onPick={setCwd} onBrowse={() => (wPeer ? toast(tr('别的电脑上的文件夹，从它最近用过的里面选')) : void pickDir())} worktree={wWorktree} onWorktree={setWWorktree} /></> : null}
-            branch={welcome && !mobile && !wPeer ? <BranchChip cwd={cwd} /> : null}
+            project={welcomeUnder ? null : projectChips}
+            branch={welcomeUnder ? null : branchChip}
             status={under ? undefined : status}
             meter={under ? undefined : meter}
             model={under ? undefined : model}
@@ -1149,7 +1161,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
             send={send_}
           />
         </div>
-        {under && <ComposerUnder permission={permission} status={status} model={model} subagent={subagent} effort={effort} meter={meter} />}
+        {under && <ComposerUnder lead={welcomeUnder ? <>{modeSwitch}{projectChips}{branchChip}</> : undefined} permission={permission} status={status} model={model} subagent={subagent} effort={effort} meter={meter} />}
       </div>
     </div>
   );

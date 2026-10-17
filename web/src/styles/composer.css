@@ -301,3 +301,14 @@ html .composer-under.cb.cb .cb-right .mm-anchor:not(.sub-anchor) { min-width: 0;
 .side-chat .sc-input { display: flex; align-items: flex-end; gap: 6px; padding: 8px 8px 8px 12px; border-top: var(--hairline) solid var(--edge-subtle); margin-top: 6px; }
 .side-chat .sc-input textarea { flex: 1; resize: none; border: 0; background: none; color: var(--ink-1); font: inherit; outline: none; max-height: 96px; padding: 4px 0; }
 .side-chat .spin { width: 12px; height: 12px; border-radius: 50%; border: 1.6px solid var(--edge-default); border-top-color: var(--ink-2); animation: spin 0.9s linear infinite; flex: none; }
+
+/* the new-conversation page's 代码 / 聊天 (the official title bar's chat / code switch), first on the line under the box */
+.composer-under .seg.cmp-mode { display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--r-sm); background: var(--layer-hover); margin-right: 6px; flex: none; }
+.composer-under .seg.cmp-mode button { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: calc(var(--r-sm) - 2px); font-size: var(--fs-meta); color: var(--ink-3); }
+.composer-under .seg.cmp-mode button.active { background: var(--bg-elev); color: var(--ink-1); box-shadow: 0 0 0 1px var(--line); }
+/* on the line under the box the folder is named in full before the model's name gives way (the new-conversation page
+   has 代码 / 聊天, the folder, the branch and the permission on the left) */
+html .composer-under.cb.cb > .cb-left { flex-shrink: 1; min-width: 0; }
+html .composer-under.cb.cb > .cb-right { flex-shrink: 4; min-width: 0; }
+html .composer-under.cb.cb .cb-left .dirpick { flex-shrink: 0; }
+html .composer-under.cb.cb .cb-right .mm-anchor:not(.sub-anchor) .mm-chip-label { max-width: 160px; }

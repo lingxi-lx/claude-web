@@ -57,6 +57,7 @@ const CONTROLS: Record<EntryId, (e: EntryMeta) => ReactNode> = {
   'ui.infoPanel': (e) => <Toggle k={e.id} label={e.label} def />,
   'ui.sidebarFolded': (e) => <Toggle k={e.id} label={e.label} def />,
   'ui.welcomeBackdrop': (e) => <Toggle k={e.id} label={e.label} def />,
+  'ui.welcomeLayout': (e) => <Seg k={e.id} def="under" label={e.label} options={[{ id: 'under', l: tr('框下一行') }, { id: 'inbox', l: tr('框里') }]} />,
   'ui.statusLine': (e) => <Toggle k={e.id} label={e.label} def />,
   'sessions.mcp': (e) => <Toggle k={e.id} label={e.label} def />,
   'claude.desktopSkills': (e) => <Toggle k={e.id} label={e.label} def />,
