@@ -11,6 +11,9 @@ import { cellLevel, makeNoise } from './ascii-noise';
 
 const CHARS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const FPS = 15;
+const QUIET_PAD = 16;
+const QUIET_RAMP = 72;
+const QUIET_FLOOR = 0.06;
 
 export function AsciiField() {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -51,6 +54,16 @@ export function AsciiField() {
       ctx.textBaseline = 'top';
       const r = canvas.getBoundingClientRect();
       const px = (pointer.x - r.left) / cw, py = (pointer.y - r.top) / ch;
+      // the page's words (greeting, input box, hints, the recent list) sit on a near-empty field: letters fade out
+      // over QUIET_RAMP px towards that column and stay a trace inside it
+      const col = canvas.parentElement?.querySelector('.home-col')?.getBoundingClientRect();
+      const q = col && col.width > 0 ? { l: col.left - r.left - QUIET_PAD, t: col.top - r.top - QUIET_PAD, r: col.right - r.left + QUIET_PAD, b: col.bottom - r.top + QUIET_PAD } : null;
+      const calm = (x: number, y: number) => {
+        if (!q) return 1;
+        const cx = x * cw + cw / 2, cy = y * ch + ch / 2;
+        const d = Math.max(q.l - cx, cx - q.r, q.t - cy, cy - q.b);
+        return d >= QUIET_RAMP ? 1 : d <= 0 ? QUIET_FLOOR : QUIET_FLOOR + (1 - QUIET_FLOOR) * (d / QUIET_RAMP);
+      };
       for (let y = 0; y < rows; y++) {
         for (let x = 0; x < cols; x++) {
           const level = cellLevel(noise, x, y, t);
@@ -59,7 +72,7 @@ export function AsciiField() {
           if (level <= 0 && near <= 0.35) continue;
           const i = y * cols + x;
           if (!reduce && Math.random() < 0.02) glyphs[i] = Math.floor(Math.random() * CHARS.length);
-          const a = Math.min(1, level * 0.42 + near * near * 0.75);
+          const a = Math.min(1, level * 0.3 + near * near * 0.6) * calm(x, y);
           if (a < 0.03) continue;
           ctx.globalAlpha = a;
           ctx.fillStyle = near > 0.2 ? lit : ink;

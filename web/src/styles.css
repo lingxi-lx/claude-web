@@ -741,9 +741,9 @@ input.field:focus-visible, select.field:focus-visible, textarea.field:focus-visi
 .menu .menu-grid button.on { background: var(--layer-selected); }
 /* the empty tile's top row: only the sidebar reveal (and, on the desktop, a place to drag the window by) */
 .welcome-tile { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; isolation: isolate; }
-/* the new-conversation page's backdrop (features/home/AsciiField.tsx): behind everything, quieter where the words are */
-.welcome-tile > .ascii-field { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none;
-  -webkit-mask-image: radial-gradient(ellipse 46% 40% at 50% 38%, rgba(0, 0, 0, 0.18), #000 75%); mask-image: radial-gradient(ellipse 46% 40% at 50% 38%, rgba(0, 0, 0, 0.18), #000 75%); animation: fadein 0.6s; }
+/* the new-conversation page's backdrop (features/home/AsciiField.tsx): behind everything; the canvas itself keeps the
+   content column (.home-col) nearly empty */
+.welcome-tile > .ascii-field { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; animation: fadein 0.6s; }
 .welcome-top { height: var(--h-head); flex: none; display: flex; align-items: center; padding: 0 var(--sp-3); }
 .seg.mini { flex: none; }
 .seg.mini button { padding: 2px 7px; font-size: 12px; white-space: nowrap; }
