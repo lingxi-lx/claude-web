@@ -32,6 +32,7 @@
   模型，菜单里有一句说明；OpenAI / Gemini 格式的对话也一样只列自己的。
 - 选了别家的模型，存成 `cw-x:<供应商 id>:<模型>`（`models/subagent.ts` 的 `crossValue` / `crossPick`）——和普通选择同一个字段，存 / 默认 /
   重开 / 联邦都不用改。runner 启动时解开：`ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` 换成网关的分流路由（`gateway/split.ts` →
-  `GatewayService.splitEndpoint`），`CLAUDE_CODE_SUBAGENT_MODEL` 给原样的模型 id。分流路由见 `gateway` 笔记。
+  `GatewayService.splitEndpoint`），`CLAUDE_CODE_SUBAGENT_MODEL` 给**别名** `cw-sub/<模型>`（`subAlias`）——分流路由靠模型名分辨主对话和子代理，两家都有同名模型（两个中转都有
+  claude-opus-5-5）时用原名会把主对话也送到子代理那家（独立验证抓到的）；网关把别名换回真名再发。分流路由见 `gateway` 笔记。
 - 测试：`gateway/service.test.ts` 的 subagent split、`runtime/session-runner.test.ts`（换地址、给原样模型 id、OpenAI 格式对话不分流）、
   `models/subagent.test.ts`、web `subagent-cross.test.ts`。没有真中转 + 真子代理的端到端实测。

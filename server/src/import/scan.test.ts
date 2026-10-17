@@ -108,6 +108,8 @@ describe('what other tools have, read from their own files', () => {
   it('pieces: .env lines, MCP shapes, base URLs', () => {
     expect(parseDotenv("A=1\nexport B='two words'\n# C=3\nD=x # note\nE=\n")).toEqual({ A: '1', B: 'two words', D: 'x' });
     expect(mcpOf({ serverUrl: 'https://x/mcp' })).toEqual({ type: 'http', url: 'https://x/mcp' });
+    expect(mcpOf({ url: 'https://mcp.linear.app/sse' })).toEqual({ type: 'sse', url: 'https://mcp.linear.app/sse' });
+    expect(mcpOf({ url: 'https://x/sse', type: 'streamable-http' })).toEqual({ type: 'http', url: 'https://x/sse' });
     expect(mcpOf({ command: 'a', disabled: true })).toBeNull();
     expect(mcpOf({ nothing: 1 })).toBeNull();
     expect(sameBase('https://API.x.com/v1/', 'https://api.x.com')).toBe(true);

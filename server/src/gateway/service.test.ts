@@ -480,7 +480,7 @@ describe('subagent split (/gateway/~s/…): the subagents on another provider, t
     expect(A.hits[0].headers.authorization).toBe('Bearer sk-a');
     expect(A.hits[0].headers['user-agent']).toBe('claude-cli/2.1.300 (external, cli)');
     // the subagents' model: to O, as Chat Completions
-    const r2 = await at('/v1/messages', JSON.stringify({ ...msg, model: 'deepseek-chat' }));
+    const r2 = await at('/v1/messages', JSON.stringify({ ...msg, model: 'cw-sub/deepseek-chat' }));
     expect(r2.status).toBe(200);
     expect(JSON.parse(await r2.text()).content[0].text).toBe('from O');
     expect(O.hits[0].url).toBe('/v1/chat/completions');
@@ -497,13 +497,24 @@ describe('subagent split (/gateway/~s/…): the subagents on another provider, t
     expect((await fetch(`${base}/~s/${'0'.repeat(32)}/v1/messages`, { method: 'POST', headers: { authorization: `Bearer ${ep.key}` }, body: raw })).status).toBe(404);
     expect((await fetch(`${ep.base.replace(base, remoteBase)}/v1/messages`, { method: 'POST', headers: { authorization: `Bearer ${ep.key}` }, body: raw })).status).toBe(404);
   });
+  it('both providers serve a model of the same name: the main conversation still goes to its own (the subagents ask by alias)', async () => {
+    const ep = gw.splitEndpoint('a', 'b', 'claude-opus-5-5')!;
+    const at = (model: string) => fetch(`${ep.base}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': ep.key, 'anthropic-version': '2023-06-01' }, body: JSON.stringify({ ...msg, model }) });
+    expect(JSON.parse(await (await at('claude-opus-5-5')).text()).content[0].text).toBe('from A');
+    expect(JSON.parse(await (await at('cw-sub/claude-opus-5-5')).text()).content[0].text).toBe('from B');
+    expect(JSON.parse(B.hits[0].body).model).toBe('claude-opus-5-5');
+    expect(A.hits.map((h) => JSON.parse(h.body).model)).toEqual(['claude-opus-5-5']);
+    // the model list answers too (an engine may ask without the anthropic-version header)
+    expect((await fetch(`${ep.base}/v1/models`, { headers: { authorization: `Bearer ${ep.key}` } })).status).toBe(200);
+  });
   it('works with the gateway switched off (it is not a gateway group)', async () => {
     await gw.setEnabled(false);
     try {
       const ep = gw.splitEndpoint('a', 'b', 'claude-haiku-4-5')!;
-      const r = await fetch(`${ep.base}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': ep.key, 'anthropic-version': '2023-06-01' }, body: JSON.stringify({ ...msg, model: 'claude-haiku-4-5' }) });
+      const r = await fetch(`${ep.base}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': ep.key, 'anthropic-version': '2023-06-01' }, body: JSON.stringify({ ...msg, model: 'cw-sub/claude-haiku-4-5' }) });
       expect(r.status).toBe(200);
       expect(JSON.parse(await r.text()).content[0].text).toBe('from B');
+      expect(JSON.parse(B.hits[0].body).model).toBe('claude-haiku-4-5');
     } finally {
       await gw.setEnabled(true);
     }

@@ -18,6 +18,7 @@ import {
 } from './convert.js';
 import { CACHE_KEY_MAX, addMissing, affinityHeaders, cacheKeyOf, forcesTool, isParamRejection, mentionsCacheKey, refusesForcedTool, thinkingOff } from './cache.js';
 import { CacheShim, SHIM_PREFIX } from './shim.js';
+import { subAlias } from '../models/subagent.js';
 import { UpstreamError, decoded, decoder, errorHeaders, passthroughHeaders, readText, replaceTopLevelString, responseHeaders, sendUpstream, translatedHeaders, waitDrain, withTimeout, type UpstreamResponse } from './upstream.js';
 import { tr } from '../i18n/index.js';
 
@@ -331,7 +332,7 @@ export class GatewayService extends EventEmitter {
     if (!split) return this.sendError(res, 'anthropic', 404, tr('没有这条子代理分流'));
     const want = Buffer.from(this.splitKey(token));
     if (!this.presentedKeys(req, url).some((k) => { const a = Buffer.from(k); return a.length === want.length && crypto.timingSafeEqual(a, want); })) return this.sendError(res, 'anthropic', 401, tr('子代理分流的密钥无效'));
-    if (!route || route.inbound !== 'anthropic') return this.sendError(res, 'anthropic', 404, tr('网关不支持这个接口：{method} {rest}', { method: req.method, rest }));
+    if (!route || (route.inbound !== 'anthropic' && route.op !== 'models')) return this.sendError(res, 'anthropic', 404, tr('网关不支持这个接口：{method} {rest}', { method: req.method, rest }));
     const groupFor = (toSub: boolean): GatewayGroup => ({
       id: `${SPLIT_PREFIX}:${token}:${toSub ? 'sub' : 'main'}`,
       name: toSub ? tr('子代理') : tr('主对话'),
@@ -342,7 +343,9 @@ export class GatewayService extends EventEmitter {
     const body = await this.readJson(req, res, 'anthropic');
     if (!body) return;
     const model = String(body.json?.model ?? '');
-    const group = groupFor(model === split.model);
+    // subagents ask for the alias (models/subagent.ts subAlias), never a model the main conversation can use; the pinned
+    // member model sends their provider the real id
+    const group = groupFor(model === subAlias(split.model));
     const params = new URLSearchParams(url.search);
     params.delete('key');
     const ac = new AbortController();

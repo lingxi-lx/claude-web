@@ -84,7 +84,10 @@ export function mcpOf(v: any): McpConfig | null {
   if (!v || typeof v !== 'object') return null;
   if (v.disabled === true || v.enabled === false) return null;
   const url = str(v.url) || str(v.serverUrl) || str(v.httpUrl);
-  if (url) return { type: /\bsse\b/i.test(str(v.type) || str(v.transport)) ? 'sse' : 'http', url, ...(Object.keys(record(v.headers)).length ? { headers: record(v.headers) } : {}) };
+  // SSE when said so, or (Cursor, Claude Desktop write only a URL) when the path ends in /sse
+  const declared = str(v.type) || str(v.transport);
+  const sse = declared ? /\bsse\b/i.test(declared) : /\/sse\/?(\?|$)/i.test(url);
+  if (url) return { type: sse ? 'sse' : 'http', url, ...(Object.keys(record(v.headers)).length ? { headers: record(v.headers) } : {}) };
   // OpenCode keeps the command and its arguments in one array; Zed nests them under `command: { path, args }`
   const cmdArr = Array.isArray(v.command) ? strs(v.command) : [];
   const nested = v.command && typeof v.command === 'object' && !Array.isArray(v.command) ? v.command : null;

@@ -617,6 +617,13 @@ describe('SessionRunner: the engine follows the model, effort on ccb, per-turn c
     expect(queries[0].options.extraArgs['thinking-display']).toBe('summarized');
     expect(queries[0].options.env?.CLAUDE_WEB_THINKING_DISPLAY).toBeUndefined();
     await a.close();
+    // an Anthropic-format relay of another maker's model: no field it may not know
+    const ds = { id: 'ds', name: 'ds', type: 'anthropic', runtime: 'claude', baseUrl: 'https://relay.invalid', apiKey: 'k', models: ['deepseek-chat'] } as any;
+    const c = new SessionRunner({ sessionId: 'th3', cwd: '/x', model: 'deepseek-chat' } as any, ds);
+    await tick();
+    expect('thinking-display' in queries[queries.length - 1].options.extraArgs).toBe(false);
+    await c.close();
+    queries.length = 1;
     eng.kind = 'ccb';
     try {
       const b = new SessionRunner({ sessionId: 'th2', cwd: '/x', model: 'claude-sonnet-4-6' } as any, xy);
@@ -1181,7 +1188,7 @@ describe('the subagents model (the composer 子代理 chip)', () => {
       expect(env.ANTHROPIC_BASE_URL).toBe('http://127.0.0.1:1/gateway/~s/t');
       expect(env.ANTHROPIC_AUTH_TOKEN).toBe('cwx-k');
       expect(env.ANTHROPIC_API_KEY).toBeUndefined();
-      expect(env.CLAUDE_CODE_SUBAGENT_MODEL).toBe('deepseek-chat');
+      expect(env.CLAUDE_CODE_SUBAGENT_MODEL).toBe('cw-sub/deepseek-chat');
       await a.close();
       // not on an Anthropic-format provider (here an OpenAI one, on ccb): no route, the subagents keep the main model
       eng.kind = 'ccb';

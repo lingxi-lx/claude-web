@@ -6,7 +6,7 @@ import { statSync } from 'node:fs';
 import { withExplanation } from '../errors/explain.js';
 import { findClaudeTranscript, hasClaudeTranscript, hasEntry, lastCostState, lastHumanPrompt, repairLeaf } from './transcript-file.js';
 import { ownSubagentOverride, settingsOverride, userAnthropicEnv } from './user-env.js';
-import { crossPick } from '../models/subagent.js';
+import { crossPick, subAlias } from '../models/subagent.js';
 import { splitEndpoint } from '../gateway/split.js';
 import { desktopSkillsPlugin } from './desktop-skills.js';
 import { writeFlagSettings, type FlagSettings } from './flag-settings.js';
@@ -319,10 +319,13 @@ export class SessionRunner extends EventEmitter {
     if (engine.kind === 'ccb' && this.info.ultracode) args.ultracode = null;
     else delete args.ultracode;
     // Claude's thinking as text: the API's `thinking.display` defaults to "omitted" on current Claude models (the
-    // blocks come back as a bare signature) and the official binary even sends "omitted" when run by an SDK — other
-    // providers' models showed their thinking and Claude's never did. The official binary takes the flag; ccb would
-    // exit on it as an unknown option and reads CLAUDE_WEB_THINKING_DISPLAY instead (below)
-    if (engine.kind === 'claude' && !noThinking) args['thinking-display'] = 'summarized';
+    // blocks come back as a bare signature) — other providers' models showed their thinking and Claude's never did.
+    // The official binary takes the flag (for the model the process starts on: a Claude one — an Anthropic-format relay
+    // of DeepSeek / Kimi might refuse a field it does not know); ccb would exit on it as an unknown option and reads
+    // CLAUDE_WEB_THINKING_DISPLAY instead (below), which it applies per request to Claude models only
+    const startModel = this.model || this.provider?.defaultModel || '';
+    const claudeStart = !this.provider || !startModel || /claude/i.test(providerModelId(this.provider, startModel));
+    if (engine.kind === 'claude' && !noThinking && claudeStart) args['thinking-display'] = 'summarized';
     else delete args['thinking-display'];
     extra = { ...extra, extraArgs: args };
     // the transcript both engines share: the official binary resumes at its last recorded leaf (repair it after turns
@@ -366,7 +369,7 @@ export class SessionRunner extends EventEmitter {
     }
     // the subagents' model (the composer's 子代理 chip): both engines take it before an agent's own `model:` and the
     // tool's haiku / sonnet / opus; on the official binary a 1M Claude gets its `[1m]` like the main model
-    const sub = cross ? (split ? cross.model : undefined) : this.subagent ? this.engineModel(engine.kind, this.subagent) : undefined;
+    const sub = cross ? (split ? subAlias(cross.model) : undefined) : this.subagent ? this.engineModel(engine.kind, this.subagent) : undefined;
     if (sub) fenv.CLAUDE_CODE_SUBAGENT_MODEL = sub;
     // 下一句提示: the `promptSuggestions` option alone did not bring one on the official binary (2026-10-16, a real
     // two-turn conversation); with the CLI's own switch it did

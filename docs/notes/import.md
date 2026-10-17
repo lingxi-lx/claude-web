@@ -23,7 +23,7 @@
 | Ollama | 在跑就读 `/api/tags`（800ms 超时），作为 OpenAI 兼容供应商 |
 | Mirasim / Cherry Studio | **读不了**：Mirasim 把设置加密（`secret-key.enc`）存在 IndexedDB，Cherry Studio 存在浏览器数据库。只报「在，但读不出来」，对话框里请用户从它的设置里复制地址和 key 用「快速添加」。没有逆向它们。 |
 
-MCP 的各种写法统一成 `{command,args,env}` 或 `{type:'http'|'sse',url,headers}`（`mcpOf`），`disabled:true` / `enabled:false` 的不要。
+只写了地址的（Cursor、Claude Desktop）路径以 `/sse` 结尾就按 SSE 导入，写了 `type` / `transport` 的照写的。MCP 的各种写法统一成 `{command,args,env}` 或 `{type:'http'|'sse',url,headers}`（`mcpOf`），`disabled:true` / `enabled:false` 的不要。
 
 ## 测试
 

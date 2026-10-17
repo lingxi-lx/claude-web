@@ -53,3 +53,11 @@ export function crossPick(value: string | undefined): SubagentPick | null {
   return { providerId: decodeURIComponent(rest.slice(0, i)), model: rest.slice(i + 1) };
 }
 export const crossValue = (providerId: string, model: string): string => `${CROSS}${encodeURIComponent(providerId)}:${model}`;
+
+/**
+ * The model id the engine is given for subagents on another provider: never one the main conversation can use, so the
+ * split route tells the two apart by it even when both providers serve a model of the same name (the route sends the
+ * provider the real id).
+ */
+export const SUB_ALIAS = 'cw-sub/';
+export const subAlias = (model: string) => `${SUB_ALIAS}${model}`;
