@@ -111,6 +111,14 @@ html[data-density='compact'] .tl-rows > .tl:not(:last-child)::after { top: 21px;
 .sgw.stopped { color: var(--ink-4); }
 .sgw .spin { display: block; width: 13px; height: 13px; border-radius: 50%; border: 1.5px solid var(--edge-strong); border-top-color: var(--ink-2); animation: step-spin 0.7s linear infinite; }
 @keyframes step-spin { to { transform: rotate(360deg); } }
+/* working (WorkDots): a 2×2 of dots lighting up in turn, in the accent — the official app's mark for the step it is on */
+.work-dots { display: grid; grid-template-columns: 4px 4px; gap: 3px; }
+.work-dots i { width: 4px; height: 4px; border-radius: 1px; background: var(--accent); opacity: 0.25; animation: work-dot 1.2s steps(1, end) infinite; }
+.work-dots i:nth-child(2) { animation-delay: 0.3s; }
+.work-dots i:nth-child(4) { animation-delay: 0.6s; }
+.work-dots i:nth-child(3) { animation-delay: 0.9s; }
+@keyframes work-dot { 0%, 24% { opacity: 1; } 25%, 100% { opacity: 0.25; } }
+.trail.thinking .th-time { margin-left: 6px; color: var(--ink-5); font-size: 12px; font-variant-numeric: tabular-nums; }
 /* the step finished in view: its icon takes the spinner's place with a little bounce */
 .sgw .pop, .code-btn .pop { animation: step-pop var(--spring-snappy-dur) var(--spring-snappy) backwards; }
 @keyframes step-pop { from { opacity: 0; transform: scale(0.4); } }
@@ -217,9 +225,10 @@ div.code { border: 0; border-radius: var(--r-lg); background-color: var(--surfac
    the transitions written with their own length, a press that scales, and the spinner (a loop). */
 @media (prefers-reduced-motion: reduce) {
   .turn-body, .fold-box, .turn-sum .chev, .tool-head .chev, .tl-head .chev { transition-duration: 0s; }
-  .sgw .spin { animation: none; }
+  .sgw .spin, .work-dots i { animation: none; }
+  .work-dots i { opacity: 0.8; }
 }
-:root[data-reduce-motion='1'] .sgw .spin { animation: none; }
+:root[data-reduce-motion='1'] :is(.sgw .spin, .work-dots i) { animation: none; opacity: 0.8; }
 :root[data-reduce-motion='1'] :is(.code-btn, .msg-actions button, .fcard-h .btn):active { transform: none; }
 @media (prefers-reduced-motion: reduce) { :is(.code-btn, .msg-actions button, .fcard-h .btn):active { transform: none; } }
 

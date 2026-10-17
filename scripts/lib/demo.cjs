@@ -18,7 +18,7 @@ const TEXT = {
     plan: 'I’ll start by looking at how the total is calculated.',
     found: 'Found it. `applyCoupon` subtracts a floating-point discount, so `19.99 − 15%` comes out as `16.9915000000000003`. I’ll round to whole cents, and add a test for it.',
     done: 'Fixed. `applyCoupon` now rounds the discount to whole cents, so a 15% coupon on 19.99 gives 16.99.\n\n- `src/cart.ts` — round the discount, then the total\n- `tests/cart.test.ts` — a test for the 15% case\n\nAll 14 tests pass. To use it:\n\n```ts\nimport { total } from "./src/cart";\ntotal([{ sku: "mug", price: 19.99, qty: 1 }], 15); // 16.99\n```',
-    thinking: 'Totals are computed in cart.ts; the discount is a float. Check the tests too.',
+    thinking: '**Tracing how the total is computed**\n\nTotals are computed in cart.ts; the discount is a float. Check the tests too.',
     others: [
       ['Add a dark mode toggle to the settings page', 'notes', 40],
       ['Why is the build failing on CI?', 'notes', 60 * 26],
@@ -46,7 +46,7 @@ const TEXT = {
     plan: '我先看一下总价是怎么算的。',
     found: '找到了。`applyCoupon` 减的是浮点数的折扣，`19.99 − 15%` 会算成 `16.9915000000000003`。我改成按「分」取整，再补一个测试。',
     done: '修好了。`applyCoupon` 现在把折扣取整到分，19.99 用 15% 的券得到 16.99。\n\n- `src/cart.ts` —— 先把折扣取整，再取整总价\n- `tests/cart.test.ts` —— 补了 15% 这一种情况的测试\n\n14 个测试全部通过。用法：\n\n```ts\nimport { total } from "./src/cart";\ntotal([{ sku: "mug", price: 19.99, qty: 1 }], 15); // 16.99\n```',
-    thinking: '总价在 cart.ts 里算，折扣是浮点数。测试也要看一下。',
+    thinking: '**查看总价是怎么算的**\n\n总价在 cart.ts 里算，折扣是浮点数。测试也要看一下。',
     others: [
       ['给设置页加一个深色模式开关', 'notes', 40],
       ['为什么 CI 上的构建失败了？', 'notes', 60 * 26],

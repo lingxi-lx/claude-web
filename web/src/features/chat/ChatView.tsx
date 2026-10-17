@@ -16,7 +16,8 @@ import { coldCache, usageParts } from '@/model/tokens';
 import { AssistantActions, UserActions, UserEditor } from './MessageActions';
 import { FindBar } from './FindBar';
 import { Markdown } from './Markdown';
-import { GroupHead, ToolCard, ToolHead, type ToggleBy } from './ToolCard';
+import { GroupHead, ToolCard, ToolHead, WorkDots, type ToggleBy } from './ToolCard';
+import { thinkingTitle } from './thinking-title';
 import { getToolDef, isStandalone } from './tools/registry';
 import { Icon } from '@/ui/icons';
 import { blockRemoteOpen } from '@/features/remote-guard';
@@ -187,14 +188,18 @@ function Thinking({ b, streaming }: { b: ThinkingBlock; streaming: boolean }) {
   if (!text && !streaming && !b.redacted) return null;
   const show = open ?? (mode === 'expanded');
   const toggle = (by: ToggleBy) => { moves.current = by === 'pointer'; setOpen(!show); if (!show) touch?.(); };
-  const label = b.redacted ? tr('思考内容已隐藏（redacted）') : streaming ? tr('思考中') : b.ms !== undefined ? tr('思考了 {fmtDuration}', { fmtDuration: fmtDuration(b.ms) }) : text.length > 1200 ? tr('深入思考了一会儿') : tr('思考了一下');
+  // summarized thinking (Claude) names itself: the row says what it is about, the time goes after it
+  const title = b.redacted ? '' : thinkingTitle(text, streaming);
+  const label = b.redacted ? tr('思考内容已隐藏（redacted）') : title || (streaming ? tr('思考中') : b.ms !== undefined ? tr('思考了 {fmtDuration}', { fmtDuration: fmtDuration(b.ms) }) : text.length > 1200 ? tr('深入思考了一会儿') : tr('思考了一下'));
+  const after = title && !streaming && b.ms !== undefined ? fmtDuration(b.ms) : '';
   const size = text ? (text.length > 1000 ? tr('{textCount}K 字', { textCount: (text.length / 1000).toFixed(1) }) : tr('{textCount} 字', { textCount: text.length })) : '';
   return (
     <div className={clsx('trail thinking', streaming && 'running')}>
       <div className={clsx('tl', streaming ? 'active' : 'done', show && 'open')}>
         <div className="tl-head" onClick={(e) => toggle(e.detail === 0 ? 'key' : 'pointer')} role="button" tabIndex={0} aria-expanded={show} title={size ? tr('思考内容 {size}', { size }) : undefined} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle('key'); } }}>
-          <span className={clsx('sgw', streaming ? 'active' : 'done')} aria-hidden>{streaming ? <span className="spin" /> : <Icon name="memory" size={16} />}</span>
+          <span className={clsx('sgw', streaming ? 'active' : 'done')} aria-hidden>{streaming ? <WorkDots /> : <Icon name="memory" size={16} />}</span>
           <span className={clsx('lbl', streaming && 'shimmer')}>{label}</span>
+          {after && <span className="th-time">{after}</span>}
           {!b.redacted && <Icon name="chevronRight" size={13} className="chev" />}
         </div>
         <Fold open={show && !b.redacted} animate={moves.current}><div className="thinking-body"><Markdown text={text} streaming={streaming} /></div></Fold>

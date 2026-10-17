@@ -42,6 +42,11 @@ function SubagentLoader({ toolUseId }: { toolUseId: string }) {
   );
 }
 
+/** Working: four dots taking turns (the official app's mark for the step it is on), in the theme's accent. */
+export function WorkDots() {
+  return <span className="work-dots"><i /><i /><i /><i /></span>;
+}
+
 /**
  * The 16px slot at the start of a step row — the one mark that says where the step is. Running: a spinner (only in a
  * conversation that runs: elsewhere a step without a result never finished, and gets a still ring). Done: the tool's
@@ -54,7 +59,7 @@ function StepGlyph({ st, icon, spins, pop }: { st: StepState; icon: IconName; sp
         : st === 'stopped' ? <Icon name="stop" size={14} />
         : st === 'waiting' ? <Icon name="shield" size={16} />
           : st === 'done' ? <Icon name={icon} size={16} className={pop ? 'pop' : undefined} />
-            : spins ? <span className="spin" />
+            : spins ? <WorkDots />
               : <Icon name="circle" size={12} />}
     </span>
   );
