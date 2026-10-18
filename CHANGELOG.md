@@ -4,6 +4,13 @@
 
 Every version's changes are recorded here; installers are on the [Releases](https://github.com/ypyik0669/claude-web/releases) page. Versions follow [semantic versioning](https://semver.org/).
 
+## [0.2.8] — 2026-10-18
+
+### Fixed
+
+- **0.2.7 would not start**: "Failed to start: Error: server exited early (code 1)". The installer was missing a package that the new "Import from other tools" feature needs. If you're on 0.2.7, download 0.2.8 from the [Releases](https://github.com/ypyik0669/claude-web/releases) page and install it over the top. Your conversations and settings are kept. 0.2.7 can't update itself because it quits before it checks for updates.
+- From this version on, if the app fails to start, the Windows installed version looks for a newer version and offers to install it instead of just quitting.
+
 ## [0.2.7] — 2026-10-18
 
 ### Added

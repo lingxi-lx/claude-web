@@ -6,16 +6,22 @@
 // reports it (unsigned: the prompt offers the download instead).
 //   node scripts/smoke-packaged.mjs "<path to app executable>" [screenshot.png]
 import { spawn, spawnSync, execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
 import WebSocket from 'ws';
 
-const [exe, shot] = process.argv.slice(2);
-if (!exe || !existsSync(exe)) { console.error(`app executable not found: ${exe}`); process.exit(2); }
+const [built, shot] = process.argv.slice(2);
+if (!built || !existsSync(built)) { console.error(`app executable not found: ${built}`); process.exit(2); }
 const ud = mkdtempSync(path.join(os.tmpdir(), 'cw-smoke-'));
+// Run a copy outside the repo: started from dist-desktop/ its module lookup walks up into the repo's node_modules and
+// finds packages the installer does not ship (v0.2.7: `yaml`, every install died at start while this passed).
+const appRoot = process.platform === 'darwin' ? built.slice(0, built.indexOf('.app/') + 4) : path.dirname(built);
+const copyRoot = path.join(mkdtempSync(path.join(os.tmpdir(), 'cw-smoke-app-')), path.basename(appRoot));
+cpSync(appRoot, copyRoot, { recursive: true, verbatimSymlinks: true });
+const exe = path.join(copyRoot, path.relative(appRoot, built));
 const token = randomBytes(12).toString('hex');
 
 // a generic update feed (desktop/src/main.ts CW_UPDATE_FEED): 99.0.0 with a 1 MB stand-in file
@@ -184,10 +190,25 @@ if (process.platform === 'win32') {
   check(process.platform === 'win32' ? 'finds and downloads a new version by itself (installer build)' : 'finds a new version by itself (unsigned build: offers the download)', mainLog().includes(want), `${steps || 'no [update] lines'} · feed: ${feedHits.join(', ')}`);
   if (process.platform !== 'win32') check('… and downloads nothing itself', !feedHits.some((u) => u.startsWith(`/${upFile}`)));
 }
-feed.close();
 if (shot && process.platform === 'darwin') { try { await sleep(1500); execFileSync('screencapture', ['-x', shot]); console.log(`screenshot: ${shot}`); } catch (e) { console.log(`screenshot failed: ${e.message}`); } }
 
-try { if (process.platform === 'win32') execFileSync('taskkill', ['/pid', String(app.pid), '/t', '/f'], { stdio: 'ignore' }); else process.kill(-app.pid, 'SIGTERM'); } catch { /* already gone */ }
+const stop = (p) => { try { if (process.platform === 'win32') execFileSync('taskkill', ['/pid', String(p.pid), '/t', '/f'], { stdio: 'ignore' }); else process.kill(-p.pid, 'SIGTERM'); } catch { /* already gone */ } };
+stop(app);
+
+// a server that will not start (its data directory is a file) must not strand the installer build: it looks for a
+// newer version and downloads it instead of only quitting (v0.2.7 died at start and could not update out of it)
+if (process.platform === 'win32') {
+  const ud2 = mkdtempSync(path.join(os.tmpdir(), 'cw-smoke-broken-'));
+  const notADir = path.join(ud2, 'not-a-directory');
+  writeFileSync(notADir, '');
+  const broken = spawn(exe, [`--user-data-dir=${ud2}`], { env: { ...env, CLAUDE_WEB_DIR: notADir }, stdio: 'ignore' });
+  const mainLog2 = () => { try { return readFileSync(path.join(ud2, 'main.log'), 'utf8'); } catch { return ''; } };
+  for (let i = 0; i < 120 && !mainLog2().includes('[update] downloaded 99.0.0'); i++) await sleep(500);
+  const lines = mainLog2().split('\n').filter((l) => l.includes('启动失败') || l.includes('Failed to start') || l.includes('[update]')).map((l) => l.slice(l.indexOf(']') + 2, l.indexOf(']') + 80)).join(' | ');
+  check('a server that will not start: the app downloads the new version instead of only quitting', /启动失败|Failed to start/.test(mainLog2()) && mainLog2().includes('[update] downloaded 99.0.0'), lines || 'no main.log');
+  stop(broken);
+}
+feed.close();
 const bad = results.filter((r) => !r).length;
 console.log(`\n${results.length - bad}/${results.length} smoke checks passed`);
 if (bad) console.log(`--- server.log tail ---\n${log().slice(-2000)}`);

@@ -555,6 +555,40 @@ function checkForUpdate(manual = false) {
   if (updateState.status === 'checking' || updateState.status === 'downloading' || updateState.status === 'downloaded') return;
   autoUpdater.checkForUpdates().catch((e) => setUpdate({ status: 'error', error: firstLine(e) }));
 }
+/**
+ * The server would not start: a newer version may already fix it (v0.2.7 shipped without a package and every install
+ * died at start, before the usual check 15 s in — nobody could update out of it). Windows installed version only: look,
+ * download, offer to install. True when the installer is taking over.
+ */
+async function updateInsteadOfFailing(failure: string): Promise<boolean> {
+  if ((!app.isPackaged && !updateFeed()) || updateState.mode !== 'auto' || readFlags().autoUpdate === false) return false;
+  const within = <T,>(p: Promise<T>, ms: number) => Promise.race([p, new Promise<null>((r) => setTimeout(() => r(null), ms))]);
+  try {
+    setupUpdater();
+    const found = await within(autoUpdater.checkForUpdates(), 20_000);
+    if (!found?.isUpdateAvailable || !found.downloadPromise) return false;
+    const version = found.updateInfo.version;
+    if (!(await within(found.downloadPromise, 10 * 60_000))) return false;
+    const { response } = await dialog.showMessageBox({
+      type: 'error',
+      title: APP_NAME,
+      message: tr('启动失败，新版本 {version} 已经下载好', { version }),
+      detail: tr('新版本可能已经修好了这个问题。点「安装并重启」装上它。\n\n{failure}', { failure }),
+      buttons: [tr('安装并重启'), tr('退出')],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    // 退出 already saw the failure in this dialog: no second error box
+    if (response !== 0) { app.quit(); return true; }
+    quitting = true;
+    mainLog(`[update] installing ${version} (the server would not start)`);
+    autoUpdater.quitAndInstall(true, true);
+    return true;
+  } catch (e) {
+    mainLog(`[update] could not update after a failed start: ${firstLine(e)}`);
+    return false;
+  }
+}
 /** Automatic checks: shortly after start, then every few hours — unless turned off in settings (flags.json). */
 function scheduleUpdateChecks() {
   const tick = () => { if (readFlags().autoUpdate !== false) checkForUpdate(); };
@@ -669,6 +703,7 @@ if (gotLock) app.whenReady().then(async () => {
   } catch (e: any) {
     const msg = tr('启动失败：{stack}', { stack: e?.stack ?? e?.message ?? e });
     try { fs.appendFileSync(path.join(app.getPath('userData'), 'main.log'), `[${new Date().toISOString()}] ${msg}\n`); } catch { /* ignore */ }
+    if (await updateInsteadOfFailing(msg)) return;
     dialog.showErrorBox(APP_NAME, msg);
     app.quit();
   }

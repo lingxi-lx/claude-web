@@ -4,6 +4,13 @@
 
 每个版本的变化都记在这里；安装包在 [Releases](https://github.com/ypyik0669/claude-web/releases) 下载。版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.2.8] — 2026-10-18
+
+### 修复
+
+- **0.2.7 打不开**：弹出「启动失败：Error: server exited early (code 1)」。安装包里漏了一个「从其它工具导入」要用的包。已经装了 0.2.7 的，请到 [Releases](https://github.com/ypyik0669/claude-web/releases) 下载 0.2.8 直接覆盖安装，对话和设置都还在。0.2.7 在检查更新之前就退出了，所以没法自己更新。
+- 从这个版本起，Windows 安装版如果启动失败，会先去找新版本，找到就问你要不要装上，不再直接退出。
+
 ## [0.2.7] — 2026-10-18
 
 ### 新增
