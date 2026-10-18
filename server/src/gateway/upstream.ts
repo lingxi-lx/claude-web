@@ -124,6 +124,45 @@ export function passthroughHeaders(raw: string[], outbound: 'anthropic' | 'opena
   return out;
 }
 
+const OAUTH_BETA = 'oauth-2025-04-20';
+
+/**
+ * The engine's own headers for the subagent split route's plain forwarding (gateway/service.ts serveSplit): order and
+ * casing kept, hop-by-hop dropped. `bearer` replaces whatever credential the engine sent (in the place it sent it);
+ * `oauthBeta` takes the account-login beta out (a provider's key) or makes sure it is there (an account's token).
+ */
+export function forwardHeaders(raw: string[], o: { bearer?: string; oauthBeta?: 'drop' | 'ensure' } = {}): Record<string, string> {
+  const pairs: [string, string][] = [];
+  for (let i = 0; i + 1 < raw.length; i += 2) pairs.push([raw[i], raw[i + 1]]);
+  const hop = new Set(HOP);
+  for (const [n, v] of pairs) if (n.toLowerCase() === 'connection') for (const t of v.split(',')) if (t.trim()) hop.add(t.trim().toLowerCase());
+  const out: Record<string, string> = {};
+  let placed = false, beta = false;
+  for (const [name, value] of pairs) {
+    const lower = name.toLowerCase();
+    if (hop.has(lower)) continue;
+    if (o.bearer !== undefined && (lower === 'authorization' || lower === 'x-api-key')) {
+      if (!placed) out.authorization = `Bearer ${o.bearer}`;
+      placed = true;
+      continue;
+    }
+    let v = value;
+    if (lower === 'anthropic-beta' && o.oauthBeta) {
+      beta = true;
+      const parts = v.split(',').map((s) => s.trim()).filter((s) => s && s !== OAUTH_BETA);
+      if (o.oauthBeta === 'ensure') parts.push(OAUTH_BETA);
+      if (!parts.length) continue;
+      v = parts.join(',');
+    }
+    const prev = Object.keys(out).find((k) => k.toLowerCase() === lower);
+    if (prev) out[prev] += `, ${v}`;
+    else out[name] = v;
+  }
+  if (o.bearer !== undefined && !placed) out.authorization = `Bearer ${o.bearer}`;
+  if (o.oauthBeta === 'ensure' && !beta) out['anthropic-beta'] = OAUTH_BETA;
+  return out;
+}
+
 /** Codings we can decode for usage sniffing; zstd only where this Node / Electron has it. */
 const HAS_ZSTD = typeof (zlib as any).createZstdDecompress === 'function';
 export function acceptEncoding(v: string): string {

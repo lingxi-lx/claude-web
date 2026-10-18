@@ -1,4 +1,4 @@
-# 照官方桌面版录屏改的界面：信息栏 / 标题栏工具 / 一行输入框 / statusLine / 菜单 / 运行行（2026-10-16，用户要求）
+# 照官方桌面版录屏改的界面：信息栏 / 标题栏工具 / 一行输入框 / 菜单 / 运行行（2026-10-16，用户要求）
 
 用户发了一段官方 Claude Code 桌面版的录屏，要「直接借鉴 ui 和 ux」。spec：`docs/superpowers/specs/2026-10-16-recording-ux-design.md`。
 只照录屏里看得见的样子和官方公开文档做，不反编译、不拷官方代码（用户要过用逆向工具，拒绝了：官方条款禁止，而且 claude-web 是公开发布的）。
@@ -35,18 +35,13 @@
   权限卡都靠它，所以没换：加了 **Ctrl+Enter = 插话**（纯文字时），占位字写明「Enter 排到这一轮之后，Ctrl+Enter 马上插话」。
 - Ctrl+U = 添加文件或图片（只在输入框里，和 Shift+Tab 一样由输入框自己处理；`SHORTCUTS` 里有一行 `attach` 给速查表）。
 
-## statusLine（`server/src/statusline/run.ts`、`web/src/features/composer/StatusLine.tsx`）
+## statusLine（已删，2026-10-18）
 
-- 只读 **用户级** `~/.claude/settings.json` 的 `statusLine`（`type: 'command'`）。项目里的 `.claude/settings.json` 不读：别人仓库里的
-  命令不能一打开对话就跑（CLI 要先信任工作区，我们没有这一步）。
-- 输入是 CLI 那套 JSON（`session_id`、`transcript_path`、`cwd`、`model`、`workspace`、`version`、`cost`），从 stdin 给；Windows 上找
-  Git Bash（`CLAUDE_CODE_GIT_BASH_PATH` 或常见路径），找不到才用 cmd。5 秒超时（`killTree`，不然脚本卡住每 10 秒漏一个进程），最多 20 行。
-- 前端：打开对话时、一轮结束时、在跑时每 10 秒问一次 `session.statusLine`；ANSI 颜色 → span（`ansi.ts`，16 色是 `--ansi-N`，
-  暗色 / 亮色两套在 `.cmp-statusline` 上），光标移动、OSC 链接这些转义丢掉。设置 `ui.statusLine` 关掉。
-- 验证时抓到的：`tput sgr0` 写的是 `ESC ( B ESC [ m`，字符集那段（`ESC ( B`）也要丢；冒号写法的颜色 `38:2::R:G:B` 是一组参数，
-  按 `;` 分组、组里按 `:` 分（以前全按 `[;:]` 拆，后面的数被当成新代码）。脚本留了个后台进程占着 stdout 时 `close` 等不到：
-  进程 `exit` 后 150ms 就拿已有输出（它留下的后台进程管不到了：bash 一退，taskkill /T 找不到它们）。Git Bash 也在 PATH 上找（跳过 System32 的 bash.exe，那是 WSL）。
-- bash heredoc 写测试会吃掉 `\\`：带反斜杠的文件用 Write 写。
+- 曾经把用户 `~/.claude/settings.json` 里 `statusLine` 命令的输出画在输入框上方（`session.statusLine`、设置 `ui.statusLine`）。
+  用户看了说「这些都拿掉，没有意义的」——模型、分支、额度、上下文这些界面里本来就有。整块删了（服务端运行器、ANSI 解析、设置项、样式）；
+  meta.json 里留着的 `ui.statusLine` 没人读，无害。别再加回来，要加先问。
+- 当时踩过的坑（万一再做）：`tput sgr0` 写 `ESC ( B ESC [ m`，字符集那段也要丢；`38:2::R:G:B` 按 `;` 分组、组里按 `:` 分；
+  脚本留后台进程占着 stdout 时 `close` 等不到，`exit` 后 150ms 就取输出；Windows 上 Git Bash 别拿成 System32 的 bash.exe（WSL）。
 
 ## 模型菜单和 + 菜单
 
@@ -64,6 +59,9 @@
 
 - 运行行（`RunCard`）：Claude 标记转着（`.pip.spark`，3 秒一圈，减少动效时不动），后面是模型名。
 - 计划卡（`TodoBody`）：发丝边框、行间细线；进行中是转的弧、待办是虚线圈、完成是勾 + 删除线。右侧任务面板里的计划不加框。
+- 计划在对话最底下（2026-10-18，用户：「放在最下面，和 claude 桌面端一样」）：`ChatView` 的 `PlanDock`，取最后一轮里主 agent
+  最后一次 TodoWrite（`model/turn.ts` 的 `turnPlan`；子代理自己的计划不算），画在所有轮之后；步骤里的 TodoWrite 还是一行。
+  更早的轮的计划不放到底下。
 - 回复下面的操作多了「分叉」（`forkAt(sessionId, it.uuid)`，从这条回复之后）和「2 分钟前」（7 天以上显示日期）。
 - 浏览器的空白页列出对话目录 `.claude/launch.json` 里的开发服务器（`preview.list`，在跑的带地址），▶ 启动并打开（`preview.start`，
   第 5 期的 `PreviewService`）。别的机器上的对话不列。每行写出 ▶ 会跑的命令（别人仓库的 launch.json 就是别人的命令）。
@@ -72,7 +70,7 @@
 
 ## 测试
 
-- 单元：`info-model.test.ts`、`ansi.test.ts`、`statusline/run.test.ts`、`keep-awake.test.ts`（`also` / `recheck`）、`preview/service.test.ts`（`list`）。
+- 单元：`info-model.test.ts`、`keep-awake.test.ts`（`also` / `recheck`）、`preview/service.test.ts`（`list`）。
 - ui-smoke 的 `recording-ux` 段：信息栏五张卡、上下文折叠存设置、ⓘ 开关、标题栏三个工具、⋮ 顶上两项、框下一行的位置、+ 菜单在对话里的
   reach、斜杠命令、模型菜单的号和强度 ›。截图脚本的做法：demo 数据 + 离屏 Electron（见 `scripts/readme-shots.cjs`）。
 
@@ -145,6 +143,9 @@
   引擎报的 `duration_api_ms` 是这个进程的累计值，服务端 `turnShare` 把它换成每一轮自己的（`RunningTotals.apiMs`，变小了就是换了进程），
   账本也存每轮的；历史轮从账本带上 `duration_api_ms`；一轮没有模型时间（别的 agent）或者是旧账本里的累计值（比整轮还长）就用整轮的时间。
   放不下的整项藏掉（换行到被裁掉的第二行）。
+  0.2.8 用户报「tok/s 怎么没有」：在新对话页开的对话一直不出统计条。原因是选择器取的 `conv.items`——reducer 原地 push、只把 `version`
+  加一，数组还是同一个，`useMemo` 永远不重算（从历史打开的对话是整份换掉，所以那边好的）。改成取 open 条目、按 `version` 重算；
+  `store/selectors.test.ts` 加了一条，组件里直接选 `conv` / `conv.items` 会被拦。
 - 欢迎页背景：字在内容列（`.home-col`）附近渐隐、里面只留一点，整体更暗（`AsciiField` 的 `calm()`）。
 - 第四轮（用户：「背景还是有一点丑」，又给了一段官方录屏）：改成满屏很暗的细小字母数字（每格都有一层底 `FIELD_BASE`，斜向的亮带 `bandLevel` 叠上去），
   字偶尔跳变；**每次点击页面放出一圈涟漪**（`rippleLevel`：主题强调色的小圆盘张开成环、淡出，1.3 s），没有鼠标悬停高亮了。

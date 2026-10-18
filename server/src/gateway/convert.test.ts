@@ -31,11 +31,10 @@ const run = (outbound: 'anthropic' | 'openai' | 'gemini', sseText: string): IrEv
 const sse = (objs: unknown[], named = false) => objs.map((o: any) => `${named ? `event: ${o.type}\n` : ''}data: ${typeof o === 'string' ? o : JSON.stringify(o)}\n\n`).join('');
 
 describe('routing table', () => {
-  it('passthrough on same protocol, the six translation directions, 400 for the rest', () => {
+  it('passthrough on same protocol, the seven translation directions, 400 for the rest', () => {
     expect(supported('anthropic', 'anthropic')).toBe(true);
     expect(supported('responses', 'openai')).toBe(true);
-    for (const [i, o] of [['anthropic', 'openai'], ['anthropic', 'gemini'], ['openai', 'anthropic'], ['responses', 'anthropic'], ['gemini', 'anthropic'], ['openai', 'gemini']] as const) expect(supported(i, o)).toBe(true);
-    expect(supported('gemini', 'openai')).toBe(false);
+    for (const [i, o] of [['anthropic', 'openai'], ['anthropic', 'gemini'], ['openai', 'anthropic'], ['responses', 'anthropic'], ['gemini', 'anthropic'], ['openai', 'gemini'], ['gemini', 'openai']] as const) expect(supported(i, o)).toBe(true);
     expect(supported('responses', 'gemini')).toBe(false);
   });
   it('joinUrl drops a duplicated version segment', () => {

@@ -34,7 +34,7 @@ npm run dev          # 开发：server tsx watch + vite :5173（代理 /ws 到 3
 - 停靠面板 / 右侧面板 / 分区页**不卸载**，只 `hidden`（终端 pty、xterm 缓冲、表单状态）。
 - 改文件用 Edit / Write，或把脚本写成文件再跑：bash 里 `node -e "…"` 的反引号会被当命令替换，heredoc 会吃反斜杠。仓库是 LF（`.gitattributes`）。
 - 测试：`npm run typecheck`、`npm test`、`npm run build:all`、`npm run e2e`（自带临时 HOME，不花 token）、`node scripts/ui-smoke.cjs`（Electron，任何 console 错误都算失败）。真机验证用临时 `CLAUDE_WEB_DIR` / HOME，别碰用户自己的 `~/.claude-web`。
-- 本机开发 shell 继承了 `CLAUDE_CODE_ENTRYPOINT=sdk-cli`、已装桌面版的 `CLAUDE_WEB_DIST` 和 `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`，测指纹 / 自己起 server / 跑 `npm test`（`session-runner.test.ts` 会挂三条）时 `env -u` 掉。
+- 本机开发 shell 继承了 `CLAUDE_CODE_ENTRYPOINT=sdk-cli`、已装桌面版的 `CLAUDE_WEB_DIST` 、`ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`、`CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION`、`CLAUDE_WEB_THINKING_DISPLAY`，测指纹 / 自己起 server / 跑 `npm test`（`session-runner.test.ts` 会挂三条）时 `env -u` 掉。
 - 提交身份固定 `ypyik0669`；引擎（ccb fork）发版、应用发版的步骤在 `engine-providers` / `macos-ci` 两篇里。
 
 ## 笔记索引
@@ -87,7 +87,7 @@ npm run dev          # 开发：server tsx watch + vite :5173（代理 /ws 到 3
 | [review-pr](docs/notes/review-pr.md) | 审阅与 PR：diff 行评论 / 代码审查卡 / PR 监控条（2026-10-16） | DiffView comments、CLAUDE_CODE_REPORT_FINDINGS 与 ReportFindings、vcs.prForBranch / autoMerge、自动修 CI、自动归档 |
 | [sessions-env](docs/notes/sessions-env.md) | 环境与对话：跨对话工具 / 任务 chip / 选机器 / worktree 设置 / 文件右键 / 本机环境变量 / 深链接（2026-10-16） | sessions MCP（进程内）、ccb 的 ExecuteExtraTool、<cw-from>、新对话选机器、.worktreeinclude、shell.editors、local-env.json、claude-web:// |
 | [pages](docs/notes/pages.md) | 页面与入口：总览栏 / 定时任务补跑 / 预览服务器 / 更新内容 / 只聊天 / 跨对话生成文件 / 快捷键（2026-10-16） | MissionPanel 的待审 / 落地中、missedRun、.claude/launch.json 与 preview_*、app.changelog、tools: [] + strictMcpConfig、artifacts.list、Ctrl+/ |
-| [recording-ux](docs/notes/recording-ux.md) | 照官方桌面版录屏改的界面（2026-10-16，用户要求） | 信息栏、标题栏工具 / ⋮、一行输入框 + 框下一行、Ctrl+Enter 插话、statusLine、模型菜单数字 / 快速模式、+ 菜单连接器、运行行、计划卡、浏览器空白页的开发服务器；第二轮（10-17）：sharp、官方技能插件、队列里的后台结束、改名被写回、SDK 列表漏长首句、logo、动态背景、☰ ← →、钉住 / 朗读；第三轮：Claude 思考为空（thinking.display）、思考标题 / 四点、对话统计条、☰ 叠放、手机标题 |
+| [recording-ux](docs/notes/recording-ux.md) | 照官方桌面版录屏改的界面（2026-10-16，用户要求） | 信息栏、标题栏工具 / ⋮、一行输入框 + 框下一行、Ctrl+Enter 插话、statusLine（已删）、模型菜单数字 / 快速模式、+ 菜单连接器、运行行、计划卡、浏览器空白页的开发服务器；第二轮（10-17）：sharp、官方技能插件、队列里的后台结束、改名被写回、SDK 列表漏长首句、logo、动态背景、☰ ← →、钉住 / 朗读；第三轮：Claude 思考为空（thinking.display）、思考标题 / 四点、对话统计条、☰ 叠放、手机标题 |
 | [import](docs/notes/import.md) | 从其它工具导入（2026-10-17，用户要求） | Hermes / CC Switch / Codex / OpenCode / Continue / IDE 的供应商和 MCP、只读、key 不上 wire、Mirasim 读不了 |
 | [zoom](docs/notes/zoom.md) | 界面缩放（2026-10-10 用户要求：台式机分辨率高，界面看着小） | 桌面版页面缩放 |
 | [rail-sections-web](docs/notes/rail-sections-web.md) | 图标栏 / 分区 / 联网（2026-10-10，界面第二轮） | 图标栏、分区页、扩展页、强度按钮、浏览器标签、web MCP |

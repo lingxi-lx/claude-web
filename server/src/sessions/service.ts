@@ -10,6 +10,7 @@ import { closeSync, openSync, readSync } from 'node:fs';
 import { BRIEFING_HEAD } from '../session/handoff.js';
 import { tr } from '../i18n/index.js';
 import { summaryFromFile, unlistedTranscripts } from './unlisted.js';
+import { unalias } from '../models/subagent.js';
 
 export const claudeDir = process.env.CLAUDE_CONFIG_DIR ?? path.join(os.homedir(), '.claude');
 export const projectsDir = path.join(claudeDir, 'projects');
@@ -174,7 +175,10 @@ export class SessionService extends EventEmitter {
 
   async subagent(sessionId: string, agentId: string) {
     const info = await getSessionInfo(sessionId);
-    return getSubagentMessages(sessionId, agentId, { dir: info?.cwd });
+    const msgs = await getSubagentMessages(sessionId, agentId, { dir: info?.cwd });
+    // through the subagent split route the engine recorded the alias it asked with: show the real model
+    for (const m of msgs as any[]) if (m?.type === 'assistant' && typeof m.message?.model === 'string') m.message.model = unalias(m.message.model);
+    return msgs;
   }
 
   /** Copy a transcript into a new session (optionally only up to a message), returning the new id. */

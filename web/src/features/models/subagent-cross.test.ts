@@ -5,14 +5,23 @@ import { crossValue } from '../../../../server/src/models/subagent';
 
 const P = (id: string, type: Provider['type'], extra: Partial<Provider> = {}) => ({ id, name: `N-${id}`, type, baseUrl: 'https://x.invalid', models: [], ...extra }) as Provider;
 
-describe('subagents on another provider', () => {
-  const providers = [P('relay', 'anthropic'), P('ds', 'openai'), P('gem', 'gemini'), P('gw', 'gateway' as Provider['type']), P('other', 'anthropic')];
-  it('listed only for a conversation on an Anthropic-format provider: every other one the split route can reach', () => {
-    expect(crossProviders(providers, 'relay')).toEqual(['ds', 'gem', 'other']);
-    expect(crossProviders(providers, 'ds')).toEqual([]);
-    expect(crossProviders(providers, 'claude')).toEqual([]);
+describe('subagents on any model', () => {
+  const providers = [P('relay', 'anthropic'), P('ds', 'openai'), P('gem', 'gemini'), P('gw', 'gateway'), P('other', 'anthropic'), P('acct', 'claude-account')];
+  it('every provider the split route can reach, whatever the conversation runs on (the account included where it can be)', () => {
+    expect(crossProviders(providers, 'relay')).toEqual(['ds', 'gem', 'other', 'acct', 'claude']);
+    // the account: every provider, another account too
+    expect(crossProviders(providers, 'claude')).toEqual(['relay', 'ds', 'gem', 'other', 'acct']);
+    // an OpenAI-format conversation: providers only (no account login can be passed on from it)
+    expect(crossProviders(providers, 'ds')).toEqual(['relay', 'gem', 'other']);
+    // another account: providers and other accounts, not this machine's login
+    expect(crossProviders(providers, 'acct')).toEqual(['relay', 'ds', 'gem', 'other']);
   });
-  it('the chip names the provider and the model', () => {
+  it('the chip names the provider when it is not the conversation’s own', () => {
     expect(subagentLabel({ providers, providerId: 'relay', model: crossValue('ds', 'deepseek-chat') })).toBe('N-ds / deepseek-chat');
+    expect(subagentLabel({ providers, providerId: 'ds', model: crossValue('ds', 'deepseek-chat') })).toBe('deepseek-chat');
+    // a value from before (a plain id): the conversation's own provider
+    expect(subagentLabel({ providers, providerId: 'ds', model: 'deepseek-chat' })).toBe('deepseek-chat');
+    expect(subagentLabel({ providers, providerId: 'relay', model: crossValue('claude', 'claude-haiku-4-5'), builtin: [{ value: 'claude-haiku-4-5', displayName: 'Haiku' }] })).toBe('Claude 账号 / Haiku');
+    expect(subagentLabel({ providers, providerId: 'claude', model: crossValue('claude', 'claude-haiku-4-5'), builtin: [{ value: 'claude-haiku-4-5', displayName: 'Haiku' }] })).toBe('Haiku');
   });
 });

@@ -6,7 +6,8 @@ import { WorkflowLive } from '@/features/background/WorkflowLive';
 import { credentialHint, ERROR_HINT, ERROR_LABEL, noResponseHint } from '@/model/health';
 import { fmtSize } from '@/model/attachments';
 import type { FileChange } from '@/model/diffstat';
-import { displayPath, fmtDuration, groupSteps, groupTurns, stepStarts, turnDone, turnMemo, turnStamp, turnSummaryParts, type Turn, type TurnMemo } from '@/model/turn';
+import { displayPath, fmtDuration, groupSteps, groupTurns, stepStarts, turnDone, turnMemo, turnPlan, turnStamp, turnSummaryParts, type Turn, type TurnMemo } from '@/model/turn';
+import { TodoBody, planItems, planProgress } from './tools/AgentTool';
 import { useScopedSession, useScopedSessionId, useStore } from '@/store';
 import { usePaneCtx } from '@/store/paneContext';
 import { activeGroup } from '@/model/layout';
@@ -567,7 +568,29 @@ function TurnList({ items, version, live, sessionId, cwd }: { items: Item[]; ver
   const view = useViewMode();
   // keyed by the conversation too: a fork has its parent's message ids, and a turn's view (what it saw of its end,
   // whether the user opened it) belongs to one conversation
-  return <>{turns.map((t, i) => <TurnView key={`${sessionId}|${t.id}|${view}`} turn={t} last={i === turns.length - 1} live={live} version={version} sessionId={sessionId} cwd={cwd} />)}</>;
+  const plan = turnPlan(turns[turns.length - 1]);
+  return (
+    <>
+      {turns.map((t, i) => <TurnView key={`${sessionId}|${t.id}|${view}`} turn={t} last={i === turns.length - 1} live={live} version={version} sessionId={sessionId} cwd={cwd} />)}
+      {plan && <PlanDock t={plan} />}
+    </>
+  );
+}
+
+/**
+ * The latest turn's plan at the foot of the conversation, as the official desktop app has it: the list as it stands
+ * now (ticks, the arc on the step in progress), under everything the turn wrote. The TodoWrite rows in the steps stay
+ * one-line rows; an earlier turn's plan is in its own steps.
+ */
+function PlanDock({ t }: { t: ToolUseBlock }) {
+  const todos = planItems(t);
+  if (!todos.length) return null;
+  const { done, total, attrs } = planProgress(todos);
+  return (
+    <div className="plan-dock" data-id="plan-dock" {...(attrs as any)} aria-label={tr('计划 {done}/{total}', { done, total })}>
+      <TodoBody t={t} count={false} />
+    </div>
+  );
 }
 
 export function ChatView() {

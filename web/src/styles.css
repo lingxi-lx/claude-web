@@ -279,9 +279,9 @@ details.structured summary { cursor: pointer; color: var(--ink-3); }
 @keyframes td-turn { to { transform: rotate(360deg); } }
 :root[data-reduce-motion='1'] .todos .td-arc { animation: none; }
 /* in the conversation the plan is a card of its own: hairline box, rows split by hairlines */
-.tool .todos, .tl .todos { border: var(--hairline) solid var(--edge-subtle); border-radius: var(--r-md); padding: 2px 10px; }
-.tool .todos li, .tl .todos li { padding: 6px 0; }
-.tool .todos li + li, .tl .todos li + li { border-top: var(--hairline) solid var(--edge-subtle); }
+.tool .todos, .tl .todos, .plan-dock .todos { border: var(--hairline) solid var(--edge-subtle); border-radius: var(--r-md); padding: 2px 10px; }
+.tool .todos li, .tl .todos li, .plan-dock .todos li { padding: 6px 0; }
+.tool .todos li + li, .tl .todos li + li, .plan-dock .todos li + li { border-top: var(--hairline) solid var(--edge-subtle); }
 .ask .ask-q { margin-bottom: 6px; }
 .ask .ask-a { color: var(--ok); margin-left: 4px; font-size: 13px; }
 .agent-brief { display: flex; gap: 8px; align-items: center; font-size: 13px; margin-bottom: 4px; }
@@ -428,7 +428,9 @@ button.link:hover { text-decoration: underline; }
 .send.stop { background: var(--ink-1); color: var(--surface-0); }
 .queue { font-size: 13px; color: var(--ink-3); padding: 4px 6px; display: flex; gap: 8px; align-items: center; }
 .attach { display: flex; gap: 6px; margin-bottom: 8px; }
-.attach img { height: 56px; border-radius: var(--r-lg); border: var(--hairline) solid var(--edge-strong); cursor: pointer; }
+/* a thumbnail, not the picture: a long screenshot (a status bar, 640 × 55) took the whole row at 56px high; the
+   middle shows, the rest is cut (a click opens the whole picture) */
+.attach img { height: 56px; width: auto; min-width: 40px; max-width: 112px; object-fit: cover; border-radius: var(--r-lg); border: var(--hairline) solid var(--edge-strong); cursor: pointer; }
 .attach .att-img { position: relative; display: inline-flex; flex: none; }
 .attach .att-img-open { padding: 0; border: 0; background: none; border-radius: var(--r-lg); cursor: zoom-in; display: block; }
 .attach .att-img-open img { display: block; cursor: zoom-in; }

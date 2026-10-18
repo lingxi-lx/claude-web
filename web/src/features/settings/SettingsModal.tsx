@@ -59,7 +59,6 @@ const CONTROLS: Record<EntryId, (e: EntryMeta) => ReactNode> = {
   'ui.sidebarFolded': (e) => <Toggle k={e.id} label={e.label} def />,
   'ui.welcomeBackdrop': (e) => <Seg k={e.id} def="flow" label={e.label} norm={backdropStyle} options={[{ id: 'flow', l: tr('字流') }, { id: 'field', l: tr('字场') }, { id: 'off', l: tr('关') }]} />,
   'ui.welcomeLayout': (e) => <Seg k={e.id} def="under" label={e.label} options={[{ id: 'under', l: tr('框下一行') }, { id: 'inbox', l: tr('框里') }]} />,
-  'ui.statusLine': (e) => <Toggle k={e.id} label={e.label} def />,
   'sessions.mcp': (e) => <Toggle k={e.id} label={e.label} def />,
   'claude.desktopSkills': (e) => <Toggle k={e.id} label={e.label} def />,
   'worktree.dir': (e) => <TextSetting k={e.id} label={e.label} placeholder=".claude/worktrees/" mono />,

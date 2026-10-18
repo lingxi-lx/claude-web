@@ -36,3 +36,42 @@
   claude-opus-5-5）时用原名会把主对话也送到子代理那家（独立验证抓到的）；网关把别名换回真名再发。分流路由见 `gateway` 笔记。
 - 测试：`gateway/service.test.ts` 的 subagent split、`runtime/session-runner.test.ts`（换地址、给原样模型 id、OpenAI 格式对话不分流）、
   `models/subagent.test.ts`、web `subagent-cross.test.ts`。没有真中转 + 真子代理的端到端实测。
+
+## 子代理用任何模型（2026-10-18，用户：「主模型 / 会话不影响子代理的设置」「任何模型都能设置和切换」）
+
+上一节的改写。设计 `docs/superpowers/specs/2026-10-18-subagent-any-model-design.md`，计划 `docs/superpowers/plans/2026-10-18-subagent-any-model.md`。
+
+- **选择是整对（供应商, 模型）**：一律存 `cw-x:<供应商>:<模型>`（账号是 `claude`）。以前存的普通 id 按记录它时的 `subagent.providerId`
+  补全（`fullPick`）；对话换供应商**不再作废**。新对话默认改成一个全局设置 `subagentModel`（菜单底下「新对话都这样」）；没有它时才读旧的
+  `subagentModels`（按供应商）补全。`subagentModel` 设成 `''` 也算设过（新对话跟主模型），会盖住旧的那份。hub 的 `session.setSubagentModel`
+  不再报「刚刚换了供应商」。
+- **哪些组合能接**（`splitSupport`，前后端同一份）：任何供应商的模型在任何主对话下都行（网关翻译；gemini→openai 这个方向是这次加的）；
+  另一个账号（`claude-account`，用它存的令牌）只能在 Anthropic 格式的主对话下（供应商 / 网关 / 账号）；**本机登录**只能在 Anthropic 格式
+  的供应商主对话下；网关档案不能当子代理目标（它自己就是一组成员）。不能接的不出现在菜单里。
+- **分流路由改成「主请求原样转」**（`GatewayService.serveSplit`）：地址 `/gateway/~s/<token>/k/<key>/…`，key 在路径里（Authorization 留给
+  引擎自己的登录）。不是别名的请求 → `main.base + 路径`，带引擎自己的头和凭据（账号的 OAuth、缓存垫片的 key、Gemini 的 x-goog-api-key 都
+  原样过去，`forwardHeaders`），回包原样回去；是别名的 → 账号：转 api.anthropic.com（另一个账号就换成它的令牌并补 oauth beta），供应商：
+  走网关的 `run`（换成它的 key，去掉 oauth beta）。本机登录当子代理目标时，引擎保留账号登录（runner 去掉 `ANTHROPIC_AUTH_TOKEN`），主请求
+  由路由换成供应商的 key（`rekey`）并去掉 oauth beta。
+- **runner**（`subagentSplit`）：按主对话的格式换对应的变量（`ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL` / `GROK_BASE_URL` /
+  `GEMINI_BASE_URL`），原来的值（没设就是官方默认地址）作为 `main.base`。别名：Anthropic 格式还是 `cw-sub/<模型>`；其它格式是
+  `cw-sub-<十六进制>`——ccb 的 Gemini / Grok 客户端会把名字里带 haiku / sonnet / opus 的 id 换成家族默认，没有 OpenAI 那种
+  `CLAUDE_WEB_SERVED_MODELS` 可以绕。用户自己 settings.json 里配了中转的账号对话不接（那个地址是用户的）。
+- **先验证的**：`scripts/probe-oauth-base.mjs`——用假令牌、临时 HOME，两个内核在 `ANTHROPIC_BASE_URL` 指向本地时都照样带
+  `Authorization: Bearer <OAuth 令牌>` 和 `oauth-2025-04-20` beta，路径里的段也保留。
+- **测试**：`models/subagent.test.ts`（整对、换算、全局默认、`splitSupport`、别名）、`gateway/service.test.ts`（每种主对话：账号主请求带
+  登录、供应商子代理拿不到登录、另一个账号的令牌、`rekey`、OpenAI / Gemini 主对话、钥匙错 401）、`session-runner.test.ts`（每种主对话的
+  环境变量、不能接的组合不设）、`pool.test.ts`、web `subagent-cross.test.ts`；e2e `ws-phase28.mjs` 加了「别家的模型」一轮（两个内核：主请求
+  带主供应商的 key，子代理请求带另一家的 key 和真名）。
+- **别名的痕迹**：引擎按它请求的名字（别名）记 `modelUsage` 和子代理消息的 model（OpenAI / Gemini 线上回包的名字它不用）。runner 收到
+  `result` / assistant 消息时 `unalias` 换回真名，`sessions.subagent()` 读子代理 transcript 时也换。磁盘上的 transcript 里还是别名；
+  子代理被问「你是什么模型」时会报别名（引擎的系统提示里写的是它）——这个改不了，不影响计费和显示。
+- **真机**（2026-10-18，`scripts/real-subagent-split.mjs <主> <子> <子模型> [主模型]`：临时数据目录里放用户 meta.json 的副本——key 是
+  这个 Windows 用户的 DPAPI，副本能解；真 HOME 的账号登录；临时项目目录，跑完连 `~/.claude/projects` 里那一项一起删）：
+  - 账号（ccb，Opus 5.5）主对话 + DeepSeek（官方，openai 格式）子代理：子代理 transcript 是 `deepseek-chat`，回答正确。
+  - super-nb（只放行官方二进制）主对话 Sonnet 5.5 + **本机账号的 Haiku 4.5** 子代理（反向，`rekey`）：两边都通，super-nb 收下了
+    OAuth 模式的官方二进制换了 key、去了 oauth beta 的请求。
+  - DeepSeek（ccb，OpenAI 格式）主对话 deepseek-flash + aizhongzhuan 的 claude-haiku-5-5 子代理（十六进制别名 + OpenAI→Anthropic 翻译）：通。
+  - 先验风险脚本 `scripts/probe-oauth-base.mjs` 见上。
+- **已知的缺口**：账号对话走的是用户自己 settings.json / 环境变量里配的中转时，runner 不接分流（那个地址是用户的），但前端不知道这件事，
+  菜单照样列别家——选了会被忽略（runner 打一行警告）。要补就把 `userAnthropicEnv().relay` 经 session info 告诉前端。

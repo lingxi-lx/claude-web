@@ -28,7 +28,8 @@ export function outboundOf(type: ProviderType): Outbound | null {
 export const isPassthrough = (inbound: GatewayProtocol, outbound: Outbound) => inbound === outbound || (inbound === 'responses' && outbound === 'openai');
 
 /** The translation directions the spec asks for; everything else is rejected with a clear 400. */
-export const TRANSLATIONS = new Set(['anthropic>openai', 'anthropic>gemini', 'openai>anthropic', 'responses>anthropic', 'gemini>anthropic', 'openai>gemini']);
+// gemini>openai: a Gemini conversation's subagents on an OpenAI-format model (the split route, 2026-10-18)
+export const TRANSLATIONS = new Set(['anthropic>openai', 'anthropic>gemini', 'openai>anthropic', 'responses>anthropic', 'gemini>anthropic', 'openai>gemini', 'gemini>openai']);
 export const supported = (inbound: GatewayProtocol, outbound: Outbound) => isPassthrough(inbound, outbound) || TRANSLATIONS.has(`${inbound}>${outbound}`);
 
 export const PROTOCOL_LABEL: Record<GatewayProtocol, string> = { anthropic: 'Anthropic Messages', openai: 'OpenAI Chat Completions', responses: 'OpenAI Responses', gemini: 'Gemini' };

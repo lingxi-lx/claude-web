@@ -6,8 +6,8 @@ import { statSync } from 'node:fs';
 import { withExplanation } from '../errors/explain.js';
 import { dropEmptyText, findClaudeTranscript, hasClaudeTranscript, hasEntry, lastCostState, lastHumanPrompt, repairLeaf } from './transcript-file.js';
 import { ownSubagentOverride, settingsOverride, userAnthropicEnv } from './user-env.js';
-import { crossPick, subAlias } from '../models/subagent.js';
-import { splitEndpoint } from '../gateway/split.js';
+import { providerKey, splitSupport, subAlias, subagentTarget, unalias, type SplitKind, type SubagentPick } from '../models/subagent.js';
+import { splitEndpoint, splitTarget, type SplitSub } from '../gateway/split.js';
 import { desktopSkillsPlugin } from './desktop-skills.js';
 import { writeFlagSettings, type FlagSettings } from './flag-settings.js';
 import { resolveEngine, spawnClaude } from '../claude-exe.js';
@@ -258,6 +258,32 @@ export class SessionRunner extends EventEmitter {
     return env;
   }
 
+  /**
+   * Subagents on a model this conversation's own provider does not serve: the engine's base URL for its request format
+   * becomes the gateway's split route, which passes the conversation's requests on to where they were going (with the
+   * engine's own credential) and sends the alias's to the picked model. Returns the alias the engine asks for, or null
+   * when this pair cannot be joined (models/subagent.ts splitSupport) or the route is not up yet.
+   */
+  private subagentSplit(pick: SubagentPick, fenv: Record<string, string>): string | null {
+    const mainType: SplitKind = this.provider?.type ?? (this.account ? 'claude-account' : 'claude');
+    // the account through the user's own relay (settings.json / environment): its base URL is theirs to keep
+    if (mainType === 'claude' && userAnthropicEnv().relay) return null;
+    const t = providerKey(pick.providerId) === 'claude' ? { type: 'claude' as const } : splitTarget(pick.providerId);
+    if (!t || !splitSupport({ mainType, subType: t.type })) return null;
+    const sub: SplitSub = t.type === 'claude' ? { kind: 'account' } : t.type === 'claude-account' ? { kind: 'account', token: t.token } : { kind: 'provider', providerId: pick.providerId };
+    const v = mainType === 'openai' ? 'OPENAI_BASE_URL' : mainType === 'grok' ? 'GROK_BASE_URL' : mainType === 'gemini' ? 'GEMINI_BASE_URL' : 'ANTHROPIC_BASE_URL';
+    const defaults: Record<string, string> = { OPENAI_BASE_URL: 'https://api.openai.com/v1', GROK_BASE_URL: 'https://api.x.ai/v1', GEMINI_BASE_URL: 'https://generativelanguage.googleapis.com/v1beta', ANTHROPIC_BASE_URL: 'https://api.anthropic.com' };
+    const mainBase = mainType === 'claude' || mainType === 'claude-account' ? defaults.ANTHROPIC_BASE_URL : fenv[v] || defaults[v];
+    // this machine's login for the subagents: the engine keeps it (no provider key for it to prefer), the route puts the
+    // provider's key on the conversation's own requests
+    const rekey = t.type === 'claude' ? this.provider?.apiKey : undefined;
+    const base = splitEndpoint({ base: mainBase, ...(rekey !== undefined ? { rekey } : {}) }, sub, pick.model);
+    if (!base) return null;
+    fenv[v] = base;
+    if (rekey !== undefined) { delete fenv.ANTHROPIC_AUTH_TOKEN; delete fenv.ANTHROPIC_API_KEY; }
+    return subAlias(pick.model, v === 'ANTHROPIC_BASE_URL' ? 'anthropic' : 'other');
+  }
+
   getHistory() {
     return this.history;
   }
@@ -348,36 +374,31 @@ export class SessionRunner extends EventEmitter {
     const exe = engine.file;
     this.info.runtime = engine.kind;
     const fenv = this.featureEnv();
-    // subagents on another provider's model: the engine talks to the gateway's split route, which sends that model's
-    // requests to its provider and passes the rest through to this conversation's (an Anthropic-format provider: the
-    // route needs its key to pass them on — an account login, or another kind of provider, keeps the main model)
-    const cross = crossPick(this.subagent);
-    const split = cross && this.provider?.type === 'anthropic' ? splitEndpoint(this.provider.id, cross.providerId, cross.model) : null;
-    if (cross && !split) console.warn(`[session ${this.sessionId.slice(0, 8)}] subagents stay on the main model: a model of another provider needs this conversation on an Anthropic-format provider`);
-    if (split) {
-      fenv.ANTHROPIC_BASE_URL = split.base;
-      fenv.ANTHROPIC_AUTH_TOKEN = split.key;
-      delete fenv.ANTHROPIC_API_KEY;
-    }
+    // the subagents' model: one of this conversation's own provider goes to the engine as it is; one of another goes
+    // through the gateway's split route (subagentSplit), the engine asking for it by an alias
+    const target = subagentTarget(this.subagent, this.provider?.id ?? this.account?.id);
+    const sameSub = target?.kind === 'same' ? target.model : undefined;
+    const splitAlias = target?.kind === 'cross' ? this.subagentSplit(target.pick, fenv) : null;
+    if (target?.kind === 'cross' && !splitAlias) console.warn(`[session ${this.sessionId.slice(0, 8)}] subagents stay on the main model: ${target.pick.providerId} / ${target.pick.model} cannot be reached from this conversation`);
     if (noThinking && !('CLAUDE_CODE_DISABLE_THINKING' in fenv)) fenv.CLAUDE_CODE_DISABLE_THINKING = '1';
     if (engine.kind === 'ccb' && !('CLAUDE_WEB_THINKING_DISPLAY' in fenv) && !process.env.CLAUDE_WEB_THINKING_DISPLAY) fenv.CLAUDE_WEB_THINKING_DISPLAY = 'summarized';
     // what each of the provider's models can do with thinking strength (claude-web-engine reads it: levels, whether it
     // reasons, models recorded as refusing the native parameter); the official binary ignores it
     if (engine.kind === 'ccb' && this.provider) {
-      fenv.CLAUDE_WEB_MODEL_CAPS = webCapsEnv(this.provider, [...(this.provider.models ?? []), providerModelId(this.provider, this.model), ...(this.subagent && !cross ? [providerModelId(this.provider, this.subagent)] : [])]);
+      fenv.CLAUDE_WEB_MODEL_CAPS = webCapsEnv(this.provider, [...(this.provider.models ?? []), providerModelId(this.provider, this.model), ...(sameSub ? [providerModelId(this.provider, sameSub)] : [])]);
     }
     // each model's context window (2026-10-14: a relay's Claude compacted at 175K): claude-web-engine takes the whole
     // table (a model switched to mid-conversation keeps its own); the official binary only knows `[1m]` (engineModel)
     // and an earlier compaction for this model
     if (this.provider) {
-      const windows = engine.kind === 'ccb' ? contextWindowsEnv(this.provider, [...(this.provider.models ?? []), ...Object.values(this.provider.modelMap ?? {}), this.provider.defaultModel, providerModelId(this.provider, this.model), ...(this.subagent && !cross ? [providerModelId(this.provider, this.subagent)] : [])]) : undefined;
+      const windows = engine.kind === 'ccb' ? contextWindowsEnv(this.provider, [...(this.provider.models ?? []), ...Object.values(this.provider.modelMap ?? {}), this.provider.defaultModel, providerModelId(this.provider, this.model), ...(sameSub ? [providerModelId(this.provider, sameSub)] : [])]) : undefined;
       if (windows && !('CLAUDE_WEB_CONTEXT_WINDOWS' in fenv)) fenv.CLAUDE_WEB_CONTEXT_WINDOWS = windows;
       const compact = engine.kind === 'claude' ? this.officialCompactWindow(this.model) : undefined;
       if (compact && !('CLAUDE_CODE_AUTO_COMPACT_WINDOW' in fenv)) fenv.CLAUDE_CODE_AUTO_COMPACT_WINDOW = String(compact);
     }
     // the subagents' model (the composer's 子代理 chip): both engines take it before an agent's own `model:` and the
     // tool's haiku / sonnet / opus; on the official binary a 1M Claude gets its `[1m]` like the main model
-    const sub = cross ? (split ? subAlias(cross.model) : undefined) : this.subagent ? this.engineModel(engine.kind, this.subagent) : undefined;
+    const sub = splitAlias ?? (sameSub ? this.engineModel(engine.kind, sameSub) : undefined);
     if (sub) fenv.CLAUDE_CODE_SUBAGENT_MODEL = sub;
     // 下一句提示: the `promptSuggestions` option alone did not bring one on the official binary (2026-10-16, a real
     // two-turn conversation); with the CLI's own switch it did
@@ -611,6 +632,8 @@ export class SessionRunner extends EventEmitter {
       if (!busy) this.setState('idle');
     }
     this.trackBackground(m);
+    // a subagent through the split route: the engine names its messages after the alias it asked with
+    if (m.type === 'assistant' && typeof (m as any).message?.model === 'string') (m as any).message.model = unalias((m as any).message.model);
     if ((m.type === 'result' || (m.type === 'system' && m.subtype === 'init')) && (m as any).fast_mode_state) this.noteFast((m as any).fast_mode_state, (m as any).fast_mode_disabled_reason);
     if (m.type === 'system' && m.subtype === 'session_state_changed') {
       this.setState(m.state === 'running' ? 'running' : m.state === 'requires_action' ? 'waiting' : 'idle');
@@ -624,6 +647,17 @@ export class SessionRunner extends EventEmitter {
       this.emit('info', this.info);
     }
     if (m.type === 'result') {
+      // subagents through the split route are counted by the engine under the alias it asked with: under the real model
+      const mu = (m as any).modelUsage;
+      if (mu && typeof mu === 'object' && Object.keys(mu).some((k) => unalias(k) !== k)) {
+        const out: Record<string, Record<string, unknown>> = {};
+        for (const [k, v] of Object.entries(mu as Record<string, Record<string, unknown>>)) {
+          const prev = out[unalias(k)];
+          if (!prev) { out[unalias(k)] = { ...v }; continue; }
+          for (const [f, x] of Object.entries(v)) if (typeof x === 'number') prev[f] = (typeof prev[f] === 'number' ? (prev[f] as number) : 0) + x;
+        }
+        (m as any).modelUsage = out;
+      }
       turnShare(m as any, this.totals); // the CLI reports running totals; everything downstream adds turns up
       // ccb prices every model with Claude's table: for other vendors' models the number is fiction
       markUnknownCost(m as any, this.provider?.type);

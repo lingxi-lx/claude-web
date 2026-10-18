@@ -652,6 +652,18 @@ function driver() {
       phase = 'subagent-chip';
       const subChip = await js(`document.querySelector('.welcome .cb .sub-anchor > button.chip')?.getAttribute('aria-label') ?? null`);
       check('子代理 chip next to the model chip, nothing picked', subChip === '子代理：同主模型', subChip);
+      // any provider's models are offered, whatever the conversation runs on (2026-10-18)
+      const subProv = await srvReq({ kind: 'providers.upsert', provider: { name: 'Smoke 子代理', type: 'openai', baseUrl: 'http://127.0.0.1:9', apiKey: 'smoke-placeholder-not-a-key', models: ['smoke-sub-m'], defaultModel: 'smoke-sub-m' } }).catch(() => null);
+      await js('window.__store.getState().loadProviders()');
+      await sleep(300);
+      await click('.welcome .cb .sub-anchor > button.chip');
+      const otherListed = subProv && await waitFor(`!!document.querySelector('.menu.mm [data-sec="${subProv.id}"]')`, 3000);
+      const mainProv = await js(`window.__store.getState().settings?.['ui.lastProvider'] ?? null`);
+      check('子代理 menu lists another provider’s models', !!otherListed, JSON.stringify({ id: subProv?.id, mainProv, secs: await js(`[...document.querySelectorAll('.menu.mm [data-sec]')].map((e) => e.dataset.sec)`) }));
+      await key('Escape');
+      await sleep(250);
+      if (subProv) { await srvReq({ kind: 'providers.remove', id: subProv.id }).catch(() => {}); await js('window.__store.getState().loadProviders()'); }
+      await sleep(300);
       await click('.welcome .cb .sub-anchor > button.chip');
       const sm = await waitFor(`!!document.querySelector('.menu.mm [data-id="subagent-same"]')`, 3000) && await js(`(() => { const m = document.querySelector('.menu.mm'); return { label: m.getAttribute('aria-label'), same: m.querySelector('[data-id="subagent-same"]')?.classList.contains('cur'), def: !!m.querySelector('[data-id="subagent-default"] input'), agents: m.querySelectorAll('[data-sec^="agent:"]').length, heads: m.querySelectorAll('[data-sec="favorites"], [data-sec="recent"]').length, words: /effort|ultracode|档案|引擎/i.test(m.innerText) }; })()`);
       check('子代理 menu: 「跟主模型一样」 checked, the default switch, no other agents / favourites / recents, no implementation words', sm && sm.label === '子代理用的模型' && sm.same && sm.def && !sm.agents && !sm.heads && !sm.words, JSON.stringify(sm));

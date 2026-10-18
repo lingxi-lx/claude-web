@@ -18,8 +18,9 @@ import {
 } from './convert.js';
 import { CACHE_KEY_MAX, addMissing, affinityHeaders, cacheKeyOf, forcesTool, isParamRejection, mentionsCacheKey, refusesForcedTool, thinkingOff } from './cache.js';
 import { CacheShim, SHIM_PREFIX } from './shim.js';
-import { subAlias } from '../models/subagent.js';
-import { UpstreamError, decoded, decoder, errorHeaders, passthroughHeaders, readText, replaceTopLevelString, responseHeaders, sendUpstream, translatedHeaders, waitDrain, withTimeout, type UpstreamResponse } from './upstream.js';
+import { isSubAlias } from '../models/subagent.js';
+import type { SplitMain, SplitSub } from './split.js';
+import { UpstreamError, decoded, decoder, errorHeaders, forwardHeaders, passthroughHeaders, readText, replaceTopLevelString, responseHeaders, sendUpstream, translatedHeaders, waitDrain, withTimeout, type UpstreamResponse } from './upstream.js';
 import { tr } from '../i18n/index.js';
 
 /** Streaming: time from sending a request to the first body byte before the member counts as failed. */
@@ -29,6 +30,8 @@ export const NONSTREAM_MS = 10 * 60_000;
 /** After the response started: silence this long ends the stream with an error. */
 const IDLE_MS = 5 * 60_000;
 const BODY_LIMIT = 64 * 1024 * 1024;
+/** the split route's wait for the conversation's own upstream to answer (a non-streamed turn answers when done) */
+const SPLIT_FORWARD_MS = 15 * 60_000;
 
 export interface GatewayDeps {
   meta: MetaStore;
@@ -97,8 +100,10 @@ export class GatewayService extends EventEmitter {
   /** openai / grok profiles' prompt-cache shim (/gateway/~p/…): works whether or not the gateway is enabled */
   readonly shim: CacheShim;
   private key = '';
-  /** subagent splits (/gateway/~s/<token>): token → the conversation's provider, the subagents' provider and model */
-  private splits = new Map<string, { main: string; sub: string; model: string }>();
+  /** subagent splits (/gateway/~s/<token>/k/<key>): token → where the conversation's and the subagents' requests go */
+  private splits = new Map<string, { main: SplitMain; sub: SplitSub; model: string }>();
+  /** where an account's requests go (tests point it at a fake) */
+  anthropicBase: string | undefined;
   private splitSecret = crypto.randomBytes(32);
   private firstByteMs: number;
   private nonStreamMs: number;
@@ -136,15 +141,17 @@ export class GatewayService extends EventEmitter {
 
   /**
    * A conversation whose subagents run on another provider's model (the composer's 子代理 chip): its engine talks to
-   * this route instead of its provider. A request for `model` goes to `sub` (translated when that provider speaks
-   * another API); everything else passes through to `main` byte for byte, as the engine would have sent it. Works
-   * whether or not the gateway is enabled; the key is per split (HMAC, never stored); null before listening.
+   * this route instead of its provider. A request for the subagents' alias goes to `sub` (a provider: translated when
+   * it speaks another API, its key; an account: Anthropic with its login); everything else goes to `main.base` as the
+   * engine sent it, credential and all — so an account login, the cache shim and every request format pass through.
+   * The key is in the path (the engine's Authorization header is its own login), per split (HMAC, never stored).
+   * Works whether or not the gateway is enabled; null before listening.
    */
-  splitEndpoint(main: string, sub: string, model: string): { base: string; key: string } | null {
+  splitEndpoint(main: SplitMain, sub: SplitSub, model: string): string | null {
     if (!this.port) return null;
-    const token = crypto.createHash('sha256').update(`${main}\n${sub}\n${model}`).digest('hex').slice(0, 32);
+    const token = crypto.createHash('sha256').update(JSON.stringify([main.base, main.rekey ?? '', sub, model])).digest('hex').slice(0, 32);
     this.splits.set(token, { main, sub, model });
-    return { base: `${this.baseUrl()}/${SPLIT_PREFIX}/${token}`, key: this.splitKey(token) };
+    return `${this.baseUrl()}/${SPLIT_PREFIX}/${token}/k/${this.splitKey(token)}`;
   }
   private splitKey(token: string) { return `cwx-${crypto.createHmac('sha256', this.splitSecret).update(token).digest('hex')}`; }
 
@@ -321,56 +328,93 @@ export class GatewayService extends EventEmitter {
     try { return { raw, json: JSON.parse(raw.toString('utf8') || '{}') }; } catch { this.sendError(res, inbound, 400, tr('请求体不是合法 JSON')); return null; }
   }
 
-  /** /gateway/~s/<token>/v1/…: the subagents' model to its provider, the rest to the conversation's (see splitEndpoint). */
+  /**
+   * /gateway/~s/<token>/k/<key>/…: the subagents' alias to their target, anything else on to the conversation's own
+   * base URL as the engine sent it (see splitEndpoint). The path below the key is the engine's: `/v1/messages`
+   * (Anthropic), `/chat/completions` (an OpenAI-format base ending in /v1), `/models/<id>:<action>` (Gemini).
+   */
   private async serveSplit(req: http.IncomingMessage, res: http.ServerResponse, url: URL) {
-    const m = /^\/gateway\/~s\/([^/]+)(\/.*)?$/.exec(url.pathname);
+    const m = /^\/gateway\/~s\/([^/]+)\/k\/([^/]+)(\/.*)?$/.exec(url.pathname);
     const token = m?.[1] ?? '';
     const split = this.splits.get(token);
-    let rest = m?.[2] ?? '/';
-    if (!/^\/v1(beta)?\//.test(rest)) rest = `/v1${rest === '/' ? '' : rest}`;
-    const route = routeOf(req.method ?? 'GET', rest, req.headers);
-    if (!split) return this.sendError(res, 'anthropic', 404, tr('没有这条子代理分流'));
+    if (!m || !split) return this.sendError(res, 'anthropic', 404, tr('没有这条子代理分流'));
     const want = Buffer.from(this.splitKey(token));
-    if (!this.presentedKeys(req, url).some((k) => { const a = Buffer.from(k); return a.length === want.length && crypto.timingSafeEqual(a, want); })) return this.sendError(res, 'anthropic', 401, tr('子代理分流的密钥无效'));
-    if (!route || (route.inbound !== 'anthropic' && route.op !== 'models')) return this.sendError(res, 'anthropic', 404, tr('网关不支持这个接口：{method} {rest}', { method: req.method, rest }));
-    const groupFor = (toSub: boolean): GatewayGroup => ({
-      id: `${SPLIT_PREFIX}:${token}:${toSub ? 'sub' : 'main'}`,
-      name: toSub ? tr('子代理') : tr('主对话'),
-      strategy: 'failover',
-      members: [toSub ? { providerId: split.sub, model: split.model } : { providerId: split.main }],
-    });
-    if (route.op === 'models') return this.serveModels(res, groupFor(false), 'anthropic');
-    const body = await this.readJson(req, res, 'anthropic');
-    if (!body) return;
-    const model = String(body.json?.model ?? '');
-    // subagents ask for the alias (models/subagent.ts subAlias), never a model the main conversation can use; the pinned
-    // member model sends their provider the real id
-    const toSub = model === subAlias(split.model);
-    const group = groupFor(toSub);
-    // the official binary asks for Claude's thinking as text for the whole process (session-runner): another maker's
-    // model behind an Anthropic-format relay gets a body without that field, which it may not know
-    if (!/claude/i.test(toSub ? split.model : model) && body.json?.thinking && typeof body.json.thinking === 'object' && 'display' in body.json.thinking) {
-      delete body.json.thinking.display;
-      body.raw = Buffer.from(JSON.stringify(body.json));
-    }
-    // from here on the subagents' request names the real model, so the answer does too (a translated answer echoes
-    // the model it was asked for — the alias showed on the subagent's messages, 2026-10-17 real relay)
-    if (toSub) {
-      body.json.model = split.model;
-      body.raw = Buffer.from(replaceTopLevelString(body.raw.toString('utf8'), 'model', split.model) ?? JSON.stringify(body.json));
-    }
-    const params = new URLSearchParams(url.search);
-    params.delete('key');
+    const got = Buffer.from(m[2]);
+    if (got.length !== want.length || !crypto.timingSafeEqual(got, want)) return this.sendError(res, 'anthropic', 401, tr('子代理分流的密钥无效'));
+    const rest = m[3] ?? '/';
+    const raw = await this.readBody(req, res);
+    if (!raw) return;
+    let json: any = null;
+    try { json = raw.length ? JSON.parse(raw.toString('utf8')) : null; } catch { /* not JSON: the main conversation's, passed on */ }
+    // Gemini names the model in the path, the others in the body
+    const g = /^(\/v1beta)?\/models\/([^/:]+):(\w+)$/.exec(rest);
+    let model = String(json?.model ?? '');
+    if (g) { try { model = decodeURIComponent(g[2]); } catch { model = g[2]; } }
     const ac = new AbortController();
     res.on('close', () => { if (!res.writableFinished) ac.abort(); });
-    const ctx: Ctx = { req, res, group, route: { ...route, stream: !!body.json?.stream }, path: rest, search: params.toString() ? `?${params}` : '', raw: body.raw, json: body.json, model: toSub ? split.model : model, signal: ac.signal, t0: Date.now(), customTools: new Set() };
+    // the official binary asks for Claude's thinking as text for the whole process (session-runner): another maker's
+    // model behind an Anthropic-format relay gets a body without that field, which it may not know
+    const toSub = isSubAlias(model, split.model);
+    let body = raw;
+    if (!g && json?.thinking && typeof json.thinking === 'object' && 'display' in json.thinking && !/claude/i.test(toSub ? split.model : model)) {
+      delete json.thinking.display;
+      body = Buffer.from(JSON.stringify(json));
+    }
+    if (!toSub) return this.forward(req, res, `${split.main.base.replace(/\/+$/, '')}${rest}${url.search}`, body, split.main.rekey !== undefined ? { bearer: split.main.rekey, oauthBeta: 'drop' } : {}, ac.signal);
+    // from here on the subagents' request names the real model, so the answer does too (a translated answer echoes
+    // the model it was asked for — the alias showed on the subagent's messages, 2026-10-17 real relay)
+    if (!g && json) {
+      json.model = split.model;
+      body = Buffer.from(replaceTopLevelString(body.toString('utf8'), 'model', split.model) ?? JSON.stringify(json));
+    }
+    if (split.sub.kind === 'account') {
+      const target = `${(this.anthropicBase ?? 'https://api.anthropic.com').replace(/\/+$/, '')}${rest}${url.search}`;
+      return this.forward(req, res, target, body, split.sub.token ? { bearer: split.sub.token, oauthBeta: 'ensure' } : {}, ac.signal);
+    }
+    const path = g ? `/v1beta/models/${encodeURIComponent(split.model)}:${g[3]}` : /^\/v1(beta)?\//.test(rest) ? rest : `/v1${rest}`;
+    const route = routeOf(req.method ?? 'GET', path, req.headers);
+    if (!route || route.op === 'models') return this.sendError(res, 'anthropic', 404, tr('网关不支持这个接口：{method} {rest}', { method: req.method, rest }));
+    // an engine on an account login: its login beta is not the provider's business (its key is swapped by passthroughHeaders)
+    for (let i = 0; i + 1 < req.rawHeaders.length; i += 2) if (req.rawHeaders[i].toLowerCase() === 'anthropic-beta') req.rawHeaders[i + 1] = req.rawHeaders[i + 1].split(',').map((s) => s.trim()).filter((s) => s && s !== 'oauth-2025-04-20').join(',');
+    const group: GatewayGroup = { id: `${SPLIT_PREFIX}:${token}:sub`, name: tr('子代理'), strategy: 'failover', members: [{ providerId: split.sub.providerId, model: split.model }] };
+    const params = new URLSearchParams(url.search);
+    params.delete('key');
+    const parsed = json ?? {};
+    const ctx: Ctx = { req, res, group, route: { ...route, stream: route.stream || !!parsed.stream }, path, search: params.toString() ? `?${params}` : '', raw: body, json: parsed, model: split.model, signal: ac.signal, t0: Date.now(), customTools: new Set() };
     try {
       await this.run(ctx);
     } finally {
       // one member and no one to switch to: an upstream error goes back to the engine as it came (it retries on its
       // own); a cool-down here would refuse the next requests with an error the engine never got from its provider
-      this.states.reset(group.id, group.members[0].providerId);
+      this.states.reset(group.id, split.sub.providerId);
     }
+  }
+
+  private async readBody(req: http.IncomingMessage, res: http.ServerResponse): Promise<Buffer | null> {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const c of req) {
+      size += (c as Buffer).length;
+      if (size > BODY_LIMIT) { this.sendError(res, 'anthropic', 413, tr('请求体过大')); return null; }
+      chunks.push(c as Buffer);
+    }
+    return Buffer.concat(chunks);
+  }
+
+  /** The split route's plain forwarding: the engine's request to `target`, the answer back as it comes (status, headers, bytes). */
+  private async forward(req: http.IncomingMessage, res: http.ServerResponse, target: string, body: Buffer, auth: { bearer?: string; oauthBeta?: 'drop' | 'ensure' }, signal: AbortSignal) {
+    let up: UpstreamResponse;
+    try {
+      // a non-streamed answer only sends its headers when it is done: as long as a long turn may take
+      up = await sendUpstream(target, { method: req.method ?? 'GET', headers: forwardHeaders(req.rawHeaders, auth), body: body.length ? body : undefined, signal, headerTimeoutMs: SPLIT_FORWARD_MS });
+    } catch (e) {
+      if (signal.aborted) return;
+      return this.sendError(res, 'anthropic', 502, (e as Error).message);
+    }
+    const headers: Record<string, string | string[]> = {};
+    for (const [k, v] of Object.entries(up.headers)) if (v !== undefined && !/^(connection|keep-alive|transfer-encoding|content-length)$/i.test(k)) headers[k] = v;
+    res.writeHead(up.status, headers);
+    up.body.pipe(res);
   }
 
   private serveModels(res: http.ServerResponse, g: GatewayGroup, inbound: GatewayProtocol) {

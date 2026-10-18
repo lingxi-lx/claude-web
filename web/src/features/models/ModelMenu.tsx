@@ -291,9 +291,9 @@ export function ModelMenu(p: ModelMenuProps) {
         )}
       </div>
       {p.subagent && (
-        <label className="mm-subdef" data-id={SUBAGENT_MENU_ID.default} title={tr('在这个供应商上新开的对话（也包括 IM、定时任务）的子代理都用这里选的')}>
+        <label className="mm-subdef" data-id={SUBAGENT_MENU_ID.default} title={tr('新开的对话（也包括 IM、定时任务）的子代理都用这里选的，不管主对话用哪个供应商')}>
           <input type="checkbox" checked={p.subagent.isDefault} disabled={p.subagent.same && p.subagent.isDefault} onChange={() => p.subagent!.onToggleDefault()} />
-          <span>{tr('这个供应商的新对话都这样')}</span>
+          <span>{tr('新对话都这样')}</span>
         </label>
       )}
       {p.subagentRow && !p.subagent && (

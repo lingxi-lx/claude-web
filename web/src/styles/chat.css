@@ -294,3 +294,6 @@ div.code { border: 0; border-radius: var(--r-lg); background-color: var(--surfac
 .pr-bar .pr-ci { flex: none; display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: var(--r-sm); color: var(--ink-2); font-size: var(--fs-small); }
 .pr-bar .pr-ci:hover, .pr-bar .pr-ci[aria-expanded='true'] { background: var(--layer-hover); }
 .pr-bar .pr-ci.on { color: var(--accent-text); }
+
+/* the latest turn's plan at the foot of the conversation (ChatView PlanDock), like the official app's card */
+.plan-dock { margin: var(--sp-2) 0 var(--sp-3); }

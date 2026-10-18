@@ -10,7 +10,7 @@ import { beforeAppServer } from '../gateway/agents.js';
 import { CodexDriver } from '../agents/codex-driver.js';
 import { proxy } from '../net/proxy.js';
 import { withExplanation } from '../errors/explain.js';
-import { SUBAGENT_DEFAULTS, providerKey, subagentModelFor } from '../models/subagent.js';
+import { fullPick, providerKey, subagentModelFor } from '../models/subagent.js';
 import { tr } from '../i18n/index.js';
 
 const MODES: readonly PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk', 'auto'];
@@ -97,11 +97,12 @@ export class RunnerPool extends EventEmitter {
         const recorded = this.providers.meta?.sessionMeta(params.sessionId).cacheKey;
         if (recorded) params = { ...params, cacheParentId: recorded };
       }
-      // the subagents' model: said by the caller (the composer's chip), else this conversation's own pick for its
-      // provider, else the provider's default — IM, schedules, goals and every reopen land here too
+      // the subagents' model: said by the caller (the composer's chip), else this conversation's own pick, else the
+      // default for new conversations — IM, schedules, goals and every reopen land here too. Always a whole pick
+      // (provider + model): the conversation moving to another provider does not change it
       const m = this.providers.meta;
-      const explicit = params.subagentModel;
-      if (explicit === undefined && m) params = { ...params, subagentModel: subagentModelFor({ recorded: params.sessionId ? m.sessionMeta(params.sessionId).subagent : undefined, defaults: m.settings()[SUBAGENT_DEFAULTS], providerId: params.providerId }) };
+      const explicit = params.subagentModel === undefined ? undefined : fullPick(params.subagentModel, params.providerId);
+      params = { ...params, subagentModel: explicit ?? (m ? subagentModelFor({ recorded: params.sessionId ? m.sessionMeta(params.sessionId).subagent : undefined, settings: m.settings(), providerId: params.providerId }) : undefined) };
       const sp = this.providers.forSession(params.providerId);
       r = new SessionRunner(params, sp);
       // a pick is the conversation's from then on (a new one: under the id it was given; a fork gets its id at init)

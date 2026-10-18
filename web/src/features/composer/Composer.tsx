@@ -31,7 +31,7 @@ import { REFERENCE_EVENT, handOver, type ReferenceDetail } from '@/features/side
 import { ModelChip } from '@/features/models/ModelMenu';
 import { EffortChip, type EffortChipProps } from '@/features/models/EffortChip';
 import { SubagentChip, subagentLabel } from '@/features/models/SubagentChip';
-import { SUBAGENT_DEFAULTS, subagentDefault, subagentModelFor } from '../../../../server/src/models/subagent';
+import { subagentModelFor } from '../../../../server/src/models/subagent';
 import { OWN_PROVIDER, agentModels, effectiveRuntime, usableProfile, type AgentSource, type ModelMenuItem } from '@/features/models/menu';
 import { mergeResume, resumeView } from '@/store/reopen';
 import { routePick, switchedNote } from '@/features/models/route';
@@ -45,7 +45,6 @@ import { DOCK_BLOCKED, DOCK_CARRIED, DOCK_ENTER_IGNORED, DOCK_PLACEHOLDER, DOCK_
 import { showGoals } from '@/features/workbench/right-panel';
 import { ComposerBar, ComposerUnder } from './ComposerBar';
 import { ConvStatsLine } from './ConvStatsLine';
-import { StatusLine } from './StatusLine';
 import { PlusMenu } from './PlusMenu';
 import { PermissionChip } from './PermissionChip';
 import { nextPermissionMode } from '@/ui/terms';
@@ -188,7 +187,8 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   const provider = usableProfile(providers, wProvider, { agent: wKind, engine, gatewayGroups: gatewayView.groups, gatewayEnabled: gatewayView.enabled });
   // the agent's own model list: the catalog, or what the agent registry probed when the catalog has none
   const wProviderId = provider ? provider.id : 'claude';
-  const wSubModel = wSub && wSub.providerId === wProviderId ? wSub.model : subagentDefault(settings[SUBAGENT_DEFAULTS], wProviderId);
+  // a whole pick: switching the new conversation to another provider keeps it
+  const wSubModel = subagentModelFor({ recorded: wSub ?? undefined, settings, providerId: wProviderId });
   // (what the agent said it offers this account comes first: the catalog goes stale with every release)
   const wBuiltin = agent && (agent.reportedModels?.length || !modelsFor(agent.kind).length) ? agentModels(agent) : undefined;
   // providers a Claude conversation could use right now (the model menu's own check)
@@ -988,7 +988,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
         onPick={(it) => pickResume(it, v)}
       />
     );
-    if (rAgent === 'claude' && !remote) subagent = <SubagentChip providerId={rProvider} value={subagentModelFor({ recorded: sessionMeta[sid]?.subagent, defaults: settings[SUBAGENT_DEFAULTS], providerId: rProvider })} disabled={swapping} onPick={(m) => void pickSubagent(m, rProvider, undefined, false)} />;
+    if (rAgent === 'claude' && !remote) subagent = <SubagentChip providerId={rProvider} value={subagentModelFor({ recorded: sessionMeta[sid]?.subagent, settings, providerId: rProvider })} disabled={swapping} onPick={(m) => void pickSubagent(m, rProvider, undefined, false)} />;
     ultraOn = rUltraOk && !!v.ultracode;
     effort = (
       <EffortChip
@@ -1076,7 +1076,6 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
         {active && !welcome && <QueueCards key={active.sessionId} sessionId={active.sessionId} queue={active.queue} onEdit={(t) => { setText((cur) => (cur ? `${cur}\n${t}` : t)); ta.current?.focus(); }} />}
         {/* 后台: a workflow / sub-agent / background command still going — the pill opens the 后台 page on it */}
         {active && !welcome && <BackgroundPill sessionId={active.sessionId} />}
-        {active && !welcome && <StatusLine sessionId={active.sessionId} />}
         {/* a docked card takes the run card's place (spec §4.2: 「等确认时被权限卡替代」) */}
         {active && !welcome && (docked
           ? <PermissionDock sessionId={active.sessionId} reason={text} onReasonUsed={() => onChange('')} scope={dockScope} note={dockNote} onDenyQueued={queuedOffer ? denyQueued : undefined} />

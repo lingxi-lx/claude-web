@@ -4,7 +4,9 @@
 //   · a conversation opened with a subagent model: the main turn goes out with the main model, the subagent's
 //     request with the picked one; the session info says it and meta.json remembers it for the conversation;
 //   · back to 「跟主模型一样」 (a restart of the process, invisible): the next subagent runs on the main model;
-//   · the provider's default for new conversations (`subagentModels`): a conversation opened without a pick gets it.
+//   · the old per-provider default (`subagentModels`) and the one default for new conversations (`subagentModel`);
+//   · another provider's model (2026-10-18, any model whatever the conversation runs on): the main requests keep the
+//     conversation's own key, the subagent's go out with the other provider's key and the real model id.
 //   node server/ws-phase28.mjs   (starts its own server; scripts/e2e.mjs' port/token are ignored)
 import WebSocket from 'ws';
 import http from 'node:http';
@@ -83,7 +85,7 @@ const upstream = http.createServer((q, s) => {
   q.on('end', () => {
     let j = {};
     try { j = JSON.parse(raw || '{}'); } catch { /* keep */ }
-    const h = { method: q.method, url: q.url ?? '', model: j.model, at: Date.now() };
+    const h = { method: q.method, url: q.url ?? '', model: j.model, at: Date.now(), auth: String(q.headers.authorization ?? q.headers['x-api-key'] ?? '') };
     hits.push(h);
     if (h.url.startsWith('/v1/messages')) return anthropic(q, s, j, h);
     if (h.url.includes('/models')) return json(s, 200, { data: [{ id: 'claude-sonnet-4-6', type: 'model' }, { id: 'small-model', type: 'model' }] });
@@ -129,7 +131,8 @@ async function agentTurn(sid) {
   void asked.then((a) => a && req({ kind: 'permission.respond', requestId: a.requestId, response: { behavior: 'allow' } }));
   const r = await resultOf(sid, from);
   const mine = hits.slice(mark);
-  return { result: r?.subtype, main: mine.find((h) => h.role === 'main')?.model, sub: mine.find((h) => h.role === 'sub')?.model, tool: mine.find((h) => h.agentTool)?.agentTool };
+  const m = mine.find((h) => h.role === 'main'), sb = mine.find((h) => h.role === 'sub');
+  return { result: r?.subtype, main: m?.model, sub: sb?.model, mainAuth: m?.auth, subAuth: sb?.auth, tool: mine.find((h) => h.agentTool)?.agentTool };
 }
 
 async function main() {
@@ -148,14 +151,15 @@ async function suite(runtime) {
   const A = await req({ kind: 'providers.upsert', provider: { name: `中转${runtime}`, type: 'anthropic', baseUrl: up, apiKey: 'relay-key-e2e', defaultModel: 'claude-sonnet-4-6', models: ['claude-sonnet-4-6', 'small-model'], contextWindows: { 'small-model': 120_000 }, ...(runtime === 'claude' ? { runtime: 'claude' } : {}) } });
 
   // ---- opened with a pick ----
+  const full = (pid, m) => `cw-x:${encodeURIComponent(pid)}:${m}`;
   const o = await req({ kind: 'session.open', params: { cwd: proj, providerId: A.id, model: 'claude-sonnet-4-6', permissionMode: 'default', subagentModel: 'small-model' } });
   const sid = o.sessionId;
-  check('the session info says the subagents model', o.info?.subagentModel === 'small-model', JSON.stringify(o.info?.subagentModel));
+  check('the session info says the subagents model (a whole pick: provider + model)', o.info?.subagentModel === full(A.id, 'small-model'), JSON.stringify(o.info?.subagentModel));
   const t1 = await agentTurn(sid);
   check('the main turn goes out with the main model', /^claude-sonnet-4-6/.test(t1.main ?? ''), JSON.stringify(t1));
   check('… the subagent with the picked one', t1.sub === 'small-model', JSON.stringify(t1));
   const meta = await req({ kind: 'sessions.meta' });
-  check('… remembered for the conversation', meta[sid]?.subagent?.model === 'small-model' && meta[sid]?.subagent?.providerId === A.id, JSON.stringify(meta[sid]));
+  check('… remembered for the conversation', meta[sid]?.subagent?.model === full(A.id, 'small-model'), JSON.stringify(meta[sid]));
 
   // ---- back to the main model ----
   const from = events.length;
@@ -170,11 +174,22 @@ async function suite(runtime) {
   // ---- the provider's default for new conversations ----
   await req({ kind: 'settings.set', key: 'subagentModels', value: { [A.id]: 'small-model' } });
   const o2 = await req({ kind: 'session.open', params: { cwd: proj, providerId: A.id, model: 'claude-sonnet-4-6', permissionMode: 'default' } });
-  check('a new conversation without a pick gets the provider default', o2.info?.subagentModel === 'small-model', JSON.stringify(o2.info?.subagentModel));
+  check('a new conversation without a pick gets the old provider default', o2.info?.subagentModel === full(A.id, 'small-model'), JSON.stringify(o2.info?.subagentModel));
   const t3 = await agentTurn(o2.sessionId);
   check('… and its subagent runs on it', t3.sub === 'small-model', JSON.stringify(t3));
   await req({ kind: 'session.close', sessionId: o2.sessionId }).catch(() => {});
   await req({ kind: 'settings.set', key: 'subagentModels', value: {} });
+
+  // ---- another provider's model for the subagents ----
+  const B = await req({ kind: 'providers.upsert', provider: { name: `另一家${runtime}`, type: 'anthropic', baseUrl: up, apiKey: 'other-key-e2e', defaultModel: 'small-model', models: ['small-model'] } });
+  await req({ kind: 'settings.set', key: 'subagentModel', value: full(B.id, 'small-model') });
+  const o3 = await req({ kind: 'session.open', params: { cwd: proj, providerId: A.id, model: 'claude-sonnet-4-6', permissionMode: 'default' } });
+  check('the one default for new conversations: another provider’s model', o3.info?.subagentModel === full(B.id, 'small-model'), JSON.stringify(o3.info?.subagentModel));
+  const t4 = await agentTurn(o3.sessionId);
+  check('… the main requests go out with the conversation’s own key', /^claude-sonnet-4-6/.test(t4.main ?? '') && /relay-key-e2e/.test(t4.mainAuth ?? ''), JSON.stringify(t4));
+  check('… the subagent’s with the other provider’s key and the real model id', t4.sub === 'small-model' && /other-key-e2e/.test(t4.subAuth ?? '') && t4.result === 'success', JSON.stringify(t4));
+  await req({ kind: 'session.close', sessionId: o3.sessionId }).catch(() => {});
+  await req({ kind: 'settings.set', key: 'subagentModel', value: null });
 }
 
 try {

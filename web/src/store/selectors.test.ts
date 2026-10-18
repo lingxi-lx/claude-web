@@ -200,6 +200,23 @@ function freshSelectorLines(src: string): { line: number; body: string }[] {
   return out;
 }
 
+/**
+ * The reducer grows a conversation in place (`c.items.push(…)`) and says so by bumping the open entry's `version`, so a
+ * selector that returns `conv` or one of its arrays / maps keeps returning the same reference: the component never
+ * re-renders and a `useMemo` on it never recomputes (the stats line under the composer stayed empty for a conversation
+ * started in this window). Select the open entry (or its `version`) and derive from that.
+ */
+const MUTABLE_CONV = /\buseStore\s*\(\s*\(\s*\w+\s*\)\s*=>[^;\n]*\.conv(?:\.(?:items|toolIndex|streaming|byUuid))?\s*\)/g;
+describe('selectors do not return a conversation the reducer mutates in place', () => {
+  it('no component selects conv / conv.items directly', () => {
+    const hits = files(SRC).flatMap((f) => {
+      const src = fs.readFileSync(f, 'utf8');
+      return [...src.matchAll(MUTABLE_CONV)].map((m) => `${path.relative(SRC, f)}:${src.slice(0, m.index).split('\n').length}`);
+    });
+    expect(hits).toEqual([]);
+  });
+});
+
 describe('zustand selectors return stable references', () => {
   it('no selector builds a fresh array / object per call', () => {
     const bad: string[] = [];

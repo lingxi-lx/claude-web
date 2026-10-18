@@ -10,8 +10,9 @@ import { tr } from '@/i18n';
  * row is narrow (composer.css) and before the first turn ends; the speed shows as soon as a turn has output.
  */
 export function ConvStatsLine({ sessionId }: { sessionId: string }) {
-  const items = useStore((s) => s.open[sessionId]?.conv.items);
-  const st = useMemo(() => (items ? convStats(items) : null), [items]);
+  // the reducer grows conv.items in place and bumps `version`: key on that, not on the (same) array
+  const o = useStore((s) => s.open[sessionId]);
+  const st = useMemo(() => (o ? convStats(o.conv.items) : null), [o?.version]);
   if (!st) return null;
   const parts: { text: string; title: string }[] = [
     { text: tr('{turns} 轮', { turns: st.turns }), title: tr('这个对话发出过 {turns} 轮', { turns: st.turns }) },

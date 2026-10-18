@@ -19,7 +19,7 @@ export const SETTINGS_GROUPS: { id: SettingsGroupId; l: string }[] = [
 
 /** One setting row (a meta.json key). */
 export type EntryId =
-  | 'ui.defaultMode' | 'autoContinueOnReset' | 'ui.showThinking' | 'ui.viewMode' | 'ui.infoPanel' | 'ui.sidebarFolded' | 'ui.welcomeBackdrop' | 'ui.welcomeLayout' | 'ui.statusLine' | 'ui.autoArchivePr' | 'sessions.mcp' | 'claude.desktopSkills' | 'worktree.dir' | 'worktree.prefix' | 'ui.promptSuggestions' | 'ui.diffMode' | 'ui.inlineDiffs' | 'ui.workbench' | 'ui.autoSave'
+  | 'ui.defaultMode' | 'autoContinueOnReset' | 'ui.showThinking' | 'ui.viewMode' | 'ui.infoPanel' | 'ui.sidebarFolded' | 'ui.welcomeBackdrop' | 'ui.welcomeLayout' | 'ui.autoArchivePr' | 'sessions.mcp' | 'claude.desktopSkills' | 'worktree.dir' | 'worktree.prefix' | 'ui.promptSuggestions' | 'ui.diffMode' | 'ui.inlineDiffs' | 'ui.workbench' | 'ui.autoSave'
   | 'ui.notifications' | 'ui.closeToTray' | 'ui.confirmExit' | 'ui.softwareRender' | 'orchestra.maxParallel' | 'cafe.rate' | 'cafe.sound'
   | 'ui.language' | 'ui.theme' | 'ui.zoom' | 'ui.fontSize' | 'ui.density' | 'ui.cjkFont' | 'ui.reduceMotion' | 'ui.haptics';
 
@@ -104,7 +104,6 @@ const GENERAL: EntryMeta[] = [
   { id: 'ui.showThinking', block: tr('对话显示'), label: tr('显示思考过程'), hint: tr('展开模型回答之前的推理内容。关掉更清爽。'), keywords: tr('thinking reasoning 思考') },
   { id: 'ui.viewMode', block: tr('对话显示'), label: tr('查看模式'), hint: tr('普通：做完的回合收成一行。显示思考：回合照样收起，思考过程展开。详细：每一步和思考全部展开。Ctrl+O 随时切换。'), keywords: tr('view mode thinking verbose 查看 详细 思考 展开 Ctrl+O') },
   { id: 'ui.infoPanel', block: tr('对话显示'), label: tr('对话右边的信息栏'), hint: tr('环境、上下文用量、连接器、改动和后台任务一栏摆在对话右边；对话头上的 ⓘ 按钮也能开关。窗口太窄时自动让开。'), keywords: tr('info panel column context connectors changes background 信息栏 上下文 连接器 改动 后台') },
-  { id: 'ui.statusLine', block: tr('对话显示'), label: tr('显示 statusLine'), hint: tr('在 ~/.claude/settings.json 里配了 statusLine 命令的话，把它的输出（带颜色）显示在输入框上方，和终端里一样。每轮结束、打开对话、运行中每 10 秒刷新。'), keywords: tr('statusline status line 状态行 命令 终端 底栏') },
   { id: 'ui.welcomeLayout', block: tr('对话显示'), label: tr('新对话页的输入框'), hint: tr('框下一行：和官方 App 一样，代码 / 聊天、电脑、文件夹、分支和权限在输入框下面，模型在右边。框里：这些都放在输入框里面。'), keywords: tr('welcome composer layout chips under new conversation 输入框 新对话 首页 布局') },
   { id: 'ui.welcomeBackdrop', block: tr('对话显示'), label: tr('新对话页的动态背景'), hint: tr('字流：字母像水里的墨一样顺着水流飘，鼠标会把它们拨开，点一下溅出一圈字，在输入框里打的字会飘出来汇进去。字场：一片很暗的字，斜着慢慢流动，点一下荡开一圈。跟着主题配色；系统开了「减少动态效果」时是静止的。'), keywords: tr('background backdrop animation ascii welcome new conversation flow letters 背景 动态 字符 字流 字场 新对话 首页') },
   { id: 'ui.sidebarFolded', block: tr('对话显示'), label: tr('侧栏的项目和文件夹默认收起'), hint: tr('打开时只露出标题；你点开的那几个会一直开着，当前对话所在的也会打开。搜索时全部展开。'), keywords: tr('sidebar folders projects collapse expand 侧栏 折叠 收起 展开 项目 文件夹') },

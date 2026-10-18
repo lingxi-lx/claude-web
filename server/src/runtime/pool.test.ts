@@ -168,19 +168,25 @@ describe('RunnerPool: the subagents model', () => {
     const meta = { sessionMeta: (id: string) => recorded[id] ?? {}, settings: () => settings, setSessionMeta: async (id: string, patch: any) => { writes.push([id, patch]); } };
     return { p: new RunnerPool({ forSession: () => undefined, meta } as any), writes };
   };
-  it('not said: the conversation pick for its provider, else that provider default', () => {
+  it('not said: the conversation’s own pick wherever it now runs, else the default for new conversations', async () => {
+    const { crossValue } = await import('../models/subagent.js');
     const { p, writes } = setup({ a: { providerId: 'relay', subagent: { providerId: 'relay', model: 'mini' } }, b: { subagent: { providerId: 'relay', model: 'mini' } } }, { subagentModels: { relay: 'cheap', claude: 'haiku' } });
-    expect((p.open({ sessionId: 'a', cwd: 'C:/x', providerId: 'relay' }) as any).params.subagentModel).toBe('mini');
-    // its pick was for another provider than the one it opens on
-    expect((p.open({ sessionId: 'b', cwd: 'C:/x', providerId: 'claude' }) as any).params.subagentModel).toBe('haiku');
-    expect((p.open({ cwd: 'C:/x', providerId: 'relay' }) as any).params.subagentModel).toBe('cheap');
+    expect((p.open({ sessionId: 'a', cwd: 'C:/x', providerId: 'relay' }) as any).params.subagentModel).toBe(crossValue('relay', 'mini'));
+    // moved to the account since: still relay's mini
+    expect((p.open({ sessionId: 'b', cwd: 'C:/x', providerId: 'claude' }) as any).params.subagentModel).toBe(crossValue('relay', 'mini'));
+    // a new one: the old per-provider default, as a whole pick
+    expect((p.open({ cwd: 'C:/x', providerId: 'relay' }) as any).params.subagentModel).toBe(crossValue('relay', 'cheap'));
+    // the one default for new conversations wins over the old ones
+    const g = setup({}, { subagentModel: crossValue('ds', 'deepseek-chat'), subagentModels: { relay: 'cheap' } });
+    expect((g.p.open({ cwd: 'C:/x', providerId: 'relay' }) as any).params.subagentModel).toBe(crossValue('ds', 'deepseek-chat'));
     expect(writes).toEqual([]);
   });
-  it('said by the caller: used and remembered for the conversation (a new one under the id it got), not for a fork', () => {
+  it('said by the caller: used and remembered for the conversation as a whole pick (a new one under the id it got), not for a fork', async () => {
+    const { crossValue } = await import('../models/subagent.js');
     const { p, writes } = setup({}, {});
     const r = p.open({ cwd: 'C:/x', providerId: 'relay', subagentModel: 'mini' }) as any;
-    expect(r.params.subagentModel).toBe('mini');
-    expect(writes).toEqual([[r.sessionId, { subagent: { providerId: 'relay', model: 'mini' } }]]);
+    expect(r.params.subagentModel).toBe(crossValue('relay', 'mini'));
+    expect(writes).toEqual([[r.sessionId, { subagent: { providerId: 'relay', model: crossValue('relay', 'mini') } }]]);
     p.open({ sessionId: 'src', cwd: 'C:/x', fork: true, subagentModel: '' });
     expect(writes).toHaveLength(1);
   });

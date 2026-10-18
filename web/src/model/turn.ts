@@ -1,7 +1,7 @@
 // One turn of a conversation as the chat shows it after redesign phase 5 (spec §5.3): the user's message, the work
 // folded into one line — 「已处理 1 分 42 秒 · 读了 4 个文件 · 改了 2 个 · 运行 2 条命令」 — the answer, and a card of
 // the files it changed. Pure (no React, no tool registry) so it can be replayed against captured streams.
-import type { AssistantItem, Item, ResultItem, UserItem } from './conversation';
+import type { AssistantItem, Item, ResultItem, ToolUseBlock, UserItem } from './conversation';
 import { fileChanges, pathKey, type FileChange } from './diffstat';
 import { tr } from '@/i18n';
 
@@ -35,6 +35,16 @@ export function groupTurns(items: Item[]): Turn[] {
     if (it.kind === 'result') cur.result = it;
   }
   return out;
+}
+
+/** The turn's plan as it stands: its last TodoWrite of the main agent (a subagent's own plan is not the turn's). */
+export function turnPlan(t: Turn | undefined): ToolUseBlock | null {
+  let plan: ToolUseBlock | null = null;
+  for (const it of t?.body ?? []) {
+    if (it.kind !== 'assistant' || it.parentToolUseId) continue;
+    for (const b of it.blocks) if (b.type === 'tool_use' && b.name === 'TodoWrite') plan = b;
+  }
+  return plan;
 }
 
 const unfinished = (t: Turn): boolean => t.body.some((it) => it.kind === 'assistant' && (it.streaming || it.blocks.some((b) => b.type === 'tool_use' && (b.status === 'pending' || b.status === 'running' || b.status === 'streaming'))));

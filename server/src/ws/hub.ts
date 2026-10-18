@@ -15,7 +15,6 @@ import type { LocalEnvStore } from '../runtime/local-env.js';
 import type { PreviewService } from '../preview/service.js';
 import { cacheParentFor } from '../runtime/cache-key.js';
 import { SessionService, claudeDir } from '../sessions/service.js';
-import { runStatusLine, userStatusLine } from '../statusline/run.js';
 import { ConfigService } from '../config/service.js';
 import { UsageService } from '../usage/service.js';
 import { FilesService } from '../files/service.js';
@@ -52,7 +51,7 @@ import type { MemoryService } from '../memory/service.js';
 import { harvest } from '../memory/extract.js';
 import { setMemoryMcpEnabled } from '../memory/launcher.js';
 import { afterSwitch, normProvider, openOnProvider, swapAgent, swapProvider } from '../session/swap.js';
-import { providerKey } from '../models/subagent.js';
+import { fullPick, providerKey } from '../models/subagent.js';
 import { applyLanguage } from '../i18n/boot.js';
 import { LANGUAGE_KEY } from '../i18n/core.js';
 import { expandSessionRefs } from '../library/briefing.js';
@@ -615,12 +614,11 @@ export class Hub {
         await afterSwitch(req.sessionId);
         const live = s.pool.get(req.sessionId);
         const on = live && live.state !== 'closed' && live.state !== 'error' ? live : undefined;
-        // running: for the provider it runs on (a switch from another window in between drops the pick); not running:
-        // for the provider the window will resume it on (its chips may have picked another one already)
-        if (on && req.providerId !== undefined && providerKey(req.providerId) !== providerKey(on.info.providerId)) throw new Error(tr('这个对话刚刚换了供应商，这次选的子代理模型没有用上，请重新选'));
-        const providerId = on ? on.info.providerId : req.providerId ?? s.meta.sessionMeta(req.sessionId).providerId;
-        await s.meta.setSessionMeta(req.sessionId, { subagent: { providerId: providerKey(providerId), model: req.model } });
-        await on?.setSubagentModel?.(req.model);
+        // a whole pick (provider + model): a plain id is a model of the provider the window picked it on
+        const providerId = req.providerId ?? (on ? on.info.providerId : s.meta.sessionMeta(req.sessionId).providerId);
+        const model = fullPick(req.model, providerId);
+        await s.meta.setSessionMeta(req.sessionId, { subagent: { providerId: providerKey(providerId), model } });
+        await on?.setSubagentModel?.(model);
         return null;
       }
       // Swapping the provider or the agent behind a live session. Both are an invisible restart:
@@ -693,26 +691,6 @@ export class Hub {
         if (r.failed.length) throw new Error(r.failed[0].error);
         s.sessions.emit('changed');
         return null;
-      }
-      case 'session.statusLine': {
-        if (s.meta.settings()['ui.statusLine'] === false) return null;
-        const cfg = await userStatusLine(claudeDir);
-        if (!cfg) return null;
-        const info = s.pool.get(req.sessionId)?.info;
-        const cwd = info?.cwd ?? req.cwd;
-        if (!cwd) return null;
-        const model = info?.model ?? '';
-        const text = await runStatusLine(cfg.command, {
-          hook_event_name: 'Status',
-          session_id: req.sessionId,
-          transcript_path: (await s.sessions.locate(req.sessionId)) ?? '',
-          cwd,
-          model: { id: model, display_name: info?.models?.find((m) => m.value === model)?.displayName ?? model },
-          workspace: { current_dir: cwd, project_dir: cwd },
-          version: info?.claudeCodeVersion ?? '',
-          output_style: { name: 'default' },
-        }, cwd);
-        return text === null ? null : { text, padding: cfg.padding };
       }
       case 'session.contextUsage':
         return this.runner(req.sessionId).contextUsage?.(req.detail ?? 'summary') ?? null;

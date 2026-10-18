@@ -344,7 +344,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   await gateway.init();
   providers.gatewayEndpoint = (groupId) => gateway.endpoint(groupId);
   providers.shimEndpoint = (providerId) => gateway.shimEndpoint(providerId);
-  setSplitHook((main, sub, model) => gateway.splitEndpoint(main, sub, model));
+  setSplitHook({ endpoint: (main, sub, model) => gateway.splitEndpoint(main, sub, model), target: (id) => providers.subagentTarget(id) });
   remote = new RemoteService(meta, () => { const s = http.createServer(handler); s.on('upgrade', upgrade); return s; });
   // 在外面也能用: bridges phones' links to the remote-access listener above (never to this main one)
   const anywhere = new AnywhereService(meta, remote);

@@ -167,18 +167,6 @@ html .composer-under.cb.cb .cb-right .mm-anchor:not(.sub-anchor) { min-width: 0;
 .conv-stats > span { white-space: nowrap; }
 .conv-stats > span + span::before { content: '·'; margin: 0 6px; color: var(--ink-5); }
 
-/* statusLine: the user's own command's output, its ANSI colours from the palette below (dark themes; light ones after) */
-.cmp-statusline {
-  --ansi-0: #4d4d4d; --ansi-1: #f2777a; --ansi-2: #99cc99; --ansi-3: #ffcc66; --ansi-4: #6699cc; --ansi-5: #cc99cc; --ansi-6: #66cccc; --ansi-7: #d0d0d0;
-  --ansi-8: #808080; --ansi-9: #ff8f8f; --ansi-10: #b5e0b5; --ansi-11: #ffe08a; --ansi-12: #8cb8e6; --ansi-13: #e0b3e0; --ansi-14: #8ae0e0; --ansi-15: #ffffff;
-  margin: 0 var(--sp-3) 6px; padding: 0 2px; font-family: var(--mono); font-size: var(--fs-sm); line-height: 18px; color: var(--ink-3);
-}
-:root[data-theme='light'] .cmp-statusline, :root[data-theme='paper'] .cmp-statusline {
-  --ansi-0: #1f1f1f; --ansi-1: #c4302b; --ansi-2: #2f7d32; --ansi-3: #9a6700; --ansi-4: #1f5fbf; --ansi-5: #8e3fb3; --ansi-6: #127a7a; --ansi-7: #6e6e6e;
-  --ansi-8: #8a8a8a; --ansi-9: #d9443f; --ansi-10: #3c8f3f; --ansi-11: #b07a00; --ansi-12: #2f6fd1; --ansi-13: #a04fc4; --ansi-14: #1a8c8c; --ansi-15: #3a3a3a;
-}
-.cmp-statusline .sl-line { white-space: pre; overflow: hidden; text-overflow: ellipsis; }
-
 /* ---- send: one circle that changes in place. Nothing to send: ink at 15%. Something: ink. A turn in flight: the
    same circle is the stop square. The arrow and the square are both always there; the one that is not the face is
    small, turned away and transparent, so a change is a cross-fade with a pop (240ms). ---- */

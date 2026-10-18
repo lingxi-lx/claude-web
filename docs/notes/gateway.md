@@ -12,7 +12,11 @@
 
 ## 子代理分流路由 `/gateway/~s/<token>`（2026-10-17）
 
-- 给「子代理用别家的模型」用（`models` 笔记）。`splitEndpoint(main, sub, model)` 返回 base + key（`cwx-` + HMAC(进程随机密钥, token)，不落盘）；
+> **2026-10-18 改了**：地址是 `/gateway/~s/<token>/k/<key>/…`（key 在路径里），主对话的请求不再走 `run()`，而是原样转给
+> `main.base`（引擎自己的头和凭据，`forwardHeaders`），这样账号登录、缓存垫片、OpenAI / Gemini 格式的主对话都能接；子代理那边可以是
+> 供应商（`run()`）或账号（转 api.anthropic.com）。见 `models` 笔记「子代理用任何模型」。下面是 10-17 的版本，「主请求」那几句已过时。
+
+- 给「子代理用别家的模型」用（`models` 笔记）。`splitEndpoint(main, sub, model)` 返回一个地址，key（`cwx-` + HMAC(进程随机密钥, token)，不落盘）在路径里（10-18 起；以前是单独返回、放在 Authorization 里）；
   token 是三元组的哈希，同一组合同一个地址。**不看网关总开关**；回环之外 404。
 - 每个请求：`model` 等于子代理模型的别名 `cw-sub/<模型>`（引擎拿到的就是别名，主对话永远不会用到）→ 临时组只有 `sub` 一个成员（`model` 钉住，跨协议就翻译）；其它 → 只有 `main` 一个成员，同协议**原样透传**
   （字节、头顺序都不动，只原位换 key）。`GET /v1/models` 不管带不带 `anthropic-version` 都回主供应商的列表。发给名字里没有 claude 的模型的请求去掉 `thinking.display`（官方二进制整个进程都带）。复用 `run()`，所以 count_tokens / 流式 / 账本都和普通组一样（账本里同一对话的网关行在统计里会被去重）。

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { applyMessage, applyTranscript, createConversation, setConversationClock, type AssistantItem, type Item, type ResultItem, type ToolUseBlock, type UserItem } from './conversation';
 import { fileChanges, sessionDiffStat } from './diffstat';
-import { displayPath, fmtDuration, groupSteps, groupTurns, splitTurnBody, stepStarts, turnDone, turnMemo, turnStamp, turnSummary, turnSummaryParts, turnSummaryText, type TurnMemo } from './turn';
+import { displayPath, fmtDuration, groupSteps, groupTurns, splitTurnBody, stepStarts, turnDone, turnMemo, turnPlan, turnStamp, turnSummary, turnSummaryParts, turnSummaryText, type TurnMemo } from './turn';
 
 const FIXTURE = path.join(__dirname, '__fixtures__', 'tools.jsonl');
 const loadFixture = (): any[] => fs.readFileSync(FIXTURE, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
@@ -465,5 +465,21 @@ describe('displayPath', () => {
     expect(displayPath('c:/W/todo-api/README.md', 'C:\\w\\todo-api\\')).toEqual({ dir: '', name: 'README.md' });
     expect(displayPath('/home/me/other/x.ts', '/home/me/proj')).toEqual({ dir: '/home/me/other/', name: 'x.ts' });
     expect(displayPath('x.ts', '')).toEqual({ dir: '', name: 'x.ts' });
+  });
+});
+
+describe('turnPlan', () => {
+  const todo = (status: string) => tool('TodoWrite', { todos: [{ content: 'a', status, activeForm: 'doing a' }] });
+  it('the last top-level TodoWrite of the turn', () => {
+    const first = todo('pending'), second = todo('in_progress');
+    const [t] = groupTurns([user('go'), asst(first), asst(tool('Read', { file_path: 'x' }), second)]);
+    expect(turnPlan(t)).toBe(second);
+  });
+  it('a subagent plan does not count; no plan → null', () => {
+    const inner = todo('pending');
+    const agent = tool('Agent', { description: 'x' }, undefined, { children: [asst(inner)] });
+    const [t] = groupTurns([user('go'), asst(agent)]);
+    expect(turnPlan(t)).toBeNull();
+    expect(turnPlan(undefined)).toBeNull();
   });
 });

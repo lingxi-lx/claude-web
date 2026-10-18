@@ -1204,34 +1204,71 @@ describe('the subagents model (the composer 子代理 chip)', () => {
     await b.close();
   });
 
-  it('another provider’s model: the engine talks to the gateway’s split route and is given the plain model id', async () => {
+  it('a model of another provider: the engine’s base URL for its request format becomes the split route, whatever the conversation runs on', async () => {
     const { setSplitHook } = await import('../gateway/split.js');
-    const { crossValue } = await import('../models/subagent.js');
-    const asked: string[][] = [];
-    setSplitHook((main, sub, model) => { asked.push([main, sub, model]); return { base: 'http://127.0.0.1:1/gateway/~s/t', key: 'cwx-k' }; });
-    try {
+    const { crossValue, subAlias } = await import('../models/subagent.js');
+    const asked: any[][] = [];
+    const targets: Record<string, any> = { ds: { type: 'openai' }, an: { type: 'anthropic' }, acct: { type: 'claude-account', token: 'sk-ant-oat01-other' } };
+    setSplitHook({ endpoint: (main, sub, model) => { asked.push([main, sub, model]); return 'http://127.0.0.1:1/gateway/~s/t/k/cwx-k'; }, target: (id) => targets[id] ?? null });
+    const ROUTE = 'http://127.0.0.1:1/gateway/~s/t/k/cwx-k';
+    const run = async (p: any, model: string, pick: string) => {
       queries.length = 0;
-      const p = { id: 'p3', name: 'relay', type: 'anthropic', runtime: 'claude', baseUrl: 'https://relay.invalid', apiKey: 'k', models: ['claude-opus-5-5'] } as any;
-      const a = new SessionRunner({ sessionId: 'sub4', cwd: '/x', model: 'claude-opus-5-5', subagentModel: crossValue('ds', 'deepseek-chat') } as any, p);
+      asked.length = 0;
+      const r = new SessionRunner({ sessionId: `sx-${Math.random()}`, cwd: '/x', model, subagentModel: pick } as any, p);
       await tick();
       const env = queries[0].options.env;
-      expect(asked).toEqual([['p3', 'ds', 'deepseek-chat']]);
-      expect(env.ANTHROPIC_BASE_URL).toBe('http://127.0.0.1:1/gateway/~s/t');
-      expect(env.ANTHROPIC_AUTH_TOKEN).toBe('cwx-k');
-      expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+      await r.close();
+      return env;
+    };
+    const savedBase = process.env.ANTHROPIC_BASE_URL;
+    delete process.env.ANTHROPIC_BASE_URL;
+    try {
+      // an Anthropic-format provider: its requests keep the engine's own key, the alias keeps the readable name
+      const anth = { id: 'p3', name: 'relay', type: 'anthropic', runtime: 'claude', baseUrl: 'https://relay.invalid', apiKey: 'k', models: ['claude-opus-5-5'] } as any;
+      let env = await run(anth, 'claude-opus-5-5', crossValue('ds', 'deepseek-chat'));
+      expect(asked).toEqual([[{ base: 'https://relay.invalid' }, { kind: 'provider', providerId: 'ds' }, 'deepseek-chat']]);
+      expect(env.ANTHROPIC_BASE_URL).toBe(ROUTE);
+      expect(env.ANTHROPIC_AUTH_TOKEN).toBe('k');
       expect(env.CLAUDE_CODE_SUBAGENT_MODEL).toBe('cw-sub/deepseek-chat');
-      await a.close();
-      // not on an Anthropic-format provider (here an OpenAI one, on ccb): no route, the subagents keep the main model
+      // …with this machine's login for the subagents: the engine keeps the login, the route puts the key on
+      env = await run(anth, 'claude-opus-5-5', crossValue('claude', 'claude-haiku-4-5'));
+      expect(asked).toEqual([[{ base: 'https://relay.invalid', rekey: 'k' }, { kind: 'account' }, 'claude-haiku-4-5']]);
+      expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
+      expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+      // …with another account's: its token goes to the route
+      await run(anth, 'claude-opus-5-5', crossValue('acct', 'claude-opus-5-5'));
+      expect(asked[0][1]).toEqual({ kind: 'account', token: 'sk-ant-oat01-other' });
+      // the account (no provider): Anthropic itself behind the route, its login untouched
+      env = await run(undefined, 'claude-opus-5-5', crossValue('ds', 'deepseek-chat'));
+      expect(asked[0][0]).toEqual({ base: 'https://api.anthropic.com' });
+      expect(env.ANTHROPIC_BASE_URL).toBe(ROUTE);
+      expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
+      // the same provider's model: no route, the plain id
+      env = await run(anth, 'claude-opus-5-5', crossValue('p3', 'claude-opus-5-5'));
+      expect(asked).toHaveLength(0);
+      expect(env.CLAUDE_CODE_SUBAGENT_MODEL).toBe('claude-opus-5-5[1m]');
       eng.kind = 'ccb';
-      const o = { id: 'p4', name: 'oa', type: 'openai', baseUrl: 'https://relay.invalid', apiKey: 'k', models: ['gpt-big'] } as any;
-      const b = new SessionRunner({ sessionId: 'sub5', cwd: '/x', model: 'gpt-big', subagentModel: crossValue('ds', 'deepseek-chat') } as any, o);
-      await tick();
-      expect(asked).toHaveLength(1);
-      expect(queries[1].options.env.CLAUDE_CODE_SUBAGENT_MODEL).toBeUndefined();
-      await b.close();
+      // an OpenAI-format provider: OPENAI_BASE_URL, a hex alias (no family word for the engine's mapping to catch)
+      const oa = { id: 'p4', name: 'oa', type: 'openai', baseUrl: 'https://oa.invalid', apiKey: 'k', models: ['gpt-big'] } as any;
+      env = await run(oa, 'gpt-big', crossValue('an', 'claude-haiku-4-5'));
+      expect(asked[0][0].base).toMatch(/^https:\/\/oa\.invalid/);
+      expect(env.OPENAI_BASE_URL).toBe(ROUTE);
+      expect(env.CLAUDE_CODE_SUBAGENT_MODEL).toBe(subAlias('claude-haiku-4-5', 'other'));
+      // a Gemini one without a base URL: Google's default is where its requests go on to
+      const gm = { id: 'p5', name: 'gm', type: 'gemini', baseUrl: '', apiKey: 'k', models: ['gemini-2.5-pro'] } as any;
+      env = await run(gm, 'gemini-2.5-pro', crossValue('ds', 'deepseek-chat'));
+      expect(asked[0][0]).toEqual({ base: 'https://generativelanguage.googleapis.com/v1beta' });
+      expect(env.GEMINI_BASE_URL).toBe(ROUTE);
+      // this machine's login or another account under an OpenAI-format conversation: not joined, the main model
+      for (const pick of [crossValue('claude', 'claude-haiku-4-5'), crossValue('acct', 'claude-opus-5-5')]) {
+        env = await run(oa, 'gpt-big', pick);
+        expect(asked).toHaveLength(0);
+        expect(env.CLAUDE_CODE_SUBAGENT_MODEL).toBeUndefined();
+      }
     } finally {
       eng.kind = 'claude';
       setSplitHook(null);
+      if (savedBase !== undefined) process.env.ANTHROPIC_BASE_URL = savedBase;
     }
   });
 });

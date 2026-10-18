@@ -248,10 +248,12 @@ describe('translation through the service', () => {
     expect(ledger[0]).toMatchObject({ ok: true, model: 'gpt-4.1', input: 4, output: 1, gateway: { inbound: 'anthropic', outbound: 'openai' } });
   });
   it('unsupported direction → 400 naming it', async () => {
-    await gw.upsertGroup({ id: 'gem', name: 'Gem', members: [{ providerId: 'o' }] });
-    const r = await fetch(`${base}/gem/v1beta/models/gemini-2.5-pro:generateContent`, { method: 'POST', headers: { 'x-goog-api-key': key, 'content-type': 'application/json' }, body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'x' }] }] }) });
+    // OpenAI Responses in, a Gemini member: no such direction
+    if (!meta.provider('g')) { const p = await meta.upsertProvider({ name: 'P-g', type: 'gemini', baseUrl: B.url, apiKey: 'sk-g' }); p.id = 'g'; }
+    await gw.upsertGroup({ id: 'gem', name: 'Gem', members: [{ providerId: 'g' }] });
+    const r = await fetch(`${base}/gem/v1/responses`, { method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' }, body: JSON.stringify({ model: 'gemini-2.5-pro', input: 'x' }) });
     expect(r.status).toBe(400);
-    expect((await r.json()).error.status).toBe('INVALID_ARGUMENT');
+    expect((await r.json()).error.message).toContain('P-g');
   });
   it('count_tokens without an Anthropic member is estimated; /v1/models lists the group', async () => {
     const r = await call('/mixed/v1/messages/count_tokens', msg);
@@ -463,66 +465,144 @@ describe('review regressions', () => {
   });
 });
 
-describe('subagent split (/gateway/~s/…): the subagents on another provider, the rest passed through', () => {
-  it('the picked model goes to its provider (translated), everything else to the conversation’s byte for byte; a 429 is not held against it', async () => {
-    const ep = gw.splitEndpoint('a', 'o', 'deepseek-chat')!;
-    expect(ep.base).toMatch(/\/gateway\/~s\/[0-9a-f]{32}$/);
-    expect(gw.splitEndpoint('a', 'o', 'deepseek-chat')).toEqual(ep);
+describe('subagent split (/gateway/~s/…): the subagents on the picked model, the rest passed on as the engine sent it', () => {
+  const OAUTH = 'sk-ant-oat01-ENGINELOGIN';
+  const post = (url: string, body: string, headers: Record<string, string> = {}) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body });
+  const anth = { 'anthropic-version': '2023-06-01', 'user-agent': 'claude-cli/2.1.300 (external, cli)' };
+
+  it('an Anthropic-format provider main: its requests go on byte for byte with the engine’s own key; the alias goes to the picked provider with that one’s key', async () => {
+    const ep = gw.splitEndpoint({ base: A.url }, { kind: 'provider', providerId: 'o' }, 'deepseek-chat')!;
+    expect(ep).toMatch(/\/gateway\/~s\/[0-9a-f]{32}\/k\/cwx-[0-9a-f]{64}$/);
+    expect(gw.splitEndpoint({ base: A.url }, { kind: 'provider', providerId: 'o' }, 'deepseek-chat')).toBe(ep);
     O.handler.fn = (_q, res) => res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ id: 'c1', object: 'chat.completion', model: 'deepseek-chat', choices: [{ index: 0, message: { role: 'assistant', content: 'from O' }, finish_reason: 'stop' }], usage: { prompt_tokens: 4, completion_tokens: 1 } }));
-    const at = (p: string, body: string, k = ep.key) => fetch(`${ep.base}${p}`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${k}`, 'anthropic-version': '2023-06-01', 'user-agent': 'claude-cli/2.1.300 (external, cli)' }, body });
-    // the main model: to A, the same bytes, A's key in place of ours
     const raw = '{"model":"claude-sonnet-4-5",  "max_tokens":8,"messages":[{"role":"user","content":"hi"}]}';
-    const r1 = await at('/v1/messages?beta=true', raw);
+    const r1 = await post(`${ep}/v1/messages?beta=true`, raw, { ...anth, authorization: 'Bearer sk-a' });
     expect(r1.status).toBe(200);
     expect(JSON.parse(await r1.text()).content[0].text).toBe('from A');
-    expect(A.hits[0].body).toBe(raw);
-    expect(A.hits[0].url).toBe('/v1/messages?beta=true');
+    expect(A.hits[0]).toMatchObject({ body: raw, url: '/v1/messages?beta=true' });
     expect(A.hits[0].headers.authorization).toBe('Bearer sk-a');
     expect(A.hits[0].headers['user-agent']).toBe('claude-cli/2.1.300 (external, cli)');
-    // the subagents' model: to O, as Chat Completions
-    const r2 = await at('/v1/messages', JSON.stringify({ ...msg, model: 'cw-sub/deepseek-chat' }));
+    const r2 = await post(`${ep}/v1/messages`, JSON.stringify({ ...msg, model: 'cw-sub/deepseek-chat' }), { ...anth, authorization: 'Bearer sk-a' });
     expect(r2.status).toBe(200);
     const j2 = JSON.parse(await r2.text());
     expect(j2.content[0].text).toBe('from O');
-    // the answer names the real model, not the alias the engine asked with
     expect(j2.model).toBe('deepseek-chat');
     expect(O.hits[0].url).toBe('/v1/chat/completions');
     expect(JSON.parse(O.hits[0].body).model).toBe('deepseek-chat');
+    expect(O.hits[0].headers.authorization).toBe('Bearer sk-o');
     expect(A.hits).toHaveLength(1);
-    // A rate-limits: the engine gets A's 429 as it came, and the very next request still goes to A
+    // a 429 from the main provider comes back as it came; the next request still goes there
     A.handler.fn = (_q, res) => res.writeHead(429, { 'content-type': 'application/json', 'retry-after': '30' }).end(JSON.stringify({ type: 'error', error: { type: 'rate_limit_error', message: 'slow down' } }));
-    const r3 = await at('/v1/messages', raw);
+    const r3 = await post(`${ep}/v1/messages`, raw, anth);
     expect(r3.status).toBe(429);
+    expect(r3.headers.get('retry-after')).toBe('30');
     A.handler.fn = anthropicOk('again');
-    expect((await at('/v1/messages', raw)).status).toBe(200);
+    expect((await post(`${ep}/v1/messages`, raw, anth)).status).toBe(200);
     // another key, an unknown split, the LAN listener
-    expect((await at('/v1/messages', raw, 'cwx-nope')).status).toBe(401);
-    expect((await fetch(`${base}/~s/${'0'.repeat(32)}/v1/messages`, { method: 'POST', headers: { authorization: `Bearer ${ep.key}` }, body: raw })).status).toBe(404);
-    expect((await fetch(`${ep.base.replace(base, remoteBase)}/v1/messages`, { method: 'POST', headers: { authorization: `Bearer ${ep.key}` }, body: raw })).status).toBe(404);
+    expect((await post(`${ep.replace(/cwx-[0-9a-f]+$/, 'cwx-nope')}/v1/messages`, raw, anth)).status).toBe(401);
+    expect((await post(`${base}/~s/${'0'.repeat(32)}/k/cwx-x/v1/messages`, raw, anth)).status).toBe(404);
+    expect((await post(`${ep.replace(base, remoteBase)}/v1/messages`, raw, anth)).status).toBe(404);
   });
-  it('both providers serve a model of the same name: the main conversation still goes to its own (the subagents ask by alias)', async () => {
-    const ep = gw.splitEndpoint('a', 'b', 'claude-opus-5-5')!;
-    const at = (model: string) => fetch(`${ep.base}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': ep.key, 'anthropic-version': '2023-06-01' }, body: JSON.stringify({ ...msg, model }) });
+
+  it('both providers serve a model of the same name: the main conversation still goes to its own; thinking.display is taken off for another maker', async () => {
+    const ep = gw.splitEndpoint({ base: A.url }, { kind: 'provider', providerId: 'b' }, 'claude-opus-5-5')!;
+    const at = (model: string) => post(`${ep}/v1/messages`, JSON.stringify({ ...msg, model }), anth);
     expect(JSON.parse(await (await at('claude-opus-5-5')).text()).content[0].text).toBe('from A');
     expect(JSON.parse(await (await at('cw-sub/claude-opus-5-5')).text()).content[0].text).toBe('from B');
     expect(JSON.parse(B.hits[0].body).model).toBe('claude-opus-5-5');
-    expect(A.hits.map((h) => JSON.parse(h.body).model)).toEqual(['claude-opus-5-5']);
-    // another maker's model behind an Anthropic-format relay: the official binary's thinking.display is taken off
-    const ds = gw.splitEndpoint('a', 'b', 'deepseek-chat')!;
-    await fetch(`${ds.base}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': ds.key, 'anthropic-version': '2023-06-01' }, body: JSON.stringify({ ...msg, model: 'cw-sub/deepseek-chat', thinking: { type: 'adaptive', display: 'summarized' } }) });
+    const ds = gw.splitEndpoint({ base: A.url }, { kind: 'provider', providerId: 'b' }, 'deepseek-chat')!;
+    await post(`${ds}/v1/messages`, JSON.stringify({ ...msg, model: 'cw-sub/deepseek-chat', thinking: { type: 'adaptive', display: 'summarized' } }), anth);
     expect(JSON.parse(B.hits[1].body)).toMatchObject({ model: 'deepseek-chat', thinking: { type: 'adaptive' } });
     expect(JSON.parse(B.hits[1].body).thinking.display).toBeUndefined();
-    // the model list answers too (an engine may ask without the anthropic-version header)
-    expect((await fetch(`${ep.base}/v1/models`, { headers: { authorization: `Bearer ${ep.key}` } })).status).toBe(200);
   });
+
+  it('an account main: its requests go to Anthropic with the engine’s login; a provider subagent never sees that login', async () => {
+    gw.anthropicBase = B.url;
+    try {
+      const ep = gw.splitEndpoint({ base: B.url }, { kind: 'provider', providerId: 'a' }, 'claude-haiku-4-5')!;
+      const login = { ...anth, authorization: `Bearer ${OAUTH}`, 'anthropic-beta': 'claude-code-20250219,oauth-2025-04-20' };
+      expect(JSON.parse(await (await post(`${ep}/v1/messages?beta=true`, JSON.stringify(msg), login)).text()).content[0].text).toBe('from B');
+      expect(B.hits[0].headers.authorization).toBe(`Bearer ${OAUTH}`);
+      expect(JSON.parse(await (await post(`${ep}/v1/messages?beta=true`, JSON.stringify({ ...msg, model: 'cw-sub/claude-haiku-4-5' }), login)).text()).content[0].text).toBe('from A');
+      expect(A.hits[0].headers.authorization).toBe('Bearer sk-a');
+      expect(JSON.stringify(A.hits[0].rawHeaders)).not.toContain(OAUTH);
+      expect(String(A.hits[0].headers['anthropic-beta'] ?? '')).not.toContain('oauth');
+    } finally { gw.anthropicBase = undefined; }
+  });
+
+  it('another account as the subagent target: its own token, to Anthropic; the main provider keeps its key', async () => {
+    gw.anthropicBase = B.url;
+    try {
+      const ep = gw.splitEndpoint({ base: A.url }, { kind: 'account', token: 'sk-ant-oat01-OTHER' }, 'claude-opus-5-5')!;
+      await post(`${ep}/v1/messages`, JSON.stringify({ ...msg, model: 'cw-sub/claude-opus-5-5' }), { ...anth, authorization: 'Bearer sk-a', 'anthropic-beta': 'claude-code-20250219' });
+      expect(B.hits[0].headers.authorization).toBe('Bearer sk-ant-oat01-OTHER');
+      expect(B.hits[0].headers['x-api-key']).toBeUndefined();
+      expect(String(B.hits[0].headers['anthropic-beta'])).toContain('oauth-2025-04-20');
+      expect(JSON.parse(B.hits[0].body).model).toBe('claude-opus-5-5');
+      expect(A.hits).toHaveLength(0);
+    } finally { gw.anthropicBase = undefined; }
+  });
+
+  it('this machine’s login as the subagent target under a provider: the engine keeps the login, main requests get the provider key instead', async () => {
+    gw.anthropicBase = B.url;
+    try {
+      const ep = gw.splitEndpoint({ base: A.url, rekey: 'sk-a' }, { kind: 'account' }, 'claude-opus-5-5')!;
+      const login = { ...anth, authorization: `Bearer ${OAUTH}`, 'anthropic-beta': 'claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14' };
+      await post(`${ep}/v1/messages`, JSON.stringify(msg), login);
+      expect(A.hits[0].headers.authorization).toBe('Bearer sk-a');
+      expect(A.hits[0].headers['anthropic-beta']).toBe('claude-code-20250219,interleaved-thinking-2025-05-14');
+      expect(JSON.stringify(A.hits[0].rawHeaders)).not.toContain(OAUTH);
+      await post(`${ep}/v1/messages`, JSON.stringify({ ...msg, model: 'cw-sub/claude-opus-5-5' }), login);
+      expect(B.hits[0].headers.authorization).toBe(`Bearer ${OAUTH}`);
+      expect(String(B.hits[0].headers['anthropic-beta'])).toContain('oauth-2025-04-20');
+      expect(JSON.parse(B.hits[0].body).model).toBe('claude-opus-5-5');
+    } finally { gw.anthropicBase = undefined; }
+  });
+
+  it('an OpenAI-format main (the cache shim’s base): chat completions pass through; the hex alias goes to an Anthropic provider, translated', async () => {
+    const ep = gw.splitEndpoint({ base: `${O.url}/v1` }, { kind: 'provider', providerId: 'a' }, 'claude-haiku-4-5')!;
+    O.handler.fn = (_q, res) => res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ id: 'c1', object: 'chat.completion', model: 'gpt-x', choices: [{ index: 0, message: { role: 'assistant', content: 'from O' }, finish_reason: 'stop' }], usage: { prompt_tokens: 4, completion_tokens: 1 } }));
+    const chat = (model: string) => post(`${ep}/chat/completions`, JSON.stringify({ model, messages: [{ role: 'user', content: 'hi' }] }), { authorization: 'Bearer shim-key' });
+    const r1 = await chat('gpt-x');
+    expect(JSON.parse(await r1.text()).choices[0].message.content).toBe('from O');
+    expect(O.hits[0].url).toBe('/v1/chat/completions');
+    expect(O.hits[0].headers.authorization).toBe('Bearer shim-key');
+    const { subAlias } = await import('../models/subagent.js');
+    const r2 = await chat(subAlias('claude-haiku-4-5', 'other'));
+    expect(r2.status).toBe(200);
+    expect(JSON.parse(await r2.text()).choices[0].message.content).toBe('from A');
+    expect(A.hits[0].url).toBe('/v1/messages');
+    expect(A.hits[0].headers.authorization).toBe('Bearer sk-a');
+    expect(JSON.parse(A.hits[0].body).model).toBe('claude-haiku-4-5');
+    expect(O.hits).toHaveLength(1);
+  });
+
+  it('a Gemini main: the model is in the path; main requests pass through, the alias goes to the picked provider', async () => {
+    const ep = gw.splitEndpoint({ base: `${B.url}/v1beta` }, { kind: 'provider', providerId: 'o' }, 'deepseek-chat')!;
+    B.handler.fn = (_q, res) => res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ candidates: [{ content: { role: 'model', parts: [{ text: 'from G' }] }, finishReason: 'STOP' }] }));
+    O.handler.fn = (_q, res) => res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ id: 'c1', object: 'chat.completion', model: 'deepseek-chat', choices: [{ index: 0, message: { role: 'assistant', content: 'from O' }, finish_reason: 'stop' }], usage: { prompt_tokens: 4, completion_tokens: 1 } }));
+    const body = JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'hi' }] }] });
+    const r1 = await post(`${ep}/models/gemini-2.5-pro:generateContent`, body, { 'x-goog-api-key': 'g-key' });
+    expect(JSON.parse(await r1.text()).candidates[0].content.parts[0].text).toBe('from G');
+    expect(B.hits[0].url).toBe('/v1beta/models/gemini-2.5-pro:generateContent');
+    expect(B.hits[0].headers['x-goog-api-key']).toBe('g-key');
+    const { subAlias } = await import('../models/subagent.js');
+    const r2 = await post(`${ep}/models/${subAlias('deepseek-chat', 'other')}:generateContent`, body, { 'x-goog-api-key': 'g-key' });
+    expect(r2.status).toBe(200);
+    expect(JSON.parse(await r2.text()).candidates[0].content.parts[0].text).toBe('from O');
+    expect(JSON.parse(O.hits[0].body).model).toBe('deepseek-chat');
+    expect(O.hits[0].headers.authorization).toBe('Bearer sk-o');
+    expect(JSON.stringify(O.hits[0].rawHeaders)).not.toContain('g-key');
+    expect(B.hits).toHaveLength(1);
+  });
+
   it('works with the gateway switched off (it is not a gateway group)', async () => {
     await gw.setEnabled(false);
     try {
-      const ep = gw.splitEndpoint('a', 'b', 'claude-haiku-4-5')!;
-      const r = await fetch(`${ep.base}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': ep.key, 'anthropic-version': '2023-06-01' }, body: JSON.stringify({ ...msg, model: 'cw-sub/claude-haiku-4-5' }) });
+      const ep = gw.splitEndpoint({ base: A.url }, { kind: 'provider', providerId: 'b' }, 'claude-haiku-4-5')!;
+      const r = await post(`${ep}/v1/messages`, JSON.stringify({ ...msg, model: 'cw-sub/claude-haiku-4-5' }), anth);
       expect(r.status).toBe(200);
       expect(JSON.parse(await r.text()).content[0].text).toBe('from B');
-      expect(JSON.parse(B.hits[0].body).model).toBe('claude-haiku-4-5');
     } finally {
       await gw.setEnabled(true);
     }
