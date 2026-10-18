@@ -4,6 +4,22 @@
 
 Every version's changes are recorded here; installers are on the [Releases](https://github.com/ypyik0669/claude-web/releases) page. Versions follow [semantic versioning](https://semver.org/).
 
+## [0.2.9] — 2026-10-18
+
+### Added
+
+- **Subagents can use any model, whatever the main conversation runs on.** The Subagents menu lists the models of every provider you've connected, whether the conversation is on your Claude account or on a provider (before, other providers' models were only offered when the conversation was on an Anthropic-format provider). Changing the main model or moving the conversation to another provider keeps the subagents' choice. The checkbox at the bottom is now "Same for new conversations": one default for all new conversations, and the per-provider defaults you had carry over. A conversation on a provider can also send its subagents to a model of your Claude account.
+- **The plan sits at the bottom of the conversation**, like the official desktop app: the latest turn's plan (ticks, the step in progress) is always last.
+
+### Fixed
+
+- The stats under the input box (turns · steps · tok/s · cache hit rate) never showed for a conversation started from the new-conversation page. They do now.
+- A long screenshot pasted into the input box shows as a small thumbnail instead of filling the whole row (clicking it still opens the full image).
+
+### Removed
+
+- The statusLine above the input box: the model, branch and usage it showed are in the window already.
+
 ## [0.2.8] — 2026-10-18
 
 ### Fixed
