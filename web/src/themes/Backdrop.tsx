@@ -7,6 +7,7 @@ import type { FromWorker, ToWorker } from './backdrop-protocol';
 import { REQUIRED_COLORS, type ThemePack } from '@themes';
 import { processOf } from '@themes';
 import { watchdog } from './watchdog';
+import { backdropData } from './backdrop-data';
 import { isBuiltin } from './registry';
 
 const reducedMotion = () => (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches) || document.documentElement.dataset.reduceMotion === '1';
@@ -149,6 +150,11 @@ function BackdropCanvas({ pack, scene, onFail }: { pack: ThemePack; scene: 'welc
   }, [pack, scene]);
 
   useEffect(() => { worker.current?.postMessage({ type: 'process', process } satisfies ToWorker); }, [process]);
+  // the user's projects (花园 grows them), sent again when the list changes; a minute's tick keeps 「recent」 true
+  const sessions = useStore((s) => s.sessions);
+  const [minute, setMinute] = useState(0);
+  useEffect(() => { const t = setInterval(() => setMinute((m) => m + 1), 60_000); return () => clearInterval(t); }, []);
+  useEffect(() => { worker.current?.postMessage({ type: 'data', data: backdropData(sessions, Date.now()) } satisfies ToWorker); }, [sessions, minute]);
 
   return (
     <canvas ref={ref} className={scene === 'welcome' ? 'ascii-field ascii-bd' : 'ascii-bd chat-bd'} style={scene === 'chat' ? { opacity: pack.chatDim.opacity } : undefined} aria-hidden />

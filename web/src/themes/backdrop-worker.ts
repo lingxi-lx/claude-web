@@ -9,6 +9,8 @@ let mod: BackdropModule | null = null;
 let fps = 30, speed = 1, scene = 'welcome', process = 'idle', running = false, reduce = false;
 let mouse: { x: number; y: number; down: boolean } | null = null;
 let quiet: { x: number; y: number; w: number; h: number }[] = [];
+/** the last `data`: it can come while the theme's code is still loading (the CSP probe), and is handed over after init */
+let lastData: unknown;
 let t = 0, lastAt = 0, lastDraw = 0, spent = 0, frames = 0, statAt = 0;
 
 const raf: (f: () => void) => void = typeof (self as any).requestAnimationFrame === 'function'
@@ -57,6 +59,7 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
         guard(() => {
           mod = loadBackdrop(m.source);
           mod.init?.({ canvas: m.canvas, width: m.width, height: m.height, dpr: m.dpr, colors: m.colors, scene: m.scene, reduce: m.reduce });
+          if (lastData !== undefined) mod.data?.(lastData);
           // motion reduced: one still frame, then the host stops expecting word from us
           if (reduce) { mod.frame({ t: 0, dt: 0, mouse: null, process, scene, speed, quiet }); post({ type: 'still' }); }
         });
@@ -74,7 +77,7 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
     case 'type': guard(() => mod?.event?.({ type: 'type', text: m.text })); break;
     case 'process': process = m.process; break;
     case 'colors': guard(() => mod?.theme?.({ colors: m.colors })); break;
-    case 'data': guard(() => mod?.data?.(m.data)); break;
+    case 'data': lastData = m.data; guard(() => mod?.data?.(m.data)); break;
     case 'quiet': quiet = m.rects; break;
     case 'pause': running = false; break;
     case 'resume': start(); break;
