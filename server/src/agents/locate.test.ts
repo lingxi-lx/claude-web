@@ -66,7 +66,8 @@ describe('the DeepSeek Harness desktop app from the official download', () => {
   const CLI = ['resources', 'runtime', 'cli', 'bin'];
   it('looks in the installer’s directories and in the directory the Uninstall key records (a custom install)', () => {
     const local = 'C:\\U\\AppData\\Local';
-    const files = bundledCandidates('dsh', 'win32', 'x64', { LOCALAPPDATA: local, ProgramFiles: 'C:\\Program Files' }, 'C:\\U', [{ name: 'DeepSeek Harness', dir: 'D:\\Apps\\DSH' }]).map((c) => c.pattern.join('\\'));
+    // join the way findBundled does (path.join on the host platform), so the expectation holds on every OS
+    const files = bundledCandidates('dsh', 'win32', 'x64', { LOCALAPPDATA: local, ProgramFiles: 'C:\\Program Files' }, 'C:\\U', [{ name: 'DeepSeek Harness', dir: 'D:\\Apps\\DSH' }]).map((c) => path.join(...c.pattern));
     expect(files).toContain(path.join(local, 'Programs', 'DeepSeek Harness', ...CLI, 'dsh.cmd'));
     expect(files).toContain(path.join('C:\\Program Files', 'DeepSeek Harness', ...CLI, 'dsh.cmd'));
     expect(files).toContain(path.join('D:\\Apps\\DSH', ...CLI, 'dsh.cmd'));
