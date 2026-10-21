@@ -3,7 +3,11 @@
 import phosphorJson from './phosphor/theme.json';
 import phosphorBackdrop from './phosphor/backdrop.js?raw';
 import phosphorCss from './phosphor/theme.css?raw';
+import paperJson from './paper/theme.json';
+import paperBackdrop from './paper/backdrop.js?raw';
+import paperCss from './paper/theme.css?raw';
 
 export const BUILTIN_SOURCES: { json: unknown; backdrop?: string; css?: string }[] = [
   { json: phosphorJson, backdrop: phosphorBackdrop, css: phosphorCss },
+  { json: paperJson, backdrop: paperBackdrop, css: paperCss },
 ];

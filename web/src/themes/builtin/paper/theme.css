@@ -1,0 +1,26 @@
+/* 纸刊 · Gazette — a morning paper: serif headlines, rust hairlines, a folded corner on the composer, a masthead rule
+   under the greeting. Everything here is scoped to html[data-ascii='paper']. */
+html[data-ascii='paper'] {
+  --r-sm: 3px; --r-row: 4px; --r-md: 4px; --r-lg: 5px; --r-xl: 6px;
+  --r-bubble: 6px; --r-composer: 6px; --r-2xl: 8px;
+  --display: Georgia, 'Times New Roman', 'Songti SC', 'SimSun', serif;
+}
+
+html[data-ascii='paper'] .welcome .greet { font-style: italic; letter-spacing: 0; padding-bottom: 10px; border-bottom: 3px double color-mix(in oklab, var(--fg) 70%, transparent); }
+html[data-ascii='paper'] .welcome .greet .spark { color: var(--accent); }
+
+html[data-ascii='paper'] .composer-box {
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 45%, transparent), 3px 3px 0 0 color-mix(in oklab, var(--accent) 22%, transparent);
+}
+html[data-ascii='paper'] .composer-box:focus-within {
+  box-shadow: 0 0 0 1px var(--accent), 4px 4px 0 0 color-mix(in oklab, var(--accent) 30%, transparent);
+}
+/* the folded corner */
+html[data-ascii='paper'] .composer-box::after {
+  content: ''; position: absolute; top: 0; right: 0; width: 14px; height: 14px; pointer-events: none;
+  background: linear-gradient(225deg, var(--bg-1) 50%, color-mix(in oklab, var(--accent) 35%, var(--bg-2)) 50%);
+  border-bottom-left-radius: 2px;
+}
+html[data-ascii='paper'] .run-card { font-family: var(--mono); }
+html[data-ascii='paper'] .tool-head .summary { font-family: var(--mono); }
