@@ -7,6 +7,8 @@ export type ToWorker =
   | { type: 'process'; process: string }
   | { type: 'colors'; colors: Record<string, string> }
   | { type: 'data'; data: unknown }
+  /** where the page's words are (canvas px): a backdrop keeps these quiet */
+  | { type: 'quiet'; rects: { x: number; y: number; w: number; h: number }[] }
   | { type: 'pause' }
   | { type: 'resume' };
 

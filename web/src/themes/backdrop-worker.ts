@@ -8,6 +8,7 @@ const post = (m: unknown) => (self as unknown as DedicatedWorkerGlobalScope).pos
 let mod: BackdropModule | null = null;
 let fps = 30, speed = 1, scene = 'welcome', process = 'idle', running = false, reduce = false;
 let mouse: { x: number; y: number; down: boolean } | null = null;
+let quiet: { x: number; y: number; w: number; h: number }[] = [];
 let t = 0, lastAt = 0, lastDraw = 0, spent = 0, frames = 0, statAt = 0;
 
 const raf: (f: () => void) => void = typeof (self as any).requestAnimationFrame === 'function'
@@ -25,7 +26,7 @@ function loop() {
     const dt = Math.min(0.1, (now - lastAt) / 1000) * speed;
     lastAt = now; lastDraw = now; t += dt;
     const a = performance.now();
-    guard(() => mod!.frame({ t, dt, mouse, process, scene, speed }));
+    guard(() => mod!.frame({ t, dt, mouse, process, scene, speed, quiet }));
     spent += performance.now() - a; frames++;
   }
   if (now - statAt >= 1000) {
@@ -52,18 +53,19 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
         mod = loadBackdrop(m.source);
         mod.init?.({ canvas: m.canvas, width: m.width, height: m.height, dpr: m.dpr, colors: m.colors, scene: m.scene, reduce: m.reduce });
         // motion reduced: one still frame
-        if (reduce) mod.frame({ t: 0, dt: 0, mouse: null, process, scene, speed });
+        if (reduce) mod.frame({ t: 0, dt: 0, mouse: null, process, scene, speed, quiet });
       });
       post({ type: 'stats', avgMs: 0 });
       start();
       break;
     }
-    case 'resize': guard(() => mod?.resize?.({ width: m.width, height: m.height, dpr: m.dpr })); if (reduce) guard(() => mod?.frame({ t, dt: 0, mouse: null, process, scene, speed })); break;
+    case 'resize': guard(() => mod?.resize?.({ width: m.width, height: m.height, dpr: m.dpr })); if (reduce) guard(() => mod?.frame({ t, dt: 0, mouse: null, process, scene, speed, quiet })); break;
     case 'pointer': mouse = m.x === null ? null : { x: m.x, y: m.y!, down: !!m.down }; if (m.click) guard(() => mod?.event?.({ type: 'click', x: m.x!, y: m.y! })); break;
     case 'type': guard(() => mod?.event?.({ type: 'type', text: m.text })); break;
     case 'process': process = m.process; break;
     case 'colors': guard(() => mod?.theme?.({ colors: m.colors })); break;
     case 'data': guard(() => mod?.data?.(m.data)); break;
+    case 'quiet': quiet = m.rects; break;
     case 'pause': running = false; break;
     case 'resume': start(); break;
   }

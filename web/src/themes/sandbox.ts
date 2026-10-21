@@ -3,7 +3,8 @@
 
 export interface BackdropModule {
   init?(a: { canvas: OffscreenCanvas; width: number; height: number; dpr: number; colors: Record<string, string>; scene: string; reduce: boolean }): void;
-  frame(f: { t: number; dt: number; mouse: { x: number; y: number; down: boolean } | null; process: string; scene: string; speed: number }): void;
+  /** `quiet`: rectangles (canvas px) where the page's words are — keep them calm there */
+  frame(f: { t: number; dt: number; mouse: { x: number; y: number; down: boolean } | null; process: string; scene: string; speed: number; quiet: { x: number; y: number; w: number; h: number }[] }): void;
   event?(e: { type: 'pointer' | 'click' | 'type'; x?: number; y?: number; text?: string }): void;
   resize?(r: { width: number; height: number; dpr: number }): void;
   theme?(t: { colors: Record<string, string> }): void;

@@ -78,11 +78,24 @@ function BackdropCanvas({ pack, scene, onFail }: { pack: ThemePack; scene: 'welc
     const off = canvas.transferControlToOffscreen();
     send({ type: 'init', canvas: off, source: pack.backdrop!, width: r.width, height: r.height, dpr, colors: readColors(), scene, speed: scene === 'chat' ? pack.chatDim.speed : 1, reduce }, [off]);
 
+    // where the page's words are, in canvas px: the welcome column (backdrops keep it quiet)
+    const words = () => {
+      if (scene !== 'welcome') return;
+      const b = canvas.getBoundingClientRect();
+      const rects = [...(canvas.parentElement?.querySelectorAll('.welcome .home-col > *') ?? [])].map((el) => el.getBoundingClientRect()).filter((r) => r.width && r.height)
+        .map((r) => ({ x: r.left - b.left, y: r.top - b.top, w: r.width, h: r.height }));
+      send({ type: 'quiet', rects });
+    };
     const ro = new ResizeObserver(() => {
       const b = canvas.getBoundingClientRect();
       send({ type: 'resize', width: b.width, height: b.height, dpr: Math.min(2, window.devicePixelRatio || 1) });
+      words();
     });
     ro.observe(canvas);
+    const col = canvas.parentElement?.querySelector('.welcome .home-col');
+    if (col) ro.observe(col);
+    const wordsTimer = setInterval(words, 1500);
+    words();
     // off screen or in a hidden window: no frames, and silence is expected
     let seen = true;
     const sync = () => {
@@ -119,6 +132,7 @@ function BackdropCanvas({ pack, scene, onFail }: { pack: ThemePack; scene: 'welc
     return () => {
       dead = true;
       clearInterval(beat);
+      clearInterval(wordsTimer);
       ro.disconnect(); io.disconnect(); mo.disconnect();
       document.removeEventListener('visibilitychange', sync);
       window.removeEventListener('pointermove', onMove);

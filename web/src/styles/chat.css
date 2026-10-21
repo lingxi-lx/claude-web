@@ -304,10 +304,10 @@ div.code { border: 0; border-radius: var(--r-lg); background-color: var(--surfac
 .menu.cm.sel-menu .cm-d { font-size: var(--fs-meta); }
 
 /* process animations (themes/ProcessGlyph): frames of text, drawn by one clock; the colours are the theme's tokens */
-.pg { font-family: var(--font-mono); white-space: pre; color: var(--accent-text); line-height: 1; user-select: none; font-variant-ligatures: none; }
+.pg { font-family: var(--mono); white-space: pre; color: var(--accent-text); line-height: 1; user-select: none; font-variant-ligatures: none; }
 .pg b { font-weight: inherit; }
 .pg.inline { display: inline-flex; justify-content: center; min-width: 16px; font-size: 12px; }
-.pg.stage { display: inline-block; font-size: 9px; line-height: 9px; letter-spacing: 0; vertical-align: middle; }
+.pg.stage { display: inline-block; font-size: 10px; line-height: 10px; letter-spacing: 0; vertical-align: middle; }
 .working .pg.stage, .agent-trail .pg.stage { margin-right: 6px; }
 .run-card .rc-glyph { flex: none; color: var(--accent-text); }
 .run-card.waiting .rc-glyph { color: var(--warn); }
