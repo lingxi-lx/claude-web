@@ -33,7 +33,8 @@ describe('SidecarManager install', () => {
       expect(fs.readFileSync(bin)).toEqual(bytes);
       expect(good.status('gemini').installed).toBe(true);
 
-      const bad = new SidecarManager({ dir: path.join(d, 'sc', 'gemini'), manifest: manifestWith('gemini', url, '0'.repeat(64), bytes.length, 'g') });
+      // a separate folder: install() short-circuits on the binary the good run already placed
+      const bad = new SidecarManager({ dir: path.join(d, 'bad', 'gemini'), manifest: manifestWith('gemini', url, '0'.repeat(64), bytes.length, 'g') });
       await expect(bad.install('gemini')).rejects.toThrow(/SHA256/);
       expect(bad.status('gemini').installed).toBe(false);
     } finally {

@@ -5,6 +5,8 @@ import path from 'node:path';
 import { runCode, runnerFor } from './run-code.js';
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'cw-runcode-'));
+// macOS: os.tmpdir() is /var/folders/… but the child reports /private/var/folders/… (symlink)
+const real = (p: string) => { try { return fs.realpathSync.native(p); } catch { return p; } };
 
 describe('runCode', () => {
   it('runs JavaScript in the folder it was given and captures both streams', async () => {
@@ -12,7 +14,7 @@ describe('runCode', () => {
     const r = await runCode('javascript', "console.log(process.cwd()); console.error('oops')", { cwd });
     expect(r.ok).toBe(true);
     expect(r.code).toBe(0);
-    expect(path.resolve(r.stdout.trim()).toLowerCase()).toBe(path.resolve(cwd).toLowerCase());
+    expect(real(r.stdout.trim()).toLowerCase()).toBe(real(cwd).toLowerCase());
     expect(r.stderr).toContain('oops');
   });
 
@@ -37,7 +39,7 @@ describe('runCode', () => {
   it('falls back to the process folder for a bad cwd', async () => {
     const r = await runCode('js', 'console.log(process.cwd())', { cwd: '/does/not/exist/anywhere' });
     expect(r.ok).toBe(true);
-    expect(path.resolve(r.stdout.trim())).toBe(path.resolve(process.cwd()));
+    expect(real(r.stdout.trim())).toBe(real(process.cwd()));
   });
 
   it('refuses a language it cannot start', async () => {
