@@ -5,8 +5,19 @@ server/dist/
 desktop/dist/
 dist-desktop/
 dist-desktop-*/
+# pinned sidecars, fetched by scripts/sidecars/fetch.mjs (never committed)
+vendor/sidecars/*
+!vendor/sidecars/.gitkeep
 *.log
 hello.txt
 color.txt
 .superpowers/
 .claude/worktrees/
+.claude/workflow-runs/
+.claude/scheduled_tasks.lock
+
+# 论坛发帖和调研草稿（不入库，和以前一样）
+论坛发文-*.md
+论坛图/
+reports/
+research_notes/

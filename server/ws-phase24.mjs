@@ -159,7 +159,7 @@ async function main() {
   const withIt = await openClaude({ computerUse: true });
   const computer = withIt.servers?.find((m) => m.name === 'computer');
   if (WIN) {
-    check('one opened with it is handed `computer` next to the web and the shared memory', !!computer && withIt.servers.some((m) => m.name === 'web') && withIt.servers.some((m) => m.name === 'memory'), withIt.servers ? names(withIt.servers) : withIt.error);
+    check('one opened with it is handed `computer` next to the web and the shared memory', !!computer && withIt.servers.some((m) => m.name === 'web') && withIt.servers.some((m) => m.name === 'claude-web-memory'), withIt.servers ? names(withIt.servers) : withIt.error);
     // the engine reports its servers as soon as it is up: a server still connecting is "pending" there
     const settled = computer?.status === 'connected';
     check('… the engine started it (connected: its 23 tools; or still connecting)', !!computer && (settled ? computer.tools?.length === 23 : computer.status === 'pending'), JSON.stringify({ status: computer?.status, tools: computer?.tools?.length, error: computer?.error }));

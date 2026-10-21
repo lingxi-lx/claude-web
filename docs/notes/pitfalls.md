@@ -14,10 +14,33 @@
 - `SessionRunner.send()` 以前总是在 content 末尾放 `{type:'text', text}`，只发图片时就是 `[image, {type:'text', text:''}]`。接口不收空文字块，
   引擎还会给最后一块加 `cache_control`：`messages.N.content.1.text: cache_control cannot be set for empty text blocks` /
   `text content blocks must be non-empty`。这条消息进了 transcript，**之后每一轮都带着它重发，对话就再也用不了**（截图里一连串 400）。
-- 修法三处：`send()` 只有图片时不加文字块；`transcript-file.ts` 的 `dropEmptyText()` 在 resume 前（还没有进程拿着文件）把 user / assistant
+- 修法三处：`send()` 只有图片时不加文字块；`transcript-file.ts` 的 `dropEmptyText()`（现名 `dropEmptyBlocks()`，见下一节）在 resume 前（还没有进程拿着文件）把 user / assistant
   消息里的空文字块去掉（全空的消息换成 `…`），经临时文件 rename，没东西可修时不碰文件；进程还活着时它内存里有这段历史，
   所以结果是这两种 400 之一时 runner 标 `respawnPending`，这一轮结束后重开进程（resume 读修过的文件）。前端 `classifyError` 新增 `history`
   「对话记录有误」，提示点重试。
 - 独立验证后改的：`dropEmptyText` **只在这种 400 之后**的那次重开前跑（`repairEmptyText`；它整个读文件，42 MB 要 0.4 s，每次 resume 都跑会卡住服务端）；
   读之前和 rename 之前各对一次大小和 mtime，变了就不写（同一个对话开在终端里时，那边追加的行会被盖掉）。已经卡住的老对话：再发一次会先 400 一次，
-  然后自动修好重开，点重试就通。`content: ""` 字符串、`"\n"` 文字、tool_result 里嵌的空文字不修（没见过它们引起这个错）。
+  然后自动修好重开，点重试就通。`content: ""` 字符串、tool_result 里嵌的空文字不修（没见过它们引起这个错）。
+
+## 别家模型的空思考 → 换到 Claude 后每一轮都 400（2026-10-19 用户截图，P1）
+
+- 对话一直跑在 deepseek-v4.1-flash（Anthropic 格式的供应商）上，它偶尔回 `{type:'thinking', thinking:' '}`（只有空白、**没有签名**），
+  DeepSeek 自己收得下；换到 claude-opus-5-5 后接口拒整段历史：`messages.179.content.0.thinking: each thinking block must contain
+  non-whitespace thinking`。分叉会把这些块原样复制过去。Claude 自己的空思考（display omitted）**带签名**，是合法的，不能删。
+  DeepSeek 的 327 个思考块全都没签名，第一次 400 只报了空的那个——没签名的也会被拒，见下面「去掉空的之后还不够」。
+- 修法：`dropEmptyText` 改名 `dropEmptyBlocks`，也去掉「没签名、只有空白」的思考块；预检正则改成 `"(?:text|thinking)":"(?:\s|\\[nrt])*"`
+  （以前认不出文件里转义成 `\n` 的换行）。触发时机（都是没有我们的进程拿着文件的时候）：这种 400 之后（runner 的 `repairEmptyBlocks`，
+  和空文字同一条路）；`setModel` 要重开进程时；`swap.ts` 换供应商（`swapProviderNow` 换了供应商、`openOnProvider` 用另一个供应商打开没在跑的对话）。
+  同一个供应商里进程内 `setModel` 成功的切换，历史在进程内存里，只能靠那次 400 → 重开。前端 `classifyError` 把这句也算 `history`。
+- 用户那两个对话（`5b7b91f6…` / `16bbc467…`）是手工修的，备份在同目录 `*.jsonl.bak-2026-10-19T08-19-10-948Z`。
+  用真文件（27.9 MB）跑 `dropEmptyBlocks`：改 2 条消息、510 ms，结果和手工修的逐字节一致，再跑一次不改。
+- **去掉空的之后还不够**（同一天，装好后在真接口上测）：分叉那个对话发一轮 Opus，回 ``messages.3.content.0: Invalid `signature` in `thinking` block``。
+  DeepSeek 的 325 个思考块全是 `signature: ""`；Anthropic 先查空白（所以先报的是 179），再查签名。引擎（ccb）只在 ant 用户的模型回退时
+  去掉签名块（`stripSignatureBlocks`），普通换模型不管。现在 `dropEmptyBlocks(file, { unsigned: true })` 把没签名的思考块也去掉（Claude 的思考总带签名，
+  `redacted_thinking` 不动）：runner 里「下一个模型是 Claude」（`toClaude`：账号；供应商按 `providerModelId` 认；`cw-x:<供应商>:<模型>` 按模型名）
+  或者接口报了这个 400（`repairUnsigned`，不管模型叫什么）时用；从别家模型 `setModel` 到 Claude 一律重开进程（进程内换的话第一轮必 400）；
+  `swap.ts` 换到 Claude（账号 / claude-account / 默认模型是 Claude 的供应商）时用。代价：这些对话里 DeepSeek 那几轮的思考过程从历史里没了。
+  直接用 Claude 打开一个带别家思考的旧对话（没有切换这一步）还是会先 400 一次，自动清掉、点重试就通——不想每次 resume 都读整个文件。
+- 真接口验证：`5b7b91f6` 的分叉（33 万 token 历史），第一轮 400 → 重试 OK；用户两个对话按 unsigned 清掉（备份 `*.bak-unsigned-2026-10-19T13-44-06-426Z`）后，
+  新分叉第一轮就 OK。分叉 / 真机脚本的做法：自己起一个 server（`meta.json` 只拷 providers 到临时 `CLAUDE_WEB_DIR`，真 HOME 用账号登录），
+  `session.open { sessionId, fork: true, permissionMode: "plan" }`，跑完删掉分叉的 jsonl。

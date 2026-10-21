@@ -324,27 +324,32 @@ Conversation id rules: Claude conversations keep their original UUID, and other 
 
 ### 11. Model gateway (multi-account failover / protocol conversion)
 
-A local HTTP gateway: it offers agents the **Anthropic**, **OpenAI** (Chat Completions, and the Responses API that Codex uses) and **Gemini** interfaces at once, with the providers you set up under "Providers" behind it. What it's for:
+A local HTTP gateway: it offers agents the **Anthropic**, **OpenAI** (Chat Completions, and the Responses API that Codex uses) and **Gemini** interfaces at once, with the providers and accounts you add behind it. What it's for:
 
 - **Automatic multi-account switching**: put a relay's main account and backup account in one group; when the main one is rate-limited (429), out of quota, returns 5xx or can't be reached, it switches to the next automatically. A rate-limited account cools down until the reset time given by `retry-after`, or if there's no hint, starts at 60 seconds and doubles (up to 30 minutes); an account whose key is invalid (401/403) is disabled, and you click "Restore" once it's fixed.
 - **Protocol conversion**: let Codex use Claude, let Claude Code use OpenAI-compatible models, and so on. Supported directions: Anthropic in → OpenAI / Gemini out, OpenAI in → Anthropic / Gemini out, Codex (Responses) in → Anthropic out, Gemini in → Anthropic out; the same protocol is passed through as is (a relay's client fingerprint check still passes).
+- **Claude subscription accounts**: add a `sk-ant-oat…` setup token or the OAuth JSON from Claude Code; its requests are sent in the Claude Code shape (Bearer + OAuth beta + the Claude Code system prefix). Health, quota, cooldown, an optional per-account proxy and a daily request cap are shown on the account row.
+- **Gemini web and WorkBuddy accounts**: add Gemini cookies (one per line, in batches) or a WorkBuddy cockpit JSON / QR login. Each family runs a pinned MIT sidecar on this computer — downloaded and SHA256-checked on first use, or bundled with the installer — supervised with health checks and restarts. Their models appear in `/v1/models`, and their pools can be gateway members next to Claude accounts and providers.
+- **A Tasks page for account upkeep**: check-in, keepalive, growth tasks, cat travel, lottery, activity, quota refresh and account check, by cron or interval, with run-now and a history; missed runs are caught up within seven days.
 
 Steps:
 
-1. **Settings → Model gateway**, tick "Enable the local model gateway" (the first time, a gateway key is generated).
-2. "New group": add providers from the dropdown in priority order (drag to reorder); choose "Fail over in order" or "Weighted round-robin", and you can pin a model for each member or write a model mapping (such as `claude-*haiku*` → `gpt-4.1-mini`). "Test" sends a minimal request and shows which member it actually went through.
-3. Under **Settings → Providers**, create a new one, choose the type "Model gateway" and pick the group. After that, new conversations (Claude, Codex, Gemini and so on) just pick its models in the model menu, and the address and key are injected automatically when the conversation starts.
+1. **Settings → Model gateway** (or the 网关 entry in the icon rail), turn on "Enable the local model gateway" (the first time, a gateway key is generated). It opens on just 概览 / 账号 / 任务.
+2. On **账号**, add a Claude subscription account, Gemini cookies or a WorkBuddy login. It goes into a **默认** group by itself, and the 概览 shows the address (`…/v1`) plus a one-click "Copy key" for other apps. No pools, groups or keys to set up.
+3. Under **Settings → Providers**, create a new one, choose the type "Model gateway" and pick the 默认 group. After that, new conversations (Claude, Codex, Gemini and so on) just pick its models in the model menu, and the address and key are injected automatically when the conversation starts.
+4. **高级设置** has the rest when you want it: account pools and failover order, route groups, key groups, the audit log and the LAN listener. "Test" sends a minimal request and shows which member it actually went through.
 
 Notes:
 
-- The gateway only accepts loopback connections from this computer; access from the local-network / phone listener always gets a 404; the key is only read out when you click "Copy" and never appears in logs.
+- The gateway only accepts loopback connections from this computer by default; the optional LAN listener serves only `/v1` and `/v1beta` to keys whose key group allows LAN and whose IP is on the allowlist. Keys are stored hashed, shown masked, and read out only when you click "Copy"; they never appear in logs.
+- A **key group** can restrict the route groups, models (glob allow/deny), source IPs, RPM, concurrency and a daily token budget of the keys that use it.
 - Once a streaming reply has started flowing to the agent, it won't switch members (an error halfway is reported as is).
 - Even if Codex and Gemini CLI are signed in to their own accounts, conversations opened through the gateway are forced through the gateway (their own config files aren't changed); other ACP agents such as Qwen Code only get environment variables injected, and under an OAuth login they may still use their own account.
 - The request the "Test" button sends doesn't carry the Claude Code fingerprint: a relay that only accepts the official client may reject the test, but real conversations go through.
 - After regenerating the gateway key, running conversations need to be reopened.
-- Every request gets a row in the ledger (the account row at the bottom of the sidebar → **Usage and ledger** → Ledger; choose "Gateway" under "Source" to see just those), including the actual member, the number of switches, time to first byte and tokens.
-- The gateway **doesn't forward any subscription login** (claude.ai / ChatGPT / Google account); it only uses API providers you've configured yourself.
-- System proxies (`HTTPS_PROXY`) aren't supported for now: for an upstream that needs a proxy to reach, use a relay address instead.
+- Every request gets a row in the ledger (the account row at the bottom of the sidebar → **Usage and ledger** → Ledger; choose "Gateway" under "Source" to see just those), including the actual member, the number of switches, time to first byte and tokens. The audit log on the 日志 tab keeps 12 fields per request and never the prompt or a key.
+- **Subscription logins are used only when you add them here.** The app never reads the login of your installed Claude Code / ChatGPT / Google client behind your back; Claude accounts are added explicitly, and Gemini/web logins live in their own sidecars.
+- The gateway itself doesn't use the system proxy (`HTTPS_PROXY`); a Claude account can have its own `http(s)://` or `socks5://` proxy, and a relay provider can be reached through a relay/private network.
 
 ### 12. Config for other agents (MCP / instruction files / models)
 
@@ -510,7 +515,7 @@ Under **Settings → Appearance → Language**, pick "中文" or English (the de
 That's a graphics driver issue. Turn on **Settings → General → More options → Software rendering (desktop version)** and restart; after two crashes in a row the app also switches by itself.
 
 **Auto-update**
-The desktop app checks this repository's GitHub Releases for a new version after it starts and every 4 hours (under **Settings → Advanced → Update** you can check manually, or turn off the automatic check). The Windows installer version downloads in the background and then pops up a window asking whether to restart and update; choose "Later" and it installs by itself the next time you quit. The macOS build has no Apple signature and the Windows portable version can't update itself, so when there's a new version a window gives you a download link: on macOS, download the new dmg and drag the app into "Applications" to replace it, and for the portable version, swap in the new exe. A version marked "must update" can't be skipped. If you built the package yourself from source, after `git pull` just run `npm install && npm run build:desktop` again and install over it. None of your data is lost. See the [changelog](CHANGELOG.md) for what changed in each version.
+The desktop app checks this repository's GitHub Releases for a new version after it starts and every 4 hours (under **Settings → Advanced → Update** you can check manually, or turn off the automatic check). The Windows installer version and the macOS app download in the background and then pop up a window asking whether to restart and update; choose "Later" and it installs by itself the next time you quit. The macOS app updates itself only when it's in "Applications" and opened from there (not straight from the dmg or Downloads); when it can't, and for the Windows portable version, a window gives you a download link when there's a new version: on macOS, download the new dmg and drag the app into "Applications" to replace it, and for the portable version, swap in the new exe. A version marked "must update" can't be skipped. If you built the package yourself from source, after `git pull` just run `npm install && npm run build:desktop` again and install over it. None of your data is lost. See the [changelog](CHANGELOG.md) for what changed in each version.
 
 ## How it works
 

@@ -66,6 +66,25 @@
 Electron 44 有 `webkitSpeechRecognition`，但连不上识别服务：麦克风权限给了，`start()` 后 `onerror` 是
 `network`（2026-10-16 实测）。桌面版不显示麦克风按钮，浏览器里照旧。
 
+## 选中文字就出的菜单（2026-10-20，用户：「不想右键」）
+
+照 VS Code 里 Claude 面板的样子：在对话里选中文字，松开鼠标（或 Shift+方向键选完）就在选区末端旁出一个小菜单——
+复制（Ctrl+C）· 复制代码块（选区在代码块里）· 复制整条消息 / 复制为 Markdown（用户消息只有一行）· 引用到输入框（Ctrl+Shift+L）·
+钉住这条回复（回复才有）· 从这里分叉（「新开一个对话，这个保留」；用户消息是从它之前分叉）。
+
+- 组件 `web/src/features/chat/SelectionMenu.tsx`，ChatView 里每个对话挂一个；哪些行、放哪儿是纯函数 `selection-menu.ts`（有测试）。
+  外层只听选区（`.chat` 上的 pointerdown + document 的 mouseup / keyup / keydown / selectionchange），菜单本身每次出现才挂
+  （`key` 递增），所以 `useMenuMotion` 每次都能判断是鼠标还是键盘打开的；开着时走 `useDropdown`（别处按下 / Esc 关、同时只有一个菜单）。
+- **只认这个对话转录里的选区**：`commonAncestor` 在 `.chat-inner` 里；输入框 / 编辑中的消息 / Monaco / xterm / 旁聊不算；
+  按下必须是从这个 `.chat` 开始的（否则选区留着时点侧栏任何按钮都会再弹一次）。触摸 / 笔不弹（系统有自己的）。
+- 不抢焦点（还要能接着 Shift+方向键扩选区）；开着时按 Tab 进菜单，之后 ↑ ↓ Home End / 数字和 composer 的菜单一样（`menuKey`）。
+  菜单上的 mousedown `preventDefault`，选区不丢。滚动、窗口缩放、选区收起都关。Ctrl+Shift+L 桌面版菜单没占，不用进白名单。
+- 复用：引用走 `quote.ts` 的 `quoteInComposer`（进当前聚焦分屏的输入框，和右键那条一样）；钉住 / 分叉 / 回复的 Markdown 是
+  `MessageActions.tsx` 导出的 `togglePin` / `forkFrom` / `replyMarkdown`；代码块的全文由 `CodeBlock.tsx` 的 `codeOf(el)`
+  （WeakMap：`.code` 根元素 → 代码）给；「复制整条消息」的纯文字取 `.msg.assistant > .msg-text` 的 innerText。
+- 用户说的「钉住为章节」：我们没有章节，用的是现成的「钉住」（信息栏「钉住的回复」），字照实写。桌面版右键菜单不变。
+- ui-smoke 段 `selection-menu`：用 Range 选中种子回复的 `ok`，派 pointerdown + mouseup，点 引用到输入框，查输入框是 `> ok`。
+
 ## 坑
 
 - 用 `node -e` 往测试里写带 `'` 的字符串，转义经常坏成 `'CLI's'`，vitest 报「no tests」+ PARSE_ERROR——改用 Edit。

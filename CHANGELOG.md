@@ -4,6 +4,63 @@
 
 Every version's changes are recorded here; installers are on the [Releases](https://github.com/ypyik0669/claude-web/releases) page. Versions follow [semantic versioning](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+**Gateway: one address for every account**
+
+- **The gateway is simpler to start with.** It now opens on just 概览 / 账号 / 任务. Add an account and it goes into a 默认 group automatically, so the root `/v1` address works without creating pools, groups or keys; the overview shows the address and a one-click "copy key". Pools, route groups, keys, the audit log and LAN settings are under 高级设置. The Tasks page has three one-click presets (daily check-in, keepalive every 6 hours, daily quota refresh), and the account dialog is three big buttons and one Add button.
+- **The address stays put.** It used to pick a new port on every start, so an address copied elsewhere stopped working the next day. The gateway now has a port of its own; changing it listens on the new one first and only then switches, keeping the old one if that fails. Note: upgrading from an older build moves the port once — the overview page shows the current one.
+- **A gateway group is a provider.** Add an account and its group shows up in the model menu; there is no second step of creating a provider. Deleting that provider means "keep this group out of the menu", and it is not recreated on its own.
+- **Gemini web and WorkBuddy accounts, in the gateway with the Claude ones.** Each family runs its own pinned MIT sidecar on this computer: downloaded and SHA256-checked on first use (or already bundled with the installer), supervised with health checks, automatic restarts and a log you can read in the app. Their models appear in `/v1/models`, and their account pools can be gateway members next to Claude accounts and providers.
+- **A Gemini web account is added by signing in with this computer's Chrome.** Click "sign in to Google" and Chrome (Edge if there is none) opens at Google's sign-in page; once you are signed in to Gemini, close that window and the account is added. It keeps a sign-in of its own and does not touch the Chrome you use day to day. Pasting cookies works too (one per line, in batches), and the dialog says what is missing as you paste — including the common case of copying only the gemini.google.com row.
+- **Residential exits and anti-ban settings.** The Gemini card manages a pool of exits (http / https / socks5, credentials included): an account remembers the exit it used and keeps leaving from the same IP, and the sign-in window uses that same exit, so signing in and calling out come from one address. An unreachable exit is an error — it never quietly falls back to a direct connection. An exit that keeps failing is tripped and put back after a cooldown, with its failure count and state shown in the UI. Per-exit concurrency, per-minute and per-hour caps, whether a direct connection is allowed when every exit is out, and whether an expired cookie may fall back to anonymous: all editable, applied immediately.
+- **A dead sign-in comes back by itself.** A windowless Chrome loads Gemini on that account's own profile in the background, letting Chromium renew the short-lived ticket the sidecar cannot, and the renewed cookies are written back. When that cannot help, the account row offers 重新登录 — sign in again and the account is switched back on. An account you stopped yourself is never re-enabled automatically.
+- **Keys and LAN**: a key starts with `cwg-` and is stored as a salted SHA256 hash — the UI shows only the first and last few characters. LAN listening is opt-in and takes an IP allowlist, CORS origins and a body limit; every request goes to an audit log that never records the prompt or a key. No public listener.
+- **A Tasks page for account upkeep**: check-in, keepalive, growth tasks, cat travel, lottery, activity, quota refresh and account check. Give a task a cron time or an interval; run it now; missed runs are caught up once (up to seven days late) and dropped beyond that. The run history shows each account's result.
+
+**Conversation**
+
+- **Run a code block straight from the conversation.** Bash / shell / PowerShell / Python / Node blocks in a reply get a run button: after a confirmation, the code runs as you, in the conversation's folder, with a 30-second limit and at most 64 KB of output shown under the block. Only a window on this machine can run code; phones and remote devices cannot.
+- **Selecting text brings up a menu**, like the official desktop app: copy, copy the code block, copy the message / copy as Markdown, quote it into the input box, pin the reply, fork from here. No right-click needed. The desktop app also has a real context menu now (before, right-clicking selected text did nothing).
+- **Thinking language**: a setting that asks the model to write its reasoning in a chosen language (code, paths and identifiers stay as they are); the answer still follows the language you write in. A conversation can override it.
+
+**Models**
+
+- **A subagent can run on any model, whatever the conversation uses.** The 子代理 menu lists every connected provider's models, whether the conversation runs on a Claude account or another provider. Changing the main model or moving the conversation to another provider keeps the subagent pick. Once one is picked, the system prompt tells the main model to hand the work to it instead of doing it itself.
+
+**Library**
+
+- **Cursor's history is readable** (read-only), and a local scan finds the conversation folders of WorkBuddy, Zcode, Hermes, OpenClaw, Kiro and Windsurf (read-only; nothing of theirs is changed).
+- **DeepSeek Harness history can be read and continued**, like Codex.
+
+**Desktop**
+
+- **The Mac app updates itself, like the Windows one.** A new version downloads in the background; "Restart to update" swaps it in and opens it again, and "Later" installs it when you quit. No Apple signature needed: the app replaces its own copy in Applications. If it can't (opened straight from the dmg or Downloads, a folder it can't write to, or macOS's App Management said no), you get the download link as before, with the reason. Versions up to and including 0.2.9 still have to be updated by hand one last time.
+- **The installer carries the Gemini and WorkBuddy components**, so the first account no longer waits for a download.
+
+### Changed
+
+- **The Gemini web path is much faster.** A bare "hello" used to take 26 seconds to the first token and 90+ to finish: every turn carried the whole tool schema (~100 KB) plus the system prompt, went past the sidecar's 128 KB inline limit as an uploaded attachment, and the model read that before answering. Such conversations now carry seven core tools (read, edit, write, run a command, search contents, find files, todo), and the first token lands in 1-2 seconds. Measured on "hello": 26.4 s / 95.7 s before, 1.2 s / 6.4 s after.
+- **A long conversation is pointed out once.** These turns re-send everything each time; past 128 KB the conversation says so once (with the current size) and suggests `/compact` or a new conversation — past about 163 KB the web end truncates the tail anyway. It arms again after a compaction.
+- **The model list follows the sign-in.** Without a usable account the sidecar reports two anonymous models; once signed in it reports the full subscription list (including `gemini-4-argon`). It is refreshed on a timer, the Gemini card has a 刷新模型 button, and each model carries a one-line note in the menu (fast / best for code / thinks 20-40 s / flagship, slowest).
+- **Streaming no longer lags.** Each delta used to re-render the whole conversation; with DeepSeek sending one token per delta the window fell tens of seconds behind (a 5-second burst took 49.6 s to paint). Rendering now happens once per frame — 0.05 s behind.
+- **Plan card, question card and thinking box**: the plan card stays with the task when a background subagent continues it; 详细 view no longer shows the plan twice; no spinner while the model waits for your answer; Enter submits inside the question card; the thinking box follows the bottom while streaming.
+- **DeepSeek V4 counts as a 1M context window** (it was 128K, so compaction ran far too often and cache hits sat at 26-33%).
+- **Saving provider settings reaches a conversation that is already running** — it restarts after the current turn, no manual restart needed.
+- **Every native select is the app's own component now**, with the same keyboard handling and the same picker on a phone.
+- **A connector's first start is warmed up**: an npx / uvx entry downloads its package on first launch and used to show 「连不上」 straight after adding; now it waits for it.
+- **Smaller first screen**: the English catalogs (useless to a Chinese interface) are no longer in the first-screen bundle — 2.36 MB of first-load files became 4 KB, the rest loading on demand. This also matters for opening the app from a phone.
+
+### Fixed
+
+- **Switching from another provider's model to Claude no longer 400s every turn.** Empty thinking blocks left by the other model are dropped from the history (the cost: those turns' reasoning is gone from it).
+- **A relay configured in your own settings.json can serve subagents again** — the pick used to be silently ignored and fell back to another model.
+- **The shared-memory MCP is named `claude-web-memory`**, no longer colliding with the official `memory`.
+- **The add-account dialog**: the "I understand" checkbox is gone; WorkBuddy's 扫码登录 / 粘贴 JSON became a proper two-way switch instead of two broken rows; Cancel sits in the standard dialog footer.
+- **The sidebar's 「把 X 等工具里的对话也列在这里？」 was cut off** with several, long tool names; it now may wrap to three lines.
+
 ## [0.2.9] — 2026-10-18
 
 ### Added

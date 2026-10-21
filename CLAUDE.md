@@ -34,7 +34,7 @@ npm run dev          # 开发：server tsx watch + vite :5173（代理 /ws 到 3
 - 停靠面板 / 右侧面板 / 分区页**不卸载**，只 `hidden`（终端 pty、xterm 缓冲、表单状态）。
 - 改文件用 Edit / Write，或把脚本写成文件再跑：bash 里 `node -e "…"` 的反引号会被当命令替换，heredoc 会吃反斜杠。仓库是 LF（`.gitattributes`）。
 - 测试：`npm run typecheck`、`npm test`、`npm run build:all`、`npm run e2e`（自带临时 HOME，不花 token）、`node scripts/ui-smoke.cjs`（Electron，任何 console 错误都算失败）。真机验证用临时 `CLAUDE_WEB_DIR` / HOME，别碰用户自己的 `~/.claude-web`。
-- 本机开发 shell 继承了 `CLAUDE_CODE_ENTRYPOINT=sdk-cli`、已装桌面版的 `CLAUDE_WEB_DIST` 、`ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`、`CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION`、`CLAUDE_WEB_THINKING_DISPLAY`，测指纹 / 自己起 server / 跑 `npm test`（`session-runner.test.ts` 会挂三条）时 `env -u` 掉。
+- 本机开发 shell 继承了 `CLAUDE_CODE_ENTRYPOINT=sdk-cli`、已装桌面版的 `CLAUDE_WEB_DIST` 、`ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`、`CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION`、`CLAUDE_WEB_THINKING_DISPLAY`、`CLAUDE_WEB_CONTEXT_WINDOWS` / `CLAUDE_WEB_MODEL_CAPS`、`ELECTRON_RUN_AS_NODE`（会让 `npx electron` 退回 Node，`ui-smoke` 整个跑不起来），测指纹 / 自己起 server / 跑 `npm test`（`session-runner.test.ts` 会挂三条）/ `ui-smoke` 时 `env -u` 掉。
 - 提交身份固定 `ypyik0669`；引擎（ccb fork）发版、应用发版的步骤在 `engine-providers` / `macos-ci` 两篇里。
 
 ## 笔记索引
@@ -53,7 +53,7 @@ npm run dev          # 开发：server tsx watch + vite :5173（代理 /ws 到 3
 | [remote-anywhere](docs/notes/remote-anywhere.md) | 手机在外面也能连（2026-10-01） | MQTT 牵线 + WebRTC / 转发、手机壳、密钥派生、限制、调试脚本 |
 | [phase07-board-goal](docs/notes/phase07-board-goal.md) | 看板 / 目标 / Android（阶段 7，2026-09-03） | Issue/PR 看板、目标（Goal）、Android |
 | [phase08-tokens-dock](docs/notes/phase08-tokens-dock.md) | 设计令牌 / 图标 / 停靠面板（阶段 8，2026-09-04） | 令牌分层、焦点环、PANELS 表、停靠面板不卸载 |
-| [phase09-chat](docs/notes/phase09-chat.md) | 对话渲染与 composer（阶段 9，2026-09-04） | 回合时间线、RunCard、applyTranscript live、模型 catalog、ultracode |
+| [phase09-chat](docs/notes/phase09-chat.md) | 对话渲染与 composer（阶段 9，2026-09-04） | 回合时间线、RunCard、applyTranscript live、模型 catalog、ultracode、流式卡顿（按帧渲染 / 测量脚本） |
 | [phase10-browser-tile](docs/notes/phase10-browser-tile.md) | 内嵌浏览器（阶段 10，2026-09-04） | 窗格里的浏览器标签 |
 | [phase11-canonical](docs/notes/phase11-canonical.md) | 会话内核：canonical / 热切换 / 交接（阶段 11，2026-09-04） | canonical 时间线、热切换、交接 |
 | [phase12-memory](docs/notes/phase12-memory.md) | 跨 agent 共享记忆（阶段 12，2026-09-04） | memory.db、FTS5 与中文、MCP 注入 |
@@ -62,7 +62,7 @@ npm run dev          # 开发：server tsx watch + vite :5173（代理 /ws 到 3
 | [agent-config](docs/notes/agent-config.md) | 其它 agent 的配置中心（2026-09-28） | Codex/Gemini/Qwen/OpenCode 配置编辑、备份、CLI 的坑 |
 | [federation](docs/notes/federation.md) | 跨机器会话 / 联邦（2026-09-28） | peer 连接、id 前缀、路由表、防环、远端文件保护 |
 | [orchestra](docs/notes/orchestra.md) | 多 agent 编排（2026-09-28） | 编排引擎、worktree / 比选、不毁用户的东西、竞态 |
-| [models](docs/notes/models.md) | 多模型管理（2026-09-28） | 拉模型列表、统一菜单、会话内切换路由、子代理模型（含别家的模型）、挑要用的模型、Codex 报的列表 |
+| [models](docs/notes/models.md) | 多模型管理（2026-09-28） | 拉模型列表、统一菜单、会话内切换路由、子代理模型（含别家的模型）、挑要用的模型、Codex 报的列表、DeepSeek V4 窗口、改供应商对在跑的对话生效、思考用的语言 |
 | [ui-redesign-0-1](docs/notes/ui-redesign-0-1.md) | 界面改版 阶段 0–1：令牌 / 文案 / 外框按需出现（2026-09-28） | 令牌 / 对比度测试、术语表、外框按需出现、会话头、桌面标题栏、外框控件计数 |
 | [ui-redesign-2-right-panel](docs/notes/ui-redesign-2-right-panel.md) | 界面改版 阶段 2：右侧面板（2026-09-28） | 右侧面板：固定标签、审阅、文件、标签行、ui-smoke 段 |
 | [ui-redesign-3-composer](docs/notes/ui-redesign-3-composer.md) | 界面改版 阶段 3：输入框 + 模型 / 权限菜单（2026-09-28） | 输入框一行、+ 菜单、项目 / 分支 / 权限 chip、模型菜单、上下文小环、没在跑的对话的 chip |

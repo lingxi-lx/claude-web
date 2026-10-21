@@ -351,10 +351,10 @@ async function main() {
     return echoed?.message?.event?.delta?.text?.trim() ?? '(nothing echoed)';
   };
   const withWeb = await handed();
-  check('a CLI agent is handed the web server next to the shared memory', withWeb === '[mcp: memory,web]', withWeb);
+  check('a CLI agent is handed the web server next to the shared memory', withWeb === '[mcp: claude-web-memory,web]', withWeb);
   await a.req({ kind: 'settings.set', key: 'web.mcp', value: false });
   const withoutWeb = await handed();
-  check('with web.mcp off a new conversation is not told about it', withoutWeb === '[mcp: memory]' && (await a.req({ kind: 'web.status' })).enabled === false, withoutWeb);
+  check('with web.mcp off a new conversation is not told about it', withoutWeb === '[mcp: claude-web-memory]' && (await a.req({ kind: 'web.status' })).enabled === false, withoutWeb);
   await a.req({ kind: 'settings.set', key: 'web.mcp', value: true });
   await a.req({ kind: 'agents.set', agent: 'acp:p23', patch: null });
 

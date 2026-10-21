@@ -34,3 +34,19 @@
 - 拷贝的 `CODEX_HOME` 上 `thread/resume` / `thread/fork` 测不了：线程记着当时的 model provider（`cwgw`，我们的网关）、rollout 路径指向真的 `~/.codex`（「must be in Codex home directory」）。
 - **SDK 的 `listSessions` 会整个漏掉第一句很长的对话**（2026-10-17 实测：头 64 KB 里没有可读的第一句、尾部又没有标题类的行）：`sessions/unlisted.ts`
   扫目录补上，进程结束时补一行 `last-prompt` 让别的应用（Mirasim）也列得出。详见「照官方桌面版录屏改的界面」第二轮。
+
+## 本机发现与 Cursor 只读历史（2026-10-21，用户要求「直接扫本机」）
+
+- **Cursor**：`~/.cursor/projects/<project>/agent-transcripts/<uuid>/<uuid>.jsonl`（本机确认的字段：`{role, message:{content:[{type:'text'|'tool_use'}]}}`）。`library/cursor-source.ts` 只读，`caps` 全 false（`resume / rename / archive / delete / fork`）；`AgentKind` 加 `cursor`，库 id `cursor-<uuid>`。`LibraryService.prepareResume` 现在对 `caps.resume === false` 的来源直接报「只读」，不再把它交给根本没有驱动的 agent。
+- **本机发现**：`library/local-scan.ts` 只看常见目录（home、`APPDATA`、`LOCALAPPDATA`、`HERMES_HOME`），列 Cursor / WorkBuddy / DeepSeek Harness / Zcode / Hermes / OpenClaw / Kiro / Windsurf；`readable` 只在确有来源时为 true。本机 WorkBuddy 只有 `~/.workbuddy/sessions/*.json` 运行记录，没有可读的对话文件 → 界面显示「找到数据」。扫描不读凭据、不全盘递归；结果缓存 60 秒（按 homeDir 区分，测试可注入）。
+- **协议**：新增 `library.localScan`；`SourceStatus.caps` 让设置页把只读来源标成「只读」。测试 `library/cursor-source.test.ts`（脱敏 fixture：半行 JSON、tool_use、本机发现只读标记）。
+
+### DeepSeek Harness（2026-10-21，用户问「对话库没有它是不是我电脑没有」）
+
+- **不是没装**：`~/.dsh`（`$DSH_HOME` 可改）是它的用户目录；会话在 `sessions/<项目目录>/<会话目录>/`，标题/cwd 索引在 `storages/session_projcache/sessions/*.json`。之前的 `local-scan` 只找 `.deepseek*` 和 AppData，漏了 `~/.dsh`。
+- **格式**：日志是**多帧 zstd**（每次追加一帧），Node 的 `zstdDecompressSync` 只解第一帧；要按 magic `28 B5 2F FD` 切帧再逐帧解。旧会话文件名 `session.jsonl.zstd`、新会话（v4）是 `session.v4.jsonl.zstd`，两者都要认。解出来是 JSONL 事件流：`session`（header，`cwd` / `createdAt` 在**顶层**，不在 `data` 里）、`session/title`、`user/message`、`assistant/message`、`tool/call`、`tool/result`（另有 text / reasoning / tool-call 的增量 chunk，读历史用不到）。
+- **会话 id 就是目录名**：旧会话目录是 `session-<uuid>`，新会话是裸 `<uuid>`。不要去掉/补前缀——`session/list` 和 `session/resume` 都用它，改了就回 `session is not resumable`。
+- **实现**：`library/dsh-source.ts` 读文件（列会话 / 读正文），`AgentKind` 加 `dsh`，库 id `dsh-<目录名>`；`local-scan.ts` 把它标为可读取（不再重复列 `.deepseek*`）。真机验证：本机 4 个会话（Desktop\dsh 3 个、Documents 1 个，后者只有标题头），最大一个 49 条消息（21 user / 28 assistant）。测试 `library/dsh-source.test.ts` 用两帧 zstd 的脱敏 fixture 覆盖多帧解码、消息映射与分页。
+- **续聊（2026-10-21 用户要求「像 Codex 那样」）**：dsh 的 ACP 服务端（`dsh --profile acp`）在 `initialize` 里声明 `sessionCapabilities: { list, resume, close }`，**没有标准 `loadSession`**。所以 `agents/acp-driver.ts` 续聊时先发 `session/resume`（`{ sessionId, cwd, mcpServers }`，要求 cwd 与创建时一致），再退回 `session/load`；`library/acp-source.ts` 的 `caps.resume` 也认 `sessionCapabilities.resume`。`DshSource` 继续负责列会话和读正文（ACP 没有 transcript replay），续聊由 ACP 驱动完成，新轮次由 dsh 写回同一份日志，下次读文件就能看到。`AGENT_DEFS` 里 dsh 默认命令是 `dsh --profile acp`（需 `npm i -g @deepseek-ai/dsh`；本机实测 npx 缓存那份依赖不全，`execa` / `zod` 解析失败，所以不用 npx）。
+- **resume 不能带我们的 MCP 列表**（2026-10-21 真机）：带上 `claude-web-memory` 的 stdio MCP 时 dsh 回 `Internal error`，去掉就成功。AcpDriver 现在先按完整 MCP 列表 resume，失败再不带 MCP 重试一次，并推一条「本次续聊没有挂载共享记忆 / 联网」的提示。
+- **真机实测**（`dsh` 0.2.1-rc.2）：`initialize` 12.8 s（`deepseek-harness-acp` 0.0.1）、`session/list` 4 个、`session/resume` 15.3 s、`session/close` 正常；用用户的 `session-86ce…` 跑完整 AcpDriver，`head.nativeSessionId` 保持原 id，未回退新会话。测试时创建的 3 个空会话目录已删除。限制：dsh 不支持 fork / 删除 / `session/load`，一次只允许一个进行中的 prompt。

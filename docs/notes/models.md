@@ -13,7 +13,7 @@
 
 - **为什么**：用户朋友的子代理全跑在贵的主模型上，额度很快用完。主任务用主模型，子代理换个便宜的。
 - **入口**：输入框里模型按钮右边的「子代理」按钮（`models/SubagentChip.tsx`），只有 Claude 对话有（其它 Agent、别的机器上的对话不显示）。菜单就是模型菜单加了 `subagent` 选项：锁在当前供应商（`lockProvider`），最上面一行「跟主模型一样」，不列收藏 / 最近 / 默认项 / 其它 Agent，没有星标，选了不记进最近；底下一个勾「这个供应商的新对话都这样」。欢迎页、在跑的对话、没在跑的对话都能选。
-- **生效**：`CLAUDE_CODE_SUBAGENT_MODEL`，两个运行内核都先认它（在 agent 定义的 `model:` 和工具给的 haiku / sonnet / opus 之前）。环境变量只在启动时读：runner 的 `plan().key` 里带 `:sub-<model>`，换了就 `respawnWhenIdle()`（这一轮跑完再换，已经派出去的子代理不受影响）。官方二进制上 1M 的 Claude 也加 `[1m]`（`engineModel`）；ccb 上子代理模型也进 `CLAUDE_WEB_MODEL_CAPS` / `CLAUDE_WEB_CONTEXT_WINDOWS`。用官方账号时用户 settings.json 里自己写了这个变量，选了的会用 `--settings` 压过去（`ownSubagentOverride`）。
+- **生效**：`CLAUDE_CODE_SUBAGENT_MODEL` + `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1`。ccb 总是先认前者；**新版官方二进制不加 `_FORCE` 时顺序是 工具给的 model → agent 定义的 `model:` → 这个变量**，Explore 定义的是 inherit（带上限），于是跑在主模型上（2026-10-19 真机：Opus 5.5 + DeepSeek，Explore 子代理是 Opus；用户中转上看到的 claude-sonnet-5 也是这么来的）。加了 `_FORCE` 之后变量压过前两者。环境变量只在启动时读：runner 的 `plan().key` 里带 `:sub-<model>`，换了就 `respawnWhenIdle()`（这一轮跑完再换，已经派出去的子代理不受影响）。官方二进制上 1M 的 Claude 也加 `[1m]`（`engineModel`）；ccb 上子代理模型也进 `CLAUDE_WEB_MODEL_CAPS` / `CLAUDE_WEB_CONTEXT_WINDOWS`。用官方账号时用户 settings.json 里自己写了这个变量，选了的会用 `--settings` 压过去（`ownOverride`，以前叫 `ownSubagentOverride`）。
 - **存哪**：每个对话 `SessionMeta.subagent = { providerId, model }`（`''` = 跟主模型一样，也是一种选择）；每个供应商的新对话默认在设置 `subagentModels`（供应商 id → 模型，官方账号是 `claude`）。纯函数在 `server/src/models/subagent.ts`（前端经相对路径用同一份）。解析在 pool：调用方给了 `subagentModel` 就用并记进 SessionMeta（新对话记在它拿到的 id 下，分叉不记）；没给就是「这个对话为这个供应商选过的」→ 否则「这个供应商的默认」——IM、定时任务、目标、重开都走这里。对话换了供应商，旧的选择不再用（模型 id 是旧供应商的），按新供应商的默认来。
 - **请求**：`session.setSubagentModel { sessionId, model, providerId }`（进了联邦路由表）。在跑：校验 providerId 还是它跑的那个（别的窗口刚换了供应商就报错），再 `runner.setSubagentModel()`；没在跑：只记 SessionMeta，下次启动用。
 - **布局**：这个按钮让输入框那一行变挤了。宽的行（> 560px）里主模型按钮先缩（`flex-shrink: 100`，`.cb-right` 也是），「proj」「深入」这些短的保持完整；没选时「子代理」三个字不缩。窄的行（分屏、手机）只剩图标，选了模型时图标是强调色。
@@ -56,7 +56,7 @@
 - **runner**（`subagentSplit`）：按主对话的格式换对应的变量（`ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL` / `GROK_BASE_URL` /
   `GEMINI_BASE_URL`），原来的值（没设就是官方默认地址）作为 `main.base`。别名：Anthropic 格式还是 `cw-sub/<模型>`；其它格式是
   `cw-sub-<十六进制>`——ccb 的 Gemini / Grok 客户端会把名字里带 haiku / sonnet / opus 的 id 换成家族默认，没有 OpenAI 那种
-  `CLAUDE_WEB_SERVED_MODELS` 可以绕。用户自己 settings.json 里配了中转的账号对话不接（那个地址是用户的）。
+  `CLAUDE_WEB_SERVED_MODELS` 可以绕。用户自己 settings.json / 环境变量里配了中转的账号对话也接，见下面「已知的缺口」那条（已补）。
 - **先验证的**：`scripts/probe-oauth-base.mjs`——用假令牌、临时 HOME，两个内核在 `ANTHROPIC_BASE_URL` 指向本地时都照样带
   `Authorization: Bearer <OAuth 令牌>` 和 `oauth-2025-04-20` beta，路径里的段也保留。
 - **测试**：`models/subagent.test.ts`（整对、换算、全局默认、`splitSupport`、别名）、`gateway/service.test.ts`（每种主对话：账号主请求带
@@ -73,5 +73,55 @@
     OAuth 模式的官方二进制换了 key、去了 oauth beta 的请求。
   - DeepSeek（ccb，OpenAI 格式）主对话 deepseek-flash + aizhongzhuan 的 claude-haiku-5-5 子代理（十六进制别名 + OpenAI→Anthropic 翻译）：通。
   - 先验风险脚本 `scripts/probe-oauth-base.mjs` 见上。
-- **已知的缺口**：账号对话走的是用户自己 settings.json / 环境变量里配的中转时，runner 不接分流（那个地址是用户的），但前端不知道这件事，
-  菜单照样列别家——选了会被忽略（runner 打一行警告）。要补就把 `userAnthropicEnv().relay` 经 session info 告诉前端。
+- **账号走用户自己的中转**（以前的缺口，2026-10-19 用户报告补上：主对话 Opus 5.5 走 settings.json 里配的中转 kiro，子代理选了另一家的
+  DeepSeek V4.1，中转日志里却是 claude-sonnet-5——runner 不接分流，选择被忽略，只打一行警告，子代理落回 haiku → 中转映射的模型）。
+  现在照常接：`main.base` 是引擎真正发往的地址（`user-env.ts` 的 `ownAnthropicBase(cwd)`：settings 文件的 env，user → project → local
+  后者优先，压过进程环境变量；都没有才是 api.anthropic.com），主请求原样转过去，**凭据是引擎自己从 settings.json 读的那个**（Bearer 或
+  x-api-key，路由原样带上）——我们不读、不存用户的 token。路由地址要压过 settings.json 里的 `ANTHROPIC_BASE_URL`：和子代理模型一样走
+  `--settings` 文件（flag 层，两个内核都认），`ownOverride(ours, cwd)` 只放我们设的、settings 文件里也出现的键（`CLAUDE_CODE_SUBAGENT_MODEL`
+  / `ANTHROPIC_BASE_URL`），token / 模型映射不进这个文件；中转只在进程环境变量里时直接覆盖，不写文件。这种对话默认跑官方二进制（`plan()`），
+  有 ccb 才有的开关时跑 ccb，两条都通。测试：`user-env.test.ts`（`ownOverride` / `ownAnthropicBase`）、`session-runner.test.ts`（两个内核：
+  `main.base` 是用户的中转、`--settings` 里只有路由地址；只在环境变量里时不写文件）、`gateway/service.test.ts`（主地址带路径、Bearer 和
+  x-api-key 都原样到中转，子代理那家看不到用户的 token）；e2e `ws-phase28.mjs` 末尾一轮（临时 HOME 的 settings.json 指向假中转 `/relayA`
+  + token，两个内核：主请求到 relayA 带用户 token，子代理请求到另一家带它的 key 和真名，`--settings` 文件里没有用户 token）。没有真中转实测。
+
+## DeepSeek V4 的上下文窗口 / 改了供应商设置对正在跑的对话生效（2026-10-19 用户报告：缓存率低）
+
+- `knownContextWindow` 以前把所有 `deepseek` 当 128K。中转的 deepseek-v4.1-flash 在 128K 上每 1.5–2 分钟自动压缩一次，后期每一轮都压缩
+  （压缩后上下文已经接近上限），缓存命中 26–33%；用户把窗口设成 1M 后：201 次调用不压缩、提示到 272K、命中 97%。
+  api.deepseek.com 自己的模型列表给 `deepseek-v4-pro` / `deepseek-flash` 报 1,048,576。现在 `deepseek-v4+` / `deepseek-flash` / `deepseek-pro` → 1,048,576，
+  其它 deepseek（chat / reasoner / v3.x）还是 128K。
+- 窗口（`CLAUDE_WEB_CONTEXT_WINDOWS` / 官方二进制的 `CLAUDE_CODE_AUTO_COMPACT_WINDOW`）是进程启动时读的，runner 的 `provider` 也是开的时候拿的：
+  以前在设置里改了窗口，正在跑的对话照旧。现在 `providers.upsert` 之后 `pool.providerSaved(id)` → 这个供应商上每个 Claude 对话 `runner.reprovide()`：
+  设置有变（不算 `modelsAt`）就等这一轮跑完重开进程（resume），没变什么都不做。只有用户在设置里保存才触发，后台刷新模型列表不触发。
+
+## 思考用的语言（2026-10-19，用户要求：照 DeepSeek Harness 插件 dsh-thinking-language）
+
+- 纯提示词：在系统提示的 `append` 后面加一节 `# Thinking language`（`server/src/runtime/thinking-language.ts` 的 `thinkingLanguagePrompt`），
+  让模型用某种语言写思考过程，代码 / 标识符 / 路径照旧，**回答仍跟着用户说的语言**。和 `.claude/launch.json` 的自动验证那段用空行接在一起。
+- 设置键 `ai.thinkingLanguage`（设置 → 模型与智能程度 → 思考用的语言）：`''` / `'off'` / 没设 = 不指定（默认，不加任何字）；`'auto'` = 跟随界面语言
+  （`getLocale()`：zh → 简体中文，en → English）；其余是语言 id（zh-CN / zh-TW / en / ja / ko / fr / de / es / ru / pt / ar，未知 id 当没设）。
+  每个对话可以单独改：`SessionMeta.thinkingLanguage`（对话头 ··· 菜单的「思考语言」，`ThinkingLanguageRow.tsx`）：`''` = 跟随设置，`'off'` = 这个对话不指定。
+  server 端在 `index.ts` 启动时 / `settings.set` 时用 `setThinkingLanguageSetting()` 存一份；pool 开 runner 时把对话自己的那份当第三个参数给它。
+- 为什么只放系统提示、不在每条用户消息前加提醒：系统提示稳定，前缀缓存不受影响；每条消息前加隐藏前缀要改 reducer 藏它、改历史回显，
+  还会把每轮的缓存前缀切碎。代价是进程启动时才读：改了（设置、对话自己的、界面语言变了而设置是 auto）→ `pool.thinkingLanguageChanged()` →
+  `runner.refreshThinkingLanguage()`：算出来的那段字和进程启动时的不一样才 `respawnWhenIdle()`（这一轮跑完再 resume），一样就什么都不做。
+- 对任何供应商都一样（官方二进制 / ccb，Claude 账号 / Anthropic 格式中转 / OpenAI 格式）：都是 SDK 的 `systemPrompt.append`。
+  Codex / ACP 的 agent 不管（菜单里那一行只给本机的 Claude 对话）。
+- 分叉出来的对话开的时候跟父对话的设定；新 id 没有单独记，下次重开跟设置走。
+- 测试：`server/src/runtime/thinking-language.test.ts`（解析与文字）、`session-runner.test.ts` 的「思考用的语言」（进系统提示、改了重启一次、一样不重启）、
+  `web/src/features/settings/thinking-language.test.ts`、`catalog.test.ts`。语言自称的名字在两个文件里（server 的那份给提示词用），都进了 `coverage.test.ts` 的 ALLOWED。
+
+## 子代理硬绑定：设了子代理模型，主模型就把活派给子代理（2026-10-19 用户要求）
+
+- 用户：「子代理设置什么样，那就会派什么子代理，硬绑定，不要用户在提示词还要另外 trigger」。以前设了子代理模型，主模型要不要派子代理全凭它自己判断，常常自己干完了；用户得在提示词里写「用子代理」。
+- 做法（`runtime/subagent-policy.ts`）：对话选了子代理模型（不是「跟主模型一样」），系统提示词末尾加一段 `# Subagents`：这是用户的常设指令，默认用 Agent 工具把探索 / 读文件 / 调研 / 范围清楚的实现 / 跑测试 / 审查交给子代理，独立的并行派，主模型只留理解需求、规划、决定、整合、管计划和跟用户说话——凡是要动工具（读 / 搜文件、跑命令、改代码）的都交给子代理，再小也一样（2026-10-19 真机：第一版允许「几步就完的小事自己做」，Opus 读三个小文件就没派）；每个子代理给完整的简报；不要给 Agent 工具传 `model`。只聊天的对话不加。模型本身的绑定还是 `CLAUDE_CODE_SUBAGENT_MODEL`（压过 agent 定义的 `model:` 和工具调用给的模型）。
+- 子代理模型在 plan key 里（`:sub-<model>`），换了会重启进程（等这一轮和后台子代理都结束），这一段跟着重新读。测试：`subagent-policy.test.ts`、`session-runner.test.ts`「a subagent model picked → the work is delegated」。
+- 这是提示词，不是强制：主模型偶尔仍可能自己动手；不用工具就能答的问题它直接答。
+- 真机（`PROMPT=… node scripts/real-subagent-split.mjs nvm1u37t ntuxdq7p deepseek-v4.1-flash claude-opus-5-5`，提示词不提子代理，项目里放几个小文件）：加 `# Subagents` 段之前 Opus 自己读完；第一版段落（允许「几步就完的小事」）也自己读；声明「压过 Agent 工具说明里 读指定文件用 Read 的建议」之后派了 Explore；再加 `_FORCE` 之后 Explore 的 transcript 是 `deepseek-v4.1-flash`。`[Agent call]` 那行打印主模型调 Agent 的参数。
+
+### 思考用的语言：每轮提醒 + Claude 的限制（2026-10-20 用户：换了语言思考还是英文）
+
+- 只有系统提示那一段不够，照参考插件加了**每轮提醒**：SDK 钩子 `UserPromptSubmit` / `PostToolUse` 返回 `additionalContext`（`thinking-language.ts` 的 `thinkingLanguageReminder`，runner 的 `thinkingHooks`），引擎把它作为 system reminder 放进最新一条消息，对话里不显示，也不动缓存前缀。
+- 假上游抓包（`cw-real/fake-upstream.cjs`）确认请求里有 `# Thinking language` 段和 `[Thinking language]` 提醒。
+- 真机：DeepSeek V4.1（aizhongzhuan，OpenAI 格式）设日语 → 三段思考全是日语；设简体中文 + 中文提问 → 中文。**Claude（Opus 5.5，账号）不照做**：连用户消息里直接写「思考过程必须全部用简体中文」都还是英文——Claude 显示的思考是官方的摘要（`thinking.display: summarized`），语言我们管不了。设置里的说明写了这一点。
