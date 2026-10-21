@@ -4,6 +4,8 @@
 export const SLOW_MS = 50;
 /** the worker reports every second; the host checks every half second, so a hang goes in about 2.5 s */
 export const SILENT_MS = 2000;
+/** the host's own checks are this far apart or more: the page itself was stalled (its messages queued behind it) */
+export const HOST_STALL_MS = 1000;
 
 export interface Watchdog {
   feed(e: { type: 'stats'; avgMs: number } | { type: 'error' }, now: number): 'ok' | 'fail';
@@ -14,7 +16,7 @@ export interface Watchdog {
 }
 
 export function watchdog(start: number): Watchdog {
-  let last = start, slow = 0, paused = false, failed = false;
+  let last = start, lastTick = start, slow = 0, paused = false, failed = false;
   const fail = () => { failed = true; return 'fail' as const; };
   return {
     feed(e, now) {
@@ -26,9 +28,13 @@ export function watchdog(start: number): Watchdog {
     },
     tick(now) {
       if (failed) return 'fail';
+      // a late check means the page was frozen, not the worker: the worker's word is still queued — start counting again
+      const stalled = now - lastTick > HOST_STALL_MS;
+      lastTick = now;
+      if (stalled) { last = now; return 'ok'; }
       return !paused && now - last > SILENT_MS ? fail() : 'ok';
     },
     pause() { paused = true; },
-    resume(now) { paused = false; last = now; },
+    resume(now) { paused = false; last = now; lastTick = now; },
   };
 }

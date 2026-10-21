@@ -63,6 +63,12 @@ describe('paletteCss / sanitizeCss', () => {
     'a{--u:"https://x/v.png"} b{background:image-set(var(--u) 1x)}',
     '@font-face{font-family:x;src:url(https://x/f.woff2)}',
     'a{cursor:url(file:///c:/x.cur),auto}',
+    // the second review's three: an escaped newline in a string, an escaped quote in an identifier, a stray quote
+    '.d{background-image:image-set("\\a http://x/nl.png" 1x)}',
+    ".e[title=a\\27 b]{} .e2{background-image:image-set(\"http://x/pair.png\" 1x)} .e3[title=c\\27 d]{}",
+    ".f{background:url(data:x')} .f2{background-image:image-set(\"http://x/badurl.png\" 1x)} .f3{content:\"'\"}",
+    '@\\69mport "a.css";',
+    'a{background:url("/x.png")}',
   ]) {
     it(`drops all of it: ${bad}`, () => {
       expect(cssRemoteRefs(bad).length, bad).toBeGreaterThan(0);

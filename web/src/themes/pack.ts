@@ -3,6 +3,7 @@
 import { DEFAULT_ANIMS } from './default-anims';
 import { checkAnim, type ProcessAnim } from './frames';
 import { PROCESSES, type Process } from './process';
+import { cssTokens } from './css-tokens';
 
 export interface ThemePack {
   id: string;
@@ -84,29 +85,31 @@ export function paletteCss(p: ThemePack): string {
   return `html:root[data-ascii='${p.id}'] {\n${decl}\n  color-scheme: ${p.mode};\n}\n`;
 }
 
-/** CSS with its comments gone and its escapes decoded (`\68ttp` is `http`): what a browser reads, to look at. */
-export function cssPlain(css: string): string {
-  return css
-    .replace(/\/\*[\s\S]*?(\*\/|$)/g, ' ')
-    .replace(/\\([0-9a-f]{1,6})[ \t\n\r\f]?/gi, (_, h) => { const n = parseInt(h, 16); return n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : '\ufffd'; })
-    .replace(/\\\r?\n/g, '')
-    .replace(/\\(.)/g, '$1');
-}
-
-const FETCHY = /^\s*([a-z][a-z0-9+.-]*:|\/\/|\/)/i;
-const SAFE_SCHEME = /^\s*data:/i;
+const FETCHY = /^([a-z][a-z0-9+.-]*:|\/\/|\/)/i;
+const SAFE_SCHEME = /^data:/i;
+/** a string or url as the URL parser takes it: tabs and newlines anywhere dropped, C0 controls and spaces trimmed */
+// eslint-disable-next-line no-control-regex
+const asUrl = (v: string) => v.replace(/[\t\n\r]/g, '').replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, '');
 
 /**
- * Everything in a theme's CSS that could reach outside the page (spec 2026-10-22 §6: a theme stays offline): any
- * @import, a url() that is not data:, a string that looks like an address (image-set("…"), src("…"), a custom
- * property carrying one). Checked on cssPlain, so comments and escapes do not hide anything. Empty = fine.
+ * Everything in a theme's CSS that could reach outside the page (spec 2026-10-22 §6: a theme stays offline), read
+ * the way a browser reads it (css-tokens.ts): any @import, a url that is not data:, a string that looks like an
+ * address (image-set("…"), src("…"), one kept in a custom property), and anything malformed (a bad url or string —
+ * the browser's recovery from those is where pattern checks went wrong). Empty = fine.
  */
 export function cssRemoteRefs(css: string): string[] {
-  const plain = cssPlain(css);
   const out: string[] = [];
-  if (/@import/i.test(plain)) out.push('@import');
-  for (const m of plain.matchAll(/url\(\s*(['"]?)([^)]*?)\1\s*\)/gi)) if (!SAFE_SCHEME.test(m[2])) out.push(`url(${m[2].slice(0, 60)})`);
-  for (const m of plain.matchAll(/(["'])((?:(?!\1)[^\n])*)\1/g)) if (FETCHY.test(m[2]) && !SAFE_SCHEME.test(m[2])) out.push(`"${m[2].slice(0, 60)}"`);
+  const toks = cssTokens(css).filter((t) => t.type !== 'ws');
+  toks.forEach((t, k) => {
+    const v = asUrl(t.value);
+    if (t.type === 'at' && t.value.toLowerCase() === 'import') out.push('@import');
+    else if (t.type === 'bad-url' || t.type === 'bad-string') out.push(`malformed ${t.type}`);
+    else if (t.type === 'url' && !SAFE_SCHEME.test(v)) out.push(`url(${v.slice(0, 60)})`);
+    else if (t.type === 'string') {
+      const inUrl = toks[k - 1]?.type === 'function' && toks[k - 1].value === 'url';
+      if (inUrl ? !SAFE_SCHEME.test(v) : FETCHY.test(v) && !SAFE_SCHEME.test(v)) out.push(`"${v.slice(0, 60)}"`);
+    }
+  });
   return out;
 }
 
