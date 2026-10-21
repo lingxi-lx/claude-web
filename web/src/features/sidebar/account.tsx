@@ -13,6 +13,7 @@ import { ACCOUNT_PANELS, type AccountId } from './entries';
 import { showPanel } from '@/features/workbench/right-panel';
 import { ThemeQuick } from '@/features/settings/ThemePicker';
 import { tr } from '@/i18n';
+import { ProcessGlyph } from '@/themes/ProcessGlyph';
 
 /**
  * Today's spend for the account popover: `ledger.list` parses the whole ledger file on the server, so one answer is
@@ -57,7 +58,7 @@ export function AccountRow({ open, setOpen }: { open: boolean; setOpen(v: boolea
         </span>
         <span className="who">
           <span className="nm">{who.name}</span>
-          <span className="sub">{connected ? <UsageRing tip={false} fallbackPlan={auth?.subscriptionType} /> : <span className="conn-off">{tr('连接断开，正在重连…')}</span>}</span>
+          <span className="sub">{connected ? <UsageRing tip={false} fallbackPlan={auth?.subscriptionType} /> : <span className="conn-off"><ProcessGlyph process="connect" /> {tr('连接断开，正在重连…')}</span>}</span>
         </span>
       </button>
       <button className="icon-btn" data-id={id('settings')} title={tr('设置 ({modKey}+,) · 右键：在右侧面板打开配置中心', { modKey })} aria-label={tr('设置')} onClick={settings} onContextMenu={(e) => { e.preventDefault(); if (showPanel(ACCOUNT_PANELS.config)) closeDrawer(); }}>

@@ -99,6 +99,8 @@ describe('no Chinese text left outside tr()', () => {
     'web/src/features/settings/ui-settings.ts': 'a language named in itself, and font names',
     'web/src/features/settings/thinking-language.ts': 'languages named in themselves (思考用的语言)',
     'desktop/src/update-policy.ts': 'a marker looked for in a release note',
+    'web/src/themes/frames.ts': 'what is wrong with the frames of a theme, for the theme skill (the model fixes them)',
+    'web/src/themes/pack.ts': 'what is wrong with a theme pack, for the theme skill (the model fixes it)',
   };
   const CATALOGS = AREAS.map((a) => a.catalog);
 

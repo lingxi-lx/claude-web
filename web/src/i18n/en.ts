@@ -3834,4 +3834,6 @@ export const EN_WEB: Record<string, string> = {
   "cookie 还缺必需项，补齐后才能添加。": "The cookie is missing required fields; fill them in before adding.",
   "添加后会直接进入默认入口，根地址 /v1 马上就能用。": "It joins the default entry right away, so the root /v1 works immediately.",
   "正在添加…": "Adding…",
+  "已临时换回默认主题，下次启动恢复": "Switched back to the default theme for now; it comes back next time you start",
+  "字符画主题": "Character themes",
 };

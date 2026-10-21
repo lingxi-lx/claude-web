@@ -12,12 +12,16 @@ import { WAITING_FOR_YOU } from '@/ui/terms';
 import { useJust } from './Fold';
 import { fmtStepDuration, mergedLabel, mergedTarget, shortVerb, stepDurationMs, stepState, watchStep, watchedStep, type StepState } from './step-view';
 import { tr } from '@/i18n';
+import { ProcessGlyph } from '@/themes/ProcessGlyph';
+import { processOf, type Process } from '@/themes/process';
 
 /** How a step's row is toggled: a pointer's click moves (the detail slides open), the keyboard's does not (spec §4.5). */
 export type ToggleBy = 'pointer' | 'key';
 
 /** The icon's pop when a step finishes (chat.css `step-pop`), and a margin. */
 const POP_MS = 320 + 80;
+/** a step that finished in view: its animation's ending, then the icon's pop, within this */
+const ENDING_MS = 1600;
 
 function SubagentLoader({ toolUseId }: { toolUseId: string }) {
   const ctx = usePaneCtx();
@@ -42,24 +46,25 @@ function SubagentLoader({ toolUseId }: { toolUseId: string }) {
   );
 }
 
-/** Working: four dots taking turns (the official app's mark for the step it is on), in the theme's accent. */
-export function WorkDots() {
-  return <span className="work-dots"><i /><i /><i /><i /></span>;
-}
-
 /**
- * The 16px slot at the start of a step row — the one mark that says where the step is. Running: a spinner (only in a
- * conversation that runs: elsewhere a step without a result never finished, and gets a still ring). Done: the tool's
- * own icon, popping in when the step finished in view (`pop`). Waiting on you: the yellow shield. Failed or refused: red.
+ * The 16px slot at the start of a step row — the one mark that says where the step is. Running: the step's process
+ * animation (themes/ProcessGlyph; only in a conversation that runs: elsewhere a step without a result never finished,
+ * and gets a still ring). Finished while in view: the animation's ending (a tick drawn, a cross), then the tool's own
+ * icon pops in. Waiting on you: the yellow shield. Failed or refused: red.
  */
-function StepGlyph({ st, icon, spins, pop }: { st: StepState; icon: IconName; spins: boolean; pop: boolean }) {
+function StepGlyph({ st, icon, spins, proc }: { st: StepState; icon: IconName; spins: boolean; proc: Process }) {
+  const ending = useJust(st === 'done' || st === 'failed', ENDING_MS);
+  const [ended, setEnded] = useState(false);
+  if (ending && !ended) {
+    return <span className={clsx('sgw', st)} aria-hidden><ProcessGlyph process={proc} phase={st === 'failed' ? 'fail' : 'done'} onEnd={() => setEnded(true)} /></span>;
+  }
   return (
     <span className={clsx('sgw', st)} aria-hidden>
       {st === 'failed' ? <Icon name="close" size={16} />
         : st === 'stopped' ? <Icon name="stop" size={14} />
         : st === 'waiting' ? <Icon name="shield" size={16} />
-          : st === 'done' ? <Icon name={icon} size={16} className={pop ? 'pop' : undefined} />
-            : spins ? <WorkDots />
+          : st === 'done' ? <Icon name={icon} size={16} className={ending ? 'pop' : undefined} />
+            : spins ? <ProcessGlyph process={proc} />
               : <Icon name="circle" size={12} />}
     </span>
   );
@@ -97,8 +102,6 @@ export function ToolHead({ t, onToggle, open }: { t: ToolUseBlock; onToggle?: (b
   const live = useContext(LiveCtx);
   const starts = useContext(StepStartCtx);
   const watched = watchStep(t, st, Date.now(), useContext(ArrivalCtx).current);
-  // finished while this row was on screen: its icon pops in (history, and a row drawn already finished, do not)
-  const pop = useJust(st === 'done', POP_MS);
   const took = st === 'done' ? stepDurationMs(t, { start: starts.get(t.id), watched }) : undefined;
   const end = st === 'failed' ? tr('失败')
     : st === 'stopped' ? tr('已停止')
@@ -121,7 +124,7 @@ export function ToolHead({ t, onToggle, open }: { t: ToolUseBlock; onToggle?: (b
         onKeyDown: (e: React.KeyboardEvent) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); if (phone) setInspect(t.id); else onToggle('key'); } },
       } : {})}
     >
-      <StepGlyph st={st} icon={icon} spins={live} pop={pop} />
+      <StepGlyph st={st} icon={icon} spins={live} proc={processOf(t.name, t.input)} />
       <span className="name">{name}</span>
       {verb && <span className="verb">{verb}</span>}
       {target && <code className="summary">{target}</code>}

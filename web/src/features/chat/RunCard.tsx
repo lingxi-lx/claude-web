@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useStore } from '@/store';
 import { getToolDef } from './tools/registry';
 import { clsx, shortModel } from '@/util';
-import { Icon } from '@/ui/icons';
+import { ProcessGlyph } from '@/themes/ProcessGlyph';
 import { RUN_TAB_IN_MS, RUN_TAB_OUT_MS, elapsedText, lingerPhase, runStatus, swapCount, type LingerPhase, type RunStatus, type StepLabeler } from './run-status';
 import { tr } from '@/i18n';
 
@@ -77,8 +77,8 @@ export function RunCard({ sessionId }: { sessionId: string }) {
 
   return (
     <div className={clsx('run-card', v.waiting && 'waiting', phase === 'enter' && 'enter', leaving && 'out')} data-kind={st.kind} aria-hidden={leaving || undefined}>
-      {/* the official app's running line: Claude's mark turning while it works, then the model's name (phase 6 §6) */}
-      <span className="pip spark" aria-hidden><Icon name="claude" size={13} /></span>
+      {/* what it is doing, as the theme draws that process (themes/ProcessGlyph), then the model's name */}
+      <ProcessGlyph process={st.process} size="stage" className="rc-glyph" />
       {v.model && <span className="rc-model">{v.model} ·</span>}
       <span key={st.key} className={clsx('what', swap && 'swap')}>
         <span className="rc-words">{st.text}{st.target && <span className="tgt">{st.target}</span>}</span>

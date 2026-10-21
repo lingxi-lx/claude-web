@@ -60,6 +60,7 @@ import { usePageOpen } from '@/features/sections';
 import { composerCovered } from './covered';
 import { glowing, sendFace } from './send-state';
 import { dateLocale, tr } from '@/i18n';
+import { ProcessGlyph } from '@/themes/ProcessGlyph';
 
 // sessions on another machine: uploads land on this machine's disk, out of the remote agent's reach
 const REMOTE_ATTACH = tr('附件在本机，远端读不到，请粘贴内容（图片可以直接发）');
@@ -895,7 +896,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
       onClick={busy ? () => { if (active) void interrupt(active.sessionId); } : () => void doSend()} title={busy ? tr('中断 (Esc)') : tr('发送 (Enter)')} aria-label={busy ? tr('中断') : tr('发送')}>
       <span className="send-ic up" aria-hidden><Icon name="send" size={18} /></span>
       <span className="send-ic sq" aria-hidden />
-      {face === 'working' && <span className="spinner" />}
+      {face === 'working' && <ProcessGlyph process="start" className="send-glyph" />}
     </button>
   );
   const steer = docked && (dockClick === 'deny' || dockClick === 'blocked') ? (

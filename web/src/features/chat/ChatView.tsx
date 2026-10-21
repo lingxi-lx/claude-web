@@ -20,7 +20,9 @@ import { AssistantActions, UserActions, UserEditor } from './MessageActions';
 import { FindBar } from './FindBar';
 import { Markdown } from './Markdown';
 import type { CodeRunContext } from './CodeBlock';
-import { GroupHead, ToolCard, ToolHead, WorkDots, type ToggleBy } from './ToolCard';
+import { GroupHead, ToolCard, ToolHead, type ToggleBy } from './ToolCard';
+import { ProcessGlyph } from '@/themes/ProcessGlyph';
+import { runStatus } from './run-status';
 import { thinkingTitle } from './thinking-title';
 import { getToolDef, isStandalone } from './tools/registry';
 import { Icon } from '@/ui/icons';
@@ -205,7 +207,7 @@ function Thinking({ b, streaming, run }: { b: ThinkingBlock; streaming: boolean;
     <div className={clsx('trail thinking', streaming && 'running')}>
       <div className={clsx('tl', streaming ? 'active' : 'done', show && 'open')}>
         <div className="tl-head" onClick={(e) => toggle(e.detail === 0 ? 'key' : 'pointer')} role="button" tabIndex={0} aria-expanded={show} title={size ? tr('思考内容 {size}', { size }) : undefined} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle('key'); } }}>
-          <span className={clsx('sgw', streaming ? 'active' : 'done')} aria-hidden>{streaming ? <WorkDots /> : <Icon name="memory" size={16} />}</span>
+          <span className={clsx('sgw', streaming ? 'active' : 'done')} aria-hidden>{streaming ? <ProcessGlyph process="think" /> : <Icon name="memory" size={16} />}</span>
           <span className={clsx('lbl', streaming && 'shimmer')}>{label}</span>
           {after && <span className="th-time">{after}</span>}
           {!b.redacted && <Icon name="chevronRight" size={13} className="chev" />}
@@ -743,7 +745,7 @@ export function ChatView() {
       <SelectionMenu root={ref} sessionId={active.sessionId} />
       {!atBottom && <button className="jump-bottom" title={tr('回到底部')} onClick={() => { const el = ref.current!; el.scrollTop = el.scrollHeight; stick.current = true; }} aria-label={tr('回到底部')}><Icon name="chevronDown" size={16} /></button>}
       <div className="chat-inner" data-session-id={active.sessionId}>
-        {active.loading && <div className="sysline"><span className="spinner" /> {tr('加载历史…')}</div>}
+        {active.loading && <div className="sysline"><ProcessGlyph process="read" /> {tr('加载历史…')}</div>}
         {active.loadError && !active.loading && (
           <div className="load-err" role="alert">
             <Icon name="alert" size={14} />
@@ -770,17 +772,17 @@ export function ChatView() {
         {active.error && <div className="sysline" role="alert" style={{ color: 'var(--red)', whiteSpace: 'pre-line', userSelect: 'text' }}>{withExplanation(active.error)}</div>}
         {active.state === 'running' && !active.conv.streaming.size && (
           <div className="working">
-            <span className="spinner" /> {tr('处理中')}
+            <ProcessGlyph process={runStatus(active.conv, active.state, () => null).process} size="stage" /> {tr('处理中')}
           </div>
         )}
         {(elsewhere || (readsFromOutside(active) && externalLive(active))) && (
           <div className="working elsewhere" data-elsewhere={elsewhere?.agent ?? ''}>
-            <span className="spinner" /> {elsewhere ? tr('这一轮还在 {v} 里进行，做完会自动显示在这里', { v: AGENT_NAMES[elsewhere.agent] ?? tr('别的应用') }) : tr('这个对话正在别处更新（终端或其它应用），这里会跟着显示')}
+            <ProcessGlyph process="think" /> {elsewhere ? tr('这一轮还在 {v} 里进行，做完会自动显示在这里', { v: AGENT_NAMES[elsewhere.agent] ?? tr('别的应用') }) : tr('这个对话正在别处更新（终端或其它应用），这里会跟着显示')}
           </div>
         )}
         {active.state === 'starting' && (
           <div className="working">
-            <span className="spinner" /> {tr('正在启动 Claude Code…')}
+            <ProcessGlyph process="start" size="stage" /> {tr('正在启动 Claude Code…')}
           </div>
         )}
       </div>

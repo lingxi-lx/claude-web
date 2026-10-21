@@ -11,6 +11,7 @@ import { ErrorPre, JsonTree } from './McpTool';
 import { ExtLink } from './WebTools';
 import { Icon } from '@/ui/icons';
 import { tr } from '@/i18n';
+import { ProcessGlyph } from '@/themes/ProcessGlyph';
 
 /** Sub-agent: brief (prompt) → trail (progress) → result (report + totals). Children are rendered by ToolCard. */
 export function AgentBody({ t }: { t: ToolUseBlock }) {
@@ -33,7 +34,7 @@ export function AgentBody({ t }: { t: ToolUseBlock }) {
       {showPrompt && <Expandable text={String(inp.prompt ?? '')} lines={20} chars={4000}>{(v) => <div className="tool-md"><Markdown text={v} /></div>}</Expandable>}
       {running && (
         <div className="agent-trail">
-          <span className="spinner" />
+          <ProcessGlyph process="agent" size="stage" />
           <span>{t.progress?.summary ?? task?.summary ?? tr('子代理工作中…')}</span>
           {(t.progress?.lastTool ?? task?.lastTool) && <span className="badge">{t.progress?.lastTool ?? task?.lastTool}</span>}
           {t.progress?.elapsed ? <span className="tool-meta">{Math.round(t.progress.elapsed)}s</span> : null}
