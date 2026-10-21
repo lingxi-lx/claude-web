@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 // The backdrop worker (spec 2026-10-22 §2): owns the canvas (OffscreenCanvas from <Backdrop>), runs the theme's
 // backdrop code with the network taken away, paces frames, and reports how long they take (themes/watchdog.ts).
-import { loadBackdrop, lockdown, type BackdropModule } from './sandbox';
+import { cspHolds, loadBackdrop, lockdown, type BackdropModule } from './sandbox';
 import type { ToWorker } from './backdrop-protocol';
 
 const post = (m: unknown) => (self as unknown as DedicatedWorkerGlobalScope).postMessage(m);
@@ -47,19 +47,29 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
   const m = e.data;
   switch (m.type) {
     case 'init': {
-      lockdown(self as unknown as Record<string, unknown>);
       scene = m.scene; speed = m.speed; fps = m.scene === 'chat' ? 15 : 30; reduce = m.reduce;
-      guard(() => {
-        mod = loadBackdrop(m.source);
-        mod.init?.({ canvas: m.canvas, width: m.width, height: m.height, dpr: m.dpr, colors: m.colors, scene: m.scene, reduce: m.reduce });
-        // motion reduced: one still frame
-        if (reduce) mod.frame({ t: 0, dt: 0, mouse: null, process, scene, speed, quiet });
+      const realFetch = (self as any).fetch?.bind(self) as typeof fetch | undefined;
+      lockdown(self);
+      // a theme that is not built in runs only where the worker's CSP really cuts the network
+      const ready = m.trusted || !realFetch ? Promise.resolve(true) : cspHolds(realFetch, `${m.probe}?cw-csp-probe=${Date.now()}`);
+      void ready.then((ok) => {
+        if (!ok) { post({ type: 'error', message: 'no network sandbox here (the backdrop worker came without its CSP); a theme that is not built in does not run' }); return; }
+        guard(() => {
+          mod = loadBackdrop(m.source);
+          mod.init?.({ canvas: m.canvas, width: m.width, height: m.height, dpr: m.dpr, colors: m.colors, scene: m.scene, reduce: m.reduce });
+          // motion reduced: one still frame, then the host stops expecting word from us
+          if (reduce) { mod.frame({ t: 0, dt: 0, mouse: null, process, scene, speed, quiet }); post({ type: 'still' }); }
+        });
+        if (!mod) return;
+        post({ type: 'stats', avgMs: 0 });
+        start();
       });
-      post({ type: 'stats', avgMs: 0 });
-      start();
       break;
     }
-    case 'resize': guard(() => mod?.resize?.({ width: m.width, height: m.height, dpr: m.dpr })); if (reduce) guard(() => mod?.frame({ t, dt: 0, mouse: null, process, scene, speed, quiet })); break;
+    case 'resize':
+      guard(() => mod?.resize?.({ width: m.width, height: m.height, dpr: m.dpr }));
+      if (reduce && mod) { guard(() => mod?.frame({ t, dt: 0, mouse: null, process, scene, speed, quiet })); post({ type: 'still' }); }
+      break;
     case 'pointer': mouse = m.x === null ? null : { x: m.x, y: m.y!, down: !!m.down }; if (m.click) guard(() => mod?.event?.({ type: 'click', x: m.x!, y: m.y! })); break;
     case 'type': guard(() => mod?.event?.({ type: 'type', text: m.text })); break;
     case 'process': process = m.process; break;

@@ -5,6 +5,7 @@ import { Icon } from '@/ui/icons';
 import { QUICK_THEMES, THEME_LABEL, THEME_ORDER, THEME_PREVIEW, themeChoice, type ThemeChoice } from './theme-preview';
 import { tr, getLocale } from '@/i18n';
 import { listPacks } from '@/themes/registry';
+import { setSafeMode } from '@/themes/apply';
 
 // Picking a theme (final review §9 #3): `ui.theme` through setSetting, which applies it at once (the store's
 // setTheme, the desktop title bar). Two places: the account popover's three and 设置 → 外观's swatches.
@@ -44,7 +45,7 @@ export function ThemeSwatches({ label }: { label?: string }) {
           const vars = { '--sw-bg': p.colors.bg, '--sw-side': p.colors['bg-1'], '--sw-fg': p.colors.fg, '--sw-accent': p.colors.accent } as CSSProperties;
           const nm = getLocale() === 'zh' ? p.name.zh : p.name.en;
           return (
-            <button key={t} role="radio" aria-checked={v === t} className={clsx('sw', v === t && 'on')} data-theme-pick={t} onClick={() => void useStore.getState().setSetting('ui.theme', t)} title={nm}>
+            <button key={t} role="radio" aria-checked={v === t} className={clsx('sw', v === t && 'on')} data-theme-pick={t} onClick={() => { setSafeMode(false); void useStore.getState().setSetting('ui.theme', t); }} title={nm}>
               <span className="pv" style={vars} aria-hidden>
                 <span className="side" />
                 <span className="body"><span className="ln" /><span className="ln short" /><span className="dot" /></span>

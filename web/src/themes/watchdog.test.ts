@@ -12,16 +12,16 @@ describe('watchdog', () => {
     b.feed({ type: 'stats', avgMs: 20 }, 2000);
     expect(b.feed({ type: 'stats', avgMs: 60 }, 3000)).toBe('ok');
   });
-  it('three silent seconds fail it, unless paused', () => {
+  it('two silent seconds fail it, unless paused', () => {
     const a = watchdog(0);
-    expect(a.tick(2900)).toBe('ok');
-    expect(a.tick(3100)).toBe('fail');
+    expect(a.tick(1900)).toBe('ok');
+    expect(a.tick(2100)).toBe('fail');
     const b = watchdog(0);
     b.pause();
     expect(b.tick(10_000)).toBe('ok');
     b.resume(10_000);
-    expect(b.tick(12_000)).toBe('ok');
-    expect(b.tick(13_100)).toBe('fail');
+    expect(b.tick(11_900)).toBe('ok');
+    expect(b.tick(12_100)).toBe('fail');
   });
   it('once failed, stays failed', () => {
     const a = watchdog(0);

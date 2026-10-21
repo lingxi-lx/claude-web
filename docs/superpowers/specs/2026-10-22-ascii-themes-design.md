@@ -139,9 +139,9 @@ export default {
 
 ## 6. 沙箱与兜底
 
-- Worker 启动先删掉 `fetch` / `XMLHttpRequest` / `WebSocket` / `EventSource` / `importScripts` / `indexedDB` / `caches`，再执行主题代码。
-- theme.css 去掉远程 `@import` 和远程 `url(...)`。
-- 看门狗：backdrop 抛错，或连续 2 秒平均每帧 > 50 ms → terminate Worker，换默认主题的 backdrop，toast「这个主题的背景出了问题，已暂时换回默认」+「让 Claude 修」（带报错开对话）。
+- Worker 的脚本由服务端带 CSP `default-src 'none'; script-src 'self' 'unsafe-eval'` 发出（断网的主力）；Worker 里再沿原型链删掉网络相关的全局；不是内置的主题先自检 CSP 生效才运行。
+- theme.css 去注释、解转义后检查：有 `@import`、非 data: 的 `url()`、像地址的字符串就整份不用，并报错。
+- 看门狗：backdrop 抛错，或连续 2 秒平均每帧 > 50 ms，或 2 秒没有回音（含减少动态效果时）→ terminate Worker，换默认主题的 backdrop，toast「这个主题的背景出了问题，已暂时换回默认」+「让 Claude 修」（带报错开对话）。
 - 救命开关：`Ctrl+Shift+0` 本次启动临时回到默认主题（不写设置）。
 
 ## 7. 挑主题的界面

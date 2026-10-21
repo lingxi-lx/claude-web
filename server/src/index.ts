@@ -82,6 +82,9 @@ import { ComputerAccess } from './computer/access.js';
 import { handleComputerAsk } from './computer/http.js';
 import { configureComputerMcp } from './computer/launcher.js';
 
+/** the backdrop worker's own CSP: its scripts from here (and the theme's code through new Function), nothing else */
+export const BACKDROP_WORKER_CSP = "default-src 'none'; script-src 'self' 'unsafe-eval'";
+
 const FILE_MIME: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.bmp': 'image/bmp', '.ico': 'image/x-icon', '.avif': 'image/avif', '.pdf': 'application/pdf', '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.m4a': 'audio/mp4', '.flac': 'audio/flac', '.html': 'text/html; charset=utf-8', '.txt': 'text/plain; charset=utf-8', '.md': 'text/plain; charset=utf-8', '.json': 'application/json' };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -288,7 +291,11 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       res.end(withLanguage(fs.readFileSync(file, 'utf8'), meta.settings()[LANGUAGE_KEY]));
       return;
     }
-    res.writeHead(200, { 'content-type': MIME[path.extname(file)] ?? 'application/octet-stream' });
+    // the character themes' backdrop worker runs code a theme brought (web/src/themes/backdrop-worker.ts): a worker's
+    // permissions are its own response's CSP, and this one has no network at all — no fetch, no import() from
+    // elsewhere, no fonts (docs/notes/ascii-themes.md 「背景（Worker）」)
+    const extra = /^backdrop-worker-[\w-]+\.js$/.test(path.basename(file)) ? { 'Content-Security-Policy': BACKDROP_WORKER_CSP } : {};
+    res.writeHead(200, { 'content-type': MIME[path.extname(file)] ?? 'application/octet-stream', ...extra });
     pipeFile(file, res);
   };
   const server = http.createServer(handler);

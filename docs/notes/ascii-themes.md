@@ -11,7 +11,7 @@
 - `default-anims.ts`：经典主题用的 16 个动画，也是字符画主题缺项 / 坏项时的兜底。
 - `pack.ts`：`parsePack`（theme.json → `ThemePack`；坏的过程只记在 `broken` 里退回默认，别的错就整个不要）、`paletteCss`、`sanitizeCss`、`animFor`。
 - `registry.ts` + `builtin/<id>/{theme.json,backdrop.js,theme.css}`：内置主题。backdrop 和 css 用 Vite 的 `?raw` 读成文本，和以后 skill 生成的主题走同一条路。
-- `apply.ts`：`applyAscii(id)` 维护 `<style id="cw-ascii-theme">` 和 `html[data-ascii]`；`useActivePack()`；救命开关 `setSafeMode()`（Ctrl+Shift+0，`app/App.tsx`）。
+- `apply.ts`：`applyAscii(id)` 维护 `<style id="cw-ascii-theme">` 和 `html[data-ascii]`；`useActivePack()`；救命开关 `setSafeMode()`（Ctrl+Shift+0，`app/App.tsx`，本次启动有效；在设置里再点一个字符画主题就解除）。
 - `ProcessGlyph.tsx` + `ticker.ts` + `render.ts`：过程动画。一个共享时钟（30 Hz，没人登记就停），帧号变了才写 `innerHTML`，不走 React 渲染。帧预先转成转义过的 HTML。
 - `Backdrop.tsx` + `backdrop-worker.ts` + `sandbox.ts` + `watchdog.ts` + `backdrop-protocol.ts`：背景。
 
@@ -24,9 +24,14 @@
 ## 背景（Worker）
 
 - `<Backdrop scene="welcome|chat">`：`canvas.transferControlToOffscreen()` 交给模块 Worker；宿主转发尺寸、指针（canvas 坐标）、点击（点在按钮 / 输入框上的不算）、输入框新打的字、当前对话的过程、`quiet`（欢迎页 `.home-col` 各块的矩形，背景在那里要变淡，否则字雨压在按钮上看不清）。
-- Worker 先 `lockdown(self)`：fetch / XHR / WebSocket / EventSource / importScripts / indexedDB / caches / BroadcastChannel / Worker / navigator 全部删掉并钉成 undefined（不可再赋值），然后把 `export default` 换成 `return` 用 `new Function` 求值。
+- **真正断网的是 Worker 自己的 CSP**：服务端发 `backdrop-worker-*.js` 时带 `default-src 'none'; script-src 'self' 'unsafe-eval'`（`server/src/index.ts` `BACKDROP_WORKER_CSP`；开发时 `web/vite.config.ts` 的小插件发同一个）。Worker 的权限看它自己那个响应的 CSP，不看页面的；页面没有 CSP，所以不能用 blob: Worker（会继承页面的「什么都不管」）。
+- `lockdown(self)` 只是第二道：沿原型链把 fetch / XHR / WebSocket / EventSource / importScripts / indexedDB / caches / BroadcastChannel / Worker / navigator / FontFace / fonts / Request / Response 删掉钉死。只删 `self` 自己的属性不够——`WorkerGlobalScope.prototype.fetch.call(self, …)` 照样能发请求；`import('http://…')` 和 `new FontFace(…, 'url(http://…)')` 也只有 CSP 拦得住（2026-10-22 验收时实测）。
+- 不是内置的主题，Worker 先用真的 fetch 请求一次本页（`cspHolds`）：请求成功 = CSP 没生效，直接报错不跑（看门狗换回默认）。内置主题（`isBuiltin`）跳过这一步。
+- 然后把 `export default`（不要求在行首）换成 `return`，用 `new Function` 求值。
+- theme.css 不做替换，只做检查（`cssRemoteRefs`）：去注释、解 CSS 转义（`\68ttp` = `http`）之后，有任何 `@import`、不是 `data:` 的 `url()`、像地址的字符串（`image-set("http…")`、自定义属性里藏一个）就**整份不用**，错误写进 `parsePack` 的 errors 给 skill 看。正则替换的旧做法被 `@import/**/"…"`、`image-set("…")`、`url(\68ttp://…)` 绕过过。
 - 帧率：欢迎页 30，对话页 15（对话页还乘 `chatDim.speed`）；离屏、窗口隐藏时 pause；减少动态效果时只画一帧。
-- 看门狗：报错、连续两秒每帧 > 50 ms、或 3 秒没有 stats（死循环）→ terminate，欢迎页换回「字流」，对话页不画，toast 一句。暂停时不算沉默。
+- 看门狗：报错、连续两秒每帧 > 50 ms、或 2 秒没有 stats（死循环；宿主每 0.5 秒查一次，卡死约 2.5 秒内被换下）→ terminate，欢迎页换回「字流」，对话页不画，toast 一句。离屏 / 窗口隐藏时暂停不算沉默。
+- 减少动态效果：Worker 画完那一帧静止画面发 `still`，宿主这时才停看门狗；每次 resize 重画前再打开，重画完再 `still`。以前一开「减少动态效果」看门狗就永久暂停，卡死的背景永远不被关、一直占一个核。
 - 对话页的背景垫在 `.chat-main` 里（`isolation: isolate` + canvas `z-index: -1`），透明度 `chatDim.opacity`；设置「对话里的淡背景」（`ui.backdropInChat`，默认开）。
 
 ## 写一个 backdrop.js 要注意

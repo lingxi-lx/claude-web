@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_ANIMS } from './default-anims';
 import { checkAnim } from './frames';
-import { REQUIRED_COLORS, animFor, paletteCss, parsePack, sanitizeCss } from './pack';
+import { REQUIRED_COLORS, animFor, cssRemoteRefs, paletteCss, parsePack, sanitizeCss } from './pack';
 import { PROCESSES } from './process';
 
 const colors = Object.fromEntries(REQUIRED_COLORS.map((k) => [k, '#000000']));
@@ -44,10 +44,35 @@ describe('paletteCss / sanitizeCss', () => {
     expect(css).toContain('--bg: #000000;');
     expect(css).toContain('color-scheme: dark');
   });
-  it('drops remote imports and urls, keeps data: urls', () => {
-    const out = sanitizeCss('@import url(https://x/y.css); a{background:url(http://x/a.png)} c{background:url(//x/b.png)} b{background:url(data:image/png;base64,AA)}');
-    expect(out).not.toMatch(/https?:\/\/x|\/\/x/);
-    expect(out).toContain('data:image/png;base64,AA');
+  it('keeps offline CSS as it is (data: urls, content strings)', () => {
+    const css = ".a::before{content:'> SYS: ok'} .b{background:url(data:image/png;base64,AA//BB)} .c{background:url('data:image/svg+xml,<svg/>')}";
+    expect(cssRemoteRefs(css)).toEqual([]);
+    expect(sanitizeCss(css)).toBe(css);
+  });
+  // each of these reached the network in the 2026-10-22 review, or would
+  for (const bad of [
+    '@import url(https://x/y.css);',
+    '@import/**/"http://x/y.css";',
+    '@IMPORT "local.css";',
+    'a{background:url(http://x/a.png)}',
+    'a{background:url(//x/a.png)}',
+    'a{background:url(/api/x)}',
+    'a{background:url(\\68ttp://x/escaped)}',
+    'a{background:u\\72l(http://x/escaped-fn)}',
+    'a{background-image:image-set("http://x/i.png" 1x)}',
+    'a{--u:"https://x/v.png"} b{background:image-set(var(--u) 1x)}',
+    '@font-face{font-family:x;src:url(https://x/f.woff2)}',
+    'a{cursor:url(file:///c:/x.cur),auto}',
+  ]) {
+    it(`drops all of it: ${bad}`, () => {
+      expect(cssRemoteRefs(bad).length, bad).toBeGreaterThan(0);
+      expect(sanitizeCss(bad)).toBe('');
+    });
+  }
+  it('a pack whose CSS reaches out keeps its colours, loses its CSS and says why', () => {
+    const { pack, errors } = parsePack(mini, { css: 'a{background:url(http://x/a.png)}' });
+    expect(pack?.css).toBeUndefined();
+    expect(errors.join()).toMatch(/theme\.css/);
   });
 });
 

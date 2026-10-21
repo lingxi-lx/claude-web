@@ -34,9 +34,10 @@ export function applyAscii(id: string | null) {
   for (const f of subs) f();
 }
 
-/** Ctrl+Shift+0: back to the classic look for this run (a theme whose CSS hid the way to the settings). */
-export function setSafeMode() {
-  safe = true;
+/** Ctrl+Shift+0: back to the classic look for this run (a theme whose CSS hid the way to the settings). Picking a
+ *  character theme again on 设置 → 外观 lifts it (`setSafeMode(false)`). */
+export function setSafeMode(on = true) {
+  safe = on;
   applyAscii(wanted);
 }
 export const isSafeMode = () => safe;

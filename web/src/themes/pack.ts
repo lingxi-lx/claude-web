@@ -63,11 +63,17 @@ export function parsePack(raw: unknown, extra: { backdrop?: string; css?: string
     if (e.length) { broken[k as Process] = e; errors.push(...e.map((x) => `processes.${k}: ${x}`)); }
     else processes[k as Process] = a as ProcessAnim;
   }
-  // a broken process falls back on its own; anything else wrong and there is no pack
+  // a broken process falls back on its own, CSS that reaches out is left off; anything else wrong and there is no pack
   const fatal = errors.filter((e) => !e.startsWith('processes.'));
   if (fatal.length) return { errors };
+  let css = extra.css;
+  const refs = css ? cssRemoteRefs(css) : [];
+  if (refs.length) {
+    errors.push(...refs.map((r) => `theme.css: 不能引用外部资源（主题要离线可用，图片请用 data: 地址）：${r}`));
+    css = undefined;
+  }
   return {
-    pack: { id, name: { zh: name.zh, en: name.en }, mode: raw.mode, colors, chatDim, processes, broken, backdrop: extra.backdrop, css: extra.css },
+    pack: { id, name: { zh: name.zh, en: name.en }, mode: raw.mode, colors, chatDim, processes, broken, backdrop: extra.backdrop, css },
     errors,
   };
 }
@@ -78,11 +84,35 @@ export function paletteCss(p: ThemePack): string {
   return `html:root[data-ascii='${p.id}'] {\n${decl}\n  color-scheme: ${p.mode};\n}\n`;
 }
 
-/** A theme's CSS stays offline: no remote @import, no remote url(). */
-export function sanitizeCss(css: string): string {
+/** CSS with its comments gone and its escapes decoded (`\68ttp` is `http`): what a browser reads, to look at. */
+export function cssPlain(css: string): string {
   return css
-    .replace(/@import\s+(url\()?\s*['"]?\s*(https?:)?\/\/[^;]*;?/gi, '')
-    .replace(/url\(\s*['"]?\s*(https?:)?\/\/[^)]*\)/gi, 'none');
+    .replace(/\/\*[\s\S]*?(\*\/|$)/g, ' ')
+    .replace(/\\([0-9a-f]{1,6})[ \t\n\r\f]?/gi, (_, h) => { const n = parseInt(h, 16); return n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : '\ufffd'; })
+    .replace(/\\\r?\n/g, '')
+    .replace(/\\(.)/g, '$1');
+}
+
+const FETCHY = /^\s*([a-z][a-z0-9+.-]*:|\/\/|\/)/i;
+const SAFE_SCHEME = /^\s*data:/i;
+
+/**
+ * Everything in a theme's CSS that could reach outside the page (spec 2026-10-22 §6: a theme stays offline): any
+ * @import, a url() that is not data:, a string that looks like an address (image-set("…"), src("…"), a custom
+ * property carrying one). Checked on cssPlain, so comments and escapes do not hide anything. Empty = fine.
+ */
+export function cssRemoteRefs(css: string): string[] {
+  const plain = cssPlain(css);
+  const out: string[] = [];
+  if (/@import/i.test(plain)) out.push('@import');
+  for (const m of plain.matchAll(/url\(\s*(['"]?)([^)]*?)\1\s*\)/gi)) if (!SAFE_SCHEME.test(m[2])) out.push(`url(${m[2].slice(0, 60)})`);
+  for (const m of plain.matchAll(/(["'])((?:(?!\1)[^\n])*)\1/g)) if (FETCHY.test(m[2]) && !SAFE_SCHEME.test(m[2])) out.push(`"${m[2].slice(0, 60)}"`);
+  return out;
+}
+
+/** A theme's CSS as it may go on the page: all of it, or none of it when anything in it reaches out. */
+export function sanitizeCss(css: string): string {
+  return cssRemoteRefs(css).length ? '' : css;
 }
 
 /** The animation a process plays under this pack: its own when it has a good one, else the default's (inline too). */

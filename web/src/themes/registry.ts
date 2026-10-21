@@ -20,3 +20,8 @@ export function listPacks(): ThemePack[] {
 export function getPack(id: string | null | undefined): ThemePack | null {
   return id ? builtin.find((p) => p.id === id) ?? null : null;
 }
+
+/** a theme that ships with the app (its backdrop runs even where the worker's CSP is missing) */
+export function isBuiltin(id: string): boolean {
+  return builtin.some((p) => p.id === id);
+}

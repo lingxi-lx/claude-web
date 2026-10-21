@@ -5,7 +5,17 @@ import path from 'node:path';
 export default defineConfig({
   // relative asset URLs (./assets/…): the phone shell runs the same build below a folder (app/index.html)
   base: './',
-  plugins: [react()],
+  plugins: [react(), {
+    // the same CSP the server sends with the built worker (server/src/index.ts BACKDROP_WORKER_CSP): in dev the backdrop
+    // worker is /src/themes/backdrop-worker.ts?worker_file…
+    name: 'backdrop-worker-csp',
+    configureServer(server: any) {
+      server.middlewares.use((req: any, res: any, next: any) => {
+        if (String(req.url ?? '').includes('backdrop-worker')) res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self' 'unsafe-eval'");
+        next();
+      });
+    },
+  }],
   resolve: {
     alias: {
       '@shared': path.resolve(__dirname, '../server/src/protocol.ts'),

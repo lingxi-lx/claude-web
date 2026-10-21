@@ -7,6 +7,7 @@ import type { FromWorker, ToWorker } from './backdrop-protocol';
 import { REQUIRED_COLORS, type ThemePack } from './pack';
 import { processOf } from './process';
 import { watchdog } from './watchdog';
+import { isBuiltin } from './registry';
 
 const reducedMotion = () => (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches) || document.documentElement.dataset.reduceMotion === '1';
 
@@ -56,8 +57,8 @@ function BackdropCanvas({ pack, scene, onFail }: { pack: ThemePack; scene: 'welc
     worker.current = w;
     const send = (m: ToWorker, transfer: Transferable[] = []) => w.postMessage(m, transfer);
     const wd = watchdog(performance.now());
+    // motion reduced: watched until the still frame is drawn (`still`), and again around each redraw on a resize
     const reduce = reducedMotion();
-    if (reduce) wd.pause();
     let dead = false;
     const die = (why: string) => {
       if (dead) return;
@@ -68,15 +69,16 @@ function BackdropCanvas({ pack, scene, onFail }: { pack: ThemePack; scene: 'welc
       fail.current();
     };
     w.onmessage = (e: MessageEvent<FromWorker>) => {
+      if (e.data.type === 'still') { wd.pause(); return; }
       if (wd.feed(e.data.type === 'error' ? { type: 'error' } : e.data, performance.now()) === 'fail') die(e.data.type === 'error' ? e.data.message : 'too slow');
     };
     w.onerror = (e) => die(e.message || 'worker error');
-    const beat = setInterval(() => { if (wd.tick(performance.now()) === 'fail') die('no answer'); }, 1000);
+    const beat = setInterval(() => { if (wd.tick(performance.now()) === 'fail') die('no answer'); }, 500);
 
     const r = canvas.getBoundingClientRect();
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const off = canvas.transferControlToOffscreen();
-    send({ type: 'init', canvas: off, source: pack.backdrop!, width: r.width, height: r.height, dpr, colors: readColors(), scene, speed: scene === 'chat' ? pack.chatDim.speed : 1, reduce }, [off]);
+    send({ type: 'init', canvas: off, source: pack.backdrop!, width: r.width, height: r.height, dpr, colors: readColors(), scene, speed: scene === 'chat' ? pack.chatDim.speed : 1, reduce, trusted: isBuiltin(pack.id), probe: new URL('./', location.href).href }, [off]);
 
     // where the page's words are, in canvas px: the welcome column (backdrops keep it quiet)
     const words = () => {
@@ -88,6 +90,7 @@ function BackdropCanvas({ pack, scene, onFail }: { pack: ThemePack; scene: 'welc
     };
     const ro = new ResizeObserver(() => {
       const b = canvas.getBoundingClientRect();
+      if (reduce) wd.resume(performance.now());
       send({ type: 'resize', width: b.width, height: b.height, dpr: Math.min(2, window.devicePixelRatio || 1) });
       words();
     });
@@ -99,9 +102,10 @@ function BackdropCanvas({ pack, scene, onFail }: { pack: ThemePack; scene: 'welc
     // off screen or in a hidden window: no frames, and silence is expected
     let seen = true;
     const sync = () => {
+      // motion reduced: nothing runs to pause or resume (the watch follows `still` and resizes)
+      if (reduce) return;
       const on = seen && document.visibilityState === 'visible';
       if (on) { wd.resume(performance.now()); send({ type: 'resume' }); } else { wd.pause(); send({ type: 'pause' }); }
-      if (reduce) wd.pause();
     };
     const io = new IntersectionObserver(([en]) => { seen = !!en?.isIntersecting; sync(); });
     io.observe(canvas);
