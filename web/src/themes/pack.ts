@@ -89,18 +89,29 @@ const SAFE_SCHEME = /^data:/i;
 /** a string or url as the URL parser takes it: tabs and newlines anywhere dropped, C0 controls and spaces trimmed */
 // eslint-disable-next-line no-control-regex
 const asUrl = (v: string) => v.replace(/[\t\n\r]/g, '').replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, '');
-const BASE = 'http://theme.invalid/page/';
+/** the page runs on http (desktop, a browser on this machine) and on https (the phone shell): judged against both */
+const BASES = ['http://theme.invalid/page/', 'https://theme.invalid/page/'];
 const FETCHABLE = new Set(['http:', 'https:', 'ftp:', 'ws:', 'wss:', 'file:', 'blob:', 'filesystem:']);
+const SCHEME = /^([a-z][a-z0-9+.-]*):/i;
 /**
- * Whether a string, used as an image / font address, would leave the page: the WHATWG URL parser decides (the one
- * the browser uses — `\` is `/` for http, tabs go, `//host` is another host; 2026-10-22 review: `"\/host/x"`).
- * Relative addresses stay on the app's own origin; a scheme nothing loads from (`"status: ok"`) is just text.
+ * Whether a string, used as an image / font address, could leave the page. Fails closed (2026-10-22 reviews):
+ * - a network scheme written out (`http:host`, `HtTp:…`) leaves, whatever it would resolve to — against an https page
+ *   `http:host/x` is another host;
+ * - what the URL parser cannot parse leaves too — the browser's CSS loader is more lenient (`//h%3A1/x` fetched);
+ * - otherwise it leaves when, against an http or an https page, it lands on another origin with a fetchable scheme
+ *   (`\` is `/`, `//host`, …). Relative addresses stay on the page; `"status: ok"` is just text.
  */
 function leaves(v: string): boolean {
-  let u: URL;
-  try { u = new URL(v, BASE); } catch { return false; }
-  if (u.protocol === 'data:') return false;
-  return u.origin !== new URL(BASE).origin && FETCHABLE.has(u.protocol);
+  const n = asUrl(v);
+  const m = SCHEME.exec(n);
+  if (m && FETCHABLE.has(m[1].toLowerCase() + ':')) return true;
+  for (const base of BASES) {
+    let u: URL;
+    try { u = new URL(v, base); } catch { return true; }
+    if (u.protocol === 'data:') continue;
+    if (u.origin !== new URL(base).origin && FETCHABLE.has(u.protocol)) return true;
+  }
+  return false;
 }
 
 /**

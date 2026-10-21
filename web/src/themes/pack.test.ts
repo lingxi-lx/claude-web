@@ -75,6 +75,13 @@ describe('paletteCss / sanitizeCss', () => {
     'a{background-image:image-set("\\5c\\5c host/x" 1x)}',
     'a{background-image:image-set("HtTpS:host" 1x)}',
     'a{--x:"wss://host"}',
+    // the fourth review: what the URL parser rejects but the CSS loader fetches; a scheme with no slashes on an https page
+    'a{background-image:image-set("//127.0.0.1%3A3198/x" 1x)}',
+    'a{background-image:image-set("//[::1]%3A3198/x" 1x)}',
+    'a{background-image:image-set("http:127.0.0.1:3198/x" 1x)}',
+    'a{background-image:image-set("HtTp:host/x" 1x)}',
+    'a{background-image:image-set("http:\\\\host/x" 1x)}',
+    '@font-face{font-family:x;src:src("http:host/f.woff2")}',
   ]) {
     it(`drops all of it: ${bad}`, () => {
       expect(cssRemoteRefs(bad).length, bad).toBeGreaterThan(0);
