@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { contrast, themeBlock } from './contrast';
 import { listPacks } from '@/themes/registry';
+import { contrastProblems } from '@themes';
 
 const css = readFileSync(new URL('../tokens.css', import.meta.url), 'utf8');
 const dark = themeBlock(css, ':root');
@@ -104,26 +105,7 @@ describe('helpers', () => {
   });
 });
 
-// 字符画主题 (spec 2026-10-22 §4): text-heavy like the defaults, so the full table; over the classic theme of the
-// pack's brightness (what the page lays them over)
-if (listPacks().length) describe('character themes: full contrast table', () => {
-  for (const p of listPacks()) {
-    const t = { ...(p.mode === 'light' ? DEFAULTS.light : dark), ...p.colors };
-    describe(p.id, () => {
-      for (const r of RULES) {
-        for (const g of GROUNDS) it(`${r.what}: --${r.ink} on --${g} ≥ ${r.min}:1`, () => expect(pair(t, r.ink, g)).toBeGreaterThanOrEqual(r.min));
-      }
-      it('user bubble text ≥ 7:1', () => expect(pair(t, 'fg', 'user-bg')).toBeGreaterThanOrEqual(7));
-      it('text on an accent fill ≥ 4.5:1', () => expect(pair(t, 'accent-fg', 'accent')).toBeGreaterThanOrEqual(4.5));
-      it('primary button label ≥ 4.5:1', () => expect(pair(t, 'primary-fg', 'primary')).toBeGreaterThanOrEqual(4.5));
-      it('ink keeps its order', () => {
-        expect(pair(t, 'fg-1', 'bg')).toBeGreaterThan(pair(t, 'fg-2', 'bg'));
-        expect(pair(t, 'fg-2', 'bg')).toBeGreaterThan(pair(t, 'fg-3', 'bg'));
-      });
-      for (let i = 1; i <= 10; i++) {
-        for (const g of ['bg', 'bg-1']) it(`--agent-${i} on --${g} ≥ 3:1`, () => expect(pair(t, `agent-${i}`, g)).toBeGreaterThanOrEqual(3));
-      }
-      it('ten distinct agent colours', () => expect(new Set(Array.from({ length: 10 }, (_, i) => t[`agent-${i + 1}`].toLowerCase())).size).toBe(10));
-    });
-  }
+// 字符画主题 (spec 2026-10-22 §4): the same table, through the shared check the theme skill's drafts go through
+describe('character themes: full contrast table', () => {
+  for (const p of listPacks()) it(`${p.id}: no contrast problems`, () => expect(contrastProblems(p.colors)).toEqual([]));
 });

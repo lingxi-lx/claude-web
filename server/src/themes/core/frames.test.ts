@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkAnim, strWidth } from './frames';
+import { checkAnim, strWidth } from './frames.js';
 
 const ok = { fps: 8, loop: [['✎  ', '───'], ['a✎ ', '───']], done: [['a ✓', '───']], color: { '✓': 'green' }, inline: { loop: ['✎', '✐'] } };
 

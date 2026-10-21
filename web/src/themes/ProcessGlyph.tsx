@@ -1,8 +1,8 @@
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import { clsx } from '@/util';
 import { useActivePack } from './apply';
-import { animFor } from './pack';
-import type { Process } from './process';
+import { animFor } from '@themes';
+import type { Process } from '@themes';
 import { frameHtml } from './render';
 import { play } from './ticker';
 

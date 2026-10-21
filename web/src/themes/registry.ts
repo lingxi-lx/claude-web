@@ -1,6 +1,6 @@
 // Which character themes there are. `ui.theme` names one as `ascii:<id>`.
 import { BUILTIN_SOURCES } from './builtin';
-import { parsePack, type ThemePack } from './pack';
+import { parsePack, type ThemePack } from '@themes';
 
 const PREFIX = 'ascii:';
 

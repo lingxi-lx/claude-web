@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { BUILTIN_SOURCES } from './builtin';
-import { checkAnim } from './frames';
-import { parsePack } from './pack';
-import { PROCESSES } from './process';
+import { checkAnim } from '@themes';
+import { parsePack } from '@themes';
+import { PROCESSES } from '@themes';
 import { asciiId, getPack, listPacks } from './registry';
 
 describe('registry', () => {

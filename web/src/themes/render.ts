@@ -1,4 +1,4 @@
-import type { Frame } from './frames';
+import type { Frame } from '@themes';
 
 const ESC: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' };
 

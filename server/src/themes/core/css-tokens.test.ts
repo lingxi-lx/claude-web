@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cssTokens } from './css-tokens';
+import { cssTokens } from './css-tokens.js';
 
 const kinds = (css: string) => cssTokens(css).filter((t) => t.type !== 'ws').map((t) => `${t.type}:${t.value}`);
 

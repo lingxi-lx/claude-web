@@ -1,9 +1,9 @@
 // A character theme's pack (spec 2026-10-22 §1): theme.json, parsed and checked, plus its backdrop source and CSS.
 // The errors are read by the theme skill, so they stay Chinese (not tr()'d).
-import { DEFAULT_ANIMS } from './default-anims';
-import { checkAnim, type ProcessAnim } from './frames';
-import { PROCESSES, type Process } from './process';
-import { cssTokens } from './css-tokens';
+import { DEFAULT_ANIMS } from './default-anims.js';
+import { checkAnim, type ProcessAnim } from './frames.js';
+import { PROCESSES, type Process } from './process.js';
+import { cssTokens } from './css-tokens.js';
 
 export interface ThemePack {
   id: string;

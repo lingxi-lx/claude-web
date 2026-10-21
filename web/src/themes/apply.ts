@@ -2,7 +2,7 @@
 // dark rule applies), `html[data-ascii]` names the pack, and one <style> carries its primitives and its CSS.
 // Ctrl+Shift+0 (safe mode) takes it off until the next start, without touching the setting.
 import { useSyncExternalStore } from 'react';
-import { paletteCss, sanitizeCss, type ThemePack } from './pack';
+import { paletteCss, sanitizeCss, type ThemePack } from '@themes';
 import { getPack } from './registry';
 
 const STYLE_ID = 'cw-ascii-theme';

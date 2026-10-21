@@ -4,8 +4,8 @@ import { tr } from '@/i18n';
 import { LetterFlow } from '@/features/home/LetterFlow';
 import { useActivePack } from './apply';
 import type { FromWorker, ToWorker } from './backdrop-protocol';
-import { REQUIRED_COLORS, type ThemePack } from './pack';
-import { processOf } from './process';
+import { REQUIRED_COLORS, type ThemePack } from '@themes';
+import { processOf } from '@themes';
 import { watchdog } from './watchdog';
 import { isBuiltin } from './registry';
 

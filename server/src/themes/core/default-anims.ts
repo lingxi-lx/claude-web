@@ -1,7 +1,7 @@
 // The process animations of the classic themes (dark / light / …), and what a character theme falls back to for a
 // process it leaves out or gets wrong. Quiet on purpose: one row, the accent and the state colours only.
-import type { ProcessAnim } from './frames';
-import type { Process } from './process';
+import type { ProcessAnim } from './frames.js';
+import type { Process } from './process.js';
 
 const f = (...rows: string[]) => rows.map((r) => [r]);
 const DONE = { done: ['✓'], fail: ['✗'] };

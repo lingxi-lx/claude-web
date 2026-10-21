@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_ANIMS } from './default-anims';
-import { checkAnim } from './frames';
-import { REQUIRED_COLORS, animFor, cssRemoteRefs, paletteCss, parsePack, sanitizeCss } from './pack';
-import { PROCESSES } from './process';
+import { DEFAULT_ANIMS } from './default-anims.js';
+import { checkAnim } from './frames.js';
+import { REQUIRED_COLORS, animFor, cssRemoteRefs, paletteCss, parsePack, sanitizeCss } from './pack.js';
+import { PROCESSES } from './process.js';
 
 const colors = Object.fromEntries(REQUIRED_COLORS.map((k) => [k, '#000000']));
 const mini = { id: 'mini', name: { zh: '小', en: 'Mini' }, mode: 'dark', colors };

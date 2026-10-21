@@ -27,6 +27,8 @@ export default defineConfig({
       // the phone shell's channel code (web-standard APIs only); index.ts, never the core's tests (they use node:*)
       '@anywhere': path.resolve(__dirname, '../server/src/remote/anywhere/core/index.ts'),
       '@characters': path.resolve(__dirname, '../server/src/characters/core/index.ts'),
+      // the character themes' pure core: the server checks a theme skill's drafts with it
+      '@themes': path.resolve(__dirname, '../server/src/themes/core/index.ts'),
       '@': path.resolve(__dirname, 'src'),
     },
   },

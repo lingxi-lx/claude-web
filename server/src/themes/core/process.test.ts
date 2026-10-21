@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PROCESSES, processOf } from './process';
+import { PROCESSES, processOf } from './process.js';
 
 describe('processOf', () => {
   const cmd = (command: string) => processOf('Bash', { command });
