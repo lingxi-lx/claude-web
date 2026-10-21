@@ -52,6 +52,29 @@ describe.skipIf(process.platform !== 'win32')('resolveSpawn (Windows .cmd shims)
     expect(resolveSpawn(shim, ['serve']).via).toBe('cmd');
   });
 
+  // the DeepSeek Harness desktop app ships exactly this shim: an ESM entry inside app.asar, run by its own Electron
+  // binary — plain node cannot read a .asar archive, so unwrapping it would start nothing at all
+  it('leaves a shim entry inside app.asar to cmd.exe', () => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-resolve-asar-'));
+    const bin = path.join(dir, 'resources', 'runtime', 'cli', 'bin');
+    const entry = path.join(dir, 'resources', 'app.asar', 'dsh', 'node_modules', '@deepseek-ai', 'dsh-desktop-host', 'lib', 'cli.js');
+    fs.mkdirSync(path.dirname(entry), { recursive: true });
+    fs.writeFileSync(entry, 'export {};\n');
+    fs.mkdirSync(bin, { recursive: true });
+    const shim = path.join(bin, 'dsh.cmd');
+    fs.writeFileSync(shim, [
+      '@echo off',
+      'setlocal DisableDelayedExpansion',
+      'set "ELECTRON_RUN_AS_NODE=1"',
+      '"%~dp0..\\..\\..\\..\\DeepSeek Harness.exe" --expose-internals "%~dp0..\\..\\..\\app.asar\\dsh\\node_modules\\@deepseek-ai\\dsh-desktop-host\\lib\\cli.js" %*',
+      'exit /b %errorlevel%',
+    ].join('\r\n'));
+    const r = resolveSpawn(shim, ['--profile', 'acp']);
+    expect(r.via).toBe('cmd');
+    expect(r.command).toMatch(/cmd\.exe$/i);
+    expect(r.args[r.args.length - 1]).toContain('--profile acp');
+  });
+
   it('refuses arguments cmd.exe would expand or split (`%VAR%`, newlines) instead of passing them mangled', () => {
     const { shim } = setup('#!/bin/sh\necho 1\n');
     expect(() => resolveSpawn(shim, ['--token=%USERPROFILE%'])).toThrow(/%/);

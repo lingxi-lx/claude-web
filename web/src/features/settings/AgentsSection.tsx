@@ -145,7 +145,7 @@ export function AgentsSection() {
         {agents.length === 0 && <div className="empty">{tr('检测中…')}</div>}
       </div>
       <div className="sub" style={{ marginTop: 8 }} title={tr('Codex 走 codex app-server（JSON-RPC），Gemini / Qwen / Kimi 和自定义 agent 走 ACP（--acp / --experimental-acp）')}>
-        {tr('权限确认、工具卡片、总览、账本对所有 Agent 一致；它们的对话记录存在')} <code>~/.claude-web/agents/</code>{tr('。装好之后没检测到？点「重新检测」：会重新读取系统 PATH，也会找 Codex 桌面版 / IDE 扩展自带的 codex。')}
+        {tr('权限确认、工具卡片、总览、账本对所有 Agent 一致；它们的对话记录存在')} <code>~/.claude-web/agents/</code>{tr('。装好之后没检测到？点「重新检测」：会重新读取系统 PATH，也会找 Codex 桌面版 / IDE 扩展自带的 codex、从官网下载安装的 DeepSeek Harness。')}
       </div>
     </div>
   );

@@ -58,6 +58,14 @@ const textOf = (content: unknown): string => {
   return content.map((b: any) => (b?.type === 'text' && typeof b.text === 'string' ? b.text : '')).join('');
 };
 
+/** dsh writes thinking as `{type:'reasoning', text}`; the renderer knows the SDK's `thinking` block. */
+function sdkBlocks(content: unknown): unknown {
+  if (!Array.isArray(content)) return content;
+  return content.map((b: any) => (b?.type === 'reasoning'
+    ? { type: 'thinking', thinking: String(b.text ?? ''), ...(b.signature ? { signature: b.signature } : {}) }
+    : b));
+}
+
 /** The event stream → the SDK-shaped messages the app renders (read-only: no writes back to dsh). */
 export function dshMessages(events: Event[], sessionId: string): any[] {
   const out: any[] = [];
@@ -65,9 +73,13 @@ export function dshMessages(events: Event[], sessionId: string): any[] {
   for (const e of events) {
     const d = e?.data ?? {};
     if (e.type === 'user/message') {
+      // the harness writes its own injections through the same event: the runtime-context snapshot (cwd, sandbox,
+      // approval policy) and the skill catalog. They are not what the user said — a history full of them reads
+      // like the user pasted a wall of text before every question.
+      if (d.source?.kind && d.source.kind !== 'user') continue;
       out.push({ type: 'user', uuid: `${sessionId}-${n++}`, session_id: sessionId, message: { role: 'user', content: d.content ?? [] } });
     } else if (e.type === 'assistant/message' && d.message) {
-      out.push({ type: 'assistant', uuid: `${sessionId}-${n++}`, session_id: sessionId, message: d.message });
+      out.push({ type: 'assistant', uuid: `${sessionId}-${n++}`, session_id: sessionId, message: { ...d.message, content: sdkBlocks(d.message.content) } });
     } else if (e.type === 'tool/call') {
       let input: unknown = {};
       try { input = JSON.parse(String(d.arguments ?? '{}')); } catch { /* not JSON */ }

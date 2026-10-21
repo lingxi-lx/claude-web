@@ -48,6 +48,24 @@ describe('DeepSeek Harness history (read-only)', () => {
     expect(msgs.map((m) => m.type)).toEqual(['user', 'assistant', 'assistant', 'user']);
     expect(msgs[2].message.content[0]).toMatchObject({ type: 'tool_use', id: 'c1', name: 'Bash', input: { cmd: 'ls' } });
     expect(msgs[3].message.content[0]).toMatchObject({ type: 'tool_result', tool_use_id: 'c1', content: 'out' });
+    // dsh calls thinking `reasoning`; the renderer only folds blocks typed `thinking`
+    const withThinking = dshMessages([
+      { type: 'assistant/message', data: { message: { role: 'assistant', content: [{ type: 'reasoning', text: 'hmm' }, { type: 'text', text: 'done' }] } } },
+    ], 'dsh-y');
+    expect(withThinking[0].message.content).toEqual([{ type: 'thinking', thinking: 'hmm' }, { type: 'text', text: 'done' }]);
+  });
+
+  // a harness session writes the cwd / sandbox / approval snapshot and the whole skill catalog through the same
+  // `user/message` event; read back verbatim they look like the user pasted a wall of text before each question
+  it('leaves out what the harness injects as user messages', () => {
+    const msgs = dshMessages([
+      { type: 'user/message', data: { content: [{ type: 'text', text: 'hi' }], source: { kind: 'user' } } },
+      { type: 'user/message', data: { content: [{ type: 'text', text: 'Current runtime context. …' }], source: { kind: 'runtime-context', form: 'snapshot' } } },
+      { type: 'user/message', data: { content: [{ type: 'text', text: '<system-reminder>\nA skill is …' }], source: { kind: 'skill-catalog', form: 'catalog' } } },
+      { type: 'assistant/message', data: { message: { role: 'assistant', content: [{ type: 'text', text: 'ok' }] } } },
+    ], 'dsh-x');
+    expect(msgs.map((m) => m.type)).toEqual(['user', 'assistant']);
+    expect(JSON.stringify(msgs[0])).toContain('hi');
   });
 
   it('lists and pages a session, and never offers to write or resume', async () => {

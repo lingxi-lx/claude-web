@@ -554,7 +554,7 @@ export const EN_WEB: Record<string, string> = {
   "↑ 推送{v}": "↑ Push{v}",
   "↑↓ 选择": "↑↓ Select",
   "。第一次用的时候，在对话里输入 /mcp 完成登录": ". The first time you use it, type /mcp in the conversation to sign in",
-  "。装好之后没检测到？点「重新检测」：会重新读取系统 PATH，也会找 Codex 桌面版 / IDE 扩展自带的 codex。": ". Installed it but it isn't detected? Click “Re-detect”: it re-reads the system PATH and also looks for the codex that ships with the Codex desktop app / IDE extensions.",
+  "。装好之后没检测到？点「重新检测」：会重新读取系统 PATH，也会找 Codex 桌面版 / IDE 扩展自带的 codex、从官网下载安装的 DeepSeek Harness。": ". Installed it but it isn't detected? Click “Re-detect”: it re-reads the system PATH and also looks for the codex that ships with the Codex desktop app / IDE extensions, and for a DeepSeek Harness installed from the official download.",
   "「{line}」不是 {v} 形式": "“{line}” is not in the {v} form",
   "「{name}」可以用（{secs} 秒）": "\"{name}\" works ({secs} s)",
   "「{name}」已添加，但这个 Agent 用不了这种格式的供应商": "“{name}” was added, but this agent can't use providers of this format",

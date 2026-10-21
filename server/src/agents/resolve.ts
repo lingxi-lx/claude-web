@@ -57,8 +57,11 @@ export function resolveSpawn(command: string, args: string[]): { command: string
     const text = fs.readFileSync(found, 'utf8');
     // every quoted `%dp0%\…` / `%~dp0\…` path in the shim, minus the node.exe it may prefer; a .js entry,
     // or an extensionless one with a node shebang (npm's shim for opencode-ai's `bin/opencode`), runs
-    // under our node — otherwise the tree is cmd.exe → node → agent and only cmd.exe is a direct child
-    const rels = [...text.matchAll(/"%(?:dp0%|~dp0)\\([^"%]+)"/gi)].map((m) => m[1]).filter((r) => !/(^|\\)node(\.exe)?$/i.test(r));
+    // under our node — otherwise the tree is cmd.exe → node → agent and only cmd.exe is a direct child.
+    // Never an entry inside app.asar (the DeepSeek Harness desktop app's shim): that archive is Electron's own
+    // format, plain node answers MODULE_NOT_FOUND — such a shim runs its own Electron binary, so keep cmd.exe
+    const rels = [...text.matchAll(/"%(?:dp0%|~dp0)\\([^"%]+)"/gi)].map((m) => m[1])
+      .filter((r) => !/(^|\\)node(\.exe)?$/i.test(r) && !/(^|[\\/])[^\\/]*\.asar([\\/]|$)/i.test(r));
     for (const rel of rels) {
       const entry = path.join(path.dirname(found), rel);
       if (!fs.existsSync(entry)) continue;

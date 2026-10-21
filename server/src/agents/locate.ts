@@ -21,10 +21,20 @@ export function expandWinVars(s: string, env: Env): string {
   return s.replace(/%([^%;]+)%/g, (all, name: string) => lower.get(name.toLowerCase()) ?? all);
 }
 
+/** One named REG_SZ value from `reg query` output, or null. */
+export function parseRegValue(stdout: string, name: string): string | null {
+  const m = new RegExp(`^\\s*${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+REG_(?:EXPAND_)?SZ\\s+(.*?)\\s*$`, 'im').exec(stdout);
+  return m ? m[1] : null;
+}
+
 /** The value of `reg query <key> /v Path`, or null. */
 export function parseRegPath(stdout: string): string | null {
-  const m = /^\s*Path\s+REG_(?:EXPAND_)?SZ\s+(.*?)\s*$/im.exec(stdout);
-  return m ? m[1] : null;
+  return parseRegValue(stdout, 'Path');
+}
+
+/** The sub-keys `reg query <root> /s /f …` reports (its output puts each on a line of its own). */
+export function parseRegKeys(stdout: string): string[] {
+  return stdout.split(/\r?\n/).map((l) => l.trim()).filter((l) => /^HKEY_/i.test(l));
 }
 
 /** Directories CLIs commonly install into. Existence is not checked here. */
@@ -94,10 +104,54 @@ export function mergePath(current: string, extra: string[], platform: NodeJS.Pla
   return { path: [current, ...added].filter(Boolean).join(delim), added };
 }
 
-function regPath(key: string): Promise<string | null> {
+function reg(args: string[]): Promise<string | null> {
   return new Promise((resolve) => {
-    execFile('reg', ['query', key, '/v', 'Path'], { windowsHide: true, timeout: 5000 }, (err, stdout) => resolve(err ? null : parseRegPath(String(stdout))));
+    execFile('reg', args, { windowsHide: true, timeout: 8000 }, (err, stdout) => resolve(err ? null : String(stdout)));
   });
+}
+
+function regPath(key: string): Promise<string | null> {
+  return reg(['query', key, '/v', 'Path']).then((out) => (out ? parseRegPath(out) : null));
+}
+
+const UNINSTALL_ROOTS = [
+  'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall',
+  'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall',
+  'HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall',
+];
+
+/**
+ * Install directories of whatever desktop app mentions `needle` in its uninstall entry — the user may install to any
+ * folder, so the registry (not a guessed path) is what says where it went. Read-only.
+ */
+export async function regInstallDirs(needle: string): Promise<string[]> {
+  const found = await Promise.all(UNINSTALL_ROOTS.map((root) => reg(['query', root, '/s', '/f', needle])));
+  const keys = [...new Set(found.filter((v): v is string => !!v).flatMap(parseRegKeys))];
+  const dirs = await Promise.all(keys.map(async (key) => {
+    const out = await reg(['query', key, '/v', 'InstallLocation']);
+    const value = out ? parseRegValue(out, 'InstallLocation') : null;
+    return value ? value.trim().replace(/^"(.*)"$/, '$1') : '';
+  }));
+  return [...new Set(dirs.filter(Boolean))];
+}
+
+/**
+ * Where desktop apps that ship an agent CLI were installed (from the Uninstall keys; refreshProcessPath fills it, so
+ * `bundled` can stay synchronous). The DeepSeek Harness desktop app from deepseek.com ships `dsh` but puts it on PATH
+ * only when the user turns its command line on, so this is the difference between 装好了 and 未安装.
+ */
+let desktopInstalls: { name: string; dir: string }[] = [];
+export function desktopAgentInstalls(): { name: string; dir: string }[] {
+  return desktopInstalls;
+}
+
+/** Desktop apps that ship an agent CLI, by what their uninstall entry calls them. */
+const DESKTOP_CLI_APPS: { name: string; needle: string }[] = [{ name: 'DeepSeek Harness', needle: 'DeepSeek Harness' }];
+
+async function findDesktopInstalls(): Promise<{ name: string; dir: string }[]> {
+  if (process.platform !== 'win32') return [];
+  const all = await Promise.all(DESKTOP_CLI_APPS.map(async (a) => (await regInstallDirs(a.needle).catch(() => [])).map((dir) => ({ name: a.name, dir }))));
+  return all.flat();
 }
 
 /** The PATH Windows gives a process started now: machine + user (what Explorer knew at login may be older). */
@@ -127,6 +181,7 @@ export function refreshProcessPath(force = false): Promise<string[]> {
     const dirs = [...fromReg, ...wellKnownDirs(process.platform, env, home)].filter(isDir);
     const { path: next, added } = mergePath(env.PATH ?? '', dirs);
     if (added.length) env.PATH = next;
+    desktopInstalls = await findDesktopInstalls().catch(() => []);
     refreshedAt = Date.now();
     return added;
   })().finally(() => { refreshing = null; });
@@ -134,7 +189,19 @@ export function refreshProcessPath(force = false): Promise<string[]> {
 }
 
 /** Where an agent binary shipped inside another app may be, per platform. Globs are one `*` in the last-but-n segment. */
-export function bundledCandidates(kind: string, platform: NodeJS.Platform, arch: string, env: Env, home: string): { from: string; pattern: string[] }[] {
+export function bundledCandidates(kind: string, platform: NodeJS.Platform, arch: string, env: Env, home: string, desktop: { name: string; dir: string }[] = desktopInstalls): { from: string; pattern: string[] }[] {
+  // the DeepSeek Harness desktop app (deepseek.com's Download button): resources\runtime\cli\bin\dsh.cmd inside the app
+  if (kind === 'dsh') {
+    const tail = ['resources', 'runtime', 'cli', 'bin', platform === 'win32' ? 'dsh.cmd' : 'dsh'];
+    const roots = desktop.filter((d) => d.name === 'DeepSeek Harness').map((d) => d.dir);
+    if (platform === 'win32') {
+      const local = env.LOCALAPPDATA || path.join(home, 'AppData', 'Local');
+      roots.push(path.join(local, 'Programs', 'DeepSeek Harness'), path.join(env.ProgramFiles || 'C:\\Program Files', 'DeepSeek Harness'));
+    } else if (platform === 'darwin') {
+      for (const apps of ['/Applications', path.join(home, 'Applications')]) roots.push(path.join(apps, 'DeepSeek Harness.app', 'Contents'));
+    }
+    return roots.map((root) => ({ from: tr('DeepSeek Harness 桌面版'), pattern: [root, ...tail] }));
+  }
   if (kind !== 'codex') return [];
   const exe = platform === 'win32' ? 'codex.exe' : 'codex';
   const extPlat = platform === 'win32' ? `windows-${arch === 'arm64' ? 'aarch64' : 'x86_64'}` : platform === 'darwin' ? `macos-${arch === 'arm64' ? 'aarch64' : 'x86_64'}` : `linux-${arch === 'arm64' ? 'aarch64' : 'x86_64'}`;
@@ -165,10 +232,10 @@ function expand(pattern: string[]): string[] {
 }
 
 /** The newest (by mtime) agent binary shipped inside another app, or null. */
-export function findBundled(kind: string, o: { platform?: NodeJS.Platform; arch?: string; env?: Env; home?: string } = {}): { file: string; from: string } | null {
+export function findBundled(kind: string, o: { platform?: NodeJS.Platform; arch?: string; env?: Env; home?: string; desktop?: { name: string; dir: string }[] } = {}): { file: string; from: string } | null {
   const platform = o.platform ?? process.platform;
   let best: { file: string; from: string; at: number } | null = null;
-  for (const c of bundledCandidates(kind, platform, o.arch ?? process.arch, o.env ?? process.env, o.home ?? os.homedir())) {
+  for (const c of bundledCandidates(kind, platform, o.arch ?? process.arch, o.env ?? process.env, o.home ?? os.homedir(), o.desktop)) {
     for (const file of expand(c.pattern)) {
       try {
         const st = fs.statSync(file);
