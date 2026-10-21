@@ -14,6 +14,8 @@ import { tr } from '@/i18n';
 import { AsciiField } from '@/features/home/AsciiField';
 import { LetterFlow } from '@/features/home/LetterFlow';
 import { backdropStyle } from '@/features/home/letter-flow';
+import { Backdrop } from '@/themes/Backdrop';
+import { useActivePack } from '@/themes/apply';
 
 /**
  * The start page — an empty chat tile (spec §5.8, mock-home.png): 「今天想做点什么？」 · the composer (it creates the
@@ -29,15 +31,18 @@ export function Welcome({ paneId, tileId }: { paneId: string; tileId: string }) 
   // nothing until the settings are in: someone who turned it off would see the default flash for a second
   const backdrop = useStore((s) => (s.metaLoaded ? backdropStyle(s.settings['ui.welcomeBackdrop']) : 'off'));
   const theme = useStore((s) => s.theme);
+  const ascii = useActivePack();
   const pick = (sid: string) => {
     dispatch({ t: 'session.assign', paneId, tileId, sessionId: sid });
     if (!open[sid]) void loadHistory(sid, { focus: false });
   };
   return (
     <div className="welcome-tile">
-      {!mobile && backdrop === 'field' && <AsciiField />}
+      {/* a character theme brings its own backdrop (themes/Backdrop); the classic themes keep 字流 / 字场 */}
+      {!mobile && backdrop !== 'off' && ascii?.backdrop && <Backdrop scene="welcome" />}
+      {!mobile && !ascii?.backdrop && backdrop === 'field' && <AsciiField />}
       {/* keyed by the theme in effect (a system switch too): its colours are read when it starts */}
-      {!mobile && backdrop === 'flow' && <LetterFlow key={String(theme)} />}
+      {!mobile && !ascii?.backdrop && backdrop === 'flow' && <LetterFlow key={String(theme)} />}
       {/* the empty page's top row: nothing but the sidebar reveal; on the desktop it is also the title bar (drag) */}
       <div className="welcome-top">{((edge.lead && !edge.strip) || mobile) && <SidebarReveal />}</div>
       <div className="welcome">

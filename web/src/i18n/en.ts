@@ -3836,4 +3836,8 @@ export const EN_WEB: Record<string, string> = {
   "正在添加…": "Adding…",
   "已临时换回默认主题，下次启动恢复": "Switched back to the default theme for now; it comes back next time you start",
   "字符画主题": "Character themes",
+  "这个主题的背景出了问题，已暂时换回默认": "This theme's background ran into a problem; switched to the default for now",
+  "对话里的淡背景": "Faint background in conversations",
+  "用字符画主题时，对话后面也垫一层很淡、很慢的背景；关掉就是纯色。": "With a character theme, a faint, slow background sits behind conversations too; turn it off for a plain colour.",
+  "background backdrop ascii theme conversation dim 背景 字符画 主题 对话 淡": "background backdrop ascii theme conversation dim",
 };

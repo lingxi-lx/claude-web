@@ -1,3 +1,5 @@
+import { Backdrop } from '@/themes/Backdrop';
+import { useActivePack } from '@/themes/apply';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '@/store';
 import { ws } from '@/ws/client';
@@ -241,6 +243,8 @@ export function ChatTile({ tile, paneId, visible }: { tile: ChatTileModel; paneI
     return () => ro.disconnect();
   }, [!!active, mobile, tile.wb]);
   const infoShown = infoOn && roomy && !deleted;
+  // a character theme's backdrop, faint and slow behind the conversation (设置 → 对话里的淡背景)
+  const chatBackdrop = useStore((s) => s.settings['ui.backdropInChat'] !== false) && !!useActivePack()?.backdrop;
   // restored from a persisted layout: lazily pull the transcript
   useEffect(() => {
     if (sid && !has && visible) void loadHistory(sid, { focus: false });
@@ -266,7 +270,7 @@ export function ChatTile({ tile, paneId, visible }: { tile: ChatTileModel; paneI
       {deleted && <div className="deleted-banner" role="status"><Icon name="trash" size={13} /> {tr('这个对话已被删除（备份在 ~/.claude-web/library-trash），这里只剩最后看到的内容。')}</div>}
       {tile.wb === 'live' && (mobile ? live : (
         <div className="chat-split" ref={split}>
-          <div className="chat-main">{live}</div>
+          <div className="chat-main">{chatBackdrop && <Backdrop scene="chat" />}{live}</div>
           {infoShown && <InfoColumn sessionId={sid} />}
         </div>
       ))}
