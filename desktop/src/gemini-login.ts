@@ -49,7 +49,9 @@ export const profileDir = (base: string, partition: string): string =>
 
 /** Chrome first, then Edge; on Linux the commands are looked up on PATH. */
 export function browserCandidates(platform: NodeJS.Platform, env: Record<string, string | undefined>): string[] {
-  const under = (dir: string | undefined, ...rest: string[]) => (dir ? [path.join(dir, ...rest)] : []);
+  // platform is a parameter: use its own separators, so the result is the same off Windows
+  const join = (platform === 'win32' ? path.win32 : path.posix).join;
+  const under = (dir: string | undefined, ...rest: string[]) => (dir ? [join(dir, ...rest)] : []);
   if (platform === 'win32') {
     return [
       ...under(env.PROGRAMFILES, 'Google', 'Chrome', 'Application', 'chrome.exe'),
