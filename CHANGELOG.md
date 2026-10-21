@@ -4,6 +4,18 @@
 
 Every version's changes are recorded here; installers are on the [Releases](https://github.com/ypyik0669/claude-web/releases) page. Versions follow [semantic versioning](https://semver.org/).
 
+## [0.3.1] — 2026-10-21
+
+### Fixed
+
+**DeepSeek Harness**
+
+- **The desktop app from deepseek.com is found, wherever it was installed.** Its Download button gives an Electron app whose `dsh` command lives inside the install folder and is deliberately kept off PATH — so an install showed up as “not installed”. The install folder is now read from the Windows uninstall entry (which follows a custom folder too), with the usual folders and the macOS `.app` as fallbacks. Click 重新检测, or wait a minute, and it is detected.
+- **And it starts.** That `dsh` launcher runs a script inside `app.asar` with the app's own Electron binary; plain `node` cannot read an asar archive, so the launcher now goes through `cmd.exe` instead of being unwrapped into `node`.
+- **Its conversations read the way they were written.** The runtime records its own injections (working folder / sandbox snapshot, the skill list) as user messages — those are skipped, so a history no longer looks like you pasted a wall of text before each question. Reasoning blocks are shown as thinking again.
+
+Two tests that could not pass on macOS / Linux were fixed (a path built for the host platform instead of the one asked for, and a symlinked temp dir).
+
 ## [0.3.0] — 2026-10-21
 
 ### Added
