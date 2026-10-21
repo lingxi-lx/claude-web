@@ -3,7 +3,8 @@ import { useStore } from '@/store';
 import { clsx } from '@/util';
 import { Icon } from '@/ui/icons';
 import { QUICK_THEMES, THEME_LABEL, THEME_ORDER, THEME_PREVIEW, themeChoice, type ThemeChoice } from './theme-preview';
-import { tr } from '@/i18n';
+import { tr, getLocale } from '@/i18n';
+import { listPacks } from '@/themes/registry';
 
 // Picking a theme (final review §9 #3): `ui.theme` through setSetting, which applies it at once (the store's
 // setTheme, the desktop title bar). Two places: the account popover's three and 设置 → 外观's swatches.
@@ -28,10 +29,32 @@ export function ThemeQuick({ dataId }: { dataId?: string }) {
   );
 }
 
-/** 设置 → 外观: every theme as a small window in its own colours (跟随系统 = half light, half dark). */
+/** 设置 → 外观: every theme as a small window in its own colours (跟随系统 = half light, half dark); the character
+ *  themes (themes/registry.ts) in a row of their own. */
 export function ThemeSwatches({ label }: { label?: string }) {
   const [cur, pick] = useTheme();
+  const v = useStore((s) => s.settings['ui.theme']);
+  const packs = listPacks();
   return (
+    <>
+    {packs.length > 0 && (
+      <div className="theme-sw ascii" role="radiogroup" aria-label={tr('字符画主题')}>
+        {packs.map((p) => {
+          const t = `ascii:${p.id}`;
+          const vars = { '--sw-bg': p.colors.bg, '--sw-side': p.colors['bg-1'], '--sw-fg': p.colors.fg, '--sw-accent': p.colors.accent } as CSSProperties;
+          const nm = getLocale() === 'zh' ? p.name.zh : p.name.en;
+          return (
+            <button key={t} role="radio" aria-checked={v === t} className={clsx('sw', v === t && 'on')} data-theme-pick={t} onClick={() => void useStore.getState().setSetting('ui.theme', t)} title={nm}>
+              <span className="pv" style={vars} aria-hidden>
+                <span className="side" />
+                <span className="body"><span className="ln" /><span className="ln short" /><span className="dot" /></span>
+              </span>
+              <span className="nm">{nm}</span>
+            </button>
+          );
+        })}
+      </div>
+    )}
     <div className="theme-sw" role="radiogroup" aria-label={label}>
       {THEME_ORDER.map((t) => {
         const p = t === 'system' ? THEME_PREVIEW.light : THEME_PREVIEW[t];
@@ -48,5 +71,6 @@ export function ThemeSwatches({ label }: { label?: string }) {
         );
       })}
     </div>
+    </>
   );
 }

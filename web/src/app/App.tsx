@@ -44,6 +44,8 @@ import { pushBackLayer } from '@/ui/back-layer';
 import { installPhoneSheet, sheetEnter, sheetTakesEscape, toggleSheetDetent, useSheetLeaving } from '@/ui/phone-sheet';
 import { drawerEnter, installPhoneDrawer, usePhoneDrawer } from '@/ui/phone-drawer';
 import { tr } from '@/i18n';
+import { applyUiSettings, resolveTheme, DEFAULT_THEME } from '@/features/settings/ui-settings';
+import { setSafeMode } from '@/themes/apply';
 import { CustomCss } from './custom-css';
 import { AddAccountHost } from '@/features/settings/ClaudeAccounts';
 import { FileMenu } from '@/features/files/FileMenu';
@@ -265,6 +267,16 @@ export function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { if (useStore.getState().settingsOpen) useStore.setState({ settingsOpen: null }); useStore.setState({ shortcutsOpen: false }); return; }
+      // the way out of a character theme whose CSS hid the settings: the classic look until the next start
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.code === 'Digit0') {
+        e.preventDefault();
+        const st = useStore.getState();
+        setSafeMode();
+        applyUiSettings(st.settings);
+        st.setTheme(resolveTheme((st.settings['ui.theme'] as any) ?? DEFAULT_THEME), true);
+        st.toast(tr('已临时换回默认主题，下次启动恢复'));
+        return;
+      }
       const id = matchBrowserKey(e);
       if (!id) return;
       // on desktop the menu accelerators own the Ctrl-only chords; browser-only (Alt) chords still run here
