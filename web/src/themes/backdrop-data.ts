@@ -23,7 +23,7 @@ export function backdropData(sessions: readonly SessionSummary[], now: number, m
   const by = new Map<string, { name: string; count: number; last: number; live: boolean }>();
   for (const s of sessions) {
     if (!s.cwd) continue;
-    const key = s.cwd.toLowerCase();
+    const key = s.cwd.replace(/[\\/]+$/, '').replace(/\\/g, '/').toLowerCase();
     const p = by.get(key) ?? { name: base(s.cwd), count: 0, last: 0, live: false };
     p.count++;
     p.last = Math.max(p.last, s.lastModified || 0);
