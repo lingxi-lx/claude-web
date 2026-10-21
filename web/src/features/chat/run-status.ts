@@ -3,6 +3,7 @@
 import type { Conversation } from '@/model/conversation';
 import { basename } from '@/util';
 import { tr } from '@/i18n';
+import { processOf, type Process } from '@/themes/process';
 
 /** A tool call in a few words: its verb, its argument, and what kind of tool it is (the registry's category). */
 export type StepLabeler = (name: string, input: Record<string, unknown>) => { verb?: string; arg?: string; category?: string } | null;
@@ -22,6 +23,8 @@ export interface RunStatus {
   since?: number;
   /** the words on the tab; other words = another key (the new ones come in with the swap animation) */
   key: string;
+  /** which process animation plays: 「思考中」 before anything of the turn came back is `start` */
+  process: Process;
 }
 
 export function runStatus(c: Conversation, state: string, label: StepLabeler): RunStatus {
@@ -38,16 +41,18 @@ export function runStatus(c: Conversation, state: string, label: StepLabeler): R
   } else { kind = 'thinking'; text = tr('思考中'); }
 
   // how much of this turn is behind us
-  let done = 0, total = 0;
+  let done = 0, total = 0, answered = false;
   for (const it of c.items) {
-    if (it.kind === 'user' && !it.meta) { done = 0; total = 0; continue; }
+    if (it.kind === 'user' && !it.meta) { done = 0; total = 0; answered = false; continue; }
     if (it.kind !== 'assistant') continue;
+    answered = true;
     for (const b of it.blocks) if (b.type === 'tool_use') { total++; if (b.status === 'done' || b.status === 'error') done++; }
   }
   let tasks = 0;
   for (const t of c.tasks.values()) if (t.status === 'running') tasks++;
 
-  return { kind, text, target, done, total, tasks, since: c.turnStartedAt ?? c.runningTool?.since ?? c.lastEventAt, key: JSON.stringify([kind, text, target]) };
+  const process: Process = kind === 'compacting' ? 'compact' : kind === 'waiting' ? 'wait' : kind === 'tool' && rt ? processOf(rt.name, rt.input) : answered ? 'think' : 'start';
+  return { kind, text, target, done, total, tasks, process, since: c.turnStartedAt ?? c.runningTool?.since ?? c.lastEventAt, key: JSON.stringify([kind, text, target]) };
 }
 
 /** 「0:12」, 「1:05」, 「62:05」 — how long the turn has been going: a clock (the steps and the summary spell their

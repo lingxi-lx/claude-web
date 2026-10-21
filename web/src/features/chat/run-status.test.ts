@@ -59,6 +59,19 @@ describe('runStatus: what the tab on the composer says while a turn is in flight
     expect(runStatus(c, 'running', label).kind).toBe('compacting');
   });
 
+  it('process: start before anything of the turn came back, think after; the running step\'s process; wait / compact', () => {
+    expect(runStatus(conv([]), 'running', label).process).toBe('start');
+    const answered = conv([]);
+    answered.items.push(assistant('a1', [{ type: 'text', text: 'ok' } as AssistantItem['blocks'][number]]));
+    expect(runStatus(answered, 'running', label).process).toBe('think');
+    expect(runStatus(conv([tool('t1', 'Edit', { file_path: '/a' })]), 'running', label).process).toBe('edit');
+    const c = conv([tool('t1', 'Bash', { command: 'npm test' })]);
+    expect(runStatus(c, 'running', label).process).toBe('test');
+    expect(runStatus(c, 'waiting', label).process).toBe('wait');
+    c.compacting = true;
+    expect(runStatus(c, 'running', label).process).toBe('compact');
+  });
+
   it('counts this turn\'s steps: everything after the last message the user wrote, finished or failed = done', () => {
     const c = createConversation();
     const old = tool('o1', 'Read', { file_path: 'a' }, 'done');
