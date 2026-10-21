@@ -85,16 +85,28 @@ export function paletteCss(p: ThemePack): string {
   return `html:root[data-ascii='${p.id}'] {\n${decl}\n  color-scheme: ${p.mode};\n}\n`;
 }
 
-const FETCHY = /^([a-z][a-z0-9+.-]*:|\/\/|\/)/i;
 const SAFE_SCHEME = /^data:/i;
 /** a string or url as the URL parser takes it: tabs and newlines anywhere dropped, C0 controls and spaces trimmed */
 // eslint-disable-next-line no-control-regex
 const asUrl = (v: string) => v.replace(/[\t\n\r]/g, '').replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, '');
+const BASE = 'http://theme.invalid/page/';
+const FETCHABLE = new Set(['http:', 'https:', 'ftp:', 'ws:', 'wss:', 'file:', 'blob:', 'filesystem:']);
+/**
+ * Whether a string, used as an image / font address, would leave the page: the WHATWG URL parser decides (the one
+ * the browser uses — `\` is `/` for http, tabs go, `//host` is another host; 2026-10-22 review: `"\/host/x"`).
+ * Relative addresses stay on the app's own origin; a scheme nothing loads from (`"status: ok"`) is just text.
+ */
+function leaves(v: string): boolean {
+  let u: URL;
+  try { u = new URL(v, BASE); } catch { return false; }
+  if (u.protocol === 'data:') return false;
+  return u.origin !== new URL(BASE).origin && FETCHABLE.has(u.protocol);
+}
 
 /**
  * Everything in a theme's CSS that could reach outside the page (spec 2026-10-22 §6: a theme stays offline), read
- * the way a browser reads it (css-tokens.ts): any @import, a url that is not data:, a string that looks like an
- * address (image-set("…"), src("…"), one kept in a custom property), and anything malformed (a bad url or string —
+ * the way a browser reads it (css-tokens.ts): any @import, a url that is not data:, a string that points off the
+ * page (`leaves`: image-set("…"), src("…"), one kept in a custom property), and anything malformed (a bad url or string —
  * the browser's recovery from those is where pattern checks went wrong). Empty = fine.
  */
 export function cssRemoteRefs(css: string): string[] {
@@ -107,7 +119,7 @@ export function cssRemoteRefs(css: string): string[] {
     else if (t.type === 'url' && !SAFE_SCHEME.test(v)) out.push(`url(${v.slice(0, 60)})`);
     else if (t.type === 'string') {
       const inUrl = toks[k - 1]?.type === 'function' && toks[k - 1].value === 'url';
-      if (inUrl ? !SAFE_SCHEME.test(v) : FETCHY.test(v) && !SAFE_SCHEME.test(v)) out.push(`"${v.slice(0, 60)}"`);
+      if (inUrl ? !SAFE_SCHEME.test(v) : leaves(t.value)) out.push(`"${v.slice(0, 60)}"`);
     }
   });
   return out;

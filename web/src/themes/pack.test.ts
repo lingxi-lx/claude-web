@@ -44,8 +44,8 @@ describe('paletteCss / sanitizeCss', () => {
     expect(css).toContain('--bg: #000000;');
     expect(css).toContain('color-scheme: dark');
   });
-  it('keeps offline CSS as it is (data: urls, content strings)', () => {
-    const css = ".a::before{content:'> SYS: ok'} .b{background:url(data:image/png;base64,AA//BB)} .c{background:url('data:image/svg+xml,<svg/>')}";
+  it('keeps offline CSS as it is (data: urls, content strings, text with a colon, a relative address)', () => {
+    const css = ".z::after{content:'status: ok'} .y{background-image:image-set('assets/a.png' 1x)} .a::before{content:'> SYS: ok'} .b{background:url(data:image/png;base64,AA//BB)} .c{background:url('data:image/svg+xml,<svg/>')}";
     expect(cssRemoteRefs(css)).toEqual([]);
     expect(sanitizeCss(css)).toBe(css);
   });
@@ -69,6 +69,12 @@ describe('paletteCss / sanitizeCss', () => {
     ".f{background:url(data:x')} .f2{background-image:image-set(\"http://x/badurl.png\" 1x)} .f3{content:\"'\"}",
     '@\\69mport "a.css";',
     'a{background:url("/x.png")}',
+    // the third review: a backslash is a slash to the URL parser (and two make a Windows share)
+    'a{background-image:image-set("\\\\/127.0.0.1:3198/bs-slash" 1x)}',
+    'a{background-image:image-set("\\\\\\\\host/x" 1x)}',
+    'a{background-image:image-set("\\5c\\5c host/x" 1x)}',
+    'a{background-image:image-set("HtTpS:host" 1x)}',
+    'a{--x:"wss://host"}',
   ]) {
     it(`drops all of it: ${bad}`, () => {
       expect(cssRemoteRefs(bad).length, bad).toBeGreaterThan(0);
