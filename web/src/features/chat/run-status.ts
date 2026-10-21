@@ -3,7 +3,7 @@
 import type { Conversation } from '@/model/conversation';
 import { basename } from '@/util';
 import { tr } from '@/i18n';
-import { processOf, type Process } from '@/themes/process';
+import { processOf, type Process } from '@themes';
 
 /** A tool call in a few words: its verb, its argument, and what kind of tool it is (the registry's category). */
 export type StepLabeler = (name: string, input: Record<string, unknown>) => { verb?: string; arg?: string; category?: string } | null;

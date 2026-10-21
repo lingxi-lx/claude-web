@@ -13,7 +13,7 @@ import { useJust } from './Fold';
 import { fmtStepDuration, mergedLabel, mergedTarget, shortVerb, stepDurationMs, stepState, watchStep, watchedStep, type StepState } from './step-view';
 import { tr } from '@/i18n';
 import { ProcessGlyph } from '@/themes/ProcessGlyph';
-import { processOf, type Process } from '@/themes/process';
+import { processOf, type Process } from '@themes';
 
 /** How a step's row is toggled: a pointer's click moves (the detail slides open), the keyboard's does not (spec §4.5). */
 export type ToggleBy = 'pointer' | 'key';
