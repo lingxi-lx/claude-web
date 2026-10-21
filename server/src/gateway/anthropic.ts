@@ -14,7 +14,12 @@ const systemOf = (c: unknown): string => typeof c === 'string'
   ? noBilling(c)
   : textOf(Array.isArray(c) ? c.map((b: any) => (b?.type === 'text' ? { ...b, text: noBilling(String(b.text ?? '')) } : b)) : c);
 
-export interface AnthropicRenderOpts { /** `1h` = the extended cache TTL (2× base write price vs 1.25×); default 5 minutes */ cacheTtl?: '1h' }
+export interface AnthropicRenderOpts {
+  /** `1h` = the extended cache TTL (2× base write price vs 1.25×); default 5 minutes */
+  cacheTtl?: '1h';
+  /** a subscription login only accepts requests carrying Claude Code's own system prompt first */
+  systemPrefix?: string;
+}
 
 function imagePart(b: any): IrPart | null {
   const s = b?.source;
@@ -85,7 +90,11 @@ export function renderRequest(r: IrRequest, opts: AnthropicRenderOpts = {}): any
   const lastBlock = msgs.at(-1)?.content.at(-1);
   if (lastBlock) lastBlock.cache_control = cc;
   const out: any = { model: r.model, max_tokens: r.maxTokens ?? 8192, messages: msgs };
-  if (r.system) out.system = [{ type: 'text', text: r.system, cache_control: cc }];
+  const sys = [
+    ...(opts.systemPrefix ? [{ type: 'text', text: opts.systemPrefix }] : []),
+    ...(r.system ? [{ type: 'text', text: r.system, cache_control: cc }] : []),
+  ];
+  if (sys.length) out.system = sys;
   if (r.tools?.length) {
     out.tools = r.tools.map((t) => ({ name: t.name, ...(t.description ? { description: t.description } : {}), input_schema: t.schema }));
     out.tools[out.tools.length - 1].cache_control = cc;

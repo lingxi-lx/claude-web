@@ -2,12 +2,24 @@
 // reach the page too) and its own, registered on the shared core. Importing this is what fixes the page's language
 // (core.ts reads it when it is first imported): every module that calls `tr()` imports it first.
 import { HINT_KEY, LANGUAGE_KEY, getLocale, registerEnglish, resolveLanguage } from '@i18n';
-import { EN_SERVER } from '../../../server/src/i18n/en';
-import { EN_WEB } from './en';
 
-registerEnglish(EN_SERVER);
-registerEnglish(EN_WEB);
 export * from '@i18n';
+
+/**
+ * The English catalogs, as their own chunk. They are ~420 KB of source and their keys are the Chinese text, so a
+ * Chinese page needs none of it — keeping them out of the first-screen bundle is what holds the app under the phone
+ * relay's response cap. Must finish before any module that calls `tr()` at the top level runs: main.tsx awaits it
+ * before importing boot.tsx.
+ */
+export async function loadEnglish(): Promise<void> {
+  if (getLocale() !== 'en') return;
+  const [{ EN_SERVER }, { EN_WEB }] = await Promise.all([
+    import('@i18n-en'),
+    import('./en'),
+  ]);
+  registerEnglish(EN_SERVER);
+  registerEnglish(EN_WEB);
+}
 
 const RELOAD_FLAG = 'cw.langReload';
 

@@ -185,7 +185,7 @@ describe('another Claude account (claude-account)', () => {
     expect(env).toMatchObject({ CLAUDE_CODE_OAUTH_TOKEN: token, ANTHROPIC_AUTH_TOKEN: '', ANTHROPIC_API_KEY: '', ANTHROPIC_BASE_URL: '' });
     expect(env.ANTHROPIC_MODEL).toBeUndefined();
   });
-  it('saved with the account models; refreshing keeps them; the token is checked for its shape; never a gateway member; only Claude takes it', async () => {
+  it('saved with the account models; refreshing keeps them; the token is checked for its shape; a gateway member as a login; only Claude takes it', async () => {
     const fs = await import('node:fs/promises');
     const os = await import('node:os');
     const path = await import('node:path');
@@ -205,7 +205,7 @@ describe('another Claude account (claude-account)', () => {
       expect((await svc.refreshModels([p.id]))[0]).toMatchObject({ ok: true, count: models.length });
       expect(await svc.probe(p.id, undefined, { listOnly: true })).toMatchObject({ ok: true, models });
       expect(await svc.probe(undefined, { type: 'claude-account', apiKey: 'sk-relay-123' }, { listOnly: true })).toMatchObject({ ok: false });
-      expect(svc.member(p.id)).toBeNull();
+      expect(svc.member(p.id)).toMatchObject({ type: 'claude-account', apiKey: token });
       expect(svc.fitError(p.id, 'claude')).toBeNull();
       expect(svc.fitError(p.id, 'codex')).toMatch(/Codex/);
       expect(svc.forSession(p.id)).toMatchObject({ type: 'claude-account', apiKey: token });

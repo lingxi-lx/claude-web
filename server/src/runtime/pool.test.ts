@@ -142,6 +142,19 @@ describe('RunnerPool', () => {
     expect(long.closeCalls).toBe(0);
   });
 
+  it('a provider saved in settings goes to its running conversations; one it cannot build any more fails nothing', () => {
+    let broken = false;
+    const p = new RunnerPool({ forSession: (id?: string) => { if (broken) throw new Error('gateway off'); return { id, type: 'anthropic', v: 2 }; } } as any);
+    const on: any = p.open({ sessionId: 'on', cwd: '/x', providerId: 'ds' });
+    const off: any = p.open({ sessionId: 'off', cwd: '/x', providerId: 'other' });
+    for (const r of [on, off]) { r.info.providerId = r.params.providerId; r.got = []; r.reprovide = async (x: any) => { r.got.push(x); }; }
+    p.providerSaved('ds');
+    expect(on.got).toEqual([{ id: 'ds', type: 'anthropic', v: 2 }]);
+    expect(off.got).toEqual([]);
+    broken = true; // the save itself went through: it must not come back as an error
+    expect(() => p.providerSaved('ds')).not.toThrow();
+  });
+
   it('closeAll survives a runner whose close rejects', async () => {
     const p = pool();
     const a: any = p.open({ sessionId: 's3', cwd: '/x' });

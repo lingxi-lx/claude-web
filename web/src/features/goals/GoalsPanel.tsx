@@ -10,6 +10,7 @@ import { EMPTY, MODE_LABEL } from '@/ui/terms';
 import { EmptyState } from '@/ui/EmptyState';
 import { imeComposing } from '@/ui/ime';
 import { tr, dateLocale } from '@/i18n';
+import { Select } from '@/ui/Select';
 
 /** The permission modes a goal can run in: it runs unattended, so only these three (as before, in interface words). */
 const GOAL_MODES = ['default', 'acceptEdits', 'bypassPermissions'] as const;
@@ -28,9 +29,9 @@ function Editor({ g, onDone }: { g: Partial<Goal> & { cwd: string }; onDone: (v:
       <label>{tr('目标（一句话说清「做到什么算完成」）')}<textarea className="field" rows={3} value={f.objective} onChange={(e) => setF({ ...f, objective: e.target.value })} placeholder={tr('例如：把 /api/users 的 N+1 查询修掉，加上回归测试，CI 全绿')} /></label>
       <label>{tr('活规格 / 验收标准（Markdown，可随时改，下一轮生效）')}<textarea className="field mono" rows={6} value={f.spec} onChange={(e) => setF({ ...f, spec: e.target.value })} placeholder={tr("- [ ] 验收点 1\n- [ ] 验收点 2\n约束：不改公共 API")} /></label>
       <div className="row3">
-        <label>{tr('项目')}<select className="field" value={f.cwd} onChange={(e) => setF({ ...f, cwd: e.target.value })}>{[...new Set([f.cwd, ...workspaces.map((w) => w.path)])].filter(Boolean).map((p) => <option key={p} value={p}>{p}</option>)}</select></label>
-        <label>{tr('用哪个 Agent')}<select className="field" value={f.agent} onChange={(e) => setF({ ...f, agent: e.target.value })}><option value="">Claude Code</option>{agents.filter((a) => a.kind !== 'claude' && a.installed && a.enabled).map((a) => <option key={a.kind} value={a.kind}>{a.name}</option>)}</select></label>
-        <label>{tr('权限')}<select className="field" value={f.permissionMode} onChange={(e) => setF({ ...f, permissionMode: e.target.value })}>{GOAL_MODES.map((m) => <option key={m} value={m}>{MODE_LABEL[m]}</option>)}</select></label>
+        <label>{tr('项目')}<Select className="field" value={f.cwd} onValueChange={(value) => setF({ ...f, cwd: String(value) })} aria-label={tr('项目')} searchable options={[...new Set([f.cwd, ...workspaces.map((w) => w.path)])].filter(Boolean).map((p) => ({ value: p, label: p }))} /></label>
+        <label>{tr('用哪个 Agent')}<Select className="field" value={f.agent} onValueChange={(value) => setF({ ...f, agent: String(value) })} aria-label={tr('用哪个 Agent')} options={[{ value: '', label: 'Claude Code' }, ...agents.filter((a) => a.kind !== 'claude' && a.installed && a.enabled).map((a) => ({ value: a.kind, label: a.name }))]} /></label>
+        <label>{tr('权限')}<Select className="field" value={f.permissionMode} onValueChange={(value) => setF({ ...f, permissionMode: String(value) })} aria-label={tr('权限')} options={GOAL_MODES.map((m) => ({ value: m, label: MODE_LABEL[m] }))} /></label>
         <label>{tr('最大轮数')}<input className="field" type="number" value={f.maxTurns} onChange={(e) => setF({ ...f, maxTurns: Number(e.target.value) || 50 })} /></label>
         <label>{tr('Token 预算（空 = 不限）')}<input className="field" type="number" value={f.tokenBudget ?? ''} onChange={(e) => setF({ ...f, tokenBudget: e.target.value ? Number(e.target.value) : null })} /></label>
       </div>

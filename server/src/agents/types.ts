@@ -71,6 +71,9 @@ export const AGENT_DEFS: AgentDef[] = [
   { kind: 'qwen', name: 'Qwen Code', icon: 'qwen', protocol: 'acp', command: 'qwen', args: ['--acp'], versionArgs: ['--version'], install: 'npm i -g @qwen-code/qwen-code', login: 'qwen', models: catalogIds('qwen'), docs: 'https://github.com/QwenLM/qwen-code' },
   { kind: 'kimi', name: 'Kimi CLI', icon: 'kimi', protocol: 'acp', command: 'kimi', args: ['acp'], versionArgs: ['--version'], install: 'uv tool install kimi-cli', login: 'kimi login', models: catalogIds('kimi'), docs: 'https://github.com/MoonshotAI/kimi-cli' },
   { kind: 'opencode', name: 'OpenCode', icon: 'opencode', protocol: 'acp', command: 'opencode', args: ['acp'], versionArgs: ['--version'], install: 'npm i -g opencode-ai', login: 'opencode auth login', models: [], docs: 'https://opencode.ai' },
+  // ACP stdio server; sessions can be listed and resumed (`session/resume`, not the standard `session/load`).
+  // `dsh` on PATH (npm i -g) rather than npx: an npx cache with missing transitive deps fails at startup.
+  { kind: 'dsh', name: 'DeepSeek Harness', icon: 'agent', protocol: 'acp', command: 'dsh', args: ['--profile', 'acp'], versionArgs: ['--version'], install: 'npm i -g @deepseek-ai/dsh', login: 'dsh web', models: [], docs: 'https://github.com/deepseek-ai/deepseek-harness' },
 ];
 
 export interface AgentConfig { command?: string; args?: string[]; env?: Record<string, string>; model?: string; label?: string; enabled?: boolean; name?: string; protocol?: 'acp' | 'codex'; /** the provider new sessions of this agent run on when none is picked ('' / absent = its own login) */ providerId?: string }

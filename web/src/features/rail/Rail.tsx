@@ -11,6 +11,7 @@ import { closePages, useSection, type Section } from '@/features/sections';
 import { openAutomation } from '@/features/automation/state';
 import { openExtensions } from '@/features/extensions/state';
 import { openBackground } from '@/features/background/state';
+import { openGateway } from '@/features/gateway/state';
 import { useOrch, waitingOf } from '@/features/orchestra/state';
 import { Menu } from '@/features/sidebar/menus';
 import { AccountMenu } from '@/features/sidebar/account';
@@ -34,6 +35,7 @@ const OPEN: Record<Section, () => void> = {
   chat: closePages,
   background: () => { openBackground(); },
   automation: () => { openAutomation(); },
+  gateway: () => { openGateway(); },
   extensions: () => { openExtensions(); },
 };
 

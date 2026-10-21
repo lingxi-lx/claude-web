@@ -5,6 +5,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { MetaStore } from '../meta/store.js';
 import { GatewayService } from './service.js';
+import { AuditLog } from './audit.js';
 import type { LedgerEntry, Provider } from '../protocol.js';
 
 interface Hit { rawHeaders: string[]; headers: http.IncomingHttpHeaders; body: string; url: string }
@@ -105,7 +106,7 @@ describe('auth and reachability', () => {
   it('Bearer works too; the endpoint helper reflects enable state', async () => {
     const r = await call('/main/v1/messages', msg, { 'x-api-key': '', authorization: `Bearer ${key}` });
     expect(r.status).toBe(200);
-    expect(gw.endpoint('main')).toEqual({ baseUrl: `${base}/main`, key });
+    expect(gw.endpoint('main')).toEqual({ baseUrl: `${base}/main`, key, leanTools: false });
     expect(gw.endpoint('missing')).toBeNull();
   });
 });
@@ -559,6 +560,27 @@ describe('subagent split (/gateway/~s/…): the subagents on the picked model, t
     } finally { gw.anthropicBase = undefined; }
   });
 
+  it('an account main through the user’s own relay (its base URL has a path): main requests go there with the relay key the engine sent; the subagents’ provider never sees it', async () => {
+    const ep = gw.splitEndpoint({ base: `${A.url}/relay/api/` }, { kind: 'provider', providerId: 'o' }, 'deepseek-v4.1')!;
+    O.handler.fn = (_q, res) => res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ id: 'c1', object: 'chat.completion', model: 'deepseek-v4.1', choices: [{ index: 0, message: { role: 'assistant', content: 'from O' }, finish_reason: 'stop' }], usage: { prompt_tokens: 4, completion_tokens: 1 } }));
+    const raw = '{"model":"claude-opus-5-5", "max_tokens":8,"messages":[{"role":"user","content":"hi"}]}';
+    for (const cred of [{ authorization: 'Bearer user-relay-token' }, { 'x-api-key': 'user-relay-token' }]) {
+      A.hits.length = 0;
+      O.hits.length = 0;
+      const r1 = await post(`${ep}/v1/messages?beta=true`, raw, { ...anth, ...cred });
+      expect(JSON.parse(await r1.text()).content[0].text).toBe('from A');
+      expect(A.hits[0]).toMatchObject({ body: raw, url: '/relay/api/v1/messages?beta=true' });
+      const [name, value] = Object.entries(cred)[0];
+      expect(A.hits[0].headers[name]).toBe(value);
+      const r2 = await post(`${ep}/v1/messages?beta=true`, JSON.stringify({ ...msg, model: 'cw-sub/deepseek-v4.1' }), { ...anth, ...cred });
+      expect(JSON.parse(await r2.text()).content[0].text).toBe('from O');
+      expect(JSON.parse(O.hits[0].body).model).toBe('deepseek-v4.1');
+      expect(O.hits[0].headers.authorization).toBe('Bearer sk-o');
+      expect(JSON.stringify(O.hits[0].rawHeaders)).not.toContain('user-relay-token');
+      expect(A.hits).toHaveLength(1);
+    }
+  });
+
   it('an OpenAI-format main (the cache shim’s base): chat completions pass through; the hex alias goes to an Anthropic provider, translated', async () => {
     const ep = gw.splitEndpoint({ base: `${O.url}/v1` }, { kind: 'provider', providerId: 'a' }, 'claude-haiku-4-5')!;
     O.handler.fn = (_q, res) => res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ id: 'c1', object: 'chat.completion', model: 'gpt-x', choices: [{ index: 0, message: { role: 'assistant', content: 'from O' }, finish_reason: 'stop' }], usage: { prompt_tokens: 4, completion_tokens: 1 } }));
@@ -605,6 +627,252 @@ describe('subagent split (/gateway/~s/…): the subagents on the picked model, t
       expect(JSON.parse(await r.text()).content[0].text).toBe('from B');
     } finally {
       await gw.setEnabled(true);
+    }
+  });
+});
+
+describe('account members', () => {
+  it('routes an account member through translation with oauth headers and the Claude Code prefix', async () => {
+    const seen: any[] = [];
+    const up = await fake();
+    up.handler.fn = (q, res, body) => {
+      seen.push({ headers: q.headers, body });
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
+        id: 'm', type: 'message', role: 'assistant', model: 'claude-haiku-4-5',
+        content: [{ type: 'text', text: 'ok' }], stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 },
+      }));
+    };
+    const g2 = new GatewayService({
+      meta, member: () => null,
+      resolveMember: async () => [{ id: 'acct_1', name: 'Account', type: 'anthropic', baseUrl: up.url, apiKey: 'at-1', createdAt: 0, auth: 'oauth', forceTranslate: true }],
+      firstByteMs: 400, nonStreamMs: 3000,
+    });
+    const s = http.createServer((q, r) => { if (!g2.handle(q, r, new URL(q.url ?? '/', 'http://x'))) r.writeHead(418).end(); });
+    await new Promise<void>((r) => s.listen(0, '127.0.0.1', () => r()));
+    g2.port = (s.address() as any).port;
+    await g2.setEnabled(true);
+    await g2.upsertGroup({ id: 'acct', name: 'Acct', strategy: 'failover', members: [{ accountId: 'acct_1' }] });
+    try {
+      const r = await call('/gateway/acct/v1/messages', { model: 'claude-sonnet-4-6', max_tokens: 8, messages: [{ role: 'user', content: 'hi' }] }, { 'x-api-key': g2.revealKey() }, `http://127.0.0.1:${g2.port}`);
+      expect(r.status).toBe(200);
+      expect(seen[0].headers.authorization).toBe('Bearer at-1');
+      expect(seen[0].headers['x-api-key']).toBeUndefined();
+      expect(seen[0].headers['anthropic-beta']).toContain('oauth-2025-04-20');
+      expect(JSON.parse(seen[0].body).system[0].text).toContain('You are Claude Code');
+      // the member state is keyed by the account, not by an empty provider id
+      expect(g2.status().states.acct[0]).toMatchObject({ key: 'a:acct_1', providerId: 'acct_1', health: 'ok' });
+    } finally {
+      s.closeAllConnections();
+      s.close();
+      await up.close();
+    }
+  });
+});
+
+describe('root routes and key groups', () => {
+  it('serves /v1 directly and resolves group/model', async () => {
+    A.handler.fn = anthropicOk('root');
+    const root = await call('/v1/messages', { model: 'main/claude-haiku-4-5', max_tokens: 8, messages: [{ role: 'user', content: 'hi' }] }, {}, `http://127.0.0.1:${gw.port}`);
+    expect(root.status).toBe(200);
+    expect(JSON.parse(root.text).content[0].text).toBe('root');
+    // two route groups and no prefix: the client must say which
+    const ambiguous = await call('/v1/messages', { model: 'claude-haiku-4-5', max_tokens: 8, messages: [] }, {}, `http://127.0.0.1:${gw.port}`);
+    expect(ambiguous.status).toBe(400);
+  });
+
+  it('enforces a key group allowlist on explicit group paths', async () => {
+    A.handler.fn = anthropicOk('root');
+    const kg = await gw.keys.upsertGroup({ id: 'restricted', name: 'R', routeGroupIds: ['mixed'] });
+    const { plaintext } = await gw.keys.create(kg.id, 'restricted');
+    const denied = await call('/main/v1/messages', { model: 'x', max_tokens: 1, messages: [] }, { 'x-api-key': plaintext }, `http://127.0.0.1:${gw.port}`);
+    expect(denied.status).toBe(403);
+  });
+
+  it('rate-limits a key', async () => {
+    const kg = await gw.keys.upsertGroup({ id: 'slow', name: 'Slow', routeGroupIds: ['main'], rateLimit: { rpm: 1 } });
+    const { plaintext } = await gw.keys.create(kg.id, 'slow');
+    A.handler.fn = anthropicOk('x');
+    const one = await call('/main/v1/messages', { model: 'm', max_tokens: 1, messages: [] }, { 'x-api-key': plaintext }, `http://127.0.0.1:${gw.port}`);
+    expect(one.status).toBe(200);
+    const two = await call('/main/v1/messages', { model: 'm', max_tokens: 1, messages: [] }, { 'x-api-key': plaintext }, `http://127.0.0.1:${gw.port}`);
+    expect(two.status).toBe(429);
+    expect(two.headers.get('retry-after')).toBeTruthy();
+  });
+
+  it('rejects a model outside the key group allowlist', async () => {
+    const kg = await gw.keys.upsertGroup({ id: 'only-sonnet', name: 'S', routeGroupIds: ['main'], modelAllowlist: ['claude-sonnet-*'] });
+    const { plaintext } = await gw.keys.create(kg.id, 'sonnet');
+    A.handler.fn = anthropicOk('x');
+    const denied = await call('/main/v1/messages', { model: 'claude-opus-4-7', max_tokens: 1, messages: [] }, { 'x-api-key': plaintext }, `http://127.0.0.1:${gw.port}`);
+    expect(denied.status).toBe(403);
+    const ok = await call('/main/v1/messages', { model: 'claude-sonnet-4-6', max_tokens: 1, messages: [] }, { 'x-api-key': plaintext }, `http://127.0.0.1:${gw.port}`);
+    expect(ok.status).toBe(200);
+  });
+});
+
+describe('LAN listener', () => {
+  it('exposes only the data plane and requires allowLan', async () => {
+    const kg = await gw.keys.upsertGroup({ id: 'lan', name: 'LAN', routeGroupIds: ['main'], allowLan: true, ipAllowlist: ['127.0.0.0/8'] });
+    const { plaintext } = await gw.keys.create(kg.id, 'lan');
+    await gw.setLan({ enabled: true, bind: '127.0.0.1', port: 0 });
+    const lan = `http://127.0.0.1:${gw.lanStatus().port}`;
+    A.handler.fn = anthropicOk('lan');
+    try {
+      const ok = await call('/v1/messages', { model: 'm', max_tokens: 1, messages: [] }, { 'x-api-key': plaintext }, lan);
+      expect(ok.status).toBe(200);
+      const admin = await fetch(`${lan}/gateway/main/v1/messages`, { method: 'POST', headers: { 'x-api-key': plaintext }, body: '{}' });
+      expect(admin.status).toBe(404);
+      // the default key group does not allow LAN
+      const denied = await call('/v1/messages', { model: 'm', max_tokens: 1, messages: [] }, { 'x-api-key': key }, lan);
+      expect(denied.status).toBe(403);
+      const health = await fetch(`${lan}/healthz`);
+      expect(health.status).toBe(200);
+    } finally {
+      await gw.stopLan();
+    }
+  });
+
+  it('confirms 0.0.0.0 and rejects a public bind address', async () => {
+    await expect(gw.setLan({ bind: '0.0.0.0' })).rejects.toThrow();
+    await expect(gw.setLan({ bind: '8.8.8.8' })).rejects.toThrow();
+    await gw.setLan({ bind: '0.0.0.0', confirmAny: true, enabled: false });
+  });
+});
+
+describe('claude-account provider members', () => {
+  it('is sent as an Anthropic login, never passed through', async () => {
+    const seen: any[] = [];
+    const up = await fake();
+    up.handler.fn = (_q, res, body) => {
+      seen.push(body);
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
+        id: 'm', type: 'message', role: 'assistant', model: 'claude-haiku-4-5',
+        content: [{ type: 'text', text: 'ok' }], stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 },
+      }));
+    };
+    const acct = await meta.upsertProvider({ name: 'Login', type: 'claude-account', apiKey: 'sk-ant-oat01-login', baseUrl: up.url });
+    const g3 = new GatewayService({ meta, member: (id) => meta.provider(id) ?? null, firstByteMs: 400, nonStreamMs: 3000 });
+    const s = http.createServer((q, r) => { if (!g3.handle(q, r, new URL(q.url ?? '/', 'http://x'))) r.writeHead(418).end(); });
+    await new Promise<void>((r) => s.listen(0, '127.0.0.1', () => r()));
+    g3.port = (s.address() as any).port;
+    await g3.setEnabled(true);
+    await g3.upsertGroup({ id: 'login', name: 'Login', strategy: 'failover', members: [{ providerId: acct.id }] });
+    try {
+      const r = await call('/gateway/login/v1/messages', { model: 'claude-sonnet-4-6', max_tokens: 4, messages: [{ role: 'user', content: 'hi' }] }, { 'x-api-key': g3.revealKey() }, `http://127.0.0.1:${g3.port}`);
+      expect(r.status, r.text).toBe(200);
+      expect(JSON.parse(seen[0]).system[0].text).toContain('You are Claude Code');
+      expect(g3.status().states.login[0]).toMatchObject({ key: `p:${acct.id}`, health: 'ok' });
+    } finally {
+      s.closeAllConnections();
+      s.close();
+      await up.close();
+    }
+  });
+});
+
+describe('account members on the other inbound protocols', () => {
+  const accountService = async () => {
+    const up = await fake();
+    up.handler.fn = (q, res, body) => {
+      const j = JSON.parse(body || '{}');
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
+        id: 'm', type: 'message', role: 'assistant', model: j.model ?? 'claude-haiku-4-5',
+        content: [{ type: 'text', text: 'from account' }], stop_reason: 'end_turn', usage: { input_tokens: 2, output_tokens: 3 },
+      }));
+    };
+    const g = new GatewayService({
+      meta, member: () => null,
+      resolveMember: async () => [{ id: 'acct_x', name: 'Account', type: 'anthropic', baseUrl: up.url, apiKey: 'at-x', createdAt: 0, auth: 'oauth', forceTranslate: true, account: true }],
+      firstByteMs: 400, nonStreamMs: 3000,
+    });
+    const s = http.createServer((q, r) => { if (!g.handle(q, r, new URL(q.url ?? '/', 'http://x'))) r.writeHead(418).end(); });
+    await new Promise<void>((r) => s.listen(0, '127.0.0.1', () => r()));
+    g.port = (s.address() as any).port;
+    await g.setEnabled(true);
+    await g.upsertGroup({ id: 'acct2', name: 'Acct', strategy: 'failover', members: [{ accountId: 'acct_x' }] });
+    return { g, up, s };
+  };
+
+  it('translates a Responses inbound into an account request and back', async () => {
+    const { g, up, s } = await accountService();
+    try {
+      const r = await call('/gateway/acct2/v1/responses', { model: 'claude-sonnet-4-6', input: 'hi' }, { 'x-api-key': g.revealKey() }, `http://127.0.0.1:${g.port}`);
+      expect(r.status).toBe(200);
+      const j = JSON.parse(r.text);
+      expect(j.object).toBe('response');
+      expect(j.output?.[0]?.content?.[0]?.text).toBe('from account');
+    } finally { s.closeAllConnections(); s.close(); await up.close(); }
+  });
+
+  it('translates a Gemini inbound into an account request and back', async () => {
+    const { g, up, s } = await accountService();
+    try {
+      const r = await call('/gateway/acct2/v1beta/models/claude-sonnet-4-6:generateContent', { contents: [{ role: 'user', parts: [{ text: 'hi' }] }] }, { 'x-api-key': g.revealKey() }, `http://127.0.0.1:${g.port}`);
+      expect(r.status).toBe(200);
+      expect(JSON.parse(r.text).candidates?.[0]?.content?.parts?.[0]?.text).toBe('from account');
+    } finally { s.closeAllConnections(); s.close(); await up.close(); }
+  });
+
+  it('estimates count_tokens locally for an account target, never as a generation', async () => {
+    const { g, up, s } = await accountService();
+    const before = up.hits.length;
+    try {
+      const r = await call('/gateway/acct2/v1/messages/count_tokens', { model: 'claude-sonnet-4-6', messages: [{ role: 'user', content: 'hello' }] }, { 'x-api-key': g.revealKey() }, `http://127.0.0.1:${g.port}`);
+      expect(r.status).toBe(200);
+      expect(JSON.parse(r.text).input_tokens).toBeGreaterThan(0);
+      expect(r.headers.get('x-cw-estimated')).toBe('1');
+      expect(up.hits.length).toBe(before);
+    } finally { s.closeAllConnections(); s.close(); await up.close(); }
+  });
+
+  it('enforces the key group daily token budget', async () => {
+    const { g, up, s } = await accountService();
+    try {
+      const kg = await g.keys.upsertGroup({ id: 'budget', name: 'B', routeGroupIds: ['acct2'], rateLimit: { dailyTokens: 1 } });
+      const { plaintext } = await g.keys.create(kg.id, 'budget');
+      const first = await call('/gateway/acct2/v1/messages', { model: 'claude-sonnet-4-6', max_tokens: 2, messages: [] }, { 'x-api-key': plaintext }, `http://127.0.0.1:${g.port}`);
+      expect(first.status).toBe(200);
+      const second = await call('/gateway/acct2/v1/messages', { model: 'claude-sonnet-4-6', max_tokens: 2, messages: [] }, { 'x-api-key': plaintext }, `http://127.0.0.1:${g.port}`);
+      expect(second.status).toBe(429);
+      expect(second.headers.get('retry-after')).toBeTruthy();
+    } finally { s.closeAllConnections(); s.close(); await up.close(); }
+  });
+
+  it('filters /v1/models by the key group allowlist', async () => {
+    const { g, up, s } = await accountService();
+    try {
+      const kg = await g.keys.upsertGroup({ id: 'one', name: 'One', routeGroupIds: ['acct2'], modelAllowlist: ['only-this'] });
+      const { plaintext } = await g.keys.create(kg.id, 'one');
+      const r = await fetch(`http://127.0.0.1:${g.port}/v1/models`, { headers: { 'x-api-key': plaintext } });
+      expect(r.status).toBe(200);
+      const j: any = await r.json();
+      expect(j.data.map((x: any) => x.id)).toEqual(['only-this']);
+    } finally { s.closeAllConnections(); s.close(); await up.close(); }
+  });
+});
+
+describe('audit of refused requests', () => {
+  it('writes a line for a 401 with no key, and never the body', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-audit-gw-'));
+    const m = new MetaStore(path.join(dir, 'meta.json'));
+    await m.load();
+    const audit = new AuditLog(path.join(dir, 'logs'), () => ({ enabled: true, maxBytes: 1_000_000, keepFiles: 3 }));
+    const g = new GatewayService({ meta: m, member: () => null, audit, firstByteMs: 400, nonStreamMs: 3000 });
+    const s = http.createServer((q, r) => { if (!g.handle(q, r, new URL(q.url ?? '/', 'http://x'))) r.writeHead(418).end(); });
+    await new Promise<void>((r) => s.listen(0, '127.0.0.1', () => r()));
+    g.port = (s.address() as any).port;
+    await g.setEnabled(true);
+    await g.upsertGroup({ id: 'main', name: 'Main', strategy: 'failover', members: [] });
+    try {
+      const r = await fetch(`http://127.0.0.1:${g.port}/main/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model: 'x', messages: [{ role: 'user', content: 'SECRET PROMPT' }] }) });
+      expect(r.status).toBe(401);
+      const lines = await audit.list({});
+      expect(lines.some((l) => l.status === 401 && l.keyId === '')).toBe(true);
+      expect(JSON.stringify(lines)).not.toContain('SECRET PROMPT');
+    } finally {
+      s.closeAllConnections();
+      s.close();
+      await g.stop();
     }
   });
 });

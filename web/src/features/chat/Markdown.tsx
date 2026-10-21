@@ -1,10 +1,10 @@
-import { memo, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
+import { createContext, memo, useContext, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { CodeBlock } from './CodeBlock';
+import { CodeBlock, type CodeRunContext } from './CodeBlock';
 import { useStore } from '@/store';
 import { desktop } from '@/desktop';
-import { arrive, rehypeStreamFade, type FadeState } from './stream-fade';
+import { arrive, rehypeStreamFade, settledCuts, type FadeState } from './stream-fade';
 import { reducedMotion } from './Fold';
 
 export { DiffView } from './DiffView';
@@ -24,6 +24,9 @@ function openLink(href: string) {
   else window.open(href, '_blank', 'noopener,noreferrer');
 }
 
+/** Only the conversation's own view provides this; a code block elsewhere gets no 运行 button. */
+const CodeRunCtx = createContext<CodeRunContext | undefined>(undefined);
+
 const components: Components = {
   pre({ children }) {
     // fenced code: unwrap the <pre><code class="language-x"> pair into CodeBlock
@@ -31,7 +34,8 @@ const components: Components = {
     const props = child?.props ?? {};
     const lang = /language-([\w+-]+)/.exec(props.className ?? '')?.[1];
     const code = typeof props.children === 'string' ? props.children : Array.isArray(props.children) ? props.children.join('') : '';
-    return <CodeBlock code={code} lang={lang} streaming={(props as any)['data-streaming']} maxLines={400} />;
+    const run = useContext(CodeRunCtx);
+    return <CodeBlock code={code} lang={lang} streaming={(props as any)['data-streaming']} maxLines={400} run={run} />;
   },
   code({ className, children, ...rest }: ComponentProps<'code'>) {
     return <code className={className} {...rest}>{children}</code>;
@@ -51,9 +55,24 @@ const components: Components = {
 
 /**
  * `streaming`: the text is still arriving. What arrives fades in (stream-fade.ts: the new end of the last block is
- * wrapped in `<span class="w">` for the length of its fade); when the stream ends the text is plain again.
+ * wrapped in `<span class="w">` for the length of its fade); when the stream ends the text is plain again, parsed
+ * whole. While a long one streams, the blocks that stopped changing are parsed once each (memo) and only the last
+ * one again per frame: a long thinking parsed whole for every frame was most of a frame (2026-10-19, DeepSeek).
  */
-export const Markdown = memo(function Markdown({ text, streaming }: { text: string; streaming?: boolean }) {
+export const Markdown = memo(function Markdown({ text, streaming, run }: { text: string; streaming?: boolean; run?: CodeRunContext }) {
+  const cuts = streaming && text.length > 2000 ? settledCuts(text) : [];
+  return (
+    <div className="md" data-streaming={streaming || undefined}>
+      <CodeRunCtx.Provider value={run}>
+        {cuts.length
+          ? [0, ...cuts].map((at, i) => <MarkdownBody key={i} text={text.slice(at, cuts[i] ?? text.length)} streaming={i === cuts.length} />)
+          : <MarkdownBody text={text} streaming={streaming} />}
+      </CodeRunCtx.Provider>
+    </div>
+  );
+});
+
+const MarkdownBody = memo(function MarkdownBody({ text, streaming }: { text: string; streaming?: boolean }) {
   const needMath = useMemo(() => MATH_RE.test(text), [text]);
   const [math, setMath] = useState<MathPlugins>(mathCache);
   useEffect(() => {
@@ -67,10 +86,8 @@ export const Markdown = memo(function Markdown({ text, streaming }: { text: stri
   const remark = useMemo(() => (needMath && math ? [remarkGfm, [math.remark, { singleDollarTextMath: false }]] : [remarkGfm]), [needMath, math]);
   const rehype = useMemo(() => [...(needMath && math ? [[math.rehype, { throwOnError: false, strict: false }]] : []), ...(fades ? [[rehypeStreamFade, fade]] : [])], [needMath, math, fades]);
   return (
-    <div className="md" data-streaming={streaming || undefined}>
-      <ReactMarkdown remarkPlugins={remark as any} rehypePlugins={rehype as any} components={components}>
-        {text}
-      </ReactMarkdown>
-    </div>
+    <ReactMarkdown remarkPlugins={remark as any} rehypePlugins={rehype as any} components={components}>
+      {text}
+    </ReactMarkdown>
   );
 });

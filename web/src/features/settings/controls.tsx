@@ -2,6 +2,8 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useStore } from '@/store';
 import { clsx } from '@/util';
 import { Segmented } from '@/ui/Segmented';
+import { Select as MenuSelect } from '@/ui/Select';
+import { tr } from '@/i18n';
 import { imeComposing } from '@/ui/ime';
 
 // The controls of one settings row (a meta.json key through `settings.set`) and the row itself: 标题 + 一句后果 +
@@ -17,11 +19,7 @@ export function Toggle({ k, def = false, label }: { k: string; def?: boolean; la
 export function Select({ k, def, options, label }: { k: string; def: string; options: { id: string; l: string }[]; label?: string }) {
   const v = useStore((s) => s.settings[k]);
   const set = useStore((s) => s.setSetting);
-  return (
-    <select className="field" aria-label={label} value={String(v ?? def)} onChange={(e) => void set(k, e.target.value)}>
-      {options.map((o) => <option key={o.id} value={o.id}>{o.l}</option>)}
-    </select>
-  );
+  return <MenuSelect className="field" aria-label={label} value={String(v ?? def)} onValueChange={(value) => void set(k, String(value))} options={options.map((o) => ({ value: o.id, label: o.l }))} label={label ?? tr('选择')} />;
 }
 
 /** A line of text, saved when it loses focus or on Enter ('' = not set). */
@@ -42,11 +40,7 @@ export function TextSetting({ k, label, placeholder, mono }: { k: string; label?
 export function NumberSelect({ k, def, options, label }: { k: string; def: number; options: readonly number[]; label?: string }) {
   const v = useStore((s) => s.settings[k]);
   const set = useStore((s) => s.setSetting);
-  return (
-    <select className="field" aria-label={label} value={String(v ?? def)} onChange={(e) => void set(k, Number(e.target.value))}>
-      {options.map((o) => <option key={o} value={o}>{o}</option>)}
-    </select>
-  );
+  return <MenuSelect className="field" aria-label={label} value={String(v ?? def)} onValueChange={(value) => void set(k, Number(value))} options={options.map((o) => ({ value: String(o), label: String(o) }))} label={label ?? tr('选择')} />;
 }
 
 /** A segmented choice for two or three short options (改动的显示方式: 上下对照 / 左右并排). */

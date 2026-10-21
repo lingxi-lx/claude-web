@@ -9,8 +9,8 @@ import { tr } from '@/i18n';
 const snoozed: Record<string, number> = {};
 
 /**
- * The update prompt (desktop only, in the main window): the main process finds and — on the Windows installer —
- * downloads a new version by itself (desktop/src/main.ts, update-policy.ts); this asks to restart into it, or, where
+ * The update prompt (desktop only, in the main window): the main process finds and — on the Windows installer and a
+ * Mac app that can replace itself — downloads a new version by itself (desktop/src/main.ts, update-policy.ts); this asks to restart into it, or, where
  * the build cannot install it, points at the download. A release marked 必须更新 has no 稍后.
  */
 export function UpdatePrompt() {
@@ -40,7 +40,7 @@ export function UpdatePrompt() {
   if (!p || !desktop) return null;
   const d = desktop;
 
-  const c = promptCopy(p, { platform: d.platform, mode: st?.mode, portable: d.platform === 'win32' && st?.mode === 'manual', running });
+  const c = promptCopy(p, { platform: d.platform, mode: st?.mode, why: st?.why, portable: d.platform === 'win32' && st?.mode === 'manual', running });
   const later = () => { snoozed[p.version] = Date.now(); setOpened(null); setTick((t) => t + 1); };
   const install = async () => {
     setBusy(true);

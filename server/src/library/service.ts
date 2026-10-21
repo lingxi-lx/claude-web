@@ -113,7 +113,12 @@ function defaultDataDirs(): Partial<Record<AgentKind, string[]>> {
   const home = os.homedir();
   const oc = [path.join(home, '.local', 'share', 'opencode')];
   if (process.env.LOCALAPPDATA) oc.push(path.join(process.env.LOCALAPPDATA, 'opencode'));
-  return { codex: [path.join(home, '.codex', 'sessions')], opencode: oc };
+  return {
+    codex: [path.join(home, '.codex', 'sessions')],
+    opencode: oc,
+    cursor: [path.join(home, '.cursor', 'projects')],
+    dsh: [process.env.DSH_HOME?.trim() || path.join(home, '.dsh')],
+  };
 }
 
 function defaultWatchDirs(): Partial<Record<AgentKind, string[]>> {
@@ -521,8 +526,9 @@ export class LibraryService extends EventEmitter {
       const info = infos.find((x) => x.kind === kind);
       const defName = info?.name ?? this.opts.agents?.defs().find((d) => d.kind === kind)?.name ?? kind;
       const installed = !!info?.installed || this.dirExists(kind);
+      const caps = this.srcs.get(kind)?.caps;
       if (!this.isJoined(kind)) {
-        return { kind, name: defName, installed, detected: installed, joined: false, dismissed: dismissed.includes(kind), enabled: false };
+        return { kind, name: defName, installed, detected: installed, joined: false, dismissed: dismissed.includes(kind), enabled: false, ...(caps ? { caps } : {}) };
       }
       const src = this.source(kind);
       let st: SourceStatus;
@@ -536,6 +542,7 @@ export class LibraryService extends EventEmitter {
         ...st,
         name: !st.name || st.name === kind ? defName : st.name,
         joined: true,
+        ...(caps ? { caps } : {}),
         dismissed: dismissed.includes(kind),
         count: this.perKind.get(kind)?.items.length,
         indexedAt: this.indexedAtByKind.get(kind),
@@ -730,6 +737,12 @@ export class LibraryService extends EventEmitter {
       const route = parseLibraryId(id);
       if (!s || route.kind === 'claude') throw new Error(tr('对话库里找不到这个对话'));
       if (!this.isJoined(route.kind)) throw new Error(tr('这个对话的来源没有加入对话库'));
+      // a read-only source has no official way to continue: say so instead of handing it to a driver that cannot
+      const src = this.source(route.kind);
+      if (!src?.caps.resume) {
+        const name = this.opts.agents?.defs().find((d) => d.kind === route.kind)?.name ?? (route.kind === 'cursor' ? 'Cursor' : route.kind);
+        throw new Error(src ? tr('{name} 的历史对话是只读的，不能接着聊；可以在对话库里查看和搜索', { name }) : tr('这个对话的来源没有加入对话库'));
+      }
       await this.transcripts.create({ sessionId: id, agent: route.kind, cwd: s.cwd, title: s.title, createdAt: s.createdAt ?? s.lastModified ?? Date.now(), nativeSessionId: route.nativeId, imported: true });
       return { agent: route.kind, cwd: s.cwd };
     })();

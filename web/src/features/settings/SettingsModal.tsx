@@ -42,6 +42,7 @@ import { tr, trAs } from '@/i18n';
 import { CustomCssSection } from './CustomCssSection';
 import { VIEW_MODES, viewModeLabel } from '@/features/chat/view-mode';
 import { LocalEnvEditor } from './LocalEnvEditor';
+import { thinkingLanguageOptions } from './thinking-language';
 
 export { Row } from './controls';
 
@@ -76,6 +77,7 @@ const CONTROLS: Record<EntryId, (e: EntryMeta) => ReactNode> = {
   'cafe.rate': (e) => <NumberSelect k={e.id} def={5} label={e.label} options={[0, 2, 3, 5, 8, 10, 15]} />,
   'cafe.sound': (e) => <Toggle k={e.id} label={e.label} />,
   'ui.language': (e) => <Select k={e.id} def="auto" label={e.label} options={LANGUAGES} />,
+  'ai.thinkingLanguage': (e) => <Select k={e.id} def="" label={e.label} options={thinkingLanguageOptions()} />,
   'ui.theme': (e) => <ThemeSwatches label={e.label} />,
   'ui.zoom': (e) => <ZoomControl label={e.label} />,
   'ui.fontSize': (e) => <NumberSelect k={e.id} def={14} label={e.label} options={FONT_SIZES} />,

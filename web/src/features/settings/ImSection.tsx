@@ -8,6 +8,7 @@ import { ProviderSelect } from '@/features/providers/ProviderSelect';
 import { Icon } from '@/ui/icons';
 import { MODE_LABEL } from '@/ui/terms';
 import { tr } from '@/i18n';
+import { Select } from '@/ui/Select';
 
 const MODES = (['default', 'acceptEdits', 'bypassPermissions'] as const).map((m) => [m, MODE_LABEL[m]] as const);
 
@@ -55,9 +56,9 @@ function GatewayCard({ g, def, onChange }: { g: ImGatewayInfo; def: ImKindDef; o
         <div className="agent-form">
           <label>{tr('名称')}<input className="field" value={name} onChange={(e) => setName(e.target.value)} /></label>
           {def.fields.map((fl) => <label key={fl.key}>{fl.label}<input className="field" type={fl.secret ? 'password' : 'text'} value={f[fl.key] ?? ''} onChange={(e) => setF({ ...f, [fl.key]: e.target.value })} placeholder={fl.hint ?? ''} autoComplete="off" /></label>)}
-          <label>{tr('默认项目')}<select className="field" value={g.defaultCwd} onChange={(e) => patch({ defaultCwd: e.target.value })}><option value="">{tr('第一个项目')}</option>{workspaces.map((w) => <option key={w.id} value={w.path}>{w.name} · {w.path}</option>)}</select></label>
-          <label>{tr('权限模式')}<select className="field" value={g.permissionMode} onChange={(e) => patch({ permissionMode: e.target.value })}>{MODES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
-          <label>{tr('用哪个 Agent')}<select className="field" value={g.agent} onChange={(e) => patch({ agent: e.target.value })}><option value="">Claude Code</option>{agents.filter((a) => a.kind !== 'claude' && a.installed && a.enabled).map((a) => <option key={a.kind} value={a.kind}>{a.name}</option>)}</select></label>
+          <label>{tr('默认项目')}<Select className="field" value={g.defaultCwd} onValueChange={(value) => patch({ defaultCwd: String(value) })} aria-label={tr('默认项目')} searchable={workspaces.length > 8} options={[{ value: '', label: tr('第一个项目') }, ...workspaces.map((w) => ({ value: w.path, label: w.name, description: w.path }))]} /></label>
+          <label>{tr('权限模式')}<Select className="field" value={g.permissionMode} onValueChange={(value) => patch({ permissionMode: String(value) })} aria-label={tr('权限模式')} options={MODES.map(([v, l]) => ({ value: v, label: l }))} /></label>
+          <label>{tr('用哪个 Agent')}<Select className="field" value={g.agent} onValueChange={(value) => patch({ agent: String(value) })} aria-label={tr('用哪个 Agent')} options={[{ value: '', label: 'Claude Code' }, ...agents.filter((a) => a.kind !== 'claude' && a.installed && a.enabled).map((a) => ({ value: a.kind, label: a.name }))]} /></label>
           {/* the bot's new conversations: a relay, the account, or whatever a new conversation in the window gets */}
           <label>{tr('用哪个供应商')}<ProviderSelect agent={(g.agent || 'claude') as AgentKind} value={g.providerId ?? ''} onChange={(v) => patch({ providerId: v })} first={{ label: tr('跟新对话一样（{sameAsNew}）', { sameAsNew }), title: tr('和在窗口里开新对话时用的一样') }} own={g.agent ? tr('{agentName} 自己的登录', { agentName }) : tr('Claude 账号')} /></label>
           <label className="chip" style={{ alignSelf: 'end' }}><input type="checkbox" checked={g.verbose} onChange={(e) => patch({ verbose: e.target.checked })} /> {tr('推送工具调用过程')}</label>

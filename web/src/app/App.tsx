@@ -36,6 +36,7 @@ import { Rail } from '@/features/rail/Rail';
 import { RAIL_WIDTH } from '@/features/rail/rail-model';
 import { AutomationSide } from '@/features/automation/AutomationSide';
 import { ExtensionsSide } from '@/features/extensions/ExtensionsSide';
+import { GatewaySide } from '@/features/gateway/GatewaySide';
 import { installChecklist } from '@/features/home/checklist-sync';
 import { installAccountDefault } from '@/features/models/account-default';
 import { installSettingsClose } from '@/features/settings/close-on-nav';
@@ -47,6 +48,7 @@ import { CustomCss } from './custom-css';
 import { AddAccountHost } from '@/features/settings/ClaudeAccounts';
 import { FileMenu } from '@/features/files/FileMenu';
 import { fillComposer } from '@/features/composer/fill';
+import { quoteInComposer } from '@/features/composer/quote';
 import { WhatsNewModal, useWhatsNewOnUpdate } from '@/features/update/WhatsNew';
 import { startNavHistory } from '@/features/workbench/nav-history';
 
@@ -76,6 +78,7 @@ function SidebarColumn() {
       <div className="sb-sect" data-section="chat" hidden={section !== 'chat'}><ErrorBoundary area={tr('侧栏')}><Sidebar onNew={() => runCommand('new')} /></ErrorBoundary></div>
       {seen.includes('background') && <div className="sb-sect" data-section="background" hidden={section !== 'background'}><ErrorBoundary area={tr('侧栏 · 后台')}><BackgroundSide /></ErrorBoundary></div>}
       {seen.includes('automation') && <div className="sb-sect" data-section="automation" hidden={section !== 'automation'}><ErrorBoundary area={tr('侧栏 · 自动化')}><AutomationSide /></ErrorBoundary></div>}
+      {seen.includes('gateway') && <div className="sb-sect" data-section="gateway" hidden={section !== 'gateway'}><ErrorBoundary area={tr('侧栏 · 网关')}><GatewaySide /></ErrorBoundary></div>}
       {seen.includes('extensions') && <div className="sb-sect" data-section="extensions" hidden={section !== 'extensions'}><ErrorBoundary area={tr('侧栏 · 扩展')}><ExtensionsSide /></ErrorBoundary></div>}
       <div
         className="resizer right"
@@ -252,7 +255,11 @@ export function App() {
     };
     const offLink = desktop.onDeepLink?.(() => void takeLink());
     void takeLink();
-    return () => { offCmd(); offFocus(); offLink?.(); };
+    // 右键菜单 → 引用到输入框 (desktop/src/context-menu.ts): the selected text into the front conversation's input box
+    const offQuote = desktop.onQuoteSelection?.((text) => {
+      if (!quoteInComposer(text)) useStore.getState().toast(tr('先打开一个对话（或新对话），再引用'));
+    });
+    return () => { offCmd(); offFocus(); offLink?.(); offQuote?.(); };
   }, []);
 
   useEffect(() => {

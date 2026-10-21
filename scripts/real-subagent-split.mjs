@@ -20,6 +20,14 @@ const dataDir = path.join(tmp, 'data');
 const proj = path.join(tmp, 'proj');
 fs.mkdirSync(dataDir, { recursive: true });
 fs.mkdirSync(proj, { recursive: true });
+// PROMPT=…: an ordinary request instead of the one asking for a subagent (子代理硬绑定: does the main model delegate
+// unasked?); the project gets a few files to look at
+if (process.env.PROMPT) {
+  for (const [f, body] of Object.entries({ 'src/cart.js': 'export function total(items) { return items.reduce((s, i) => s + i.price * i.qty, 0); }\n', 'src/user.js': 'export function fullName(u) { return `${u.first} ${u.last}`; }\n', 'src/tax.js': 'export const RATE = 0.13;\nexport function withTax(n) { return n * (1 + RATE); }\n', 'README.md': '# shop\nA tiny shop.\n' })) {
+    fs.mkdirSync(path.dirname(path.join(proj, f)), { recursive: true });
+    fs.writeFileSync(path.join(proj, f), body);
+  }
+}
 const meta = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.claude-web', 'meta.json'), 'utf8'));
 fs.writeFileSync(path.join(dataDir, 'meta.json'), JSON.stringify({ version: meta.version, providers: meta.providers, settings: { 'network.proxy': meta.settings?.['network.proxy'] ?? 'system', 'ui.disabledModels': meta.settings?.['ui.disabledModels'] } }));
 
@@ -53,11 +61,16 @@ try {
   sid = o.sessionId;
   console.log('opened', sid, 'runtime', o.info?.runtime, 'main model', o.info?.model, 'sub', o.info?.subagentModel);
   const from = events.length;
-  await req({ kind: 'session.send', params: { sessionId: sid, text: 'Use the Agent tool exactly once (subagent_type general-purpose) with the prompt "Reply with exactly: PONG-SUB and say which model you are." Then tell me, in one line, what the subagent answered. Do nothing else.' } });
+  await req({ kind: 'session.send', params: { sessionId: sid, text: process.env.PROMPT || 'Use the Agent tool exactly once (subagent_type general-purpose) with the prompt "Reply with exactly: PONG-SUB and say which model you are." Then tell me, in one line, what the subagent answered. Do nothing else.' } });
   const result = await until(() => events.slice(from).find((e) => e.kind === 'session.event' && e.sessionId === sid && e.message?.type === 'result')?.message, 300_000);
   const texts = events.slice(from).filter((e) => e.kind === 'session.event' && e.sessionId === sid && e.message?.type === 'assistant').map((e) => ({ parent: e.message.parent_tool_use_id ?? null, model: e.message.message?.model, text: (e.message.message?.content ?? []).filter((b) => b.type === 'text').map((b) => b.text).join(' ').slice(0, 160) })).filter((x) => x.text);
   console.log('result', result?.subtype, result?.is_error ? 'ERROR' : '', JSON.stringify(result?.modelUsage ? Object.keys(result.modelUsage) : null));
   for (const t of texts) console.log(t.parent ? '  [sub]' : '  [main]', t.model, '|', t.text);
+  // how the main model called its subagents (subagent_type / model / a fork without a type)
+  for (const e of events.slice(from)) {
+    if (e.kind !== 'session.event' || e.sessionId !== sid || e.message?.type !== 'assistant' || e.message.parent_tool_use_id) continue;
+    for (const b of e.message.message?.content ?? []) if (b.type === 'tool_use' && (b.name === 'Agent' || b.name === 'Task')) console.log('  [Agent call]', JSON.stringify({ subagent_type: b.input?.subagent_type, model: b.input?.model, run_in_background: b.input?.run_in_background, keys: Object.keys(b.input ?? {}) }));
+  }
   const subs = await req({ kind: 'transcript.subagents', sessionId: sid }).catch(() => []);
   for (const a of subs) {
     const msgs = await req({ kind: 'transcript.subagent', sessionId: sid, agentId: a }).catch(() => []);

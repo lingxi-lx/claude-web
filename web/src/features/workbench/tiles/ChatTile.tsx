@@ -39,6 +39,7 @@ import { openSideChat } from '@/features/chat/side-chat';
 import { openBackground, useBackground } from '@/features/background/state';
 import { desktop } from '@/desktop';
 import type { PanelId } from '@/model/layout';
+import { ThinkingLanguageRow } from '@/features/settings/ThinkingLanguageRow';
 
 type ChatTileModel = Extract<Tile, { kind: 'chat' }>;
 
@@ -68,6 +69,8 @@ function HeaderMenu({ tile, paneId, s, live, remote, gone, onClose }: { tile: Ch
           <Icon name="bolt" size={14} /> <span style={{ flex: 1 }}>{tr('保持电脑唤醒')}<span className="menu-sub">{tr('只对这个对话')}</span></span><span className={clsx('toggle sm', keepAwake && 'on')} aria-hidden />
         </button>
       )}
+      {/* 思考用的语言, this conversation's own (Claude conversations on this machine: the instruction is Claude's system prompt) */}
+      {!remote && !gone && (!s.agent || s.agent === 'claude') && <ThinkingLanguageRow sessionId={s.sessionId} />}
       <div className="menu-sep" />
       <button onClick={act(() => shareConversation(s.sessionId))}><Icon name="share" size={14} /> {tr('导出为 HTML')}</button>
       <button onClick={act(() => patch({ wb: 'live', view: tile.view === 'trajectory' && tile.wb === 'live' ? 'chat' : 'trajectory' }))} title={tr('对话 ⇄ {trajectory}（Alt+J）', { trajectory: TERMS.trajectory })}>

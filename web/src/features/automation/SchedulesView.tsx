@@ -13,6 +13,7 @@ import { Icon } from '@/ui/icons';
 import { cronText, nextRunText, scheduleText } from './schedule-text';
 import { SCHEDULES_HERO, templateLook } from './templates';
 import { tr } from '@/i18n';
+import { Select } from '@/ui/Select';
 
 interface Template { id: string; name: string; cron: string; prompt: string; permissionMode: PermissionMode; freshSession?: boolean }
 
@@ -98,7 +99,7 @@ export function SchedulesView({ compact = false, page = false, newSignal = 0 }: 
         {mode === 'cron' ? (
           <>
             <input className="field mono sf-cron" placeholder={tr('分 时 日 月 周')} value={editing.cron ?? ''} onChange={(e) => setEditing({ ...editing, cron: e.target.value })} />
-            <select className="field sf-pick" value="" onChange={(e) => e.target.value && setEditing({ ...editing, cron: e.target.value })}><option value="">{tr('常用…')}</option>{PRESET_CRONS.map((p) => <option key={p.v} value={p.v}>{p.l}</option>)}</select>
+            <Select className="field sf-pick" value="" onValueChange={(value) => String(value) && setEditing({ ...editing, cron: String(value) })} aria-label={tr('常用时间')} options={[{ value: '', label: tr('常用…') }, ...PRESET_CRONS.map((p) => ({ value: p.v, label: p.l }))]} />
             {period && <span className="sf-hint">{period}</span>}
           </>
         ) : mode === 'manual' ? (
@@ -109,13 +110,13 @@ export function SchedulesView({ compact = false, page = false, newSignal = 0 }: 
       </div>
       <div className="sf-row">
         <span className="sf-l">{tr('项目')}</span>
-        <select className="field sf-proj" data-id="sched-project" value={cwdNow} title={cwdNow} onChange={(e) => (e.target.value === OTHER ? void browse() : setEditing({ ...editing, cwd: e.target.value }))}>
-          {!cwdNow && <option value="">{tr('选一个项目…')}</option>}
-          {projectOptions.map((o) => <option key={o.path} value={o.path}>{o.label}</option>)}
-          <option value={OTHER}>{tr('其它文件夹…')}</option>
-        </select>
+        <Select className="field sf-proj" data-id="sched-project" value={cwdNow} title={cwdNow} onValueChange={(value) => (String(value) === OTHER ? void browse() : setEditing({ ...editing, cwd: String(value) }))} aria-label={tr('项目')} searchable options={[
+          ...(cwdNow ? [] : [{ value: '', label: tr('选一个项目…') }]),
+          ...projectOptions.map((o) => ({ value: o.path, label: o.label })),
+          { value: OTHER, label: tr('其它文件夹…') },
+        ]} />
         <span className="sf-l">{tr('权限')}</span>
-        <select className="field sf-pick" value={editing.permissionMode ?? 'acceptEdits'} onChange={(e) => setEditing({ ...editing, permissionMode: e.target.value })}>{Object.entries(MODE_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+        <Select className="field sf-pick" value={editing.permissionMode ?? 'acceptEdits'} onValueChange={(value) => setEditing({ ...editing, permissionMode: String(value) })} aria-label={tr('权限')} options={Object.entries(MODE_LABEL).map(([k, l]) => ({ value: k, label: l }))} />
       </div>
       <label className="sf-check"><input type="checkbox" checked={!!editing.freshSession} onChange={(e) => setEditing({ ...editing, freshSession: e.target.checked, ...(e.target.checked ? {} : { worktree: false }) })} /> {tr('每次新开对话（不累积上下文）')}</label>
       {editing.freshSession && <label className="sf-check"><input type="checkbox" checked={!!editing.worktree} onChange={(e) => setEditing({ ...editing, worktree: e.target.checked })} /> {tr('每次在独立的{worktree}里跑（不碰你工作区里没提交的改动）', { worktree: TERMS.worktree })}</label>}

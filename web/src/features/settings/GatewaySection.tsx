@@ -1,207 +1,78 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ws } from '@/ws/client';
 import { useStore } from '@/store';
-import { ago, clsx } from '@/util';
-import { dlg } from '@/ui/dialog';
+import { clsx } from '@/util';
 import { Icon } from '@/ui/icons';
-import type { GatewayGroup, GatewayMember, GatewayMemberState, GatewayProtocol, GatewayStatus, GatewayTestResult, Provider } from '@shared';
+import { dlg } from '@/ui/dialog';
+import type { GatewayStatus } from '@shared';
+import { openGateway } from '@/features/gateway/state';
 import { tr } from '@/i18n';
 
-const PROTOCOLS: { id: GatewayProtocol; l: string }[] = [
-  { id: 'anthropic', l: 'Anthropic' },
-  { id: 'openai', l: 'OpenAI Chat' },
-  { id: 'responses', l: 'OpenAI Responses' },
-  { id: 'gemini', l: 'Gemini' },
-];
-const TYPE_LABEL: Record<string, string> = { anthropic: 'Anthropic', openai: 'OpenAI', gemini: 'Gemini', grok: 'Grok' };
-
-function left(until?: number) {
-  if (!until) return '';
-  const s = Math.max(0, Math.round((until - Date.now()) / 1000));
-  return s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${s}s`;
-}
-
-const since = (t: number) => { const a = ago(t); return a === tr('刚刚') ? a : tr('{a}前', { a }); };
-
-/** Settings → 模型网关: switch, endpoint + key, failover groups with live member health. */
+/**
+ * 设置 → 模型网关: the switch, the address and the key, and a way into the section that manages accounts,
+ * route groups, keys, the LAN listener and the audit log. Group editing moved there (embedded gateway phase A).
+ */
 export function GatewaySection() {
   const toast = useStore((s) => s.toast);
-  const providers = useStore((s) => s.providers);
-  const loadProviders = useStore((s) => s.loadProviders);
   const [st, setSt] = useState<GatewayStatus | null>(null);
   const [busy, setBusy] = useState(false);
-  const [, tick] = useState(0);
   const load = () => ws.request<GatewayStatus>({ kind: 'gateway.status' }).then(setSt).catch((e) => toast(e.message));
   useEffect(() => {
     void load();
-    void loadProviders();
     const off = ws.on((e) => { if (e.kind === 'gateway.changed') void load(); });
-    const i = setInterval(() => tick((x) => x + 1), 1000); // cooldown countdowns
-    return () => { off(); clearInterval(i); };
+    return () => { off(); };
   }, []);
   if (!st) return <div className="section"><div className="empty">{tr('读取中…')}</div></div>;
-
-  const setEnabled = async (on: boolean) => { setBusy(true); try { setSt(await ws.request<GatewayStatus>({ kind: 'gateway.set', enabled: on })); } catch (e: any) { toast(e.message); } finally { setBusy(false); } };
-  const copyKey = async () => { try { const k = await ws.request<string>({ kind: 'gateway.revealKey' }); await navigator.clipboard.writeText(k); toast(tr('已复制网关密钥'), true); } catch (e: any) { toast(e.message); } };
+  const setEnabled = async (on: boolean) => {
+    setBusy(true);
+    try { setSt(await ws.request<GatewayStatus>({ kind: 'gateway.set', enabled: on })); } catch (e: any) { toast(e.message); } finally { setBusy(false); }
+  };
+  const copyKey = async () => {
+    try {
+      const k = await ws.request<string>({ kind: 'gateway.revealKey' });
+      await navigator.clipboard.writeText(k);
+      toast(tr('已复制网关密钥'), true);
+    } catch (e: any) { toast(e.message); }
+  };
   const regen = async () => {
     if (!(await dlg.confirm(tr('重新生成网关密钥？'), { message: tr('旧密钥立即失效。已经在跑的对话要重开才会拿到新密钥；手动配置过的外部工具需要换成新的。'), danger: true, okLabel: tr('重新生成') }))) return;
-    try { setSt(await ws.request<GatewayStatus>({ kind: 'gateway.regenerateKey' })); toast(tr('已生成新密钥。运行中的对话还拿着旧密钥，需要重开才能继续走网关'), true); } catch (e: any) { toast(e.message); }
+    try {
+      setSt(await ws.request<GatewayStatus>({ kind: 'gateway.regenerateKey' }));
+      toast(tr('已生成新密钥。运行中的对话还拿着旧密钥，需要重开才能继续走网关'), true);
+    } catch (e: any) { toast(e.message); }
   };
-  const addGroup = async () => {
-    const name = await dlg.prompt(tr('组名称'), tr('默认组'));
-    if (!name) return;
-    try { await ws.request({ kind: 'gateway.groups.upsert', group: { name, strategy: 'failover', members: [] } }); } catch (e: any) { toast(e.message); }
-  };
-  const members = providers.filter((p) => p.type !== 'gateway' && p.type !== 'claude-account');
-
+  const members = Object.values(st.states).flat();
+  const healthy = members.filter((m) => m.health === 'ok').length;
+  const cooling = members.filter((m) => m.health === 'cooling').length;
   return (
     <div className="section gateway">
       <div className="row" style={{ alignItems: 'center', gap: 12 }}>
-        <label className="chip"><input type="checkbox" checked={st.enabled} disabled={busy} onChange={(e) => setEnabled(e.target.checked)} /> {tr('启用本机模型网关')}</label>
+        <label className="chip"><input type="checkbox" checked={st.enabled} disabled={busy} onChange={(e) => void setEnabled(e.target.checked)} /> {tr('启用本机模型网关')}</label>
         <span className={clsx('badge', st.enabled && 'ok')}>{st.enabled ? tr('运行中') : tr('关闭')}</span>
       </div>
       <div className="sub" style={{ marginTop: 6 }}>
-        {tr('在本机对各个 Agent 同时提供 Anthropic / OpenAI / Gemini 三种接口，后面接你自己的供应商：同协议原样透传（中转的指纹检查照样通过），跨协议自动转换；一个组里的成员按顺序故障转移，额度用尽或限流的成员自动冷却。只接受本机回环连接，局域网监听器上不可见。 不转发任何订阅登录（claude.ai / ChatGPT / Google 账号）—— 只用你配置的供应商。')}
+        {tr('在本机对各个 Agent 同时提供 Anthropic / OpenAI / Gemini 三种接口，后面接你自己的供应商和订阅账号：同协议原样透传，跨协议自动转换；一个组里的成员按顺序故障转移，额度用尽或限流的成员自动冷却。')}
       </div>
       {st.enabled && (
         <div className="gw-endpoint">
-          <div className="gw-kv"><span className="muted">{tr('地址')}</span><code>{tr('{baseUrl}/<组 id>', { baseUrl: st.baseUrl })}</code></div>
+          <div className="gw-kv"><span className="muted">{tr('地址')}</span><code>{st.localBaseUrl ?? st.baseUrl.replace(/\/gateway$/, '')}/v1</code></div>
           <div className="gw-kv">
             <span className="muted">{tr('密钥')}</span><code>{st.keyMasked}</code>
-            <button className="btn sm ghost" onClick={copyKey}><Icon name="copy" size={12} /> {tr('复制')}</button>
-            <button className="btn sm ghost danger" onClick={regen}>{tr('重新生成')}</button>
+            <button className="btn sm ghost" onClick={() => void copyKey()}><Icon name="copy" size={12} /> {tr('复制')}</button>
+            <button className="btn sm ghost danger" onClick={() => void regen()}>{tr('重新生成')}</button>
           </div>
-          <div className="sub">{tr('对话里用：在「设置 → 供应商」新建一个类型为「模型网关」的供应商并选组，Claude / Codex / Gemini 的对话开始时自动拿到地址和密钥（桌面版端口每次启动会变，所以别手抄地址）。')}</div>
+          <div className="sub">
+            {st.localError
+              ? st.localError
+              : tr('这是固定地址，重启应用不变。对话里用：在「设置 → 供应商」新建一个类型为「模型网关」的供应商并选组，Claude / Codex / Gemini 的对话开始时自动拿到地址和密钥。')}
+          </div>
         </div>
       )}
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16, marginBottom: 6 }}>
-        <h5 style={{ margin: 0 }}>{tr('故障转移组')}</h5>
+      <div className="row" style={{ alignItems: 'center', gap: 8, marginTop: 14 }}>
+        <span className="sub">{tr('组 {groups} · 正常 {ok} · 冷却 {cooling}', { groups: st.groups.length, ok: healthy, cooling })}</span>
         <span className="grow" />
-        <button className="btn sm ghost" onClick={addGroup}><Icon name="plus" size={12} /> {tr('新建组')}</button>
+        <button className="btn sm" onClick={() => openGateway('overview')}>{tr('打开网关')}</button>
       </div>
-      {!st.groups.length && <div className="empty">{tr('还没有组。新建一个，把几个供应商按优先级拖进去。')}</div>}
-      {st.groups.map((g) => <GroupCard key={g.id} group={g} states={st.states[g.id] ?? []} providers={members} enabled={st.enabled} baseUrl={st.baseUrl} />)}
-    </div>
-  );
-}
-
-function GroupCard({ group, states, providers, enabled, baseUrl }: { group: GatewayGroup; states: GatewayMemberState[]; providers: Provider[]; enabled: boolean; baseUrl: string }) {
-  const toast = useStore((s) => s.toast);
-  const [draft, setDraft] = useState<GatewayGroup>(group);
-  const [dirty, setDirty] = useState(false);
-  const [dragFrom, setDragFrom] = useState<number | null>(null);
-  const [proto, setProto] = useState<GatewayProtocol>('anthropic');
-  const [test, setTest] = useState<GatewayTestResult | 'running' | null>(null);
-  const [mapRows, setMapRows] = useState<[string, string][]>(Object.entries(group.modelMap ?? {}));
-  useEffect(() => { if (!dirty) { setDraft(group); setMapRows(Object.entries(group.modelMap ?? {})); } }, [group]);
-  const edit = (patch: Partial<GatewayGroup>) => { setDraft((d) => ({ ...d, ...patch })); setDirty(true); };
-  const setMember = (i: number, patch: Partial<GatewayMember>) => edit({ members: draft.members.map((m, j) => (j === i ? { ...m, ...patch } : m)) });
-  const byId = useMemo(() => new Map(providers.map((p) => [p.id, p])), [providers]);
-  const stateOf = (pid: string) => states.find((s) => s.providerId === pid);
-  const addable = providers.filter((p) => p.type !== 'gateway' && p.type !== 'claude-account' && !draft.members.some((m) => m.providerId === p.id));
-
-  const save = async () => {
-    try {
-      const modelMap = Object.fromEntries(mapRows.filter(([k, v]) => k.trim() && v.trim()));
-      await ws.request({ kind: 'gateway.groups.upsert', group: { ...draft, modelMap } });
-      setDirty(false);
-      toast(tr('已保存「{name}」', { name: draft.name }), true);
-    } catch (e: any) { toast(e.message); }
-  };
-  const remove = async () => {
-    if (!(await dlg.confirm(tr('删除组「{name}」？', { name: group.name }), { message: tr('引用它的「模型网关」供应商会失效，用它的新对话会报错。'), danger: true, okLabel: tr('删除') }))) return;
-    await ws.request({ kind: 'gateway.groups.remove', id: group.id }).catch((e) => toast(e.message));
-  };
-  const runTest = async () => {
-    if (dirty) await save();
-    setTest('running');
-    try { setTest(await ws.request<GatewayTestResult>({ kind: 'gateway.test', groupId: group.id, protocol: proto })); } catch (e: any) { setTest({ ok: false, status: 0, ms: 0, error: e.message }); }
-  };
-  const drop = (to: number) => {
-    if (dragFrom === null || dragFrom === to) return;
-    const list = [...draft.members];
-    const [m] = list.splice(dragFrom, 1);
-    list.splice(to, 0, m);
-    edit({ members: list });
-    setDragFrom(null);
-  };
-
-  return (
-    <div className="gw-group">
-      <div className="gw-group-head">
-        <input className="field" style={{ width: 180 }} value={draft.name} onChange={(e) => edit({ name: e.target.value })} aria-label={tr('组名称')} />
-        <select className="field" value={draft.strategy} onChange={(e) => edit({ strategy: e.target.value as GatewayGroup['strategy'] })} aria-label={tr('策略')}>
-          <option value="failover">{tr('按顺序故障转移')}</option>
-          <option value="round-robin">{tr('加权轮询')}</option>
-        </select>
-        <label className="muted" style={{ fontSize: 13, display: 'flex', gap: 4, alignItems: 'center' }} title={tr('请求转成 Anthropic 发给成员时，缓存断点用 1 小时 TTL（写入 2× 基础价；默认 5 分钟 1.25×）')}>
-          <input type="checkbox" checked={!!draft.cache1h} onChange={(e) => edit({ cache1h: e.target.checked })} /> {tr('1 小时缓存')}
-        </label>
-        <code className="muted" title={tr('这个组的入口地址')}>{baseUrl}/{group.id}</code>
-        <span className="grow" />
-        <button className="btn sm ghost danger" onClick={remove}>{tr('删除')}</button>
-      </div>
-
-      <div className="gw-members">
-        {draft.members.map((m, i) => {
-          const p = byId.get(m.providerId);
-          const s = stateOf(m.providerId);
-          const health = !p ? 'disabled' : s?.health ?? 'unknown';
-          return (
-            <div key={m.providerId} className={clsx('gw-member', dragFrom === i && 'dragging')} draggable onDragStart={() => setDragFrom(i)} onDragEnd={() => setDragFrom(null)} onDragOver={(e) => e.preventDefault()} onDrop={() => drop(i)}>
-              <span className="gw-grip" title={tr('拖动调整顺序')}><Icon name="grip" size={14} /></span>
-              <span className="gw-order">{i + 1}</span>
-              <span className={clsx('dot', health === 'ok' ? 'running' : health === 'cooling' ? 'waiting' : health === 'disabled' ? 'error' : 'idle')} />
-              <div className="grow">
-                <div>{p?.name ?? tr('（供应商已删除）')} <span className="muted" style={{ fontSize: 12 }}>{p ? TYPE_LABEL[p.type] ?? p.type : ''}</span></div>
-                <div className="sub">
-                  {health === 'cooling' ? tr('冷却中 · 还剩 {left}', { left: left(s?.cooldownUntil) }) : health === 'disabled' ? tr('已停用') : health === 'ok' ? tr('正常{v}', { v: s?.lastOkAt ? ` · ${since(s.lastOkAt)}` : '' }) : tr('未使用')}
-                  {s?.lastError ? ` · ${s.lastError}` : ''}
-                </div>
-              </div>
-              <input className="field" style={{ width: 150 }} placeholder={tr('固定模型（可选）')} value={m.model ?? ''} onChange={(e) => setMember(i, { model: e.target.value })} list={`gw-models-${m.providerId}`} aria-label={tr('固定模型')} />
-              <datalist id={`gw-models-${m.providerId}`}>{(p?.models ?? []).map((x) => <option key={x} value={x} />)}</datalist>
-              {draft.strategy === 'round-robin' && <input className="field" style={{ width: 52 }} type="number" min={1} value={m.weight ?? 1} onChange={(e) => setMember(i, { weight: Math.max(1, Number(e.target.value) || 1) })} title={tr('权重')} aria-label={tr('权重')} />}
-              {(health === 'cooling' || health === 'disabled') && p && <button className="btn sm ghost" onClick={() => ws.request({ kind: 'gateway.reset', groupId: group.id, providerId: m.providerId }).catch((e) => toast(e.message))}>{tr('恢复')}</button>}
-              <button className="icon-btn xs" onClick={() => edit({ members: draft.members.filter((_, j) => j !== i) })} aria-label={tr('移出组')}><Icon name="close" size={12} /></button>
-            </div>
-          );
-        })}
-        {!draft.members.length && <div className="empty">{tr('组里还没有成员')}</div>}
-        {addable.length > 0 && (
-          <select className="field gw-add" value="" onChange={(e) => { if (e.target.value) edit({ members: [...draft.members, { providerId: e.target.value }] }); }}>
-            <option value="">{tr('＋ 添加供应商…')}</option>
-            {addable.map((p) => <option key={p.id} value={p.id}>{p.name}（{TYPE_LABEL[p.type] ?? p.type}）</option>)}
-          </select>
-        )}
-      </div>
-
-      <div className="gw-map">
-        <div className="muted" style={{ fontSize: 13, marginBottom: 4 }}>{tr('模型映射（入口模型 → 出口模型，支持')} <code>*</code> {tr('通配；成员的「固定模型」优先）')}</div>
-        {mapRows.map(([k, v], i) => (
-          <div key={i} className="gw-map-row">
-            <input className="field" value={k} placeholder="claude-*sonnet*" onChange={(e) => { setMapRows(mapRows.map((r, j) => (j === i ? [e.target.value, r[1]] : r))); setDirty(true); }} aria-label={tr('入口模型')} />
-            <Icon name="arrowRight" size={12} />
-            <input className="field" value={v} placeholder="gpt-4.1" onChange={(e) => { setMapRows(mapRows.map((r, j) => (j === i ? [r[0], e.target.value] : r))); setDirty(true); }} aria-label={tr('出口模型')} />
-            <button className="icon-btn xs" onClick={() => { setMapRows(mapRows.filter((_, j) => j !== i)); setDirty(true); }} aria-label={tr('删除映射')}><Icon name="close" size={12} /></button>
-          </div>
-        ))}
-        <button className="btn sm ghost" onClick={() => setMapRows([...mapRows, ['', '']])}><Icon name="plus" size={12} /> {tr('添加映射')}</button>
-      </div>
-
-      <div className="gw-actions">
-        <button className="btn sm primary" disabled={!dirty} onClick={save}>{dirty ? tr('保存') : tr('已保存')}</button>
-        <span className="grow" />
-        <select className="field" value={proto} onChange={(e) => setProto(e.target.value as GatewayProtocol)} aria-label={tr('测试入口协议')}>{PROTOCOLS.map((p) => <option key={p.id} value={p.id}>{tr('{l} 入口', { l: p.l })}</option>)}</select>
-        <button className="btn sm" disabled={!enabled || !draft.members.length || test === 'running'} onClick={runTest}>{test === 'running' ? tr('测试中…') : tr('测试')}</button>
-      </div>
-      {test && test !== 'running' && (
-        <div className={clsx('gw-test', test.ok ? 'ok' : 'err')}>
-          {test.ok ? tr('通过 · 走了「{member}」{v} · {ms}s · 回复：{text}', { member: test.member, v: test.switches ? tr('（切换 {switches} 次）', { switches: test.switches }) : '', ms: (test.ms / 1000).toFixed(1), text: test.text }) : tr('失败{v}：{error}{v2}', { v: test.status ? ` HTTP ${test.status}` : '', error: test.error, v2: test.member ? tr('（最后尝试「{member}」）', { member: test.member }) : '' })}
-          {test.note && <div className="sub" style={{ marginTop: 4 }}>{test.note}</div>}
-        </div>
-      )}
     </div>
   );
 }

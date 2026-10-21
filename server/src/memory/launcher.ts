@@ -18,6 +18,17 @@ let enabled = true;
 export function setMemoryMcpEnabled(on: boolean) { enabled = on; }
 export function memoryMcpEnabled() { return enabled; }
 
+/**
+ * The key our server is handed to every agent under (tools show up as `mcp__claude-web-memory__memory_search`).
+ * Not `memory`: that is the name the official `@modelcontextprotocol/server-memory` connector is installed under
+ * (our own connector catalog included), and a server passed by the host replaces the user's server of the same
+ * name — Claude via SDK `mcpServers`, Codex via `-c mcp_servers.<name>.*` (worse: field-by-field merge into theirs),
+ * ACP via `session/new`. So a user who added that connector saw it "connected" in settings and silently got ours
+ * in every conversation. A name nobody else uses is the smallest fix: no reading of each agent's config to detect
+ * a clash, and nothing in the app keys on the server name (no allow-list, no tool-card registry entry).
+ */
+export const MEMORY_MCP_NAME = 'claude-web-memory';
+
 /** Path to the compiled MCP entry, whether we're running from src (tsx) or dist. */
 export function mcpEntry(): string {
   const compiled = path.join(here, 'mcp.js');
@@ -51,7 +62,7 @@ type StdioServer = { type: 'stdio'; command: string; args: string[]; env: Record
 export function claudeMcpServer(t: MemoryMcpTarget, execPath = process.execPath): Record<string, StdioServer> {
   if (!enabled) return {};
   const { command, args, env } = spawnShape(t, execPath);
-  return { memory: { type: 'stdio', command, args, env } };
+  return { [MEMORY_MCP_NAME]: { type: 'stdio', command, args, env } };
 }
 
 /** `--mcp-config` style JSON for CLI agents that accept an inline server map. */
@@ -66,12 +77,12 @@ export function inlineMcpConfig(t: MemoryMcpTarget, execPath = process.execPath)
 export function acpMcpServers(t: MemoryMcpTarget, execPath = process.execPath) {
   if (!enabled) return [];
   const { command, args, env } = spawnShape(t, execPath);
-  return [{ name: 'memory', command, args, env: Object.entries(env).map(([name, value]) => ({ name, value })) }];
+  return [{ name: MEMORY_MCP_NAME, command, args, env: Object.entries(env).map(([name, value]) => ({ name, value })) }];
 }
 
 /**
  * Codex reads MCP servers from `~/.codex/config.toml`, which is the user's file — so instead we pass
- * `-c mcp_servers.memory.*` overrides to the process we spawn. Values are parsed as TOML, hence the
+ * `-c mcp_servers.claude-web-memory.*` overrides to the process we spawn. Values are parsed as TOML, hence the
  * JSON quoting (a bare Windows path would fail to parse and fall back to a literal).
  * The flags must come before the `app-server` subcommand.
  */
@@ -79,10 +90,12 @@ export function codexConfigArgs(t: MemoryMcpTarget, execPath = process.execPath)
   if (!enabled) return [];
   const { command, args, env } = spawnShape(t, execPath);
   const inlineEnv = `{${Object.entries(env).map(([k, v]) => `${k} = ${JSON.stringify(v)}`).join(', ')}}`;
+  // `claude-web-memory` is a valid TOML bare key (letters, digits, `-`, `_`), so the dotted path needs no quoting.
+  const key = `mcp_servers.${MEMORY_MCP_NAME}`;
   return [
-    '-c', `mcp_servers.memory.command=${JSON.stringify(command)}`,
-    '-c', `mcp_servers.memory.args=${JSON.stringify(args)}`,
-    '-c', `mcp_servers.memory.env=${inlineEnv}`,
+    '-c', `${key}.command=${JSON.stringify(command)}`,
+    '-c', `${key}.args=${JSON.stringify(args)}`,
+    '-c', `${key}.env=${inlineEnv}`,
   ];
 }
 

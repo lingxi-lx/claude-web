@@ -8,6 +8,7 @@ import { Markdown } from '@/features/chat/Markdown';
 import type { VcsDetail, VcsItem, VcsRepo } from '@shared';
 import { Icon, type IconName } from '@/ui/icons';
 import { tr, dateLocale } from '@/i18n';
+import { Select } from '@/ui/Select';
 
 type Mode = 'issues' | 'pulls';
 const ago = (iso: string) => { const s = (Date.now() - new Date(iso).getTime()) / 1000; return s < 3600 ? tr('{Math} 分钟前', { Math: Math.max(1, Math.floor(s / 60)) }) : s < 86400 ? tr('{s} 小时前', { s: Math.floor(s / 3600) }) : tr('{s} 天前', { s: Math.floor(s / 86400) }); };
@@ -116,9 +117,7 @@ export function BoardView({ cwd, sid }: { cwd: string; sid: string | null }) {
           <button className={clsx(mode === 'pulls' && 'active')} onClick={() => { setMode('pulls'); setSel(null); }}>{repo?.provider === 'gitlab' ? 'MR' : 'PR'}</button>
           <button className={clsx(mode === 'issues' && 'active')} onClick={() => { setMode('issues'); setSel(null); }}>Issues</button>
         </div>
-        <select className="field sm" value={state} onChange={(e) => setState(e.target.value as any)}>
-          <option value="open">{tr('开放')}</option>{mode === 'pulls' && <option value="merged">{tr('已合并')}</option>}<option value="closed">{tr('已关闭')}</option><option value="all">{tr('全部')}</option>
-        </select>
+        <Select className="field sm" value={state} onValueChange={(value) => setState(String(value) as typeof state)} aria-label={tr('状态')} options={[{ value: 'open', label: tr('开放') }, ...(mode === 'pulls' ? [{ value: 'merged', label: tr('已合并') }] : []), { value: 'closed', label: tr('已关闭') }, { value: 'all', label: tr('全部') }]} />
         {mode === 'issues' && <><input className="field sm" placeholder={tr('搜索…')} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !imeComposing(e.nativeEvent) && load()} style={{ width: 160 }} /><label className="chip"><input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} /> {tr('指派给我')}</label></>}
         <span className="grow" />
         {repo && <button className="btn sm ghost" title={repo.url} onClick={changeRepo}><Icon name="branch" size={12} /> {repo.owner}/{repo.repo}{repo.user ? ` · @${repo.user}` : ''}</button>}

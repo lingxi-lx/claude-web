@@ -4,15 +4,15 @@ import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { statSync } from 'node:fs';
 import { withExplanation } from '../errors/explain.js';
-import { dropEmptyText, findClaudeTranscript, hasClaudeTranscript, hasEntry, lastCostState, lastHumanPrompt, repairLeaf } from './transcript-file.js';
-import { ownSubagentOverride, settingsOverride, userAnthropicEnv } from './user-env.js';
+import { dropEmptyBlocks, findClaudeTranscript, hasClaudeTranscript, hasEntry, lastCostState, lastHumanPrompt, repairLeaf } from './transcript-file.js';
+import { ownAnthropicBase, ownOverride, settingsOverride, userAnthropicEnv } from './user-env.js';
 import { providerKey, splitSupport, subAlias, subagentTarget, unalias, type SplitKind, type SubagentPick } from '../models/subagent.js';
 import { splitEndpoint, splitTarget, type SplitSub } from '../gateway/split.js';
 import { desktopSkillsPlugin } from './desktop-skills.js';
 import { writeFlagSettings, type FlagSettings } from './flag-settings.js';
 import { resolveEngine, spawnClaude } from '../claude-exe.js';
 import { loopbackNoProxy, providerEnv, type SessionProvider } from '../providers/service.js';
-import { ENGINE_DEFAULT_WINDOW, ONE_M, contextWindowFor, contextWindowsEnv, officialWindow } from '../models/context-window.js';
+import { ENGINE_DEFAULT_WINDOW, ONE_M, contextWindowFor, contextWindowsEnv, isClaudeModel, officialWindow } from '../models/context-window.js';
 import { ccbAccountEnv, ccbMisthinks, ccbModel, isChatModel, modelCaps, modelLabel, modelsFor, preferredRuntime, providerModelId, supportsUltracode, webCapsEnv } from '../models/catalog.js';
 import { turnShare, type RunningTotals } from '../usage/turn-cost.js';
 import { claudeMcpServer } from '../memory/launcher.js';
@@ -22,7 +22,9 @@ import { computerAllowedTools, computerClaudeMcpServer } from '../computer/launc
 import { ENGINE_SEARCH_TOOL, engineSearchOff, userPickedSearchAdapter } from '../web/engine-search.js';
 import { markUnknownCost } from '../usage/pricing.js';
 import type { AttachmentRef, EffortLevel, ModelInfo, OpenSessionParams, PermissionMode, PermissionRequestEvent, PermissionResponse, Provider, RunnerState, SessionFeatures, SessionInfoSnapshot, SideTurn } from '../protocol.js';
-import { tr } from '../i18n/index.js';
+import { getLocale, tr } from '../i18n/index.js';
+import { thinkingLanguageFor, thinkingLanguagePrompt, thinkingLanguageReminder } from './thinking-language.js';
+import { subagentPolicyPrompt } from './subagent-policy.js';
 import { localEnv } from './local-env.js';
 import { SESSIONS_ALLOWED, SESSIONS_SERVER, sessionsMcpEnabled, sessionsMcpServer } from '../sessions-mcp/tools.js';
 import { PREVIEW_ALLOWED, PREVIEW_SERVER, previewEnabled, previewMcpServer, verifyInstructions } from '../preview/tools.js';
@@ -112,6 +114,10 @@ let promptSuggestionsOn = true;
 /** Settings → 下一句提示 (`ui.promptSuggestions`); a query started from now on asks for them or not. */
 export function setPromptSuggestions(on: boolean) { promptSuggestionsOn = on; }
 
+let thinkingLanguageSetting: unknown = '';
+/** Settings → 思考用的语言 (`ai.thinkingLanguage`); conversations pick it up through refreshThinkingLanguage(). */
+export function setThinkingLanguageSetting(v: unknown) { thinkingLanguageSetting = v; }
+
 export interface RunnerEvents {
   message: (m: SDKMessage) => void;
   state: (s: RunnerState, error?: string) => void;
@@ -127,6 +133,13 @@ export interface RunnerEvents {
  */
 /** What the account path reads instead of the user's own Anthropic env, for another Claude account. */
 const NO_RELAY: ReturnType<typeof userAnthropicEnv> = { env: {}, relay: false };
+
+/**
+ * The tool set a sidecar-backed conversation gets (Gemini web / WorkBuddy). Those upstreams take the tool schemas
+ * as text inside the prompt, so every extra tool costs latency and can push a turn over the sidecar's 128 KB
+ * attachment limit. These six cover reading, searching, editing and running commands — the core of a coding turn.
+ */
+const LEAN_TOOLS = ['Read', 'Edit', 'Write', 'Bash', 'Grep', 'Glob', 'TodoWrite'];
 
 export class SessionRunner extends EventEmitter {
   readonly id: string; // sessionId (known up front for resume; assigned from init otherwise)
@@ -165,8 +178,10 @@ export class SessionRunner extends EventEmitter {
   private planKey = '';
   /** a restart asked for during a turn: done when that turn's result arrives */
   private respawnPending = false;
-  /** the next start takes empty text blocks out of the transcript first (dropEmptyText): set by that 400 */
-  private repairEmptyText = false;
+  /** the next start takes empty blocks out of the transcript first (dropEmptyBlocks): set by that 400 and by a model switch */
+  private repairEmptyBlocks = false;
+  /** …and unsigned thinking with them: the API refused a signature */
+  private repairUnsigned = false;
   /** the CLI's running totals (`total_cost_usd` / `modelUsage` are cumulative per process): each result is turned into its own turn's share */
   private totals: RunningTotals = { cost: 0, models: {} };
   /** the CLI process of `q`, and the end of what it wrote to stderr */
@@ -180,9 +195,14 @@ export class SessionRunner extends EventEmitter {
   private ultracodeFirst = false;
   /** the model subagents run on ('' = the main model): `CLAUDE_CODE_SUBAGENT_MODEL`, read once at start */
   private subagent = '';
+  /** 思考用的语言 of this conversation (SessionMeta.thinkingLanguage: '' = the setting) */
+  private ownThinkingLanguage = '';
+  /** the thinking-language section the running process was started with ('' = none) */
+  private thinkingSection = '';
 
-  constructor(params: OpenSessionParams, provider?: SessionProvider) {
+  constructor(params: OpenSessionParams, provider?: SessionProvider, opts: { thinkingLanguage?: string } = {}) {
     super();
+    this.ownThinkingLanguage = opts.thinkingLanguage ?? '';
     this.cwd = params.cwd;
     if (provider?.type === 'claude-account') this.account = provider;
     else this.provider = provider;
@@ -266,14 +286,15 @@ export class SessionRunner extends EventEmitter {
    */
   private subagentSplit(pick: SubagentPick, fenv: Record<string, string>): string | null {
     const mainType: SplitKind = this.provider?.type ?? (this.account ? 'claude-account' : 'claude');
-    // the account through the user's own relay (settings.json / environment): its base URL is theirs to keep
-    if (mainType === 'claude' && userAnthropicEnv().relay) return null;
     const t = providerKey(pick.providerId) === 'claude' ? { type: 'claude' as const } : splitTarget(pick.providerId);
     if (!t || !splitSupport({ mainType, subType: t.type })) return null;
     const sub: SplitSub = t.type === 'claude' ? { kind: 'account' } : t.type === 'claude-account' ? { kind: 'account', token: t.token } : { kind: 'provider', providerId: pick.providerId };
     const v = mainType === 'openai' ? 'OPENAI_BASE_URL' : mainType === 'grok' ? 'GROK_BASE_URL' : mainType === 'gemini' ? 'GEMINI_BASE_URL' : 'ANTHROPIC_BASE_URL';
     const defaults: Record<string, string> = { OPENAI_BASE_URL: 'https://api.openai.com/v1', GROK_BASE_URL: 'https://api.x.ai/v1', GEMINI_BASE_URL: 'https://generativelanguage.googleapis.com/v1beta', ANTHROPIC_BASE_URL: 'https://api.anthropic.com' };
-    const mainBase = mainType === 'claude' || mainType === 'claude-account' ? defaults.ANTHROPIC_BASE_URL : fenv[v] || defaults[v];
+    // the account: claude.ai, or the relay the user set up in their settings files / environment (2026-10-19 user
+    // report: Opus 5.5 through their relay, the subagents' DeepSeek ignored) — its requests go on there with the
+    // relay's own key, which the engine still sends (start() puts our base URL over theirs with `ownOverride`)
+    const mainBase = mainType === 'claude' ? ownAnthropicBase(this.cwd) || defaults.ANTHROPIC_BASE_URL : mainType === 'claude-account' ? defaults.ANTHROPIC_BASE_URL : fenv[v] || defaults[v];
     // this machine's login for the subagents: the engine keeps it (no provider key for it to prefer), the route puts the
     // provider's key on the conversation's own requests
     const rekey = t.type === 'claude' ? this.provider?.apiKey : undefined;
@@ -360,11 +381,16 @@ export class SessionRunner extends EventEmitter {
     // on ccb) and continues the cost totals it saved; ccb starts every process from zero
     const resumeId = typeof extra.resume === 'string' ? extra.resume : undefined;
     const file = resumeId ? findClaudeTranscript(resumeId) : null;
-    // refused for an empty text block in the history (a picture sent alone, before 2026-10-17): no process has the
-    // file now, take those blocks out (only then — it reads the whole file)
-    if (file && this.repairEmptyText) {
-      this.repairEmptyText = false;
-      if (dropEmptyText(file)) console.warn(`[runner] ${resumeId}: empty text blocks taken out of the transcript`);
+    // refused for an empty block in the history (a picture sent alone before 2026-10-17, another vendor's blank
+    // thinking), or about to go to another model: no process has the file now, take those blocks out (only then — it
+    // reads the whole file)
+    if (file && this.repairEmptyBlocks) {
+      this.repairEmptyBlocks = false;
+      // to a Claude model: another vendor's unsigned thinking too (「Invalid `signature` in `thinking` block」 — when
+      // the API said so, whatever the model is called)
+      const unsigned = this.repairUnsigned || this.toClaude(startModel);
+      this.repairUnsigned = false;
+      if (dropEmptyBlocks(file, { unsigned })) console.warn(`[runner] ${resumeId}: blocks the next model refuses taken out of the transcript`);
     }
     if (engine.kind === 'claude' && resumeId && !extra.forkSession) repairLeaf(file, resumeId);
     const saved = engine.kind === 'claude' && resumeId ? lastCostState(file, resumeId) : null;
@@ -396,10 +422,12 @@ export class SessionRunner extends EventEmitter {
       const compact = engine.kind === 'claude' ? this.officialCompactWindow(this.model) : undefined;
       if (compact && !('CLAUDE_CODE_AUTO_COMPACT_WINDOW' in fenv)) fenv.CLAUDE_CODE_AUTO_COMPACT_WINDOW = String(compact);
     }
-    // the subagents' model (the composer's 子代理 chip): both engines take it before an agent's own `model:` and the
-    // tool's haiku / sonnet / opus; on the official binary a 1M Claude gets its `[1m]` like the main model
+    // the subagents' model (the composer's 子代理 chip), over an agent's own `model:` and the tool's haiku / sonnet /
+    // opus: ccb always; the official binary only with `_FORCE` — without it the agent's own model came first, and
+    // Explore (inherit) ran on the main model (2026-10-19, real: Opus 5.5 + a DeepSeek pick, the Explore subagent on
+    // Opus; a user's relay showed claude-sonnet-5). On the official binary a 1M Claude gets its `[1m]` like the main model
     const sub = splitAlias ?? (sameSub ? this.engineModel(engine.kind, sameSub) : undefined);
-    if (sub) fenv.CLAUDE_CODE_SUBAGENT_MODEL = sub;
+    if (sub) { fenv.CLAUDE_CODE_SUBAGENT_MODEL = sub; fenv.CLAUDE_CODE_SUBAGENT_MODEL_FORCE = '1'; }
     // 下一句提示: the `promptSuggestions` option alone did not bring one on the official binary (2026-10-16, a real
     // two-turn conversation); with the CLI's own switch it did
     if (promptSuggestionsOn && !('CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION' in fenv) && process.env.CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION === undefined) fenv.CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION = '1';
@@ -423,6 +451,14 @@ export class SessionRunner extends EventEmitter {
     // 预览服务器 (preview/tools.ts): preview_start runs a command, so only its logs / stop are pre-allowed
     const previewMcp: Record<string, McpServerConfig> = previewEnabled() && !chatOnly ? { [PREVIEW_SERVER]: previewMcpServer(this.cwd, () => this.sessionId) } : {};
     const verify = chatOnly ? null : verifyInstructions(this.cwd);
+    // 思考用的语言: a section of the system prompt (read once at start: a change restarts the process once idle)
+    this.thinkingSection = this.thinkingLanguageSection();
+    // a subagent model picked: the work goes to subagents without the user asking each time (subagent-policy.ts); the
+    // pick is in the plan key, so a change restarts the process and this is read again
+    // — only when the model is bound (`sub`): a pick that cannot be reached leaves the subagents on the main model, and
+    // sending every piece of work to them would only cost more
+    const delegate = chatOnly || !sub ? '' : subagentPolicyPrompt(this.subagent);
+    const append = [verify, this.thinkingSection, delegate].filter(Boolean).join('\n\n');
     const allowed = chatOnly ? [] : [...webAllowedTools(), ...(Object.keys(computer).length ? computerAllowedTools() : []), ...(Object.keys(sessionsMcp).length ? SESSIONS_ALLOWED : []), ...(Object.keys(previewMcp).length ? PREVIEW_ALLOWED : [])];
     this.preAllowed = new Set(allowed);
     const noEngineSearch = engineSearchOff({ engine: engine.kind, userChoice: 'WEB_SEARCH_ADAPTER' in fenv || userPickedSearchAdapter(this.cwd) });
@@ -438,7 +474,10 @@ export class SessionRunner extends EventEmitter {
     // through the flag tier (`settingsOverride`)
     this.nextFlag?.dispose();
     this.nextFlag = null;
-    const override = this.provider || this.account ? settingsOverride(fenv, this.cwd) : sub ? ownSubagentOverride(sub, this.cwd) : null;
+    // The account: only what we set goes over the same keys there — the subagents' model, and the split route's base
+    // URL over the user's own relay (both engines lay the settings files' env over the one they start with)
+    const ours: Record<string, string> = { ...(sub ? { CLAUDE_CODE_SUBAGENT_MODEL: sub, CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '1' } : {}), ...(splitAlias && fenv.ANTHROPIC_BASE_URL ? { ANTHROPIC_BASE_URL: fenv.ANTHROPIC_BASE_URL } : {}) };
+    const override = this.provider || this.account ? settingsOverride(fenv, this.cwd) : ownOverride(ours, this.cwd);
     if (override) {
       try {
         this.nextFlag = writeFlagSettings(override);
@@ -456,13 +495,17 @@ export class SessionRunner extends EventEmitter {
       // The SDK defaults to an EMPTY system prompt. We want the real Claude Code prompt: same behaviour as the
       // CLI, and relays that fingerprint Claude Code requests (e.g. super-nb) reject bodies without it.
       // 自动验证: a project with .claude/launch.json is told to check its change in the running app (preview/tools.ts)
-      systemPrompt: verify ? { type: 'preset', preset: 'claude_code', append: verify } : { type: 'preset', preset: 'claude_code' },
+      // 思考用的语言 (thinking-language.ts) goes after it
+      systemPrompt: append ? { type: 'preset', preset: 'claude_code', append } : { type: 'preset', preset: 'claude_code' },
       // Shared cross-agent memory, injected per session rather than written into ~/.claude —
       // uninstalling claude-web must not leave an MCP entry behind in the user's own config.
       // 联网 (`web`: search + the built-in browser) goes in the same way (web/launcher.ts).
       // 操控电脑 (`computer`: the whole desktop, computer/launcher.ts) only for a conversation that has it switched on.
       mcpServers: chatOnly ? {} : { ...claudeMcpServer({ cwd: this.cwd, sessionId: this.sessionId, agent: 'claude' }), ...webClaudeMcpServer({ sessionId: this.sessionId }), ...computer, ...sessionsMcp, ...previewMcp },
-      ...(chatOnly ? { tools: [], strictMcpConfig: true } : {}),
+      // A Gemini-web / WorkBuddy sidecar has no native tool calling: the whole schema rides in the prompt, and the
+      // full Claude Code set pushes a turn past the sidecar's 128 KB attachment limit (25s before the first token).
+      // The core set still covers read / search / edit / run; the rest would only add prompt bytes.
+      ...(chatOnly ? { tools: [], strictMcpConfig: true } : this.provider?.leanTools ? { tools: LEAN_TOOLS } : {}),
       // 网吧's cafe-character skill, as a local plugin (both runtimes load it: 2026-10-13), only while the `web` server
       // that answers its character_* tools is handed out
       // + the official app's download of Anthropic's skills (desktop-skills.ts), so its conversations' anthropic-skills:*
@@ -493,6 +536,8 @@ export class SessionRunner extends EventEmitter {
       abortController: this.abort,
       allowDangerouslySkipPermissions: true,
       canUseTool: (toolName, input, o) => this.onCanUseTool(toolName, input, o),
+      // 思考用的语言: a reminder on each prompt and tool result too (thinkingHooks)
+      ...(this.thinkingSection ? { hooks: this.thinkingHooks() } : {}),
       ...extra,
     };
     this.q = query({ prompt: this.input, options });
@@ -661,10 +706,11 @@ export class SessionRunner extends EventEmitter {
       turnShare(m as any, this.totals); // the CLI reports running totals; everything downstream adds turns up
       // ccb prices every model with Claude's table: for other vendors' models the number is fiction
       markUnknownCost(m as any, this.provider?.type);
-      // refused for an empty text block in the history: the process keeps that history in memory and would be refused
-      // again on every turn — start it over, so the resume reads the transcript with the block taken out (dropEmptyText)
+      // refused for an empty block in the history: the process keeps that history in memory and would be refused
+      // again on every turn — start it over, so the resume reads the transcript with the block taken out (dropEmptyBlocks)
       const said = `${(m as any).result ?? ''} ${JSON.stringify((m as any).errors ?? '')}`;
-      if ((m as any).is_error && /empty text blocks|text content blocks must be non-empty/.test(said)) { this.repairEmptyText = true; this.respawnPending = true; }
+      if ((m as any).is_error && /empty text blocks|text content blocks must be non-empty|thinking block must contain non-whitespace|Invalid `signature` in `thinking` block/.test(said)) { this.repairEmptyBlocks = true; this.respawnPending = true; }
+      if ((m as any).is_error && /Invalid `signature` in `thinking` block/.test(said)) this.repairUnsigned = true;
       this.setState('idle');
     }
     // keep history bounded to avoid unbounded memory in very long sessions; partial events are dropped from history
@@ -684,15 +730,21 @@ export class SessionRunner extends EventEmitter {
       else void this.flushed(5000).then(() => setTimeout(repair, 1500).unref?.());
     }
     // a model / effort change made during the turn that needs another process: now that the turn is over
-    if (m.type === 'result' && this.respawnPending && !this.closed) {
+    // — and once its background subagents / workflows are back: a restart would take them down (their notification
+    // starts a turn of its own, whose result lands here again)
+    if (m.type === 'result' && this.respawnPending && !this.closed && !this.hasBackgroundWork()) {
       this.respawnPending = false;
       void this.respawn();
     }
   }
 
-  /** Restart the process now, or — mid-turn — once the turn's result is in (a restart would cut the turn off). */
+  /**
+   * Restart the process now, or — mid-turn, or while background subagents / workflows of it still run — once that is
+   * over (a restart would cut the turn off, and kill the background work: 2026-10-19, a settings change restarted a
+   * conversation idling while its subagents worked).
+   */
   private respawnWhenIdle(): Promise<void> {
-    if (this.busy()) { this.respawnPending = true; return Promise.resolve(); }
+    if (this.busy() || this.hasBackgroundWork()) { this.respawnPending = true; return Promise.resolve(); }
     return this.respawn();
   }
 
@@ -966,13 +1018,26 @@ export class SessionRunner extends EventEmitter {
     this.emit('message', m);
   }
 
+  /**
+   * Whether `model` ('' = the default) is a Claude model — what the Anthropic API checks the thinking signatures of.
+   * A model of another provider picked in this conversation (`cw-x:<provider>:<model>`) counts by its own name.
+   */
+  private toClaude(model: string): boolean {
+    const id = this.provider ? providerModelId(this.provider, model || undefined) : model;
+    return id ? isClaudeModel(id.replace(/^cw-x:[^:]*:/, '')) : !this.provider;
+  }
+
   async setModel(model: string) {
     await this.fitBeforeSwitch(model);
     // the model can decide the engine (see plan()): crossing over means another process, resuming this conversation
-    if (this.plan(model).key !== this.planKey) {
+    // what one vendor's model left in the history another's API can refuse (DeepSeek's blank thinking → Claude): the
+    // next process reads the transcript cleaned. An in-process switch keeps the history in memory — the 400 does it;
+    // so from another vendor's model to Claude it is always another process (its thinking is unsigned: every turn a 400)
+    if (this.plan(model).key !== this.planKey || (this.toClaude(model) && !this.toClaude(this.model ?? ''))) {
       this.model = model;
       this.info.model = model;
       this.emit('info', this.info);
+      this.repairEmptyBlocks = true;
       await this.respawnWhenIdle();
       return;
     }
@@ -986,6 +1051,7 @@ export class SessionRunner extends EventEmitter {
       this.model = model;
       this.info.model = model;
       this.emit('info', this.info);
+      this.repairEmptyBlocks = true;
       await this.respawnWhenIdle();
     }
   }
@@ -1040,6 +1106,47 @@ export class SessionRunner extends EventEmitter {
     else delete this.info.subagentModel;
     this.emit('info', this.info);
     if (this.plan().key !== this.planKey) await this.respawnWhenIdle();
+  }
+
+  private thinkingLanguageSection(): string {
+    return thinkingLanguagePrompt(thinkingLanguageFor(this.ownThinkingLanguage, thinkingLanguageSetting, getLocale()));
+  }
+
+  /**
+   * The same language as a reminder on every prompt and tool result (hook `additionalContext`: a system reminder in
+   * the newest message, not shown in the chat). Read at each call, from the language the process was started with.
+   */
+  private thinkingHooks(): Options['hooks'] {
+    const text = () => thinkingLanguageReminder(thinkingLanguageFor(this.ownThinkingLanguage, thinkingLanguageSetting, getLocale()));
+    if (!text()) return undefined;
+    const add = (hookEventName: 'UserPromptSubmit' | 'PostToolUse') => async () => {
+      const additionalContext = this.thinkingSection ? text() : '';
+      return additionalContext ? { hookSpecificOutput: { hookEventName, additionalContext } } : {};
+    };
+    return { UserPromptSubmit: [{ hooks: [add('UserPromptSubmit')] }], PostToolUse: [{ hooks: [add('PostToolUse')] }] } as Options['hooks'];
+  }
+
+  /**
+   * 思考用的语言 changed — this conversation's pick (`own`), or the setting / the interface language (no argument): the
+   * system prompt is read once at start, so another process, resuming this conversation, once the turn is done. Nothing
+   * restarts when the instruction comes out the same.
+   */
+  async refreshThinkingLanguage(own?: string) {
+    if (own !== undefined) this.ownThinkingLanguage = own;
+    if (this.closed || this.thinkingLanguageSection() === this.thinkingSection) return;
+    await this.respawnWhenIdle();
+  }
+
+  /**
+   * Its provider was saved in settings (a context window, a key, the model map…): read once at start, so the next
+   * process starts with it — once the turn is done. 2026-10-19: a window set to 1M did nothing to the conversation
+   * already compacting every two minutes on the old one.
+   */
+  async reprovide(p: SessionProvider | undefined) {
+    if (!p || !this.provider || p.id !== this.provider.id) return;
+    const changed = JSON.stringify({ ...this.provider, modelsAt: 0 }) !== JSON.stringify({ ...p, modelsAt: 0 });
+    this.provider = p;
+    if (changed) await this.respawnWhenIdle();
   }
 
   /** Set by the pool: a model of this conversation's provider refused its native thinking-strength parameter. */

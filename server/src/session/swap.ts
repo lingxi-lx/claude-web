@@ -7,6 +7,9 @@ import type { CanonicalLog } from './canonical.js';
 import { renderBriefing, toClaudeEntries } from './handoff.js';
 import { seedCanonical } from '../library/briefing.js';
 import { tr } from '../i18n/index.js';
+import { dropEmptyBlocks, findClaudeTranscript } from '../runtime/transcript-file.js';
+import { isClaudeModel } from '../models/context-window.js';
+import { providerModelId } from '../models/catalog.js';
 
 /**
  * Swapping what is behind a live session without the user losing the session.
@@ -158,12 +161,36 @@ export function openOnProvider<T>(
     }
     const from = d.meta.sessionMeta(sid).providerId;
     if (normProvider(to) === normProvider(from)) return hooks.open(params);
+    cleanForAnotherProvider(d, sid, to, params.model);
     const out = await hooks.open(params);
     await d.canonical.ensure(sid, params.cwd); // a CLI conversation that never ran here has no mirror yet
     await recordProviderSwitch(d, sid, from, to, nameOf(to));
     hooks.onRecorded?.();
     return out;
   });
+}
+
+/**
+ * The next provider reads this history: take out the blocks one vendor's API wrote and another's refuses for good
+ * (DeepSeek's blank unsigned thinking → Claude's 400, 2026-10-19; see dropEmptyBlocks). Called under the session lock
+ * with no process of ours on the file.
+ */
+function cleanForAnotherProvider(d: Pick<SwapDeps, 'meta'>, sessionId: string, providerId: string | undefined, model: string | undefined) {
+  if (dropEmptyBlocks(findClaudeTranscript(sessionId), { unsigned: goesToClaude(d, providerId, model) })) console.warn(`[swap] ${sessionId}: blocks the next provider refuses taken out of the transcript`);
+}
+
+/**
+ * Whether the conversation goes on with a Claude model — whose API refuses another vendor's (unsigned) thinking:
+ * 「Invalid `signature` in `thinking` block」 (2026-10-19, DeepSeek → Opus). Unknown: no (the runner's 400 still repairs).
+ */
+function goesToClaude(d: Pick<SwapDeps, 'meta'>, providerId: string | undefined, model: string | undefined): boolean {
+  const id0 = normProvider(providerId);
+  if (!id0) return !model || isClaudeModel(model.replace(/^cw-x:[^:]*:/, '')); // the Claude account
+  const p = d.meta.provider(id0);
+  if (!p) return false;
+  if (p.type === 'claude-account') return true;
+  const id = providerModelId(p, model);
+  return !!id && isClaudeModel(id);
 }
 
 /**
@@ -195,6 +222,7 @@ async function swapProviderNow(d: Pick<SwapDeps, 'pool' | 'meta' | 'canonical'>,
     // not running: the conversation's own agent (a closed Codex conversation reopened as Claude before)
     agent: prev?.agent ?? (await (d as Partial<SwapDeps>).transcripts?.head(sessionId).catch(() => null))?.agent ?? 'claude',
   };
+  if (changed && params.agent === 'claude') cleanForAnotherProvider(d, sessionId, params.providerId, params.model);
   let r = d.pool.open(params);
   // something reopened it in the gap on the provider still on record (IM / schedules / goals open through the pool, not
   // under this lock): that process is not the switch — replace it, so the record below is what really runs

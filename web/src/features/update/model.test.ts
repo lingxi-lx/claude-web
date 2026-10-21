@@ -56,4 +56,14 @@ describe('what the prompt says', () => {
     expect(promptCopy(dl, { platform: 'win32', mode: 'manual', portable: true, running: 0 }).after).toMatch(/替换现在这个/);
     expect(promptCopy(dl, { platform: 'win32', mode: 'auto', running: 0 }).lead).toMatch(/自动下载没有成功/);
   });
+
+  it('macOS: a Mac app that cannot replace itself says why; one that can only gets here when its download failed', () => {
+    const dl = { kind: 'download' as const, version: '0.1.3', required: true, url: 'u' };
+    expect(promptCopy(dl, { platform: 'darwin', mode: 'manual', why: '从 dmg 打开的', running: 0 }).lead).toBe('从 dmg 打开的');
+    expect(promptCopy(dl, { platform: 'darwin', mode: 'manual', running: 0 }).lead).toMatch(/不能自己更新/);
+    expect(promptCopy(dl, { platform: 'darwin', mode: 'auto', running: 0 }).lead).toMatch(/自动下载没有成功/);
+    // the ready prompt is the same as on Windows: 稍后 installs on quit
+    const ready = { kind: 'ready' as const, version: '0.1.3', required: false };
+    expect(promptCopy(ready, { platform: 'darwin', mode: 'auto', running: 0 }).later).toMatch(/退出软件时/);
+  });
 });

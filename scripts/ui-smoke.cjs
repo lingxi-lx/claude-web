@@ -562,7 +562,7 @@ function driver() {
       // redesign phase 1: one pane, one tab, no workbench setting → no global top bar, no group bar, no tab strip, no panel rail
       if (E.SMOKE_READONLY !== '1') {
         const chrome = await js('({ wb: window.__store.getState().settings["ui.workbench"], topbar: !!document.querySelector(".topbar"), groupbar: !!document.querySelector(".groupbar"), strips: document.querySelectorAll(".tabstrip").length, rail: !!document.querySelector(".dock-rail"), iconRail: [...document.querySelectorAll(".rail .rail-main > [data-id], .rail .rail-main > .rail-anchor > [data-id]")].map((b) => b.dataset.id).join(" ") })');
-        check('default chrome: no top bar / group bar / tab strip / row of panel icons; the icon rail is 对话 · 后台 · 自动化 · 扩展 · 更多', chrome.wb === false && !chrome.topbar && !chrome.groupbar && !chrome.strips && !chrome.rail && chrome.iconRail === 'chat background automation extensions more', JSON.stringify(chrome));
+        check('default chrome: no top bar / group bar / tab strip / row of panel icons; the icon rail is 对话 · 后台 · 自动化 · 网关 · 扩展 · 更多', chrome.wb === false && !chrome.topbar && !chrome.groupbar && !chrome.strips && !chrome.rail && chrome.iconRail === 'chat background automation gateway extensions more', JSON.stringify(chrome));
         const quota = await js('[...document.querySelectorAll(".quota")].every((q) => q.closest(".sb-foot"))');
         check('the quota ring lives in the sidebar bottom row', quota);
       }
@@ -855,7 +855,15 @@ function driver() {
         const tmpProv = await srvReq({ kind: 'providers.upsert', provider: { name: 'Smoke 中转', type: 'openai', baseUrl: 'http://127.0.0.1:9', apiKey: 'smoke-placeholder-not-a-key', models: ['smoke-m1'], defaultModel: 'smoke-m1' } }).catch(() => null);
         await js('window.__store.getState().loadProviders()');
         await js(`window.__store.getState().openSettings({ section: 'agents' })`);
-        const optsOf = (sel) => js(`[...(document.querySelector(${JSON.stringify(sel)})?.options ?? [])].map((o) => o.textContent)`);
+        // a dropdown is the shared Select now: open it, read its rows, close it again
+        const optsOf = async (sel) => {
+          await click(sel);
+          await waitFor(`!!document.querySelector('.menu.select-popover')`, 3000);
+          const opts = await js(`[...document.querySelectorAll('.menu.select-popover .select-option')].map((b) => (b.querySelector('.select-option-label')?.textContent ?? b.textContent).trim())`);
+          await key('Escape');
+          await waitFor(`!document.querySelector('.menu.select-popover')`, 3000);
+          return opts;
+        };
         const apSel = '.modal.settings .agent-provider [data-provider-select]';
         await waitFor(`!!document.querySelector(${JSON.stringify(apSel)})`, 8000);
         const apOpts = await optsOf(apSel);
@@ -1247,6 +1255,31 @@ function driver() {
             check('@ lists the project\'s files over the input box; Tab writes the first as @path', atList && /^@\S+ $/.test(picked), JSON.stringify({ atList, atCount, picked }));
             wc.selectAll(); wc.delete(); await sleep(200);
             await js(`window.__store.getState().saveDraft(${JSON.stringify(E.SMOKE_SID)}, '')`);
+
+            // the menu over selected text (SelectionMenu.tsx, 2026-10-20): select the seeded reply's text, release the
+            // mouse — the menu is there with 复制 / 复制整条消息 / 引用到输入框; 引用到输入框 puts `> ok` in the box
+            phase = 'selection-menu';
+            await js('document.activeElement && document.activeElement.blur && document.activeElement.blur()');
+            const selected = await js(`(() => {
+              const t = document.querySelector('.pane.focused .chat-inner .assistant-wrap .msg-text');
+              const chat = t && t.closest('.chat');
+              const w = t && document.createTreeWalker(t, NodeFilter.SHOW_TEXT);
+              const n = w && w.nextNode();
+              if (!n) return false;
+              chat.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'mouse' }));
+              const r = document.createRange(); r.selectNodeContents(n);
+              const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+              document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0 }));
+              return s.toString();
+            })()`);
+            const menuUp = await waitFor(`!!document.querySelector('.menu.sel-menu [data-act="copy"]') && !!document.querySelector('.menu.sel-menu [data-act="quote"]') && document.querySelector('.menu.sel-menu').style.visibility !== 'hidden'`, 3000);
+            const rows = await js(`[...document.querySelectorAll('.menu.sel-menu [data-act]')].map((b) => b.dataset.act).join(',')`);
+            if (menuUp) await js(`document.querySelector('.menu.sel-menu [data-act="quote"]').click()`);
+            const quoted = await waitFor(`!document.querySelector('.menu.sel-menu') && /^> ok\\n/.test(document.querySelector('.pane.focused .composer textarea').value)`, 3000);
+            check('selecting text in a reply brings up the selection menu (复制 · 复制整条消息 · 引用到输入框 …); 引用到输入框 quotes it into the input box', selected === 'ok' && menuUp && /copy,copyMsg,copyMd,quote/.test(rows) && quoted, JSON.stringify({ selected, menuUp, rows, box: await js(`document.querySelector('.pane.focused .composer textarea')?.value`) }));
+            await click('.pane.focused .composer textarea');
+            wc.selectAll(); wc.delete(); await sleep(200);
+            await js(`window.__store.getState().saveDraft(${JSON.stringify(E.SMOKE_SID)}, '')`);
           }
         }
 
@@ -1418,6 +1451,27 @@ function driver() {
           // the account menu over a full page (扩展): nothing of it under the page (user report, macOS)
           await js(`(() => { const b = [...document.querySelectorAll('.rail [data-id]')].find((e) => e.dataset.id === 'extensions'); b && b.click(); })()`);
           await waitFor(`!!document.querySelector('.ext-page')`, 3000);
+          // 网关: an ordinary user sees 概览 / 账号 / 任务; the sharing / tuning parts are behind 高级设置
+          await js(`(() => { const b = [...document.querySelectorAll('.rail [data-id]')].find((e) => e.dataset.id === 'gateway'); b && b.click(); })()`);
+          const gwReady = await waitFor(`(() => { const p = document.querySelector('.gateway-page'); return !!p && !p.hidden && (!!document.querySelector('.gateway-side') || !!document.querySelector('.gateway-tabs')); })()`, 4000);
+          if (!gwReady) {
+            const diag = await js(`({ app: document.querySelector('.app')?.className ?? null, rail: [...document.querySelectorAll('.rail [data-id]')].map((x) => x.dataset.id).join(','), page: !!document.querySelector('.gateway-page'), hidden: document.querySelector('.gateway-page')?.hidden ?? null, side: !!document.querySelector('.gateway-side'), sections: [...document.querySelectorAll('.sb-sect')].map((x) => x.dataset.section + ':' + x.hidden).join(','), active: document.querySelector('.rail [data-id="gateway"]')?.className ?? null })`);
+            log('gateway diag ' + JSON.stringify(diag));
+          }
+          const tabIds = `(p) => [...p.querySelectorAll('.gateway-side .nav, .gateway-tabs [role=tab]')].map((x) => x.dataset.id).filter((id) => id !== '__advanced').join(',')`;
+          const gw = gwReady ? await js(`(() => { const p = document.querySelector('.gateway-page'); return { tabs: (${tabIds})(p), tab: p.dataset.tab, side: !!document.querySelector('.gateway-side') || !!document.querySelector('.gateway-tabs') }; })()`) : null;
+          check('网关 opens with 概览 · 账号 · 任务 · 分组与路由 (no advanced parts)', gw && gw.tab === 'overview' && gw.side && gw.tabs === 'overview,accounts,tasks,routes', JSON.stringify(gw));
+          // the toggle is a link in the section's sidebar, or the extra tab in the page strip when the sidebar is away
+          const advOpen = await js(`(() => { const b = [...document.querySelectorAll('.gateway-side .link, .gateway-tabs [data-id="__advanced"]')].find((x) => x.textContent.includes('高级设置')); if (!b) return false; b.click(); return true; })()`);
+          await sleep(300);
+          const gwAll = advOpen ? await js(`(() => { const p = document.querySelector('.gateway-page'); return (${tabIds})(p); })()`) : '';
+          check('高级设置 reveals 分组与路由 · 密钥 · 日志 · 设置', advOpen && gwAll === 'overview,accounts,tasks,routes,keys,logs,settings', gwAll);
+          await js(`(() => { const b = [...document.querySelectorAll('.gateway-side .link, .gateway-tabs [data-id="__advanced"]')].find((x) => x.textContent.includes('收起高级')); if (b) b.click(); })()`);
+          await sleep(200);
+          const gwBack = await js(`(() => { const p = document.querySelector('.gateway-page'); return (${tabIds})(p); })()`);
+          check('收起高级 goes back to the ordinary parts (routing stays)', gwBack === 'overview,accounts,tasks,routes', gwBack);
+          await js(`(() => { const b = [...document.querySelectorAll('.rail [data-id]')].find((e) => e.dataset.id === 'chat'); b && b.click(); })()`);
+          await waitFor(`!document.querySelector('.gateway-page:not([hidden])')`, 3000);
           await click('.rail-acct');
           await waitFor(`!!document.querySelector('.sb-acct-menu')`, 2000);
           const onTop = await js(`(() => { const m = document.querySelector('.sb-acct-menu'); if (!m) return null; const b = m.getBoundingClientRect(); return [[b.right - 10, b.top + 16], [b.right - 10, b.bottom - 16], [b.left + 10, b.top + 16]].every(([x, y]) => m.contains(document.elementFromPoint(x, y))); })()`);
@@ -1532,7 +1586,7 @@ function driver() {
         const paneTiles = `(() => { const st = window.__store.getState(); const g = st.layout.groups.find((x) => x.id === st.layout.activeGroupId); const p = g.panes[g.focusedPaneId]; return p.tiles.map((t) => t.kind === 'chat' ? 'chat:' + (t.sessionId || 'new') : t.kind + ':' + t.id).join(',') + '|' + p.activeTileId; })()`;
         // header ··· hands over straight away: the agents (or the note that there are none) are in the menu itself
         await click('.sess-head .sh-more > button');
-        const handoff = await js(`(() => { const m = document.querySelector('.menu.sess-menu'); if (!m) return null; return { label: [...m.querySelectorAll('.menu-label')].some((l) => l.textContent.includes('交给')), nested: !!m.querySelector('button[aria-expanded]') }; })()`);
+        const handoff = await js(`(() => { const m = document.querySelector('.menu.sess-menu'); if (!m) return null; return { label: [...m.querySelectorAll('.menu-label')].some((l) => l.textContent.includes('交给')), nested: !!m.querySelector('button[aria-expanded]:not([data-act="thinking-language"])') }; })()`);
         check('header ··· lists the hand-over agents directly (no sub-menu)', handoff && handoff.label && !handoff.nested, JSON.stringify(handoff));
         await js('document.body.click()');
         await sleep(200);
@@ -2274,8 +2328,14 @@ function driver() {
           check('自动化 → 新建 (定时任务) opens the form in the page', form);
           // review 7 I4: the working directory is a 「项目」 choice (the current project first, 其它文件夹… to browse), and
           // no row of the form sticks out of it
-          const sf = await js(`(() => { const f = document.querySelector('.auto-page .sched-form'); const p = f && f.querySelector('[data-id="sched-project"]'); if (!f || !p) return null; const fr = f.getBoundingClientRect(); const pr = p.getBoundingClientRect(); const over = [...f.querySelectorAll('input, select, textarea, button')].filter((e) => { const r = e.getBoundingClientRect(); return r.width && (r.right > fr.right + 1 || r.left < fr.left - 1); }).length; return { w: Math.round(pr.width), value: p.value, options: [...p.options].map((o) => o.textContent), over }; })()`);
-          check('新定时任务: 「项目」 is a dropdown (a project chosen, 其它文件夹… last), nothing sticks out of the form', !!sf && sf.w >= 150 && !!sf.value && sf.options[sf.options.length - 1] === '其它文件夹…' && sf.over === 0, JSON.stringify(sf));
+          const sf = await js(`(() => { const f = document.querySelector('.auto-page .sched-form'); const p = f && f.querySelector('[data-id="sched-project"]'); if (!f || !p) return null; const fr = f.getBoundingClientRect(); const pr = p.getBoundingClientRect(); const over = [...f.querySelectorAll('input, select, textarea, button')].filter((e) => { const r = e.getBoundingClientRect(); return r.width && (r.right > fr.right + 1 || r.left < fr.left - 1); }).length; return { w: Math.round(pr.width), value: (p.textContent || '').trim(), dropdown: p.getAttribute('aria-haspopup'), over }; })()`);
+          // the choices themselves: open the shared Select and read its rows (其它文件夹… is the last one)
+          await click('.auto-page .sched-form [data-id="sched-project"]');
+          await waitFor(`!!document.querySelector('.menu.select-popover')`, 3000);
+          const sfOpts = await js(`[...document.querySelectorAll('.menu.select-popover .select-option')].map((b) => b.textContent.trim())`);
+          await key('Escape');
+          await waitFor(`!document.querySelector('.menu.select-popover')`, 3000);
+          check('新定时任务: 「项目」 is a dropdown (a project chosen, 其它文件夹… last), nothing sticks out of the form', !!sf && sf.w >= 150 && !!sf.value && sf.dropdown === 'menu' && sfOpts.at(-1) === '其它文件夹…' && sf.over === 0, JSON.stringify({ ...sf, sfOpts }));
           await shot('automation-new');
           // the main area goes elsewhere (a conversation opened from the palette, a notification, a link — the sidebar
           // column is the automation section's own while the page is up): the page gets out of the way, stays mounted
@@ -2556,8 +2616,10 @@ function driver() {
             // several agents' names wrap onto a second line instead of being cut off; the full text is the tooltip
             await js(`(() => { const names = { opencode: 'OpenCode', gemini: 'Gemini CLI', qwen: 'Qwen Code' }; const extra = Object.keys(names).map((k) => ({ kind: k, name: names[k], installed: true, detected: true, joined: false, dismissed: false, enabled: false })); const st = window.__store.getState(); window.__store.setState({ librarySources: [...st.librarySources.filter((x) => !names[x.kind]), ...extra] }); })()`);
             await sleep(300);
-            const hintFit = await js(`(() => { const m = document.querySelector('.sidebar .sb-hint .msg'); if (!m) return null; const lh = parseFloat(getComputedStyle(m).lineHeight); const j = document.querySelector('.sidebar .sb-hint [data-id="library-join"]').getBoundingClientRect(); const h = document.querySelector('.sidebar .sb-hint').getBoundingClientRect(); return { text: m.textContent, lines: Math.round(m.clientHeight / lh), clipped: m.scrollHeight > m.clientHeight + 1, title: m.title.includes('Qwen Code'), joinInside: j.right <= h.right && j.width > 10 }; })()`);
-            check('library hint: four agents → 「把 Codex 等工具里的对话也列在这里？」, not cut off, every name in the tooltip; 选择… stays whole', !!hintFit && hintFit.text === '把 Codex 等工具里的对话也列在这里？' && !hintFit.clipped && hintFit.lines <= 2 && hintFit.title && hintFit.joinInside, JSON.stringify(hintFit));
+            // the leading name is whatever this machine detected first (DeepSeek Harness and friends join Codex on a
+            // machine that has them), so the expected sentence is computed from the list, not hard-coded
+            const hintFit = await js(`(() => { const m = document.querySelector('.sidebar .sb-hint .msg'); if (!m) return null; const lh = parseFloat(getComputedStyle(m).lineHeight); const j = document.querySelector('.sidebar .sb-hint [data-id="library-join"]').getBoundingClientRect(); const h = document.querySelector('.sidebar .sb-hint').getBoundingClientRect(); const names = window.__store.getState().librarySources.filter((x) => x.kind !== 'claude' && x.detected && !x.joined && !x.dismissed).map((x) => x.name); return { text: m.textContent, names, want: names.length === 1 ? \`把 \${names[0]} 里的对话也列在这里？\` : \`把 \${names[0]} 等工具里的对话也列在这里？\`, lines: Math.round(m.clientHeight / lh), clipped: m.scrollHeight > m.clientHeight + 1, title: m.title.includes('Qwen Code'), joinInside: j.right <= h.right && j.width > 10 }; })()`);
+            check('library hint: several agents → 「把 <first> 等工具里的对话也列在这里？」, not cut off (up to three lines), every name in the tooltip; 选择… stays whole', !!hintFit && hintFit.text === hintFit.want && !hintFit.clipped && hintFit.lines <= 3 && hintFit.title && hintFit.joinInside, JSON.stringify(hintFit));
             await shot('sidebar-hint-wrap');
             // 文件夹 (2026-10-14): every folder its own group, open — the running conversation is listed in its folder's
             // group, which offers 在这里新建对话 and 设为项目
@@ -3269,7 +3331,9 @@ function driver() {
         const rest = await js('!!document.querySelector(".modal.settings .sp-nav") && !!document.querySelector(".sidebar")');
         check('boundary catches a crash in its own section only', caught && rest);
         await shot('crash-boundary');
-        await js('document.querySelector(\'.modal.settings .err-boundary[data-area="设置 · 模型与智能程度"] .eb-actions .btn\').click()');
+        // the section's rows have boundaries of their own whose area starts the same (「… · 思考用的语言」): they took
+        // the crash too — each one's 重试
+        await js('document.querySelectorAll(\'.modal.settings .err-boundary[data-area^="设置 · 模型与智能程度"] .eb-actions .btn:first-child\').forEach((b) => b.click())');
         await sleep(600);
         expectErrors = false;
         check('重试 remounts the section', !(await js('!!document.querySelector(".modal.settings .err-boundary")')));

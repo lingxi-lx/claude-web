@@ -198,6 +198,13 @@ div.code { border: 0; border-radius: var(--r-lg); background-color: var(--surfac
 /* the text itself: no box of its own inside the block (a markdown fence and a tool's output both gave it one) */
 .code .code-body, .md .code .code-body, .tool-body .code .code-body { margin: 0; padding: 4px 14px 12px; background: transparent; border: 0; border-radius: 0; font-size: var(--fs-code); line-height: 20px; }
 .code-foot { padding: 0 14px 10px; background: transparent; border-top: 0; font-size: var(--fs-meta); color: var(--ink-3); }
+/* 运行: what a chat code block printed, under it (same block, not a tool card) */
+.code-run { padding: 0 14px 10px; font-family: var(--mono); font-size: var(--fs-meta); }
+.code-run-h { display: flex; align-items: center; gap: 8px; color: var(--ink-3); }
+.code-run-h .link { margin-left: auto; }
+.code-run pre { margin: 4px 0 0; padding: 8px 10px; max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface-1); border-radius: var(--r-md); color: var(--ink-2); }
+.code-run pre.err { color: var(--err); }
+.code-run[data-ok='false'] .code-run-h { color: var(--warn); }
 
 /* ---------- 「改动了 N 个文件」 ---------- */
 .fcard { margin: 0; padding: 4px; border: 0; border-radius: var(--r-xl); background: var(--surface-elev); box-shadow: var(--elev-1); overflow: hidden; }
@@ -297,3 +304,8 @@ div.code { border: 0; border-radius: var(--r-lg); background-color: var(--surfac
 
 /* the latest turn's plan at the foot of the conversation (ChatView PlanDock), like the official app's card */
 .plan-dock { margin: var(--sp-2) 0 var(--sp-3); }
+
+/* the menu over selected text in the conversation (SelectionMenu.tsx): compact rows, the shortcut on the right */
+.menu.cm.sel-menu { min-width: 232px; max-width: min(320px, calc(100vw - 16px)); }
+.menu.cm.sel-menu .cm-it { min-height: 30px; padding: 4px 10px; font-size: var(--fs-base); }
+.menu.cm.sel-menu .cm-d { font-size: var(--fs-meta); }

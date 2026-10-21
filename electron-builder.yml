@@ -63,6 +63,10 @@ protocols:
 extraResources:
   - from: desktop/build/icon.png
     to: icon.png
+  # pinned Gemini / WorkBuddy sidecars, fetched by scripts/sidecars/fetch.mjs before packaging (CI does this;
+  # without them the server downloads on first use into the data directory)
+  - from: vendor/sidecars
+    to: sidecars
 win:
   target:
     - nsis

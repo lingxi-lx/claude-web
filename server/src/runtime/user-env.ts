@@ -74,9 +74,24 @@ export function settingsOverride(ours: Record<string, string>, cwd?: string): Re
 }
 
 /**
- * The account (no provider): the subagents' model picked in the composer goes over a `CLAUDE_CODE_SUBAGENT_MODEL` the
- * user's settings files set — only that key (the rest of those files is the account's own setup). Null: none sets it.
+ * The account (no provider): what we set for it goes over the same keys in the user's settings files — only those keys
+ * (the rest of those files is the account's own setup). Used for the subagents' model picked in the composer
+ * (`CLAUDE_CODE_SUBAGENT_MODEL`) and, when they run on another provider's model, the split route's base URL over the
+ * user's own relay (`ANTHROPIC_BASE_URL`). Null: no file sets any of them.
  */
-export function ownSubagentOverride(model: string, cwd?: string): Record<string, string> | null {
-  return settingsEnvs(cwd).some((env) => 'CLAUDE_CODE_SUBAGENT_MODEL' in env) ? { CLAUDE_CODE_SUBAGENT_MODEL: model } : null;
+export function ownOverride(ours: Record<string, string>, cwd?: string): Record<string, string> | null {
+  const out: Record<string, string> = {};
+  for (const env of settingsEnvs(cwd)) for (const k of Object.keys(ours)) if (k in env) out[k] = ours[k];
+  return Object.keys(out).length ? out : null;
+}
+
+/**
+ * The Anthropic base URL the account's CLI really sends to: the settings files' `env` (user, then project, then local:
+ * the later one wins) over this process's environment — where a relay the user set up there points. Undefined: none
+ * (claude.ai itself). '' counts as unset, as it does for the CLI.
+ */
+export function ownAnthropicBase(cwd?: string): string | undefined {
+  let v = process.env.ANTHROPIC_BASE_URL;
+  for (const env of settingsEnvs(cwd)) if (typeof env.ANTHROPIC_BASE_URL === 'string') v = env.ANTHROPIC_BASE_URL;
+  return v?.trim() || undefined;
 }

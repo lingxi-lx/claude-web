@@ -61,6 +61,24 @@ export class RunnerPool extends EventEmitter {
   stateOf(sessionId: string): RunnerState | undefined {
     return this.runners.get(sessionId)?.state;
   }
+  /** A provider was saved in settings: its running Claude conversations start their next process with it. */
+  providerSaved(id: string) {
+    const runners = [...this.runners.values()].filter((r): r is SessionRunner => r instanceof SessionRunner && r.info.providerId === id);
+    if (!runners.length) return;
+    // it may not build any more (gateway off, no key…): the save went through — the old processes keep going
+    let p: ReturnType<ProviderService['forSession']>;
+    try { p = this.providers.forSession(id); } catch { return; }
+    for (const r of runners) void r.reprovide(p).catch(() => { /* the old process keeps going */ });
+  }
+
+  /**
+   * 思考用的语言 changed: one conversation's pick (`sessionId`, `own`: '' = the setting), or the setting / the interface
+   * language (no id: every running Claude conversation). Each restarts once idle if its instruction changed.
+   */
+  thinkingLanguageChanged(sessionId?: string, own?: string) {
+    const runners = sessionId ? [this.runners.get(sessionId)] : [...this.runners.values()];
+    for (const r of runners) if (r instanceof SessionRunner) void r.refreshThinkingLanguage(sessionId ? own ?? '' : undefined).catch(() => { /* the old process keeps going */ });
+  }
 
   open(params: OpenSessionParams, resumeHistory: unknown[] | null = null): AgentDriver {
     void proxy.refresh(); // IM / schedules / goals come straight here: a stale look is redone for the next start (net/proxy.ts)
@@ -104,7 +122,9 @@ export class RunnerPool extends EventEmitter {
       const explicit = params.subagentModel === undefined ? undefined : fullPick(params.subagentModel, params.providerId);
       params = { ...params, subagentModel: explicit ?? (m ? subagentModelFor({ recorded: params.sessionId ? m.sessionMeta(params.sessionId).subagent : undefined, settings: m.settings(), providerId: params.providerId }) : undefined) };
       const sp = this.providers.forSession(params.providerId);
-      r = new SessionRunner(params, sp);
+      // 思考用的语言 picked for this conversation (a fork thinks in its parent's)
+      const thinkingLanguage = params.sessionId ? m?.sessionMeta(params.sessionId).thinkingLanguage : undefined;
+      r = new SessionRunner(params, sp, { thinkingLanguage });
       // a pick is the conversation's from then on (a new one: under the id it was given; a fork gets its id at init)
       if (explicit !== undefined && m && !params.fork && !params.resumeAt) {
         void m.setSessionMeta(r.sessionId, { subagent: { providerId: providerKey(params.providerId), model: explicit } }).catch(() => { /* in memory; the next save persists it */ });

@@ -13,6 +13,7 @@ import { EMPTY } from '@/ui/terms';
 import { EmptyState } from '@/ui/EmptyState';
 import './orchestra.css';
 import { tr } from '@/i18n';
+import { Select } from '@/ui/Select';
 
 type View = { kind: 'none' } | { kind: 'edit'; draft: WorkflowDraft; key: number } | { kind: 'run'; runId: string };
 
@@ -61,10 +62,7 @@ export function OrchestraPanel({ newSignal = 0, page = false }: { newSignal?: nu
         <div className="orch-side-h">
           <b>{tr('工作流')}</b>
           <span className="grow" />
-          <select className="field tpl" value="" onChange={(e) => { const t = templates.find((x) => x.id === e.target.value); if (t) edit(newDraft(t)); }} title={tr('从内置模板新建')}>
-            <option value="">{tr('模板…')}</option>
-            {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </select>
+          <Select className="field tpl" value="" onValueChange={(value) => { const t = templates.find((x) => x.id === String(value)); if (t) edit(newDraft(t)); }} title={tr('从内置模板新建')} aria-label={tr('模板')} options={[{ value: '', label: tr('模板…') }, ...templates.map((t) => ({ value: t.id, label: t.name }))]} />
           {!page && <button className="icon-btn xs" title={tr('新建工作流')} aria-label={tr('新建工作流')} onClick={() => edit(newDraft())}><Icon name="plus" size={13} /></button>}
         </div>
         {hint && <div className="orch-hint">{tr('选一个工作流，点')} <Icon name="play" size={11} /> {tr('运行')}</div>}

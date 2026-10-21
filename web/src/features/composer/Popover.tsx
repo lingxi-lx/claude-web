@@ -85,7 +85,9 @@ export function Popover({ anchor, onClose, prefer = 'up', align = 'left', classN
   // first paint: focus the checked row, else the first one (keyboard users land inside the menu)
   useLayoutEffect(() => {
     if (!pos) return; // (a sheet never has a position: it takes the focus itself)
-    const rows = [...(box.current?.querySelectorAll<HTMLElement>('[data-mi]') ?? [])];
+    // a disabled row cannot take the focus (a Select showing a value that is no longer pickable): land on the
+    // first row that can, checked first
+    const rows = [...(box.current?.querySelectorAll<HTMLElement>('[data-mi]:not(:disabled)') ?? [])];
     (rows.find((b) => b.getAttribute('aria-checked') === 'true') ?? rows[0])?.focus({ preventScroll: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [!!pos]);

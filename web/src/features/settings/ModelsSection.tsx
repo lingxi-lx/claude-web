@@ -6,7 +6,7 @@ import { Icon, AGENT_ICONS } from '@/ui/icons';
 import { CATALOG, modelsFor } from '@catalog';
 import type { AgentKind, Provider } from '@shared';
 import { modelTable, profileModels, type ModelRow } from '@/features/models/menu';
-import { refreshAllModels, useGatewayGroups, useRefreshRun } from '@/features/models/data';
+import { refreshAllModels, useGatewayStatus, useRefreshRun } from '@/features/models/data';
 import { agoText } from '@/features/models/ModelMenu';
 import '@/features/models/models.css';
 import { TERMS, ULTRACODE, effortLabel, effortTitle } from '@/ui/terms';
@@ -38,13 +38,14 @@ export function ModelsSection() {
   const providers = useStore((s) => s.providers);
   const agents = useStore((s) => s.agents);
   const toast = useStore((s) => s.toast);
-  const groups = useGatewayGroups();
+  const gatewayView = useGatewayStatus();
+  const groups = gatewayView.groups;
   const refresh = useRefreshRun();
   const [view, setView] = useState<'model' | 'profile'>('model');
   const [q, setQ] = useState('');
   const relay = useStore((s) => s.auth?.relay);
   const ownName = ownClaudeName(relay ? { relay } : null);
-  const rows = useMemo(() => modelTable(providers, groups, q, ownName), [providers, groups, q, ownName]);
+  const rows = useMemo(() => modelTable(providers, groups, q, ownName, gatewayView.poolModels), [providers, groups, q, ownName, gatewayView.poolModels]);
   // 按供应商: each a fold, so a long list reads (GitHub issue #4); the first one starts open
   const [openSec, setOpenSec] = useState<Record<string, boolean>>({});
   const isOpen = (k: string, i: number) => openSec[k] ?? i === 0;
@@ -170,7 +171,7 @@ export function ModelsSection() {
             ));
           })}
           {providers.map((p) => {
-            const models = profileModels(p, groups, providers);
+            const models = profileModels(p, groups, providers, gatewayView.poolModels);
             return fold(p.id, -1, <><Icon name={p.type === 'gateway' ? 'gateway' : 'cloud'} size={13} /> {p.name} <span className="badge">{p.type}</span></>, models.length, (
                 <div className="list">
                   {models.map((m) => row(`${p.id}:${m}`, m, p.defaultModel === m ? tr('默认') : undefined))}

@@ -9,6 +9,7 @@ import type { AgentConfigBackup, AgentConfigFile, AgentConfigKind, AgentConfigSt
 import { EMPTY_FORM, catalogSpec, describeSpec, formFromCatalog, formToSpec, settingToCommit, type McpForm } from './agent-config-form';
 import { MCP_CATALOG } from './McpCatalog';
 import { tr, dateLocale } from '@/i18n';
+import { Select } from '@/ui/Select';
 
 export const CONFIGURABLE: AgentConfigKind[] = ['codex', 'gemini', 'qwen', 'opencode'];
 const NAMES: Record<AgentConfigKind, string> = { codex: 'Codex', gemini: 'Gemini', qwen: 'Qwen', opencode: 'OpenCode' };
@@ -53,10 +54,7 @@ function SettingRow({ f, onSet }: { f: AgentSettingField; onSet: (v: string | nu
     <label className="acfg-field">
       <span>{f.label} <span className="mono muted">{f.key}</span></span>
       {f.type === 'enum' ? (
-        <select className="field" value={v} onChange={(e) => { setV(e.target.value); commit(e.target.value); }}>
-          <option value="">{tr('（未设置，用默认）')}</option>
-          {f.options?.map((o) => <option key={o} value={o}>{o}</option>)}
-        </select>
+        <Select className="field" value={v} onValueChange={(value) => { const next = String(value); setV(next); commit(next); }} aria-label={f.label} options={[{ value: '', label: tr('（未设置，用默认）') }, ...(f.options ?? []).map((o) => ({ value: o, label: o }))]} />
       ) : (
         <>
           <input className="field" value={v} list={f.suggestions?.length ? `acfg-${f.key}` : undefined} placeholder={tr('（未设置，用默认）')} onChange={(e) => setV(e.target.value)} onBlur={() => commit(v)} onKeyDown={(e) => { if (e.key === 'Enter' && !imeComposing(e.nativeEvent)) commit(v); }} />
@@ -82,16 +80,11 @@ function McpAddForm({ state, onDone }: { state: AgentConfigState; onDone: () => 
   return (
     <div className="acfg-form">
       <label>{tr('从目录填入')}
-        <select className="field" value="" onChange={(e) => { const c = MCP_CATALOG.find((x) => x.id === e.target.value); if (c) setF(formFromCatalog(c.id, c.json as any, c.env)); }}>
-          <option value="">{tr('（选一个常用服务器…）')}</option>
-          {MCP_CATALOG.map((c) => <option key={c.id} value={c.id}>{c.name} · {c.desc}</option>)}
-        </select>
+        <Select className="field" value="" onValueChange={(value) => { const c = MCP_CATALOG.find((x) => x.id === String(value)); if (c) setF(formFromCatalog(c.id, c.json as any, c.env)); }} aria-label={tr('常用 MCP 服务器')} options={[{ value: '', label: tr('（选一个常用服务器…）') }, ...MCP_CATALOG.map((c) => ({ value: c.id, label: c.name, description: c.desc }))]} searchable />
       </label>
       <label>{tr('名称')}<input className="field" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder={tr('字母 / 数字 / _ / -')} /></label>
       <label>{tr('传输')}
-        <select className="field" value={f.transport} onChange={(e) => setF({ ...f, transport: e.target.value as McpSpec['transport'] })}>
-          {state.transports.map((t) => <option key={t} value={t}>{t}</option>)}
-        </select>
+        <Select className="field" value={f.transport} onValueChange={(value) => setF({ ...f, transport: String(value) as McpSpec['transport'] })} aria-label={tr('传输')} options={state.transports.map((t) => ({ value: t, label: t }))} />
       </label>
       {f.transport === 'stdio' ? (
         <>
@@ -150,18 +143,16 @@ function SyncPanel({ state, cwd, onDone }: { state: AgentConfigState; cwd: strin
       </div>
       {from === 'claude' ? (
         <label className="wide">{tr('Claude 的 MCP 服务器')}
-          <select className="field" value={pick} onChange={(e) => setPick(e.target.value)} disabled={!list?.length}>
-            {list === null && <option>{tr('读取中…')}</option>}
-            {list?.length === 0 && <option>{tr('Claude 里还没有 MCP 服务器')}</option>}
-            {names.map((n) => { const e = list!.filter((x) => x.spec.name === n); return <option key={n} value={n}>{n} · {e[0].spec.transport} · {e.map((x) => x.scope).join('/')} · {describeSpec(e[0].spec).slice(0, 60)}</option>; })}
-          </select>
+          <Select className="field" value={pick} onValueChange={(value) => setPick(String(value))} disabled={!list?.length} aria-label={tr('Claude 的 MCP 服务器')} options={[
+            ...(list === null ? [{ value: '', label: tr('读取中…'), disabled: true }] : []),
+            ...(list?.length === 0 ? [{ value: '', label: tr('Claude 里还没有 MCP 服务器'), disabled: true }] : []),
+            ...names.map((n) => { const e = list!.filter((x) => x.spec.name === n); return { value: n, label: n, description: `${e[0].spec.transport} · ${e.map((x) => x.scope).join('/')} · ${describeSpec(e[0].spec).slice(0, 60)}` }; }),
+          ]} searchable />
         </label>
       ) : (
         <>
           <label className="wide">{tr('目录条目')}
-            <select className="field" value={catId} onChange={(e) => setCatId(e.target.value)}>
-              {MCP_CATALOG.map((c) => <option key={c.id} value={c.id}>{c.name} · {c.desc}{c.oauth ? tr(' · 需要 OAuth') : ''}</option>)}
-            </select>
+            <Select className="field" value={catId} onValueChange={(value) => setCatId(String(value))} aria-label={tr('目录条目')} options={MCP_CATALOG.map((c) => ({ value: c.id, label: c.name, description: `${c.desc}${c.oauth ? tr(' · 需要 OAuth') : ''}` }))} searchable />
           </label>
           {!!cat?.env?.length && <label className="wide">{tr('需要的环境变量')}<textarea className="field" rows={2} value={catEnv} onChange={(e) => setCatEnv(e.target.value)} /></label>}
         </>
@@ -235,9 +226,7 @@ export function AgentConfigPanel({ kind }: { kind: AgentConfigKind }) {
         <h6>{tr('说明文件')}</h6>
         <span className="grow" />
         {cwdOptions.length > 0 && (
-          <select className="field acfg-cwd" value={cwd} onChange={(e) => setCwd(e.target.value)} title={tr('项目说明文件所在的工作区')}>
-            {cwdOptions.map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
+          <Select className="field acfg-cwd" value={cwd} onValueChange={(value) => setCwd(String(value))} aria-label={tr('项目说明文件所在的工作区')} title={tr('项目说明文件所在的工作区')} searchable={cwdOptions.length > 8} options={cwdOptions.map((p) => ({ value: p, label: p }))} />
         )}
       </div>
       <div className="list">{state.files.map((f) => <FileRow key={f.path} f={f} onOpen={openFile} />)}</div>

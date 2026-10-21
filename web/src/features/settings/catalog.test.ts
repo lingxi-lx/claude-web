@@ -94,7 +94,7 @@ describe('settings map (spec §5.7)', () => {
     const legacy = Object.values(LEGACY).flatMap((x) => x.entries ?? []);
     // redesign phase 5: 「在对话里直接展开改动」 — the per-step diffs no longer start open (spec §5.3: 设置里可以改回)
     // 界面缩放 (ui.zoom): the desktop app's whole-window zoom, next to 字号
-    const added = ['ui.inlineDiffs', 'ui.haptics', 'ui.zoom', 'cafe.rate', 'cafe.sound', 'ui.language', 'ui.promptSuggestions', 'ui.viewMode', 'ui.infoPanel', 'ui.sidebarFolded', 'ui.welcomeBackdrop', 'ui.welcomeLayout', 'ui.autoArchivePr', 'sessions.mcp', 'claude.desktopSkills', 'worktree.dir', 'worktree.prefix'];
+    const added = ['ui.inlineDiffs', 'ui.haptics', 'ui.zoom', 'cafe.rate', 'cafe.sound', 'ui.language', 'ui.promptSuggestions', 'ui.viewMode', 'ui.infoPanel', 'ui.sidebarFolded', 'ui.welcomeBackdrop', 'ui.welcomeLayout', 'ui.autoArchivePr', 'sessions.mcp', 'claude.desktopSkills', 'worktree.dir', 'worktree.prefix', 'ai.thinkingLanguage'];
     const now = allEntries().map(({ entry }) => entry.id);
     expect(new Set(now).size).toBe(now.length);
     for (const id of legacy) expect(now, id).toContain(id);
@@ -102,6 +102,9 @@ describe('settings map (spec §5.7)', () => {
     const at = (id: string) => allEntries().find((e) => e.entry.id === id);
     expect(at('ui.inlineDiffs')?.section.id).toBe(at('ui.diffMode')?.section.id);
     expect(at('ui.inlineDiffs')?.entry.block).toBe(at('ui.diffMode')?.entry.block);
+    // 思考用的语言: on the model page, found by 思考 together with 显示思考过程
+    expect(at('ai.thinkingLanguage')?.section.id).toBe('models');
+    expect(ids(searchSettings('思考'))).toEqual(expect.arrayContaining(['entry:ui.showThinking', 'entry:ai.thinkingLanguage']));
   });
 
   it('every part of the old window is on exactly one page', () => {

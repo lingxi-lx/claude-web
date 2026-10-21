@@ -8,6 +8,7 @@ import { Graph, KIND_ICON } from './Graph';
 import { nextNodeId, promptVars } from './graph-layout';
 import { agentIcon, agentLabel } from './labels';
 import { tr } from '@/i18n';
+import { Select } from '@/ui/Select';
 
 export type WorkflowDraft = Omit<Workflow, 'id' | 'createdAt' | 'updatedAt'> & { id?: string };
 
@@ -50,17 +51,17 @@ function NodeCard({ n, all, agents, index, count, onChange, onMove, onRemove }: 
         <button className="icon-btn xs" onClick={onRemove} title={tr('删除节点')} aria-label={tr('删除节点')}><Icon name="trash" size={12} /></button>
       </div>
       <div className="grid">
-        <label>{tr('类型')}<select className="field" value={n.kind} onChange={(e) => onChange(withKind(n, e.target.value as OrchNode['kind'], agents))}>{(['task', 'compare', 'approval'] as const).map((k) => <option key={k} value={k}>{KIND_L[k]}</option>)}</select></label>
+        <label>{tr('类型')}<Select className="field" value={n.kind} onValueChange={(value) => onChange(withKind(n, String(value) as OrchNode['kind'], agents))} aria-label={tr('类型')} options={(['task', 'compare', 'approval'] as const).map((k) => ({ value: k, label: KIND_L[k] }))} /></label>
         {n.kind === 'task' && <>
-          <label>Agent<select className="field" value={n.agent} onChange={(e) => onChange({ ...n, agent: e.target.value as AgentKind })}>{agentOpts(n.agent).map((a) => <option key={a} value={a}>{agentLabel(a)}{agents.includes(a) ? '' : tr('（不可用）')}</option>)}</select></label>
-          <label>{tr('工作区')}<select className="field" value={n.workspace} onChange={(e) => onChange({ ...n, workspace: e.target.value as 'shared' | 'worktree' })}><option value="shared">{tr('共享工作目录')}</option><option value="worktree">{tr('独立副本（worktree），完成后合并')}</option></select></label>
-          <label>{tr('权限')}<select className="field" value={n.permissionMode ?? 'default'} onChange={(e) => onChange({ ...n, permissionMode: e.target.value as PermissionMode })}>{PERM.map((p) => <option key={p.v} value={p.v}>{p.l}</option>)}</select></label>
+          <label>Agent<Select className="field" value={n.agent} onValueChange={(value) => onChange({ ...n, agent: String(value) as AgentKind })} aria-label="Agent" options={agentOpts(n.agent).map((a) => ({ value: a, label: agentLabel(a), description: agents.includes(a) ? undefined : tr('不可用') }))} /></label>
+          <label>{tr('工作区')}<Select className="field" value={n.workspace} onValueChange={(value) => onChange({ ...n, workspace: String(value) as 'shared' | 'worktree' })} aria-label={tr('工作区')} options={[{ value: 'shared', label: tr('共享工作目录') }, { value: 'worktree', label: tr('独立副本（worktree），完成后合并') }]} /></label>
+          <label>{tr('权限')}<Select className="field" value={n.permissionMode ?? 'default'} onValueChange={(value) => onChange({ ...n, permissionMode: String(value) as PermissionMode })} aria-label={tr('权限')} options={PERM.map((p) => ({ value: p.v, label: p.l }))} /></label>
           <label>{tr('模型（空 = 默认）')}<input className="field" value={n.model ?? ''} onChange={(e) => onChange({ ...n, model: e.target.value || undefined })} /></label>
           <label className="check"><input type="checkbox" checked={!!n.untilDone} onChange={(e) => onChange({ ...n, untilDone: e.target.checked || undefined })} /> {tr('一直做到完成（目标协议）')}</label>
         </>}
         {n.kind === 'compare' && <>
-          <label>{tr('裁判（可选）')}<select className="field" value={n.judge ?? ''} onChange={(e) => onChange({ ...n, judge: (e.target.value || undefined) as AgentKind | undefined })}><option value="">{tr('不用裁判')}</option>{agents.map((a) => <option key={a} value={a}>{agentLabel(a)}</option>)}</select></label>
-          <label>{tr('权限')}<select className="field" value={n.permissionMode ?? 'acceptEdits'} onChange={(e) => onChange({ ...n, permissionMode: e.target.value as PermissionMode })}>{PERM.map((p) => <option key={p.v} value={p.v}>{p.l}</option>)}</select></label>
+          <label>{tr('裁判（可选）')}<Select className="field" value={n.judge ?? ''} onValueChange={(value) => onChange({ ...n, judge: (String(value) || undefined) as AgentKind | undefined })} aria-label={tr('裁判（可选）')} options={[{ value: '', label: tr('不用裁判') }, ...agents.map((a) => ({ value: a, label: agentLabel(a) }))]} /></label>
+          <label>{tr('权限')}<Select className="field" value={n.permissionMode ?? 'acceptEdits'} onValueChange={(value) => onChange({ ...n, permissionMode: String(value) as PermissionMode })} aria-label={tr('权限')} options={PERM.map((p) => ({ value: p.v, label: p.l }))} /></label>
         </>}
         {n.kind === 'approval' && <label className="wide">{tr('说明（给审批人看）')}<input className="field" value={n.note ?? ''} onChange={(e) => onChange({ ...n, note: e.target.value })} placeholder={tr('例如：看一眼计划再决定是否实现')} /></label>}
       </div>
@@ -119,7 +120,7 @@ export function WorkflowEditor({ initial, onSaved, onRun, onCancel }: { initial:
     <div className="orch-editor">
       <div className="orch-meta">
         <input className="field name" value={w.name} placeholder={tr('工作流名称')} onChange={(e) => setW({ ...w, name: e.target.value })} />
-        <select className="field" value={w.cwd} onChange={(e) => setW({ ...w, cwd: e.target.value })} title={tr('工作目录（worktree / 比选要求是 git 仓库）')}>{!w.cwd && <option value="">{tr('选择工作目录…')}</option>}{cwds.map((p) => <option key={p} value={p}>{p}</option>)}</select>
+        <Select className="field" value={w.cwd} onValueChange={(value) => setW({ ...w, cwd: String(value) })} title={tr('工作目录（worktree / 比选要求是 git 仓库）')} aria-label={tr('工作目录')} searchable options={[...(cwds.includes(w.cwd) ? [] : [{ value: '', label: tr('选择工作目录…') }]), ...cwds.map((p) => ({ value: p, label: p }))]} />
         <input className="field desc" value={w.description ?? ''} placeholder={tr('说明（可选）')} onChange={(e) => setW({ ...w, description: e.target.value || undefined })} />
       </div>
       <div className="orch-sec-h">{tr('执行图预览')}</div>

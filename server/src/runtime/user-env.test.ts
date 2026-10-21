@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { settingsOverride } from './user-env.js';
+import { ownAnthropicBase, ownOverride, settingsOverride } from './user-env.js';
 import { sweepFlagSettings, writeFlagSettings } from './flag-settings.js';
 
 let tmp: string;
@@ -52,6 +52,39 @@ describe('settingsOverride', () => {
     const proj = path.join(tmp, 'proj');
     write(path.join(proj, '.claude', 'settings.json'), { env: ['ANTHROPIC_AUTH_TOKEN'] });
     expect(settingsOverride(ours, proj)).toBeNull();
+  });
+});
+
+describe('ownOverride (the account: only the keys we set, where a settings file sets them too)', () => {
+  it('is null when no file sets them; otherwise just those keys with our values', () => {
+    const proj = path.join(tmp, 'proj');
+    const mine = { CLAUDE_CODE_SUBAGENT_MODEL: 'cw-sub/deepseek-chat', ANTHROPIC_BASE_URL: 'http://127.0.0.1:1/gateway/~s/t/k/cwx-k' };
+    expect(ownOverride(mine, proj)).toBeNull();
+    write(path.join(process.env.CLAUDE_CONFIG_DIR!, 'settings.json'), { env: { ANTHROPIC_BASE_URL: 'https://relay.invalid', ANTHROPIC_AUTH_TOKEN: 'user-token', ANTHROPIC_DEFAULT_HAIKU_MODEL: 'claude-sonnet-5' } });
+    // the user's token and model map stay theirs: not in the file we write
+    expect(ownOverride(mine, proj)).toEqual({ ANTHROPIC_BASE_URL: mine.ANTHROPIC_BASE_URL });
+    write(path.join(proj, '.claude', 'settings.local.json'), { env: { CLAUDE_CODE_SUBAGENT_MODEL: 'haiku' } });
+    expect(ownOverride(mine, proj)).toEqual(mine);
+    expect(ownOverride({}, proj)).toBeNull();
+  });
+});
+
+describe('ownAnthropicBase (where the account’s CLI really sends)', () => {
+  let envBase: string | undefined;
+  beforeEach(() => { envBase = process.env.ANTHROPIC_BASE_URL; delete process.env.ANTHROPIC_BASE_URL; });
+  afterEach(() => { if (envBase === undefined) delete process.env.ANTHROPIC_BASE_URL; else process.env.ANTHROPIC_BASE_URL = envBase; });
+
+  it('settings files over the environment, the later file winning; blank is unset', () => {
+    const proj = path.join(tmp, 'proj');
+    expect(ownAnthropicBase(proj)).toBeUndefined();
+    process.env.ANTHROPIC_BASE_URL = 'https://env.invalid';
+    expect(ownAnthropicBase(proj)).toBe('https://env.invalid');
+    write(path.join(process.env.CLAUDE_CONFIG_DIR!, 'settings.json'), { env: { ANTHROPIC_BASE_URL: 'https://kiro.invalid/api' } });
+    expect(ownAnthropicBase(proj)).toBe('https://kiro.invalid/api');
+    write(path.join(proj, '.claude', 'settings.json'), { env: { ANTHROPIC_BASE_URL: 'https://project.invalid' } });
+    expect(ownAnthropicBase(proj)).toBe('https://project.invalid');
+    write(path.join(proj, '.claude', 'settings.local.json'), { env: { ANTHROPIC_BASE_URL: ' ' } });
+    expect(ownAnthropicBase(proj)).toBeUndefined();
   });
 });
 

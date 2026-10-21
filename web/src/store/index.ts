@@ -45,6 +45,9 @@ export interface OpenSession {
   worktree?: string;
   conv: Conversation;
   version: number; // bumped on every mutation so React re-renders
+  /** how many of those bumps were a frame of streamed deltas only (renderStreamed): `version - streamed` moves only
+   *  for whole messages and other changes — what an earlier, finished turn can be affected by */
+  streamed?: number;
   state: RunnerState | 'history';
   info?: SessionInfoSnapshot;
   pending: PermissionRequestEvent[];
@@ -282,7 +285,30 @@ function bump(s: State, id: string, fn: (o: OpenSession) => void): Partial<State
   const o = s.open[id];
   if (!o) return {};
   fn(o);
+  unrendered.delete(id); // a render takes the deltas applied so far along
   return { open: { ...s.open, [id]: { ...o, version: o.version + 1 } } };
+}
+
+/** Conversations with streamed deltas applied to `conv` (in place) but not rendered yet: the next frame renders them. */
+const unrendered = new Set<string>();
+let frameAsked = false;
+function askFrame() {
+  if (frameAsked) return;
+  frameAsked = true;
+  // a hidden window gets no frames: its deltas wait in `conv` and show with the next frame or the next whole message
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(renderStreamed);
+  else setTimeout(renderStreamed, 16);
+}
+function renderStreamed() {
+  frameAsked = false;
+  if (!unrendered.size) return;
+  const ids = [...unrendered];
+  unrendered.clear();
+  useStore.setState((s) => {
+    const open = { ...s.open };
+    for (const id of ids) if (open[id]) open[id] = { ...open[id], version: open[id].version + 1, streamed: (open[id].streamed ?? 0) + 1 };
+    return { open };
+  });
 }
 
 const LAYOUT_KEY = `cw.layout.v2:${winId}`;
@@ -549,10 +575,21 @@ export const useStore = create<State>((set, get) => ({
     };
     ws.on((e: ServerEvent) => {
       switch (e.kind) {
-        case 'session.event':
+        case 'session.event': {
+          // a delta goes into the conversation now and is rendered with the next frame: one render per delta was
+          // 10–33 ms, and a model streaming a token per delta (DeepSeek) left the window minutes behind the relay
+          if ((e.message as any)?.type === 'stream_event') {
+            const o = get().open[e.sessionId];
+            if (!o) break;
+            applyMessage(o.conv, e.message);
+            unrendered.add(e.sessionId);
+            askFrame();
+            break;
+          }
           set((s) => bump(s, e.sessionId, (o) => applyMessage(o.conv, e.message)));
           if ((e.message as any)?.type === 'result') get().onTurnEnd(e.sessionId);
           break;
+        }
         case 'session.state': {
           const prev = get().open[e.sessionId]?.state;
           if (desktop && e.state === 'idle' && prev === 'running' && !document.hasFocus()) desktop.notify(get().sessions.find((x) => x.sessionId === e.sessionId)?.title ?? tr('对话'), tr('Claude 完成了这一轮'), e.sessionId);
@@ -573,6 +610,11 @@ export const useStore = create<State>((set, get) => ({
           break;
         case 'permission.resolved':
           set((s) => { const out = { ...s.open }; for (const [id, o] of Object.entries(out)) if (o.pending.some((p) => p.requestId === e.requestId)) out[id] = { ...o, pending: o.pending.filter((p) => p.requestId !== e.requestId), version: o.version + 1 }; return { open: out }; });
+          break;
+        case 'gateway.promptHeavy':
+          // Gemini web / WorkBuddy re-send the whole prompt every turn and have a byte ceiling: past it the model
+          // gets an attachment (slow) and eventually a truncated tail. Said once per conversation, server-side.
+          get().toast(tr('这条对话已经超过 {kb} KB，Gemini 网页会先上传附件再回答，超过太多还会被截断。建议输入 /compact 或开一个新对话。', { kb: Math.round(e.bytes / 1024) }));
           break;
         case 'sessions.changed':
           void get().refreshSessions();

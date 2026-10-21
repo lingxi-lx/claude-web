@@ -3,12 +3,22 @@
 // provider profiles, passes same-protocol traffic through byte for byte, and translates across protocols.
 import crypto from 'node:crypto';
 import http from 'node:http';
+import os from 'node:os';
+import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { StringDecoder } from 'node:string_decoder';
 import type { MetaStore } from '../meta/store.js';
 import type { SecretService } from '../secrets/service.js';
 import type { LedgerEntry, Provider } from '../protocol.js';
-import type { GatewayGroup, GatewayMember, GatewayMemberState, GatewayProtocol, GatewayStatus, GatewayTestResult } from './types.js';
+import { memberKey, type GatewayAuditConfig, type GatewayGroup, type GatewayKeyGroup, type GatewayLanConfig, type GatewayLanStatus, type GatewayMember, type GatewayMemberState, type GatewayProtocol, type GatewayStatus, type GatewayTarget, type GatewayTestResult } from './types.js';
+import { GatewayListener } from './listener.js';
+import { CLAUDE_CODE_SYSTEM_PREFIX, OAUTH_BETA } from '../upstreams/claude.js';
+import { accountProxyAgent } from '../upstreams/proxy.js';
+import type { UpstreamService } from '../upstreams/service.js';
+import { GatewayKeyStore } from '../upstreams/keys.js';
+import { RateLimiter } from '../upstreams/ratelimit.js';
+import { ipInList, modelAllowed, pickRouteGroup } from '../upstreams/routing.js';
+import { AuditLog } from './audit.js';
 import { MemberStates, classify, mapModel } from './failover.js';
 import { estimateTokens, type IrEvent, type IrRequest, type IrUsage } from './ir.js';
 import { SseParser } from './sse.js';
@@ -25,6 +35,13 @@ import { tr } from '../i18n/index.js';
 
 /** Streaming: time from sending a request to the first body byte before the member counts as failed. */
 export const FIRST_BYTE_MS = 60_000;
+/**
+ * A sidecar (Gemini web / WorkBuddy) is slower to first byte than an API: an oversized prompt is uploaded as an
+ * attachment first, and the component retries accounts inside. 60s turned a working request into 504.
+ */
+export const SIDECAR_FIRST_BYTE_MS = 3 * 60_000;
+/** A sidecar's inline prompt limit (Gemini web's max_prompt_bytes): above it the prompt becomes an attachment. */
+export const HEAVY_PROMPT_BYTES = 128_000;
 /** Non-streaming: the whole answer comes at once, so a long generation legitimately takes minutes. */
 export const NONSTREAM_MS = 10 * 60_000;
 /** After the response started: silence this long ends the stream with an error. */
@@ -38,6 +55,14 @@ export interface GatewayDeps {
   secrets?: SecretService;
   /** Provider profile with its plaintext key (null when missing / undecryptable). */
   member(providerId: string): Provider | null;
+  /** account / pool members (upstreams); falls back to member() for provider members */
+  resolveMember?(m: GatewayMember, model: string, sessionKey?: string): Promise<GatewayTarget[]>;
+  /** the account pool behind account / pool members (health, daily counters) */
+  upstreams?: UpstreamService;
+  /** key groups; made here from meta when not passed (tests) */
+  keys?: GatewayKeyStore;
+  /** audit file; made here (a temp dir) when not passed (tests) */
+  audit?: AuditLog;
   ledger?: { record(e: LedgerEntry): void };
   firstByteMs?: number; // tests
   nonStreamMs?: number; // tests
@@ -60,7 +85,14 @@ interface Ctx {
   signal: AbortSignal;
   t0: number;
   customTools: Set<string>;
+  /** the key that paid for this request */
+  keyId?: string;
+  ip?: string;
+  surface?: 'loopback' | 'lan';
 }
+
+/** A group member expanded into one concrete upstream: the state-table key is the ref or the account. */
+interface ResolvedMember { m: GatewayMember; key: string; target: GatewayTarget; model: string }
 
 type Attempt =
   | { kind: 'done'; status: number; usage: IrUsage | null; firstByteMs: number; model: string }
@@ -71,6 +103,13 @@ type Attempt =
 
 const isLoopback = (a: string | undefined) => !!a && (a === '::1' || a.startsWith('127.') || a.startsWith('::ffff:127.'));
 const newKey = () => `cwg-${crypto.randomBytes(24).toString('hex')}`;
+/** a budget refusal's retry-after: the counters reset at local midnight */
+const secondsToMidnight = () => {
+  const d = new Date();
+  const n = new Date(d);
+  n.setHours(24, 0, 0, 0);
+  return Math.max(1, Math.ceil((n.getTime() - d.getTime()) / 1000));
+};
 /** the path segment of the subagent split route (/gateway/~s/<token>/…) */
 export const SPLIT_PREFIX = '~s';
 export const maskGatewayKey = (k: string) => (k ? `${k.slice(0, 4)}…${k.slice(-4)}` : '');
@@ -99,6 +138,21 @@ export class GatewayService extends EventEmitter {
   readonly states = new MemberStates();
   /** openai / grok profiles' prompt-cache shim (/gateway/~p/…): works whether or not the gateway is enabled */
   readonly shim: CacheShim;
+  /** key groups and keys: what a request may use, from where, how often */
+  readonly keys: GatewayKeyStore;
+  /** one whitelisted line per request */
+  readonly audit: AuditLog;
+  private limiter = new RateLimiter();
+  /** conversations already told that their prompt passed a sidecar's inline limit (@see HEAVY_PROMPT_BYTES) */
+  private heavyNotified = new Set<string>();
+  private usageTimer: NodeJS.Timeout;
+  /** The stable loopback data plane, separate from the app's ephemeral main listener. */
+  private local: GatewayListener;
+  private localError?: string;
+  private localPortWanted = 61697;
+  private localSwitch: Promise<void> = Promise.resolve();
+  /** the LAN data plane (its own port; no admin surface) */
+  private lan: GatewayListener;
   private key = '';
   /** subagent splits (/gateway/~s/<token>/k/<key>): token → where the conversation's and the subagents' requests go */
   private splits = new Map<string, { main: SplitMain; sub: SplitSub; model: string }>();
@@ -112,26 +166,114 @@ export class GatewayService extends EventEmitter {
     super();
     this.firstByteMs = deps.firstByteMs ?? FIRST_BYTE_MS;
     this.nonStreamMs = deps.nonStreamMs ?? NONSTREAM_MS;
+    this.localPortWanted = deps.meta.gatewayConfig().localPort ?? 61697;
     this.shim = new CacheShim({ meta: deps.meta, member: deps.member, ledger: deps.ledger });
+    this.keys = deps.keys ?? new GatewayKeyStore(deps.meta, deps.secrets);
+    this.audit = deps.audit ?? new AuditLog(path.join(os.tmpdir(), 'cw-gateway-audit'), () => deps.meta.gatewayAudit());
+    this.audit.on('lines', (lines) => this.emit('audit', lines));
+    this.local = new GatewayListener((req, res, url) => this.handleLocal(req, res, url));
+    this.lan = new GatewayListener((req, res, url) => this.handleLan(req, res, url));
+    // key counters live in memory; write them at most every 30 s, like the account counters
+    this.usageTimer = setInterval(() => { void this.keys.saveUsage(); }, 30_000);
+    this.usageTimer.unref?.();
   }
 
-  /** Decrypt the stored key (startup). */
+  /** Decrypt the stored key (startup) and bring it into the key store as `key_default`. */
   async init() {
     const c = this.deps.meta.gatewayConfig();
-    if (!c.key) return;
-    try { this.key = this.deps.secrets ? await this.deps.secrets.reveal(c.key) : c.key; } catch (e) { console.error('[gateway] cannot decrypt key:', (e as Error).message); }
+    if (c.key) {
+      try { this.key = this.deps.secrets ? await this.deps.secrets.reveal(c.key) : c.key; } catch (e) { console.error('[gateway] cannot decrypt key:', (e as Error).message); }
+    }
+    if (this.key) await this.keys.migrateLegacy(this.key);
+    this.localPortWanted = this.deps.meta.gatewayConfig().localPort ?? 61697;
+    await this.startLocal();
+    await this.startLan();
+  }
+
+  async stop(): Promise<void> {
+    clearInterval(this.usageTimer);
+    await this.stopLan();
+    await this.stopLocal();
+    await this.keys.saveUsage().catch(() => {});
+    await this.audit.flushNow().catch(() => {});
+    this.audit.stop();
+  }
+
+  async setAudit(patch: Partial<GatewayAuditConfig>): Promise<void> {
+    Object.assign(this.deps.meta.gatewayAudit(), patch);
+    await this.deps.meta.saveGateway();
+    this.emit('changed');
+  }
+
+  async setAllowQueryKey(on: boolean): Promise<void> {
+    await this.deps.meta.setSetting('gateway.allowQueryKey', on);
+    this.emit('changed');
   }
 
   enabled() { return !!this.deps.meta.gatewayConfig().enabled && !!this.key; }
   baseUrl() { return `http://127.0.0.1:${this.port}/gateway`; }
+  localBaseUrl() { return `http://127.0.0.1:${this.localPortWanted}`; }
   groups() { return this.deps.meta.gatewayGroups(); }
   group(id: string) { return this.groups().find((g) => g.id === id); }
 
   /** Endpoint + credential a gateway provider profile resolves to, or null (disabled / unknown group). */
-  endpoint(groupId: string): { baseUrl: string; key: string; runtime?: 'claude' } | null {
+  /**
+   * Every gateway group is also a provider profile, so the model menu lists its models with no setup: the user
+   * adds an account in the gateway page and the group shows up in the menu. Deleting that profile marks the group
+   * dismissed (`gateway.dismissedProfiles`) and it is not created again.
+   */
+  async syncProfiles(): Promise<void> {
+    const dismissed = new Set(this.deps.meta.gatewayConfig().dismissedProfiles ?? []);
+    const groups = this.groups();
+    const profiles = this.deps.meta.providers();
+    let changed = false;
+    for (const g of groups) {
+      if (dismissed.has(g.id)) continue;
+      if (profiles.some((p) => p.type === 'gateway' && p.gatewayGroupId === g.id)) continue;
+      await this.deps.meta.upsertProvider({ name: g.name, type: 'gateway', gatewayGroupId: g.id, baseUrl: '' });
+      changed = true;
+    }
+    // a group that is gone takes its auto profile with it (a hand-made profile on a missing group stays: the menu
+    // already says the group is gone, and the user may be about to recreate it)
+    for (const p of profiles) {
+      if (p.type !== 'gateway' || !p.gatewayGroupId) continue;
+      if (groups.some((g) => g.id === p.gatewayGroupId)) continue;
+      if (dismissed.has(p.gatewayGroupId)) continue;
+      await this.deps.meta.removeProvider(p.id);
+      changed = true;
+    }
+    if (changed) this.emit('changed');
+  }
+
+  endpoint(groupId: string): { baseUrl: string; key: string; runtime?: 'claude'; leanTools?: boolean } | null {
     const g = this.group(groupId);
     if (!this.enabled() || !this.port || !g) return null;
-    return { baseUrl: `${this.baseUrl()}/${groupId}`, key: this.key, runtime: this.needsOfficialClient(g) ? 'claude' : undefined };
+    return {
+      baseUrl: `${this.baseUrl()}/${groupId}`,
+      key: this.key,
+      runtime: this.needsOfficialClient(g) ? 'claude' : undefined,
+      leanTools: this.sidecarOnly(g),
+    };
+  }
+
+  /**
+   * A group whose every member is a Gemini-web / WorkBuddy account: those sidecars have no native tool calling and
+   * the whole tool schemas ride inside the prompt (100+ KB), which pushes a Claude Code turn over the sidecar's
+   * 128 KB attachment limit and adds ~25s before the model answers. Such a session gets a smaller core tool set.
+   */
+  private sidecarOnly(g: GatewayGroup): boolean {
+    if (!g.members.length) return false;
+    return g.members.every((m) => {
+      if (m.upstreamGroupId) {
+        const pool = this.deps.upstreams?.groups().find((x) => x.id === m.upstreamGroupId);
+        return !!pool && (pool.kind === 'gemini' || pool.kind === 'workbuddy');
+      }
+      if (m.accountId) {
+        const a = this.deps.upstreams?.store.get(m.accountId);
+        return !!a && (a.kind === 'gemini' || a.kind === 'workbuddy');
+      }
+      return false;
+    });
   }
 
   /** The cache shim's base for a profile (the session appends `/k/<key>[/s/<id>]/v1`) + its per-profile key; null before listening. */
@@ -161,21 +303,54 @@ export class GatewayService extends EventEmitter {
    * shape is rejected by that relay's fingerprint check just the same through the gateway.
    */
   needsOfficialClient(g: GatewayGroup): boolean {
-    return g.members.some((m) => { const p = this.deps.meta.provider(m.providerId); return p?.type === 'anthropic' && p.runtime === 'claude'; });
+    return g.members.some((m) => {
+      const p = m.providerId ? this.deps.meta.provider(m.providerId) : undefined;
+      return p?.type === 'anthropic' && p.runtime === 'claude';
+    });
   }
 
   status(): GatewayStatus {
     const states: Record<string, GatewayMemberState[]> = {};
+    const poolModels: Record<string, string[]> = {};
     const now = Date.now();
     for (const g of this.groups()) {
+      // an account or a pool member brings its family's models: the menu needs them (serveModels reads the same cache)
+      for (const m of g.members) {
+        const key = m.accountId ? `a:${m.accountId}` : m.upstreamGroupId ? `u:${m.upstreamGroupId}` : '';
+        if (!key || poolModels[key]) continue;
+        const kind = m.accountId
+          ? this.deps.upstreams?.store.get(m.accountId)?.kind
+          : this.deps.upstreams?.groups().find((x) => x.id === m.upstreamGroupId)?.kind;
+        if (kind) poolModels[key] = this.deps.upstreams?.familyModels(kind) ?? [];
+      }
       states[g.id] = g.members.map((m) => {
-        const p = this.deps.meta.provider(m.providerId);
-        const s = this.states.peek(g.id, m.providerId);
-        const health = !p ? 'disabled' : s?.disabled ? 'disabled' : s && s.cooldownUntil > now ? 'cooling' : s?.lastOkAt ? 'ok' : 'unknown';
-        return { providerId: m.providerId, name: p?.name ?? tr('(已删除的供应商)'), type: p?.type ?? '', health, cooldownUntil: s && s.cooldownUntil > now ? s.cooldownUntil : undefined, strikes: s?.strikes ?? 0, lastError: !p ? tr('供应商不存在') : s?.lastError, lastStatus: s?.lastStatus, lastOkAt: s?.lastOkAt, lastUsedAt: s?.lastUsedAt };
+        const key = memberKey(m);
+        const p = m.providerId ? this.deps.meta.provider(m.providerId) : undefined;
+        const acct = m.accountId ? this.deps.upstreams?.store.get(m.accountId) : undefined;
+        const pool = m.upstreamGroupId ? this.deps.upstreams?.groups().find((x) => x.id === m.upstreamGroupId) : undefined;
+        const s = this.states.peek(g.id, key);
+        const health = s?.disabled ? 'disabled' : s && s.cooldownUntil > now ? 'cooling' : s?.lastOkAt ? 'ok' : 'unknown';
+        return {
+          providerId: m.accountId ?? m.upstreamGroupId ?? m.providerId ?? '',
+          key,
+          name: p?.name ?? acct?.name ?? pool?.name ?? m.accountId ?? m.upstreamGroupId ?? tr('(已删除的供应商)'),
+          type: p?.type ?? (acct ? 'claude' : pool ? 'pool' : ''),
+          health,
+          cooldownUntil: s && s.cooldownUntil > now ? s.cooldownUntil : undefined,
+          strikes: s?.strikes ?? 0,
+          lastError: m.providerId && !p ? tr('供应商不存在') : s?.lastError,
+          lastStatus: s?.lastStatus,
+          lastOkAt: s?.lastOkAt,
+          lastUsedAt: s?.lastUsedAt,
+        };
       });
     }
-    return { enabled: this.enabled(), baseUrl: this.baseUrl(), keyMasked: maskGatewayKey(this.key), groups: this.groups(), states };
+    const localPort = this.localPortWanted;
+    return {
+      enabled: this.enabled(), baseUrl: this.baseUrl(), localBaseUrl: `http://127.0.0.1:${localPort}`, localPort,
+      localRunning: this.local.running, localError: this.localError,
+      keyMasked: maskGatewayKey(this.key), groups: this.groups(), states, poolModels,
+    };
   }
 
   private async storeKey(k: string) {
@@ -184,13 +359,19 @@ export class GatewayService extends EventEmitter {
   }
 
   async setEnabled(on: boolean) {
-    if (on && !this.key) await this.storeKey(newKey()); // generated on first enable
+    if (on && !this.key) {
+      // generated on first enable; it becomes (or replaces) the revealable default key
+      await this.storeKey(newKey());
+      await this.keys.replaceLegacy(this.key);
+    } else if (on && this.key) await this.keys.migrateLegacy(this.key);
     this.deps.meta.gatewayConfig().enabled = on;
     await this.deps.meta.saveGateway();
     this.emit('changed');
   }
   async regenerateKey() {
-    await this.storeKey(newKey());
+    const k = newKey();
+    await this.storeKey(k);
+    await this.keys.replaceLegacy(k);
     await this.deps.meta.saveGateway();
     this.emit('changed');
   }
@@ -207,12 +388,24 @@ export class GatewayService extends EventEmitter {
     if (patch.strategy) g.strategy = patch.strategy === 'round-robin' ? 'round-robin' : 'failover';
     if (patch.members) {
       const seen = new Set<string>();
-      g.members = patch.members.filter((m) => m?.providerId && !seen.has(m.providerId) && seen.add(m.providerId)).map((m) => ({ providerId: m.providerId, ...(m.model?.trim() ? { model: m.model.trim() } : {}), ...(m.weight && m.weight !== 1 ? { weight: Math.max(1, Math.floor(m.weight)) } : {}) }));
+      g.members = patch.members
+        .filter((m) => {
+          const k = memberKey(m);
+          return k !== 'p:' && !seen.has(k) && !!seen.add(k);
+        })
+        .map((m) => ({
+          ...(m.providerId ? { providerId: m.providerId } : {}),
+          ...(m.accountId ? { accountId: m.accountId } : {}),
+          ...(m.upstreamGroupId ? { upstreamGroupId: m.upstreamGroupId } : {}),
+          ...(m.model?.trim() ? { model: m.model.trim() } : {}),
+          ...(m.weight && m.weight !== 1 ? { weight: Math.max(1, Math.floor(m.weight)) } : {}),
+        }));
     }
     if (patch.modelMap !== undefined) g.modelMap = Object.fromEntries(Object.entries(patch.modelMap ?? {}).map(([k, v]) => [k.trim(), String(v).trim()]).filter(([k, v]) => k && v));
     if (patch.cache1h !== undefined) { if (patch.cache1h) g.cache1h = true; else delete g.cache1h; }
     this.states.reset(g.id); // edited group: disabled members get another chance
     await this.deps.meta.saveGateway();
+    await this.syncProfiles();
     this.emit('changed');
     return g;
   }
@@ -221,21 +414,200 @@ export class GatewayService extends EventEmitter {
     m.data.gatewayGroups = this.groups().filter((g) => g.id !== id);
     this.states.reset(id);
     await m.saveGateway();
+    await this.syncProfiles();
     this.emit('changed');
   }
-  reset(groupId: string, providerId?: string) {
-    this.states.reset(groupId, providerId);
+  reset(groupId: string, ref?: string) {
+    // the request carries a provider id (old callers) or already a `p:` / `a:` / `u:` key
+    this.states.reset(groupId, ref && !ref.includes(':') ? `p:${ref}` : ref);
     this.emit('changed');
+  }
+
+  // ---- LAN listener ----
+
+  lanStatus(): GatewayLanStatus {
+    const c = this.deps.meta.gatewayLan();
+    const addresses = Object.values(os.networkInterfaces()).flat()
+      .filter((x): x is os.NetworkInterfaceInfo => !!x && x.family === 'IPv4' && !x.internal)
+      .map((x) => x.address);
+    return { ...c, running: this.lan.running, port: this.lan.port, addresses, audit: this.deps.meta.gatewayAudit() };
+  }
+
+  async setLan(patch: Partial<GatewayLanConfig> & { confirmAny?: boolean }): Promise<GatewayLanStatus> {
+    const c = this.deps.meta.gatewayLan();
+    // allowlist / CORS / body size are read per request; only a network change restarts the listener
+    // (with `port: 0` a restart picks a new port, which would break a client holding the old URL)
+    const before = { enabled: c.enabled, bind: c.bind, port: c.port };
+    if (patch.bind !== undefined) {
+      const priv = patch.bind === '0.0.0.0' || patch.bind === '127.0.0.1'
+        || /^10\./.test(patch.bind) || /^192\.168\./.test(patch.bind) || /^172\.(1[6-9]|2\d|3[01])\./.test(patch.bind);
+      if (!priv) throw new Error(tr('监听地址必须是本机私网 IP 或 0.0.0.0'));
+      if (patch.bind === '0.0.0.0' && !patch.confirmAny) throw new Error(tr('监听 0.0.0.0 需要二次确认'));
+      c.bind = patch.bind;
+    }
+    if (patch.port !== undefined) c.port = Math.max(0, Math.floor(patch.port));
+    if (patch.ipAllowlist !== undefined) c.ipAllowlist = patch.ipAllowlist.map((x) => x.trim()).filter(Boolean);
+    if (patch.corsOrigins !== undefined) c.corsOrigins = patch.corsOrigins.map((x) => x.trim()).filter(Boolean);
+    if (patch.maxBodyBytes !== undefined) c.maxBodyBytes = Math.max(1024, Math.floor(patch.maxBodyBytes));
+    if (patch.enabled !== undefined) c.enabled = patch.enabled;
+    await this.deps.meta.saveGateway();
+    const moved = before.enabled !== c.enabled || before.bind !== c.bind || before.port !== c.port;
+    if (c.enabled) { if (!this.lan.running || moved) await this.startLan(); }
+    else await this.stopLan();
+    this.emit('changed');
+    return this.lanStatus();
+  }
+
+  async startLan(): Promise<void> {
+    const c = this.deps.meta.gatewayLan();
+    if (!c.enabled) return;
+    if (this.lan.running) await this.lan.stop();
+    try {
+      await this.lan.start(c.bind, c.port);
+    } catch (e: any) {
+      // a port conflict / a firewall refusal is not fatal to the main gateway: report and stay off
+      console.error('[gateway lan]', e?.message ?? e);
+      await this.lan.stop();
+    }
+  }
+
+  async stopLan(): Promise<void> { await this.lan.stop(); }
+
+  async setLocalPort(port: number): Promise<GatewayStatus> {
+    const nextPort = port;
+    if (!Number.isInteger(nextPort) || nextPort < 1024 || nextPort > 65535) throw new Error(tr('本机网关端口必须在 1024 到 65535 之间'));
+    let result!: GatewayStatus;
+    let failure: unknown;
+    this.localSwitch = this.localSwitch.then(async () => {
+      const current = this.localPortWanted;
+      if (nextPort === current && this.local.running) { this.localError = undefined; result = this.status(); return; }
+      const next = this.makeLocalListener();
+      // 1. the new port must accept a connection before anything else changes
+      try {
+        await next.start('127.0.0.1', nextPort);
+      } catch (e: any) {
+        await next.stop().catch(() => {});
+        this.localError = tr('本机地址 {port} 无法启用：{error}', { port: String(nextPort), error: e?.message ?? String(e) });
+        failure = new Error(this.localError);
+        return;
+      }
+      // 2. the old one goes before the switch: a throw here leaves the working listener untouched
+      const old = this.local;
+      try {
+        await old.stop();
+      } catch {
+        await next.stop().catch(() => {});
+        this.localError = tr('本机地址 {port} 无法启用：旧监听没有关掉', { port: String(nextPort) });
+        failure = new Error(this.localError);
+        return;
+      }
+      // 3. persist, then point at the new listener; a failed write comes back to the old port
+      const cfg = this.deps.meta.gatewayConfig();
+      const prev = this.localPortWanted;
+      try {
+        cfg.localPort = nextPort;
+        await this.deps.meta.saveGateway();
+      } catch (e: any) {
+        cfg.localPort = prev;
+        this.localPortWanted = prev;
+        const back = this.makeLocalListener();
+        await back.start('127.0.0.1', prev).catch(() => {});
+        this.local = back;
+        await next.stop().catch(() => {});
+        this.localError = tr('本机地址 {port} 无法启用：{error}', { port: String(nextPort), error: e?.message ?? String(e) });
+        failure = new Error(this.localError);
+        return;
+      }
+      this.local = next;
+      this.localPortWanted = nextPort;
+      this.localError = undefined;
+      this.emit('changed');
+      result = this.status();
+    }).catch(() => { /* a rejected link must not poison later switches (failure is reported above) */ });
+    await this.localSwitch;
+    if (failure) throw failure;
+    return result;
+  }
+
+  private makeLocalListener(): GatewayListener {
+    return new GatewayListener((req, res, url) => this.handleLocal(req, res, url));
+  }
+
+  private async startLocal(): Promise<void> {
+    const port = this.localPortWanted;
+    try {
+      await this.local.start('127.0.0.1', port);
+      this.localError = undefined;
+    } catch (e: any) {
+      this.localError = tr('本机地址 {port} 无法启用：{error}', { port: String(port), error: e?.message ?? String(e) });
+      console.error('[gateway local]', this.localError);
+      await this.local.stop().catch(() => {});
+    }
+  }
+
+  async stopLocal(): Promise<void> { await this.local.stop(); }
+
+  private handleLocal(req: http.IncomingMessage, res: http.ServerResponse, url: URL): void {
+    const p = url.pathname;
+    if (p === '/healthz') { res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ ok: true, enabled: this.enabled() })); return; }
+    if (this.handleLocalRoute(req, res, url)) return;
+    res.writeHead(404).end();
+  }
+
+  private handleLocalRoute(req: http.IncomingMessage, res: http.ServerResponse, url: URL): boolean {
+    const p = url.pathname;
+    const root = /^\/(v1|v1beta)(\/|$)/.test(p);
+    const explicit = /^\/([A-Za-z0-9_-]{1,40})\/(v1|v1beta)(\/|$)/.exec(p);
+    if (!root && !explicit) return false;
+    if ((req.socket as any).cwRemote || !isLoopback(req.socket.remoteAddress)) { res.writeHead(404).end(); return true; }
+    void this.serveRequest(req, res, url, { surface: 'loopback', groupId: explicit?.[1], rest: root ? p : p.slice(explicit![1].length + 1) }).catch((e) => {
+      console.error('[gateway local]', e);
+      if (!res.headersSent) res.writeHead(500, { 'content-type': 'application/json' }).end(JSON.stringify({ error: { message: String(e?.message ?? e) } }));
+      else res.destroy();
+    });
+    return true;
+  }
+
+  private handleLan(req: http.IncomingMessage, res: http.ServerResponse, url: URL): void {
+    const p = url.pathname;
+    const ok = p === '/healthz' || /^\/(v1|v1beta)(\/|$)/.test(p);
+    if (!ok) { res.writeHead(404).end(); return; }
+    const c = this.deps.meta.gatewayLan();
+    // CORS: no header by default; a listed origin is echoed, never `*`
+    const origin = String(req.headers.origin ?? '');
+    if (origin && c.corsOrigins.includes(origin)) {
+      res.setHeader('access-control-allow-origin', origin);
+      res.setHeader('vary', 'Origin');
+      res.setHeader('access-control-allow-headers', 'content-type, x-api-key, authorization, x-goog-api-key, anthropic-version, anthropic-beta');
+      res.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS');
+      if (req.method === 'OPTIONS') { res.writeHead(204).end(); return; }
+    }
+    const ip = String(req.socket.remoteAddress ?? '').replace(/^::ffff:/, '');
+    // the listener-level allowlist admits only listed addresses from outside this machine
+    if (!isLoopback(ip) && c.ipAllowlist.length && !ipInList(ip, c.ipAllowlist)) { res.writeHead(403).end(); return; }
+    if (p === '/healthz') { res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ ok: true })); return; }
+    void this.serveRequest(req, res, url, { surface: 'lan', rest: p }).catch((e) => {
+      console.error('[gateway lan]', e);
+      if (!res.headersSent) res.writeHead(500).end();
+      else res.destroy();
+    });
   }
 
   // ---------------------------------------------------------------- HTTP
 
-  /** True when the request belongs to the gateway (it has then been answered). */
+  /**
+   * True when the request belongs to the gateway (it has then been answered). Three shapes reach here:
+   * the old `/gateway/<group>/…`, an explicit `/<group>/v1/…`, and the bare `/v1/…` root.
+   */
   handle(req: http.IncomingMessage, res: http.ServerResponse, url: URL): boolean {
-    if (url.pathname !== '/gateway' && !url.pathname.startsWith('/gateway/')) return false;
-    // never reachable from the LAN listener (nor from anything that is not this machine)
+    const p = url.pathname;
+    const legacy = p === '/gateway' || p.startsWith('/gateway/');
+    const explicit = /^\/([A-Za-z0-9_-]{1,40})\/(v1|v1beta)(\/|$)/.exec(p);
+    const root = /^\/(v1|v1beta)(\/|$)/.test(p) || p === '/healthz';
+    if (!legacy && !explicit && !root) return false;
+    // the admin/data plane on the main listener is this machine's — the LAN listener has its own handleLan
     if ((req.socket as any).cwRemote || !isLoopback(req.socket.remoteAddress)) { res.writeHead(404).end(); return true; }
-    if (url.pathname.startsWith(`/gateway/${SPLIT_PREFIX}/`)) {
+    if (legacy && p.startsWith(`/gateway/${SPLIT_PREFIX}/`)) {
       void this.serveSplit(req, res, url).catch((e) => {
         console.error('[gateway split]', e);
         if (!res.headersSent) res.writeHead(500, { 'content-type': 'application/json' }).end(JSON.stringify({ error: { message: String(e?.message ?? e) } }));
@@ -243,7 +615,7 @@ export class GatewayService extends EventEmitter {
       });
       return true;
     }
-    if (url.pathname.startsWith(SHIM_PREFIX)) {
+    if (legacy && p.startsWith(SHIM_PREFIX)) {
       void this.shim.serve(req, res, url).catch((e) => {
         console.error('[gateway shim]', e);
         if (!res.headersSent) res.writeHead(500, { 'content-type': 'application/json' }).end(JSON.stringify({ error: { message: String(e?.message ?? e) } }));
@@ -251,7 +623,17 @@ export class GatewayService extends EventEmitter {
       });
       return true;
     }
-    void this.serve(req, res, url).catch((e) => {
+    let groupId: string | undefined;
+    let rest: string;
+    if (legacy) {
+      const m = /^\/gateway\/([^/]+)(\/.*)?$/.exec(p);
+      groupId = m ? decodeURIComponent(m[1]) : undefined;
+      rest = m?.[2] ?? '/';
+    } else if (explicit) {
+      groupId = explicit[1];
+      rest = p.slice(explicit[1].length + 1);
+    } else rest = p;
+    void this.serveRequest(req, res, url, { surface: 'loopback', groupId, rest }).catch((e) => {
       console.error('[gateway]', e);
       if (!res.headersSent) res.writeHead(500, { 'content-type': 'application/json' }).end(JSON.stringify({ error: { message: String(e?.message ?? e) } }));
       else res.destroy();
@@ -263,7 +645,11 @@ export class GatewayService extends EventEmitter {
   private presentedKeys(req: http.IncomingMessage, url: URL): string[] {
     const h = req.headers;
     const bearer = /^Bearer\s+(.+)$/i.exec(String(h.authorization ?? ''))?.[1];
-    return [h['x-api-key'], bearer, h['x-goog-api-key'], url.searchParams.get('key')].map((v) => String(v ?? '').trim()).filter(Boolean);
+    // `?key=` is off by default: a URL lands in logs and shell history
+    const allowQuery = this.deps.meta.settings()['gateway.allowQueryKey'] === true;
+    return [h['x-api-key'], bearer, h['x-goog-api-key'], ...(allowQuery ? [url.searchParams.get('key')] : [])]
+      .map((v) => String(v ?? '').trim())
+      .filter(Boolean);
   }
   private keyOk(k: string): boolean {
     const a = Buffer.from(k);
@@ -276,42 +662,106 @@ export class GatewayService extends EventEmitter {
     res.writeHead(status, { 'content-type': 'application/json', ...extra }).end(JSON.stringify(renderInboundError(inbound, status, message)));
   }
 
-  private async serve(req: http.IncomingMessage, res: http.ServerResponse, url: URL) {
-    const m = /^\/gateway\/([^/]+)(\/.*)?$/.exec(url.pathname);
-    let rest = m?.[2] ?? '/';
-    if (!/^\/v1(beta)?\//.test(rest)) rest = `/v1${rest === '/' ? '' : rest}`; // base URL given without the version
+  /**
+   * One gateway request: authenticate the key, apply its group's IP / LAN / pace / budget rules, choose the route
+   * group, and hand off to `run`. Shared by the main listener (`surface: 'loopback'`) and the LAN listener.
+   */
+  private async serveRequest(req: http.IncomingMessage, res: http.ServerResponse, url: URL, o: { surface: 'loopback' | 'lan'; groupId?: string; rest: string }) {
+    let rest = o.rest;
+    if (!/^\/v1(beta)?\//.test(rest) && rest !== '/v1' && rest !== '/v1beta') rest = `/v1${rest === '/' ? '' : rest}`; // base URL given without the version
     const route = routeOf(req.method ?? 'GET', rest, req.headers);
     const inbound = route?.inbound ?? (rest.startsWith('/v1beta') ? 'gemini' : req.headers['anthropic-version'] ? 'anthropic' : 'openai');
-    if (!this.enabled()) return this.sendError(res, inbound, 503, tr('模型网关未启用（设置 → 模型网关）'));
+    if (url.pathname === '/healthz') return void res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ ok: true, enabled: this.enabled() }));
+    const ip = String(req.socket.remoteAddress ?? '').replace(/^::ffff:/, '');
+    // every refusal is audited too: a 401 / 403 / 429 is exactly what an operator looks for
+    const deny = (status: number, message: string, extra: Record<string, string> = {}, who: { keyId?: string; routeGroupId?: string; model?: string } = {}) => {
+      this.audit.write({
+        ts: Date.now(), keyId: who.keyId ?? '', ip, protocol: inbound,
+        model: who.model ?? route?.model ?? '', routeGroupId: who.routeGroupId ?? o.groupId ?? '',
+        member: '', status, ms: 0, tokensIn: 0, tokensOut: 0, errorCode: String(status),
+      });
+      return this.sendError(res, inbound, status, message, extra);
+    };
+    if (!this.enabled()) return deny(503, tr('模型网关未启用（设置 → 模型网关）'));
+
     const presented = this.presentedKeys(req, url);
-    if (!presented.some((k) => this.keyOk(k))) {
+    let auth = presented.map((k) => this.keys.verify(k)).find(Boolean) ?? null;
+    // the legacy single key (tests, or the moment before init migrated it): make `key_default` on demand
+    if (!auth && presented.some((k) => this.keyOk(k))) {
+      await this.keys.migrateLegacy(this.key);
+      // the default key must verify the presented key — a stale key store is not an authorization
+      const hit = this.keys.verify(this.key);
+      if (hit && hit.key.id === 'key_default') auth = hit;
+    }
+    if (!auth) {
       // an agent logged in with its own account (ChatGPT / Google / claude.ai) sends that token, not ours
       const foreign = presented.length > 0 && !presented.some((k) => k.startsWith('cwg-'));
-      return this.sendError(res, inbound, 401, foreign ? tr('网关密钥无效：agent 没有用网关密钥（发来的不是 cwg- 开头的密钥），检查它的登录方式是否被账号登录覆盖了') : tr('网关密钥无效'));
+      return deny(401, foreign ? tr('网关密钥无效：agent 没有用网关密钥（发来的不是 cwg- 开头的密钥），检查它的登录方式是否被账号登录覆盖了') : tr('网关密钥无效'));
     }
-    const group = m ? this.group(decodeURIComponent(m[1])) : undefined;
-    if (!group) return this.sendError(res, inbound, 404, tr('没有这个网关组：{v}', { v: m?.[1] ?? '' }));
-    if (!route) return this.sendError(res, inbound, 404, tr('网关不支持这个接口：{method} {rest}', { method: req.method, rest }));
+    if (o.surface === 'lan') {
+      if (!auth.group.allowLan) return deny(403, tr('这个密钥不允许从局域网使用'), {}, { keyId: auth.key.id });
+      // an empty list admits nobody from outside this machine
+      if (!isLoopback(ip) && !ipInList(ip, auth.group.ipAllowlist)) return deny(403, tr('来源 IP 不在白名单'), {}, { keyId: auth.key.id });
+    } else if (!isLoopback(ip) && auth.group.ipAllowlist.length && !ipInList(ip, auth.group.ipAllowlist)) {
+      return deny(403, tr('来源 IP 不在白名单'), {}, { keyId: auth.key.id });
+    }
+    // an explicit group the key may not use is a permission error, not "no such group"
+    if (o.groupId && auth.group.routeGroupIds.length && !auth.group.routeGroupIds.includes(o.groupId)) {
+      return deny(403, tr('这个密钥不能使用组「{group}」', { group: o.groupId }), {}, { keyId: auth.key.id, routeGroupId: o.groupId });
+    }
+    const take = this.limiter.take(auth.key.id, auth.group.rateLimit);
+    if (!take.ok) {
+      return deny(429, take.reason === 'concurrent' ? tr('这个密钥同时进行的请求太多') : tr('这个密钥每分钟的请求太多'), {
+        'retry-after': String(Math.max(1, Math.ceil(take.retryAfterMs / 1000))),
+      }, { keyId: auth.key.id });
+    }
+    res.on('close', take.release);
+    const spend = this.keys.canSpend(auth.key, auth.group);
+    if (!spend.ok) return deny(429, spend.message, { 'retry-after': String(secondsToMidnight()) }, { keyId: auth.key.id });
 
-    const params = new URLSearchParams(url.search);
-    params.delete('key');
-    const search = params.toString() ? `?${params}` : '';
-    if (route.op === 'models') return this.serveModels(res, group, route.inbound);
+    if (route?.op === 'models') {
+      const picked = pickRouteGroup({ pathGroupId: o.groupId, model: '', groups: this.groups(), allowed: auth.group.routeGroupIds });
+      if ('error' in picked) {
+        return deny(picked.error === 'ambiguous' ? 400 : 404,
+          picked.error === 'ambiguous' ? tr('请用「组名/模型」指定组：{groups}', { groups: picked.groups.join('、') }) : tr('没有可用的组'), {}, { keyId: auth.key.id });
+      }
+      return this.serveModels(res, picked.group, route.inbound, auth.group);
+    }
+    if (!route) return deny(404, tr('网关不支持这个接口：{method} {rest}', { method: req.method, rest }), {}, { keyId: auth.key.id });
 
+    const limit = o.surface === 'lan' ? Math.min(BODY_LIMIT, this.deps.meta.gatewayLan().maxBodyBytes) : BODY_LIMIT;
     const chunks: Buffer[] = [];
     let size = 0;
     for await (const c of req) {
       size += (c as Buffer).length;
-      if (size > BODY_LIMIT) return this.sendError(res, inbound, 413, tr('请求体过大'));
+      if (size > limit) return deny(413, tr('请求体过大'), {}, { keyId: auth.key.id });
       chunks.push(c as Buffer);
     }
     const raw = Buffer.concat(chunks);
     let json: any;
-    try { json = JSON.parse(raw.toString('utf8') || '{}'); } catch { return this.sendError(res, inbound, 400, tr('请求体不是合法 JSON')); }
+    try { json = JSON.parse(raw.toString('utf8') || '{}'); } catch { return deny(400, tr('请求体不是合法 JSON'), {}, { keyId: auth.key.id }); }
+    const asked = route.model ?? String(json?.model ?? '');
+    const picked = pickRouteGroup({ pathGroupId: o.groupId, model: asked, groups: this.groups(), allowed: auth.group.routeGroupIds });
+    if ('error' in picked) {
+      return deny(picked.error === 'ambiguous' ? 400 : 404,
+        picked.error === 'ambiguous'
+          ? tr('请用「组名/模型」指定组：{groups}', { groups: picked.groups.join('、') })
+          : tr('没有这个网关组：{v}', { v: o.groupId ?? '' }), {}, { keyId: auth.key.id, model: asked });
+    }
+    if (!modelAllowed(picked.model, auth.group.modelAllowlist, auth.group.modelDeny)) {
+      return deny(403, tr('这个密钥不能用模型 {model}', { model: picked.model }), {}, { keyId: auth.key.id, routeGroupId: picked.group.id, model: picked.model });
+    }
     const stream = route.inbound === 'gemini' ? route.stream : !!json?.stream;
     const ac = new AbortController();
     res.on('close', () => { if (!res.writableFinished) ac.abort(); });
-    const ctx: Ctx = { req, res, group, route: { ...route, stream }, path: rest, search, raw, json, model: route.model ?? String(json?.model ?? ''), signal: ac.signal, t0: Date.now(), customTools: new Set() };
+    const params = new URLSearchParams(url.search);
+    params.delete('key');
+    const search = params.toString() ? `?${params}` : '';
+    const ctx: Ctx = {
+      req, res, group: picked.group, route: { ...route, stream }, path: rest, search, raw, json,
+      model: picked.model, signal: ac.signal, t0: Date.now(), customTools: new Set(),
+      keyId: auth.key.id, ip, surface: o.surface,
+    };
     return this.run(ctx);
   }
 
@@ -417,16 +867,34 @@ export class GatewayService extends EventEmitter {
     up.body.pipe(res);
   }
 
-  private serveModels(res: http.ServerResponse, g: GatewayGroup, inbound: GatewayProtocol) {
+  private serveModels(res: http.ServerResponse, g: GatewayGroup, inbound: GatewayProtocol, keyGroup?: GatewayKeyGroup) {
     const ids = new Set<string>();
     for (const k of Object.keys(g.modelMap ?? {})) if (!k.includes('*')) ids.add(k);
+    // a concrete allowlist entry is a model this key is meant to use even when no member lists one
+    for (const m of keyGroup?.modelAllowlist ?? []) if (!m.includes('*')) ids.add(m);
     for (const m of g.members) {
       if (m.model) ids.add(m.model);
-      const p = this.deps.meta.provider(m.providerId);
+      const p = m.providerId ? this.deps.meta.provider(m.providerId) : undefined;
       for (const x of p?.models ?? []) ids.add(x);
       if (p?.defaultModel) ids.add(p.defaultModel);
+      // a single account brings its family's models (a sidecar reports them)
+      if (m.accountId) {
+        const a = this.deps.upstreams?.store.get(m.accountId);
+        if (a) for (const x of this.deps.upstreams?.familyModels(a.kind) ?? []) ids.add(x);
+      }
+      // an account pool's models are the ones it has served / mapped
+      if (m.upstreamGroupId) {
+        for (const pool of this.deps.upstreams?.groups() ?? []) {
+          if (pool.id !== m.upstreamGroupId) continue;
+          for (const x of this.deps.upstreams?.familyModels(pool.kind) ?? []) ids.add(x);
+          for (const k of Object.keys(pool.modelMap ?? {})) if (!k.includes('*')) ids.add(k);
+        }
+      }
     }
-    const list = [...ids].sort();
+    // a key group's model allow/deny applies to the list too: what it may not use is not offered
+    const list = [...ids]
+      .filter((id) => !keyGroup || modelAllowed(id, keyGroup.modelAllowlist, keyGroup.modelDeny))
+      .sort();
     res.writeHead(200, { 'content-type': 'application/json' });
     if (inbound === 'gemini') { res.end(JSON.stringify({ models: list.map((id) => ({ name: `models/${id}`, displayName: id, supportedGenerationMethods: ['generateContent', 'streamGenerateContent'] })) })); return; }
     // one shape both SDKs accept: OpenAI's `object/list` plus Anthropic's `type/display_name/has_more`
@@ -449,28 +917,74 @@ export class GatewayService extends EventEmitter {
     const { group, route, res } = ctx;
     const inbound = route.inbound;
     const counting = route.op === 'count';
-    const order = this.states.order(group);
     const unsupported: string[] = [];
+    // one member may expand into several targets (an account pool); the state table keys the ref, the model
+    // is what the pool mapped it to
+    const sessionKey = cacheKeyOf(ctx.json, ctx.req.headers);
+    const order: ResolvedMember[] = [];
+    for (const m of this.states.order(group)) {
+      const mapped = mapModel(group, m, ctx.model);
+      const targets: GatewayTarget[] = this.deps.resolveMember
+        ? await this.deps.resolveMember(m, mapped, sessionKey)
+        : m.providerId && this.deps.member(m.providerId) ? [this.deps.member(m.providerId)!] : [];
+      for (const t0 of targets) {
+        // a Claude account profile (not a pool account) is a subscription login too: translate, never pass bytes
+        const t: GatewayTarget = t0.type === 'claude-account' && !t0.auth ? { ...t0, auth: 'oauth', forceTranslate: true } : t0;
+        order.push({ m, key: t.account ? `a:${t.id}` : memberKey(m), target: t, model: t.model || mapped });
+      }
+    }
     let tried = 0;
     let last: Attempt | null = null;
-    let lastMember: { p: Provider; outbound: Outbound } | null = null;
+    let lastMember: { p: GatewayTarget; outbound: Outbound } | null = null;
+    // a refusal before any attempt still gets an audit line
+    const fail = (status: number, message: string, extra: Record<string, string> = {}) => {
+      this.audit.write({
+        ts: Date.now(), keyId: ctx.keyId ?? '', ip: ctx.ip ?? '', protocol: inbound,
+        model: ctx.model, routeGroupId: group.id, member: '', status, ms: Date.now() - ctx.t0,
+        tokensIn: 0, tokensOut: 0, errorCode: String(status),
+      });
+      return this.sendError(res, inbound, status, message, extra);
+    };
     const estimate = () => {
       let n = 0;
       try { n = estimateTokens(this.irOf(ctx)); } catch { /* malformed: 0 */ }
-      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(inbound === 'gemini' ? { totalTokens: n } : { input_tokens: n }));
+      this.audit.write({
+        ts: Date.now(), keyId: ctx.keyId ?? '', ip: ctx.ip ?? '', protocol: inbound,
+        model: ctx.model, routeGroupId: group.id, member: '', status: 200, ms: Date.now() - ctx.t0,
+        tokensIn: 0, tokensOut: 0, errorCode: '',
+      });
+      res.writeHead(200, { 'content-type': 'application/json', 'x-cw-estimated': '1' }).end(JSON.stringify(inbound === 'gemini' ? { totalTokens: n } : { input_tokens: n }));
     };
-    for (const m of order) {
-      const p = this.deps.member(m.providerId);
-      if (!p) continue;
+    for (const r of order) {
+      const p = r.target;
       const outbound = outboundOf(p.type);
       if (!outbound) continue;
-      if (counting ? !isPassthrough(inbound, outbound) : !supported(inbound, outbound)) { unsupported.push(`${p.name}（${PROTOCOL_LABEL[outbound === 'openai' ? 'openai' : outbound]}）`); continue; }
+      // count_tokens is only forwarded where the wire can carry it as it is; a translated target (an account login
+      // included) gets the local estimate instead of a real generation request
+      if (counting ? (!isPassthrough(inbound, outbound) || !!p.forceTranslate) : !supported(inbound, outbound)) {
+        unsupported.push(`${p.name}（${PROTOCOL_LABEL[outbound === 'openai' ? 'openai' : outbound]}）`);
+        continue;
+      }
+      // an account's own concurrency cap: at it, this request goes to the next target
+      const accountId = p.auth ? p.id : null;
+      if (accountId && this.deps.upstreams && !this.deps.upstreams.acquire(accountId)) continue;
       tried++;
       lastMember = { p, outbound };
-      const a = await this.attempt(ctx, m, p, outbound, tried - 1);
+      let a: Attempt;
+      try {
+        a = await this.attempt(ctx, r, outbound, tried - 1);
+      } finally {
+        if (accountId) this.deps.upstreams?.release(accountId);
+      }
       last = a;
       if (a.kind === 'switch') continue;
-      if (!counting) this.record(ctx, p, outbound, a, tried - 1);
+      if (counting) {
+        this.audit.write({
+          ts: Date.now(), keyId: ctx.keyId ?? '', ip: ctx.ip ?? '', protocol: inbound,
+          model: a.model, routeGroupId: group.id, member: p.name, status: a.status, ms: Date.now() - ctx.t0,
+          tokensIn: 0, tokensOut: 0, errorCode: a.kind === 'done' ? '' : String(a.status),
+        });
+      } else this.record(ctx, p, outbound, a, tried - 1);
       if (a.kind === 'final') {
         if (a.passthrough) res.writeHead(a.status, { ...errorHeaders(a.headers), 'content-type': String(a.headers['content-type'] ?? 'application/json') }).end(a.text);
         else this.sendError(res, inbound, a.status, upstreamErrorMessage(a.text), errorHeaders(a.headers));
@@ -481,11 +995,11 @@ export class GatewayService extends EventEmitter {
     // gets an estimate rather than an error (and never changes any member's state)
     if (counting) return estimate();
     if (!tried) {
-      if (unsupported.length) return this.sendError(res, inbound, 400, tr('组「{name}」里没有能接 {v} 入口的成员：{unsupported} 需要的转换方向暂不支持', { name: group.name, v: PROTOCOL_LABEL[inbound], unsupported: unsupported.join('、') }));
+      if (unsupported.length) return fail(400, tr('组「{name}」里没有能接 {v} 入口的成员：{unsupported} 需要的转换方向暂不支持', { name: group.name, v: PROTOCOL_LABEL[inbound], unsupported: unsupported.join('、') }));
       const next = this.states.nextAvailable(group);
       const wait = next ? Math.max(1, Math.ceil((next.at - Date.now()) / 1000)) : 0;
-      if (next && next.at > Date.now()) return this.sendError(res, inbound, next.rate ? 429 : 503, tr('组「{name}」的成员都在冷却中，约 {wait}s 后恢复', { name: group.name, wait }), { 'retry-after': String(wait) });
-      return this.sendError(res, inbound, 503, tr('组「{name}」没有可用成员（都已停用或档案缺失）', { name: group.name }));
+      if (next && next.at > Date.now()) return fail(next.rate ? 429 : 503, tr('组「{name}」的成员都在冷却中，约 {wait}s 后恢复', { name: group.name, wait }), { 'retry-after': String(wait) });
+      return fail(503, tr('组「{name}」没有可用成员（都已停用或档案缺失）', { name: group.name }));
     }
     // every member failed with a switchable error: report the last one as is
     if (last?.kind === 'switch') {
@@ -495,7 +1009,7 @@ export class GatewayService extends EventEmitter {
     }
   }
 
-  private record(ctx: Ctx, p: Provider, outbound: Outbound, a: Attempt, switches: number) {
+  private record(ctx: Ctx, p: GatewayTarget, outbound: Outbound, a: Attempt, switches: number) {
     const usage = a.kind === 'done' ? a.usage : null;
     const fb = a.kind === 'done' || a.kind === 'broken' || a.kind === 'aborted' ? a.firstByteMs : undefined;
     this.deps.ledger?.record({
@@ -516,14 +1030,43 @@ export class GatewayService extends EventEmitter {
       kind: 'gateway',
       gateway: { group: ctx.group.name, inbound: ctx.route.inbound, member: p.name, memberId: p.id, outbound, upstreamStatus: a.status, switches, firstByteMs: fb, stream: ctx.route.stream },
     });
+    const tokensIn = (usage?.input ?? 0) + (usage?.cacheRead ?? 0);
+    const tokensOut = usage?.output ?? 0;
+    if (ctx.keyId) this.keys.recordUsage(ctx.keyId, tokensIn, tokensOut, 0);
+    this.audit.write({
+      ts: Date.now(),
+      keyId: ctx.keyId ?? '',
+      ip: ctx.ip ?? '',
+      protocol: ctx.route.inbound,
+      model: a.model,
+      routeGroupId: ctx.group.id,
+      member: p.name,
+      status: a.status,
+      ms: Date.now() - ctx.t0,
+      tokensIn,
+      tokensOut,
+      errorCode: a.kind === 'done' ? '' : String(a.status),
+    });
+    if (p.auth) this.deps.upstreams?.noteUse(p.id, { input: tokensIn, output: tokensOut });
   }
 
-  private async attempt(ctx: Ctx, m: GatewayMember, p: Provider, outbound: Outbound, switches: number): Promise<Attempt> {
+  /** @see HEAVY_PROMPT_BYTES — one notice per conversation, re-armed after a compact brings it back down */
+  private noteHeavyPrompt(ctx: Ctx, bytes: number): void {
+    const sessionId = String(ctx.req.headers['x-claude-code-session-id'] ?? '');
+    if (!sessionId || this.heavyNotified.has(sessionId)) return;
+    this.heavyNotified.add(sessionId);
+    this.emit('promptHeavy', { sessionId, bytes });
+  }
+
+  private async attempt(ctx: Ctx, r: ResolvedMember, outbound: Outbound, switches: number): Promise<Attempt> {
     const { group, route } = ctx;
+    const p = r.target;
+    const key = r.key;
     // count_tokens is a side request: its failures say nothing about the member's ability to answer
     const track = route.op !== 'count';
-    const pass = isPassthrough(route.inbound, outbound);
-    const model = mapModel(group, m, ctx.model);
+    // an account login needs Claude Code's request shape, so it never passes bytes through
+    const pass = !p.forceTranslate && isPassthrough(route.inbound, outbound);
+    const model = r.model;
     const base = p.baseUrl?.trim() || DEFAULT_BASE[p.type];
     let path: string;
     let body: Buffer;
@@ -545,12 +1088,19 @@ export class GatewayService extends EventEmitter {
         headers = passthroughHeaders(ctx.req.rawHeaders, outbound, p.apiKey);
       } else {
         const ir = { ...this.irOf(ctx), model, stream: route.stream };
-        const opts: OutboundOpts = outbound === 'anthropic' ? { cacheTtl: group.cache1h || p.cache1h ? '1h' : undefined }
+        const opts: OutboundOpts = outbound === 'anthropic'
+          ? { cacheTtl: group.cache1h || p.cache1h ? '1h' : undefined, systemPrefix: p.auth === 'oauth' ? CLAUDE_CODE_SYSTEM_PREFIX : undefined }
           : outbound === 'openai' ? { promptCacheKey: !p.noPromptCacheKey, cacheControl: p.cacheControlFormat === 'anthropic' } : {};
         const out = buildOutbound(outbound, ir, opts);
         path = out.path;
         body = Buffer.from(JSON.stringify(out.body));
         headers = translatedHeaders(outbound, p.apiKey, route.stream, String(ctx.req.headers['user-agent'] ?? ''));
+        if (p.auth === 'oauth') {
+          // a subscription login: Bearer + oauth beta, never x-api-key
+          delete headers['x-api-key'];
+          headers.authorization = `Bearer ${p.apiKey}`;
+          headers['anthropic-beta'] = OAUTH_BETA;
+        }
         if (outbound === 'openai' && ir.cacheKey) {
           addMissing(headers, affinityHeaders(ir.cacheKey.slice(0, CACHE_KEY_MAX), p.type === 'grok'));
           if (out.body.prompt_cache_key) retryBody = Buffer.from(JSON.stringify(buildOutbound(outbound, ir, { ...opts, promptCacheKey: false }).body));
@@ -560,33 +1110,43 @@ export class GatewayService extends EventEmitter {
           const s = thinkingOff(body.toString('utf8'));
           if (s) noThinkingBody = Buffer.from(s);
         }
+        // A sidecar re-sends the whole prompt every turn and has no prompt cache: once it passes the inline
+        // limit (Gemini web: 128 KB) it uploads an attachment, and past ~160 KB the upstream truncates the tail.
+        // Tell the conversation once, so it can compact instead of quietly degrading.
+        if (p.id.startsWith('sidecar:') && body.length > HEAVY_PROMPT_BYTES) this.noteHeavyPrompt(ctx, body.length);
+        else if (p.id.startsWith('sidecar:')) this.heavyNotified.delete(String(ctx.req.headers['x-claude-code-session-id'] ?? ''));
       }
     } catch (e: any) {
       return { kind: 'final', status: 400, text: JSON.stringify(renderInboundError(route.inbound, 400, tr('请求转换失败：{message}', { message: e?.message ?? e }))), headers: {}, passthrough: true, model };
     }
     const url = joinUrl(base, path);
     const sent = Date.now();
-    // streaming: the first byte must come quickly; non-streaming: nothing arrives until the whole answer is done
-    const waitMs = route.stream ? this.firstByteMs : this.nonStreamMs;
+    // streaming: the first byte must come quickly; non-streaming: nothing arrives until the whole answer is done.
+    // A sidecar needs longer: it uploads an oversized prompt as an attachment before it generates anything.
+    const waitMs = route.stream
+      ? (p.id.startsWith('sidecar:') ? SIDECAR_FIRST_BYTE_MS : this.firstByteMs)
+      : this.nonStreamMs;
     const deadline = sent + waitMs;
     const aborted = (firstByteMs?: number): Attempt => ({ kind: 'aborted', status: 499, message: tr('客户端已断开'), firstByteMs, model });
     const switchOn = (status: number, message: string): Attempt => {
-      if (track) { this.states.fail(group.id, p.id, { action: 'switch', kind: 'transient' }, status, message, Date.now(), sent); this.emit('changed'); }
+      if (track) { this.states.fail(group.id, key, { action: 'switch', kind: 'transient' }, status, message, Date.now(), sent); this.emit('changed'); }
+      if (track && p.auth) void this.deps.upstreams?.markFailure(p.id, 'error', message);
       return { kind: 'switch', status, message: `${p.name}：${message}`, passthrough: pass, model };
     };
+    const agentFor = p.proxy ? () => accountProxyAgent(p.proxy!) : undefined;
     let up: UpstreamResponse;
     try {
-      up = await sendUpstream(url, { method: 'POST', headers, body, signal: ctx.signal, headerTimeoutMs: waitMs });
+      up = await sendUpstream(url, { method: 'POST', headers, body, signal: ctx.signal, headerTimeoutMs: waitMs, agentFor });
       // an upstream that may not know prompt_cache_key: this request once more without it; the profile only
       // remembers when the error named the field (a retry that happens to work proves nothing about the key)
       if ((retryBody || noThinkingBody) && isParamRejection(up.status)) {
         let text = '';
         try { text = await readText(up.body, 1024 * 1024); } catch { /* keep empty */ }
         if (noThinkingBody && refusesForcedTool(text)) {
-          up = await sendUpstream(url, { method: 'POST', headers, body: noThinkingBody, signal: ctx.signal, headerTimeoutMs: waitMs });
+          up = await sendUpstream(url, { method: 'POST', headers, body: noThinkingBody, signal: ctx.signal, headerTimeoutMs: waitMs, agentFor });
         } else if (retryBody) {
           if (mentionsCacheKey(text)) void this.deps.meta.upsertProvider({ id: p.id, noPromptCacheKey: true }, { mustExist: true }).catch(() => { /* next request tries again */ });
-          up = await sendUpstream(url, { method: 'POST', headers, body: retryBody, signal: ctx.signal, headerTimeoutMs: waitMs });
+          up = await sendUpstream(url, { method: 'POST', headers, body: retryBody, signal: ctx.signal, headerTimeoutMs: waitMs, agentFor });
         } else {
           errText = text;
         }
@@ -599,12 +1159,21 @@ export class GatewayService extends EventEmitter {
       let text = errText ?? '';
       if (errText === undefined) { try { text = await readText(up.body, 4 * 1024 * 1024); } catch { /* keep empty */ } }
       if (ctx.signal.aborted) return aborted();
-      const st = this.states.get(group.id, p.id);
+      const st = this.states.get(group.id, key);
       const v = classify(up.status, up.headers, text, st.strikes);
       const msg = `HTTP ${up.status} ${upstreamErrorMessage(text)}`.trim();
       if (track) {
-        this.states.fail(group.id, p.id, v, up.status, v.action === 'switch' && v.kind === 'auth' ? tr('{msg}（鉴权失败，已停用，检查密钥后点「恢复」）', { msg }) : msg, Date.now(), sent);
+        this.states.fail(group.id, key, v, up.status, v.action === 'switch' && v.kind === 'auth' ? tr('{msg}（鉴权失败，已停用，检查密钥后点「恢复」）', { msg }) : msg, Date.now(), sent);
         this.emit('changed');
+      }
+      if (track && p.auth) {
+        // the account row follows the member state: expired login, cooling quota, or a plain error
+        void this.deps.upstreams?.markFailure(
+          p.id,
+          v.action === 'switch' && v.kind === 'auth' ? 'expired' : v.action === 'switch' && v.kind === 'rate' ? 'cooling' : 'error',
+          msg,
+          v.action === 'switch' && v.kind === 'rate' ? Date.now() + v.cooldownMs : undefined,
+        );
       }
       if (v.action === 'final') return { kind: 'final', status: up.status, text, headers: up.headers, passthrough: pass, model };
       return { kind: 'switch', status: up.status, message: `${p.name}：${msg}`, text, headers: up.headers, passthrough: pass, model };
@@ -622,9 +1191,14 @@ export class GatewayService extends EventEmitter {
       return switchOn(504, e?.message === 'timeout' ? tr('{waitMs}s 内没有返回内容', { waitMs: Math.round(waitMs / 1000) }) : e?.message ?? String(e));
     }
     const firstByteMs = Date.now() - sent;
-    if (track && this.states.ok(group.id, p.id, Date.now(), sent)) this.emit('changed'); // recovered / first success — not on every request
+    if (track && this.states.ok(group.id, key, Date.now(), sent)) this.emit('changed'); // recovered / first success — not on every request
+    if (track && p.auth) void this.deps.upstreams?.markSuccess(p.id);
 
-    const memberHeader = { 'x-cw-gateway-member': encodeURIComponent(p.name), 'x-cw-gateway-switches': String(switches) };
+    const memberHeader = {
+      'x-cw-gateway-member': encodeURIComponent(p.name),
+      'x-cw-gateway-switches': String(switches),
+      ...(p.degraded ? { 'x-cw-degraded': '1' } : {}),
+    };
     try {
       if (pass) return await this.pipePassthrough(ctx, up, it, first, memberHeader, firstByteMs, model);
       return await this.pipeTranslated(ctx, up, it, first, outbound, memberHeader, firstByteMs, model);
@@ -709,7 +1283,7 @@ export class GatewayService extends EventEmitter {
     if (!g) return { ok: false, status: 0, ms: 0, error: tr('组不存在') };
     if (!this.enabled()) return { ok: false, status: 0, ms: 0, error: tr('网关未启用') };
     const m0 = g.members[0];
-    const p0 = m0 ? this.deps.meta.provider(m0.providerId) : undefined;
+    const p0 = m0?.providerId ? this.deps.meta.provider(m0.providerId) : undefined;
     const model = m0?.model || p0?.defaultModel || p0?.models?.find((x) => /haiku|mini|flash/i.test(x)) || p0?.models?.[0] || 'claude-haiku-4-5';
     const prompt = 'Reply with exactly: ok';
     const t0 = Date.now();
@@ -726,7 +1300,7 @@ export class GatewayService extends EventEmitter {
       const text = await r.text();
       const member = r.headers.get('x-cw-gateway-member');
       const out: GatewayTestResult = { ok: r.ok, status: r.status, ms: Date.now() - t0, member: member ? decodeURIComponent(member) : undefined, switches: Number(r.headers.get('x-cw-gateway-switches') ?? 0) };
-      if (g.members.some((m) => this.deps.meta.provider(m.providerId)?.type === 'anthropic')) out.note = tr('测试请求不带 Claude Code 指纹（系统提示 / UA），只认官方客户端的中转可能拒绝这条测试，但真实的 Claude 对话经网关透传能通过。');
+      if (g.members.some((m) => m.providerId && this.deps.meta.provider(m.providerId)?.type === 'anthropic')) out.note = tr('测试请求不带 Claude Code 指纹（系统提示 / UA），只认官方客户端的中转可能拒绝这条测试，但真实的 Claude 对话经网关透传能通过。');
       let j: any = null;
       try { j = JSON.parse(text); } catch { /* not json */ }
       if (r.ok) out.text = (j?.content?.[0]?.text ?? j?.choices?.[0]?.message?.content ?? j?.output?.[0]?.content?.[0]?.text ?? j?.candidates?.[0]?.content?.parts?.[0]?.text ?? text).toString().slice(0, 200);

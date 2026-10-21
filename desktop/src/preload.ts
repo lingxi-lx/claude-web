@@ -44,6 +44,11 @@ contextBridge.exposeInMainWorld('desktop', {
   // the built-in browser: a page's new window arrives as a new tab; a picture of one of its pages
   onBrowserPopup: on('desktop:browserPopup'),
   captureGuest: (id: number) => ipcRenderer.invoke('desktop:browser:capture', id),
+  geminiLogin: (partition?: string, proxyServer?: string) => ipcRenderer.invoke('desktop:gemini:login', partition, proxyServer),
+  geminiForget: (partition: string) => ipcRenderer.invoke('desktop:gemini:forget', partition),
+  geminiRefresh: (partition: string) => ipcRenderer.invoke('desktop:gemini:refresh', partition),
+  // the right-click menu's 引用到输入框 (context-menu.ts): the selected text, for the input box in front
+  onQuoteSelection: on('desktop:quoteSelection'),
   setFlags: (f: Record<string, unknown>) => ipcRenderer.invoke('desktop:flags:set', f),
   getFlags: () => ipcRenderer.invoke('desktop:flags:get'),
   relaunch: () => ipcRenderer.invoke('desktop:relaunch'),

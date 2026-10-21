@@ -16,11 +16,14 @@ jobs:
         include:
           - os: windows-latest
             args: --win --x64
+            sidecar_platform: win32-x64
           - os: macos-latest
             args: --mac --arm64
+            sidecar_platform: darwin-arm64
           # Intel runner: npm installs the SDK binary and ccb's ripgrep for the runner's own CPU only
           - os: macos-15-intel
             args: --mac --x64
+            sidecar_platform: darwin-x64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -29,6 +32,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: fetch sidecars (pinned, SHA256 checked)
+        run: node scripts/sidecars/fetch.mjs --platform ${{ matrix.sidecar_platform }}
       - run: npm run build:all
       - name: package
         shell: bash

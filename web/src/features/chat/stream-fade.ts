@@ -148,3 +148,31 @@ export function rehypeStreamFade(ref: { current: FadeState | null }, clock: () =
     st.from = fadeNewText(tree, st.text, st.marks, clock());
   };
 }
+
+/**
+ * While a text streams, where it can be cut so that what comes before never changes again (Markdown parses each piece
+ * once): before a line that starts a new block after a blank line, outside a code fence. Lines that may belong to the
+ * block above (indented, `>`, list items, table rows) are not cut before — a list with blank lines between its items
+ * still comes out as several lists while it streams. The line still being written is never looked at.
+ */
+export function settledCuts(text: string): number[] {
+  const cuts: number[] = [];
+  let fence: string | null = null;
+  let blank = false;
+  let pos = 0;
+  for (const line of text.split('\n')) {
+    const start = pos;
+    pos += line.length + 1;
+    if (pos > text.length) break;
+    const f = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+    if (fence) {
+      if (f && f[0] === fence[0] && f.length >= fence.length && !line.trim().slice(f.length)) fence = null;
+      continue;
+    }
+    if (!line.trim()) { blank = true; continue; }
+    if (blank && start > 0 && !/^(\s|>|[-*+]\s|\d+[.)]\s|\|)/.test(line)) cuts.push(start);
+    blank = false;
+    if (f) fence = f;
+  }
+  return cuts;
+}

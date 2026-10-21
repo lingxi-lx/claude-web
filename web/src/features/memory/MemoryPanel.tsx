@@ -7,6 +7,7 @@ import { Icon, type IconName } from '@/ui/icons';
 import { imeComposing } from '@/ui/ime';
 import { parsePeerId, type MemoryItem, type MemoryKind, type MemoryScope } from '@shared';
 import { tr } from '@/i18n';
+import { Select } from '@/ui/Select';
 
 const KINDS: { id: MemoryKind; l: string; ic: IconName }[] = [
   { id: 'decision', l: tr('决定'), ic: 'check' },
@@ -94,14 +95,8 @@ export function MemoryPanel() {
     <div className="memory">
       <div className="memory-head">
         <input className="field sm" placeholder={tr('搜索记忆…')} value={q} onChange={(e) => setQ(e.target.value)} />
-        <select className="field sm" value={scope} onChange={(e) => setScope(e.target.value as MemoryScope | '')}>
-          <option value="">{tr('全部范围')}</option>
-          {SCOPES.map((s) => <option key={s.id} value={s.id}>{s.l}</option>)}
-        </select>
-        <select className="field sm" value={kind} onChange={(e) => setKind(e.target.value as MemoryKind | '')}>
-          <option value="">{tr('全部类型')}</option>
-          {KINDS.map((k) => <option key={k.id} value={k.id}>{k.l}</option>)}
-        </select>
+        <Select className="field sm" value={scope} onValueChange={(value) => setScope(String(value) as MemoryScope | '')} aria-label={tr('记忆范围')} options={[{ value: '', label: tr('全部范围') }, ...SCOPES.map((s) => ({ value: s.id, label: s.l, description: s.hint }))]} />
+        <Select className="field sm" value={kind} onValueChange={(value) => setKind(String(value) as MemoryKind | '')} aria-label={tr('记忆类型')} options={[{ value: '', label: tr('全部类型') }, ...KINDS.map((k) => ({ value: k.id, label: k.l }))]} />
         <span className="grow" />
         {!(active && parsePeerId(active.sessionId)) && <button className="btn sm ghost" disabled={busy || !active} title={tr('扫描当前对话，提取决定 / 约束 / 走过的死路')} onClick={harvest}><Icon name="bolt" size={12} /> {tr('从对话提取')}</button>}
       </div>
@@ -109,8 +104,8 @@ export function MemoryPanel() {
       <div className="memory-new">
         <textarea placeholder={tr('记一条：写清楚「是什么」和「为什么」，几个月后还看得懂。')} value={draft} rows={2} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !imeComposing(e.nativeEvent)) void add(); }} />
         <div className="row-inline">
-          <select className="field sm" value={draftKind} onChange={(e) => setDraftKind(e.target.value as MemoryKind)}>{KINDS.map((k) => <option key={k.id} value={k.id}>{k.l}</option>)}</select>
-          <select className="field sm" value={draftScope} onChange={(e) => setDraftScope(e.target.value as MemoryScope)} title={SCOPES.find((s) => s.id === draftScope)?.hint}>{SCOPES.map((s) => <option key={s.id} value={s.id}>{s.l}</option>)}</select>
+          <Select className="field sm" value={draftKind} onValueChange={(value) => setDraftKind(String(value) as MemoryKind)} aria-label={tr('记忆类型')} options={KINDS.map((k) => ({ value: k.id, label: k.l }))} />
+          <Select className="field sm" value={draftScope} onValueChange={(value) => setDraftScope(String(value) as MemoryScope)} aria-label={tr('记忆范围')} title={SCOPES.find((s) => s.id === draftScope)?.hint} options={SCOPES.map((s) => ({ value: s.id, label: s.l, description: s.hint }))} />
           <span className="grow" />
           <button className="btn sm" disabled={!draft.trim() || busy} onClick={add}>{tr('记住 (Ctrl+Enter)')}</button>
         </div>

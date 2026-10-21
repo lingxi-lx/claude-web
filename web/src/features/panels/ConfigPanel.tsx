@@ -12,6 +12,7 @@ import { ImportDialog } from '@/features/providers/ImportDialog';
 import { REGION_BLOCKED, REGION_RE } from '@/features/providers/quick';
 import { contextWindowFor, contextWindowSource } from '../../../../server/src/models/context-window';
 import { tr } from '@/i18n';
+import { Select } from '@/ui/Select';
 
 type Tab = 'overview' | 'providers' | 'plugins' | 'mcp' | 'skills' | 'agents' | 'hooks' | 'settings';
 const TABS: { id: Tab; l: string }[] = [
@@ -192,9 +193,7 @@ export function McpAddJson() {
         <h5>{tr('添加 MCP server（JSON）')}</h5>
         <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder={tr('名称')} style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 4, padding: '4px 8px' }} />
-          <select value={scope} onChange={(e) => setScope(e.target.value as any)} style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 4 }}>
-            <option value="user">user</option><option value="project">project</option><option value="local">local</option>
-          </select>
+          <Select value={scope} onValueChange={(value) => setScope(String(value) as typeof scope)} aria-label={tr('装到哪个范围')} options={[{ value: 'user', label: 'user' }, { value: 'project', label: 'project' }, { value: 'local', label: 'local' }]} />
         </div>
         <textarea className="code" style={{ minHeight: 80 }} value={json} onChange={(e) => setJson(e.target.value)} />
         <button className="btn sm" style={{ marginTop: 6 }} disabled={!name} onClick={() => run({ kind: 'config.mcp.add', name, json, scope, cwd: active?.cwd })}>{tr('添加')}</button>
@@ -412,15 +411,12 @@ export function ProviderProfiles() {
           <h5>{editing.id ? tr('编辑「{name}」', { name: editing.name }) : tr('新供应商')}</h5>
           <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
             <input className="field" style={{ flex: 1 }} placeholder={tr('名称，如 super-nb')} value={editing.name ?? ''} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
-            <select className="field" value={editing.type} onChange={(e) => setEditing({ ...editing, type: e.target.value as ProviderType })}>{PROVIDER_TYPES.map((t) => <option key={t.v} value={t.v}>{t.l}</option>)}</select>
+            <Select className="field" value={editing.type} onValueChange={(value) => setEditing({ ...editing, type: String(value) as ProviderType })} aria-label={tr('类型')} options={PROVIDER_TYPES.map((t) => ({ value: t.v, label: t.l }))} />
           </div>
           {isGw && (
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
               <span style={{ minWidth: 110, fontSize: 13, color: 'var(--fg-2)' }}>{tr('网关组')}</span>
-              <select className="field" style={{ flex: 1 }} value={editing.gatewayGroupId ?? ''} onChange={(e) => setEditing({ ...editing, gatewayGroupId: e.target.value })}>
-                <option value="">{tr('选择组…')}</option>
-                {gwGroups.map((g) => <option key={g.id} value={g.id}>{tr('{name}（{membersCount} 个成员）', { name: g.name, membersCount: g.members.length })}</option>)}
-              </select>
+              <Select className="field" style={{ flex: 1 }} value={editing.gatewayGroupId ?? ''} onValueChange={(value) => setEditing({ ...editing, gatewayGroupId: String(value) })} aria-label={tr('网关组')} options={[{ value: '', label: tr('选择组…') }, ...gwGroups.map((g) => ({ value: g.id, label: g.name, description: tr('{n} 个成员', { n: g.members.length }) }))]} />
             </div>
           )}
           {isGw && <div className="sub" style={{ marginBottom: 6 }}>{tr('地址与密钥在对话开始时由网关填入；Claude / Codex / Gemini 等 Agent 都能用这个供应商。组里有「只认官方二进制」的 Anthropic 成员时，Claude 对话默认也用官方二进制（下面的勾选优先）。Codex、Gemini CLI 即使登录了自己的账号，也会被强制走网关；Qwen Code 等其它 Agent 只注入环境变量，在 OAuth 登录状态下可能不走网关（先退出登录或改用 API Key 模式）。{gwGroupsCount}', { gwGroupsCount: !gwGroups.length && tr('还没有组：先去「设置 → 模型网关」建一个。') })}</div>}

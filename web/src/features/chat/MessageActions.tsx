@@ -94,11 +94,24 @@ function speak(id: string, text: string, onEnd: () => void): boolean {
 }
 
 /** 钉住: a pinned reply is listed in the info column's 钉住 card (SessionMeta.pinnedMsgs), to come back to. */
-function togglePin(sessionId: string, id: string, text: string) {
+export function togglePin(sessionId: string, id: string, text: string) {
   const st = useStore.getState();
   const cur = st.sessionMeta[sessionId]?.pinnedMsgs ?? [];
   const next = cur.some((p) => p.id === id) ? cur.filter((p) => p.id !== id) : [...cur, { id, text: text.replace(/\s+/g, ' ').trim().slice(0, 120) }];
   void st.setSessionMeta(sessionId, { pinnedMsgs: next });
+}
+
+/** A reply as Markdown: its text blocks (what 复制回复 copies). */
+export function replyMarkdown(it: AssistantItem): string {
+  return it.blocks.filter((b) => b.type === 'text').map((b: any) => b.text).join('\n\n');
+}
+
+/** 分叉 of a message: before a user message (its id), after a reply (its uuid — none: it cannot be forked from). */
+export function forkFrom(sessionId: string, it: UserItem | AssistantItem): void {
+  const at = it.kind === 'user' ? it.id : it.uuid;
+  if (!at) return;
+  const st = useStore.getState();
+  st.forkAt(sessionId, at).catch((e) => st.toast(e.message));
 }
 
 export function AssistantActions({ it, sessionId }: { it: AssistantItem; sessionId: string }) {
@@ -107,7 +120,7 @@ export function AssistantActions({ it, sessionId }: { it: AssistantItem; session
   const [talking, setTalking] = useState(false);
   const fb = useStore((s) => s.open[sessionId]?.feedback[it.id]?.rating ?? null);
   const setFeedback = useStore((s) => s.setFeedback);
-  const text = it.blocks.filter((b) => b.type === 'text').map((b: any) => b.text).join('\n\n');
+  const text = replyMarkdown(it);
   const [copied, setCopied] = useState(false);
   // the round this reply is in — its own `cont-…` turn when no user message of this window started it (review M-4)
   const turn = (e: React.MouseEvent<HTMLButtonElement>) => {

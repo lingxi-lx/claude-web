@@ -16,20 +16,36 @@ const emit = () => { for (const l of listeners) l(); };
 const subscribe = (l: Listener) => { listeners.add(l); return () => { listeners.delete(l); }; };
 
 /** `enabled` undefined until the first gateway.status arrives (the menu does not judge gateway profiles before). */
-export interface GatewayView { enabled?: boolean; groups: GatewayGroup[] }
-let gateway: GatewayView = { groups: [] };
+export interface GatewayView {
+  enabled?: boolean;
+  groups: GatewayGroup[];
+  /** upstreamGroupId → the models its sidecar pool reported (a pool member's models are not in any profile) */
+  poolModels: Record<string, string[]>;
+}
+let gateway: GatewayView = { groups: [], poolModels: {} };
 let groupsLoaded = false;
 let groupsWatch: (() => void) | null = null;
 
 function loadGroups() {
-  return ws.request<GatewayStatus>({ kind: 'gateway.status' }).then((s) => { gateway = { enabled: s.enabled, groups: s.groups }; groupsLoaded = true; emit(); }).catch(() => {});
+  return ws.request<GatewayStatus>({ kind: 'gateway.status' })
+    .then((s) => { gateway = { enabled: s.enabled, groups: s.groups, poolModels: s.poolModels ?? {} }; groupsLoaded = true; emit(); })
+    .catch(() => {});
 }
 
-/** Gateway on/off + groups, loaded on first use and kept current through `gateway.changed`. */
+/**
+ * Gateway on/off + groups, loaded on first use and kept current through `gateway.changed`. A pool's model
+ * list is pulled lazily by the server and lands as `upstreams.changed`, so that one reloads too.
+ */
 export function useGatewayStatus(): GatewayView {
   useEffect(() => {
     if (!groupsLoaded) void loadGroups();
-    if (!groupsWatch) groupsWatch = ws.on((e) => { if (e.kind === 'gateway.changed') void loadGroups(); });
+    if (!groupsWatch) groupsWatch = ws.on((e) => {
+      if (e.kind !== 'gateway.changed' && e.kind !== 'upstreams.changed') return;
+      void loadGroups();
+      // every gateway group is also a provider profile (auto, server-side): a group added / renamed / removed has to
+      // show up in the menu without the user re-opening settings. upstreams.changed is too frequent for a full reload.
+      if (e.kind === 'gateway.changed') void useStore.getState().loadProviders().catch(() => {});
+    });
   }, []);
   return useSyncExternalStore(subscribe, () => gateway);
 }

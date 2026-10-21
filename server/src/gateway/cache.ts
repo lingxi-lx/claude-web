@@ -15,7 +15,7 @@ const header = (h: http.IncomingHttpHeaders, k: string) => str(Array.isArray(h[k
  * (Claude Code) → Anthropic `metadata.user_id`. Not `x-client-request-id`: that names one request.
  */
 export function cacheKeyOf(json: any, headers: http.IncomingHttpHeaders): string | undefined {
-  return str(json?.prompt_cache_key) ?? header(headers, 'session_id') ?? header(headers, 'x-claude-code-session-id') ?? str(json?.metadata?.user_id);
+  return str(json?.prompt_cache_key) ?? header(headers, 'session_id') ?? str(json?.conversation_id) ?? header(headers, 'x-claude-code-session-id') ?? str(json?.metadata?.user_id);
 }
 
 /**

@@ -1,12 +1,14 @@
-import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PermissionRequestEvent } from '@shared';
 import type { AssistantItem, Attachment, Block, Item, ResultItem, ThinkingBlock, ToolUseBlock, UserItem } from '@/model/conversation';
 import { walkTools } from '@/model/conversation';
 import { WorkflowLive } from '@/features/background/WorkflowLive';
+import { useBgSession } from '@/features/background/state';
+import { hasLive } from '@/features/background/model';
 import { credentialHint, ERROR_HINT, ERROR_LABEL, noResponseHint } from '@/model/health';
 import { fmtSize } from '@/model/attachments';
 import type { FileChange } from '@/model/diffstat';
-import { displayPath, fmtDuration, groupSteps, groupTurns, stepStarts, turnDone, turnMemo, turnPlan, turnStamp, turnSummaryParts, type Turn, type TurnMemo } from '@/model/turn';
+import { displayPath, fmtDuration, groupSteps, groupTurns, stepStarts, taskPlan, turnDone, turnMemo, turnStamp, turnSummaryParts, type Turn, type TurnMemo } from '@/model/turn';
 import { TodoBody, planItems, planProgress } from './tools/AgentTool';
 import { useScopedSession, useScopedSessionId, useStore } from '@/store';
 import { usePaneCtx } from '@/store/paneContext';
@@ -17,6 +19,7 @@ import { coldCache, usageParts } from '@/model/tokens';
 import { AssistantActions, UserActions, UserEditor } from './MessageActions';
 import { FindBar } from './FindBar';
 import { Markdown } from './Markdown';
+import type { CodeRunContext } from './CodeBlock';
 import { GroupHead, ToolCard, ToolHead, WorkDots, type ToggleBy } from './ToolCard';
 import { thinkingTitle } from './thinking-title';
 import { getToolDef, isStandalone } from './tools/registry';
@@ -33,6 +36,7 @@ import { COUNT_UP_MS, countAt, splitNumbers } from './count-up';
 import { tr } from '@/i18n';
 import { fileMenuProps } from '@/features/files/FileMenu';
 import { normViewMode, type ViewMode } from './view-mode';
+import { SelectionMenu } from './SelectionMenu';
 
 const useViewMode = (): ViewMode => useStore((s) => normViewMode(s.settings['ui.viewMode']));
 
@@ -135,7 +139,9 @@ function Steps({ tools, version }: { tools: ToolUseBlock[]; version: number }) {
   const [opened, setOpened] = useState<Record<string, boolean>>({});
   const [all, setAll] = useState(false);
   const moves = useMoves();
-  const isOpen = (t: ToolUseBlock) => all || (opened[t.id] ?? (verbose || (inlineDiffs && EDIT_STEPS.has(t.name) && t.status === 'done')));
+  const plan = useContext(PlanCtx);
+  // the plan's own step does not open in 详细 too: the dock under the turn already shows that list (2026-10-19: twice)
+  const isOpen = (t: ToolUseBlock) => all || (opened[t.id] ?? ((verbose && !(t.name === 'TodoWrite' && t === plan)) || (inlineDiffs && EDIT_STEPS.has(t.name) && t.status === 'done')));
   const toggle = (id: string, open: boolean, by: ToggleBy) => {
     moves.current = by === 'pointer';
     setAll(false);
@@ -177,7 +183,7 @@ function Steps({ tools, version }: { tools: ToolUseBlock[]; version: number }) {
  * A thinking block, folded to 「思考了 12 秒 ›」 (spec §5.3) — a row like a step's. 显示思考过程 (`ui.showThinking`:
  * true, or the older 'expanded') opens them; 'hidden' drops the finished ones.
  */
-function Thinking({ b, streaming }: { b: ThinkingBlock; streaming: boolean }) {
+function Thinking({ b, streaming, run }: { b: ThinkingBlock; streaming: boolean; run?: CodeRunContext }) {
   const pref = useStore((s) => s.settings['ui.showThinking']);
   const view = useViewMode();
   const mode = view !== 'normal' || pref === true || pref === 'expanded' ? 'expanded' : pref === 'hidden' ? 'hidden' : 'collapsed';
@@ -185,6 +191,7 @@ function Thinking({ b, streaming }: { b: ThinkingBlock; streaming: boolean }) {
   const [open, setOpen] = useState<boolean | null>(null);
   const moves = useMoves();
   const text = b.thinking;
+  const body = useFollowEnd(text, streaming);
   if (mode === 'hidden' && !streaming) return null;
   if (!text && !streaming && !b.redacted) return null;
   const show = open ?? (mode === 'expanded');
@@ -203,19 +210,38 @@ function Thinking({ b, streaming }: { b: ThinkingBlock; streaming: boolean }) {
           {after && <span className="th-time">{after}</span>}
           {!b.redacted && <Icon name="chevronRight" size={13} className="chev" />}
         </div>
-        <Fold open={show && !b.redacted} animate={moves.current}><div className="thinking-body"><Markdown text={text} streaming={streaming} /></div></Fold>
+        <Fold open={show && !b.redacted} animate={moves.current}><div className="thinking-body" ref={body.ref} onScroll={body.onScroll}><Markdown text={text} streaming={streaming} run={run} /></div></Fold>
       </div>
     </div>
   );
 }
 
-const Assistant = memo(function Assistant({ it, version }: { it: AssistantItem; version: number }) {
+/**
+ * The thinking box is 360px tall and scrolls inside: what streams in went on below its bottom edge, and the user had to
+ * keep scrolling the box to read along (2026-10-19). While it streams it stays at its end — until the user scrolls it
+ * up, and again once they scroll back to the end.
+ */
+function useFollowEnd(text: string, streaming: boolean) {
+  const ref = useRef<HTMLDivElement>(null);
+  const atEnd = useRef(true);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (el && streaming && atEnd.current) el.scrollTop = el.scrollHeight;
+  }, [text, streaming]);
+  const onScroll = () => {
+    const el = ref.current;
+    if (el) atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+  };
+  return { ref, onScroll };
+}
+
+const Assistant = memo(function Assistant({ it, version, run }: { it: AssistantItem; version: number; run?: CodeRunContext }) {
   const segs = useMemo(() => segment(it.blocks), [it.blocks, version]);
   return (
     <div className="msg assistant" data-msg={it.id}>
       {segs.map((s, idx) => {
-        if (s.kind === 'text') return <div key={idx} className={clsx(it.streaming && idx === segs.length - 1 && 'cursor')}><Markdown text={(s.b as any).text} streaming={it.streaming && idx === segs.length - 1} /></div>;
-        if (s.kind === 'thinking') return <Thinking key={idx} b={s.b as ThinkingBlock} streaming={it.streaming && idx === segs.length - 1} />;
+        if (s.kind === 'text') return <div key={idx} className={clsx('msg-text', it.streaming && idx === segs.length - 1 && 'cursor')}><Markdown text={(s.b as any).text} streaming={it.streaming && idx === segs.length - 1} run={run} /></div>;
+        if (s.kind === 'thinking') return <Thinking key={idx} b={s.b as ThinkingBlock} streaming={it.streaming && idx === segs.length - 1} run={run} />;
         if (s.kind === 'agent') return <ToolCard key={s.t.id} t={s.t} version={version} />;
         // keyed by its first tool, not its position: a leading empty text/thinking segment drops out once more
         // blocks arrive, which would shift indices and remount the trail (losing which step was expanded)
@@ -356,6 +382,8 @@ export function ItemList({ items, version, actions = 'all' }: { items: Item[]; v
     const id = s.sessionMeta[sessionId]?.providerId;
     return id && id !== 'claude' ? s.providers.find((p) => p.id === id)?.name : undefined;
   });
+  const cwd = useStore((s) => (sessionId ? s.open[sessionId]?.info?.cwd : undefined));
+  const run = useMemo(() => (sessionId && cwd ? { sessionId, cwd } : undefined), [sessionId, cwd]);
   let lastReply = '';
   if (actions === 'last') for (const it of merged) if (it.kind === 'assistant' && it.blocks.some((b) => b.type === 'text' && b.text.trim())) lastReply = it.id;
   const withActions = (it: AssistantItem) => actions === 'all' || (actions === 'last' && it.id === lastReply);
@@ -368,7 +396,7 @@ export function ItemList({ items, version, actions = 'all' }: { items: Item[]; v
           case 'assistant':
             return (
               <div key={it.id} className="assistant-wrap" data-item-id={it.id}>
-                <Assistant it={it} version={version} />
+                <Assistant it={it} version={version} run={run} />
                 {!it.streaming && withActions(it) && it.blocks.some((b) => b.type === 'text' && b.text.trim()) && sessionId && <AssistantActions it={it} sessionId={sessionId} />}
               </div>
             );
@@ -478,8 +506,18 @@ function SumLine({ parts, play }: { parts: { text: string; err?: boolean }[]; pl
  * `hidden` is set the moment the turn is folded (it is what FindBar, the export and ui-smoke read); while the steps
  * are still sliding shut the class `moving` keeps them in the page.
  */
-function TurnView({ turn, last, live, version, sessionId, cwd }: { turn: Turn; last: boolean; live: boolean; version: number; sessionId: string; cwd: string }) {
+type TurnProps = { turn: Turn; last: boolean; live: boolean; version: number; sessionId: string; cwd: string };
+/**
+ * Redrawn when its version moves — an earlier turn gets the one streamed deltas leave alone (TurnList) — not for every
+ * new Turn object: groupTurns makes them anew each time, over the same items (mutated in place by the reducer).
+ * Drawing every earlier turn for each frame of a stream was most of a frame's 15–30 ms (2026-10-19 profile).
+ */
+export const sameTurn = (a: TurnProps, b: TurnProps) =>
+  a.turn.id === b.turn.id && a.last === b.last && a.live === b.live && a.version === b.version && a.sessionId === b.sessionId && a.cwd === b.cwd;
+
+const TurnView = memo(function TurnView({ turn, last, live, version, sessionId, cwd }: TurnProps) {
   const done = turnDone(turn, { last, live });
+  const run = useMemo(() => ({ sessionId, cwd }), [sessionId, cwd]);
   // a finished earlier turn is worked out once per set of items (and per loaded subagent); the last turn and one not
   // done yet (a tool still finishing behind a steer message) are redone on every event
   const memo = useRef<TurnMemo>(undefined);
@@ -548,7 +586,7 @@ function TurnView({ turn, last, live, version, sessionId, cwd }: { turn: Turn; l
         <div className="turn-answer">
           {finals.map((a) => (
             <div key={a.id} className="assistant-wrap" data-item-id={a.id}>
-              <Assistant it={a} version={version} />
+              <Assistant it={a} version={version} run={run} />
               {a !== lastFinal && !a.streaming && a.blocks.some((b) => b.type === 'text' && b.text.trim()) && <AssistantActions it={a} sessionId={sessionId} />}
             </div>
           ))}
@@ -560,34 +598,51 @@ function TurnView({ turn, last, live, version, sessionId, cwd }: { turn: Turn; l
       {fold && parts.tail.length > 0 && <ItemList items={parts.tail} version={version} />}
     </div>
   );
-}
+}, sameTurn);
 
-/** The conversation as turns (top level only — a subagent's messages and the detail panel use `ItemList`). */
-function TurnList({ items, version, live, sessionId, cwd }: { items: Item[]; version: number; live: boolean; sessionId: string; cwd: string }) {
+/**
+ * The conversation as turns (top level only — a subagent's messages and the detail panel use `ItemList`). `settled`:
+ * the version without the frames of streamed deltas — those only write into the last turn (a background subagent's
+ * deltas into an earlier one show with its next whole message).
+ */
+function TurnList({ items, version, settled, live, waiting, sessionId, cwd }: { items: Item[]; version: number; settled: number; live: boolean; waiting: boolean; sessionId: string; cwd: string }) {
   const turns = useMemo(() => groupTurns(items), [items, version]);
   const view = useViewMode();
-  // keyed by the conversation too: a fork has its parent's message ids, and a turn's view (what it saw of its end,
-  // whether the user opened it) belongs to one conversation
-  const plan = turnPlan(turns[turns.length - 1]);
+  const bg = hasLive(useBgSession(sessionId));
+  const going = live || bg;
+  const found = taskPlan(turns);
+  const plan = planShown(found, going) ? found : null;
   return (
-    <>
-      {turns.map((t, i) => <TurnView key={`${sessionId}|${t.id}|${view}`} turn={t} last={i === turns.length - 1} live={live} version={version} sessionId={sessionId} cwd={cwd} />)}
-      {plan && <PlanDock t={plan} />}
-    </>
+    <PlanCtx.Provider value={plan}>
+      {/* keyed by the conversation too: a fork has its parent's message ids, and a turn's view (what it saw of its
+          end, whether the user opened it) belongs to one conversation */}
+      {turns.map((t, i) => <TurnView key={`${sessionId}|${t.id}|${view}`} turn={t} last={i === turns.length - 1} live={live} version={i === turns.length - 1 ? version : settled} sessionId={sessionId} cwd={cwd} />)}
+      {plan && <PlanDock t={plan} going={going} waiting={waiting} />}
+    </PlanCtx.Provider>
   );
 }
 
+/** The plan the dock shows: its TodoWrite step does not open its list in the steps as well (2026-10-19: twice). */
+export const PlanCtx = createContext<ToolUseBlock | null>(null);
+
 /**
- * The latest turn's plan at the foot of the conversation, as the official desktop app has it: the list as it stands
- * now (ticks, the arc on the step in progress), under everything the turn wrote. The TodoWrite rows in the steps stay
- * one-line rows; an earlier turn's plan is in its own steps.
+ * The plan of the task in progress at the foot of the conversation, as the official desktop app has it: the list as it
+ * stands now (ticks, the arc on the step in progress), under everything the turn wrote. It stays while the agent or
+ * its background subagents still work, and while steps are left — gone once the task is through (2026-10-19 user: the
+ * plan going away is how I know the task finished). `waiting`: a question / permission waits for the user — the step
+ * in progress does not turn meanwhile.
  */
-function PlanDock({ t }: { t: ToolUseBlock }) {
+export function planShown(t: ToolUseBlock | null, going: boolean): boolean {
+  if (!t) return false;
   const todos = planItems(t);
-  if (!todos.length) return null;
-  const { done, total, attrs } = planProgress(todos);
+  return todos.length > 0 && (going || planProgress(todos).done < todos.length);
+}
+
+function PlanDock({ t, going, waiting }: { t: ToolUseBlock; going: boolean; waiting: boolean }) {
+  const { done, total, attrs } = planProgress(planItems(t));
+  // left with steps not done and nothing running (stopped, or the model never ticked the last one): it holds still
   return (
-    <div className="plan-dock" data-id="plan-dock" {...(attrs as any)} aria-label={tr('计划 {done}/{total}', { done, total })}>
+    <div className="plan-dock" data-id="plan-dock" data-waiting={waiting || undefined} data-idle={!going || undefined} title={waiting ? tr('等你回答后继续') : undefined} {...(attrs as any)} aria-label={tr('计划 {done}/{total}', { done, total })}>
       <TodoBody t={t} count={false} />
     </div>
   );
@@ -598,6 +653,7 @@ export function ChatView() {
   const ref = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const version = active?.version ?? 0;
+  const settled = version - (active?.streamed ?? 0);
   const [find, setFind] = useState(false);
   const [atBottom, setAtBottom] = useState(true);
   const [older, setOlder] = useState<{ busy: boolean; error?: string }>({ busy: false });
@@ -606,7 +662,15 @@ export function ChatView() {
   useEffect(() => { sidRef.current = active?.sessionId; setOlder({ busy: false }); }, [active?.sessionId]);
   const pane = usePaneCtx();
   const pending = active?.pending ?? NO_PENDING;
-  const waiting = useMemo(() => waitingToolIds(pending, active?.conv.items ?? []), [pending, version]);
+  // the same Set while its ids are the same: a new one each version redrew every step of every turn (context consumers
+  // are not stopped by TurnView's memo)
+  const waitingRef = useRef<Set<string>>(undefined);
+  const waiting = useMemo(() => {
+    const next = waitingToolIds(pending, active?.conv.items ?? []);
+    const prev = waitingRef.current;
+    if (prev && prev.size === next.size && [...next].every((id) => prev.has(id))) return prev;
+    return (waitingRef.current = next);
+  }, [pending, version]);
   // the change cards' paths read relative to the conversation's folder — the list's when the open conversation has
   // none yet (like the header)
   const listCwd = useStore((s) => (active && !active.cwd ? s.sessions.find((x) => x.sessionId === active.sessionId)?.cwd : undefined));
@@ -676,6 +740,7 @@ export function ChatView() {
   return (
     <div className="chat" ref={ref} onScroll={onScroll} data-state={active.state}>
       <FindBar open={find} onClose={() => setFind(false)} root={() => ref.current} />
+      <SelectionMenu root={ref} sessionId={active.sessionId} />
       {!atBottom && <button className="jump-bottom" title={tr('回到底部')} onClick={() => { const el = ref.current!; el.scrollTop = el.scrollHeight; stick.current = true; }} aria-label={tr('回到底部')}><Icon name="chevronDown" size={16} /></button>}
       <div className="chat-inner" data-session-id={active.sessionId}>
         {active.loading && <div className="sysline"><span className="spinner" /> {tr('加载历史…')}</div>}
@@ -698,7 +763,7 @@ export function ChatView() {
         <WaitingCtx.Provider value={waiting}>
           <LiveCtx.Provider value={live}>
             <ArrivalCtx.Provider value={arrival}>
-              <TurnList items={active.conv.items} version={version} live={live} sessionId={sid} cwd={active.cwd || listCwd || ''} />
+              <TurnList items={active.conv.items} version={version} settled={settled} live={live} waiting={active.state === 'waiting' || pending.length > 0} sessionId={sid} cwd={active.cwd || listCwd || ''} />
             </ArrivalCtx.Provider>
           </LiveCtx.Provider>
         </WaitingCtx.Provider>

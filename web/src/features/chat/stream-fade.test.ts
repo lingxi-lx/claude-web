@@ -3,7 +3,36 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { arrive, fadeNewText, FRESH_MS, rehypeStreamFade, type FadeState, type HNode } from './stream-fade';
+import { arrive, fadeNewText, FRESH_MS, rehypeStreamFade, settledCuts, type FadeState, type HNode } from './stream-fade';
+
+// 2026-10-19: a long thinking (DeepSeek) parsed whole for every frame of its stream — now parsed in pieces that stop
+// changing, each once
+describe('settledCuts', () => {
+  const md = (s: string) => renderToStaticMarkup(createElement(ReactMarkdown, { remarkPlugins: [remarkGfm] }, s));
+  const pieces = (s: string) => { const c = settledCuts(s); return [0, ...c].map((at, i) => s.slice(at, c[i] ?? s.length)); };
+
+  it('cuts before a new block after a blank line, never inside a fence or before what may continue the block above', () => {
+    const s = [
+      'First thought.', '', '## Plan', '', '```ts', 'const a = 1;', '', 'const b = 2;', '```', '', '- one', '', '- two', '',
+      '    indented', '', '> quoted', '', '| a | b |', '|---|---|', '| 1 | 2 |', '', 'Last para', 'still writing',
+    ].join('\n');
+    const at = settledCuts(s).map((i) => s.slice(i, i + 8));
+    expect(at).toEqual(['## Plan\n', '```ts\nco', 'Last par']);
+  });
+
+  it('never looks at the line still being written', () => {
+    expect(settledCuts('a\n\nb')).toEqual([]);
+    expect(settledCuts('a\n\nb\n')).toEqual([3]);
+    expect(settledCuts('a\n\n```\nx\n\ny')).toEqual([3]);
+  });
+
+  it('the pieces render as the whole does', () => {
+    const s = `${['Para one with **bold**.', '# Head', '1. first\n2. second', '```py\nx = 1\n\ny = 2\n```', '| a | b |\n|---|---|\n| 1 | 2 |', 'Tail.'].join('\n\n')}\n`;
+    expect(settledCuts(s).map((i) => s[i])).toEqual(['#', '`', 'T']);
+    const tags = (h: string) => h.replace(/>\n+</g, '><'); // the whole puts a newline between blocks
+    expect(tags(pieces(s).map(md).join(''))).toBe(tags(md(s)));
+  });
+});
 
 const text = (value: string, s?: number): HNode => ({ type: 'text', value, ...(s === undefined ? {} : { position: { start: { offset: s }, end: { offset: s + value.length } } }) });
 const el = (tagName: string, children: HNode[], s = 0, e = 0): HNode => ({ type: 'element', tagName, properties: {}, children, position: { start: { offset: s }, end: { offset: e } } });

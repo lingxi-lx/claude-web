@@ -21,6 +21,7 @@ export const SETTINGS_GROUPS: { id: SettingsGroupId; l: string }[] = [
 export type EntryId =
   | 'ui.defaultMode' | 'autoContinueOnReset' | 'ui.showThinking' | 'ui.viewMode' | 'ui.infoPanel' | 'ui.sidebarFolded' | 'ui.welcomeBackdrop' | 'ui.welcomeLayout' | 'ui.autoArchivePr' | 'sessions.mcp' | 'claude.desktopSkills' | 'worktree.dir' | 'worktree.prefix' | 'ui.promptSuggestions' | 'ui.diffMode' | 'ui.inlineDiffs' | 'ui.workbench' | 'ui.autoSave'
   | 'ui.notifications' | 'ui.closeToTray' | 'ui.confirmExit' | 'ui.softwareRender' | 'orchestra.maxParallel' | 'cafe.rate' | 'cafe.sound'
+  | 'ai.thinkingLanguage'
   | 'ui.language' | 'ui.theme' | 'ui.zoom' | 'ui.fontSize' | 'ui.density' | 'ui.cjkFont' | 'ui.reduceMotion' | 'ui.haptics';
 
 /** One part of a page: a component with its own requests (a list, a form, a status block). */
@@ -126,6 +127,10 @@ const GENERAL: EntryMeta[] = [
   { id: 'orchestra.maxParallel', more: true, label: tr('编排并发上限'), hint: tr('一次编排里同时执行的任务 / 比选数（等你审批的不占名额）。'), keywords: tr('orchestra workflow parallel 编排 并发 多 agent') },
 ];
 
+const MODEL_ENTRIES: EntryMeta[] = [
+  { id: 'ai.thinkingLanguage', block: tr('思考'), label: tr('思考用的语言'), hint: tr('让模型用这种语言思考。只改思考过程，回答还是跟着你说的语言。DeepSeek 等模型会照做；Claude 显示的思考是官方生成的摘要，多半仍是英文。对话空闲时会重启一次进程，下一轮生效；每个对话的 ··· 菜单里也能单独改。'), keywords: tr('thinking reasoning language 思考 推理 语言 中文 英文 日语 思考语言') },
+];
+
 const APPEARANCE: EntryMeta[] = [
   { id: 'ui.language', block: tr('显示'), label: tr('语言'), hint: tr('界面用中文还是英文。默认跟随这台电脑的语言；改了会重新加载界面。'), keywords: tr('language locale english chinese 语言 中文 英文 English') },
   { id: 'ui.theme', block: tr('显示'), label: tr('主题'), hint: tr('跟随系统会按操作系统的深浅色切换。'), keywords: tr('theme dark light 深色 浅色 暗色 亮色 system 跟随系统') },
@@ -144,7 +149,7 @@ export const SETTINGS_SECTIONS: SectionMeta[] = [
   { id: 'appearance', l: tr('外观'), ic: 'sun', group: 'common', desc: tr('主题、字号和界面密度。'), keywords: tr('appearance theme 主题'), entries: APPEARANCE, bodies: ['customCss'] },
   { id: 'account', l: tr('账号与登录'), ic: 'user', group: 'common', desc: tr('Claude 账号的登录状态。用第三方接口或中转站请去「供应商」。'), keywords: tr('引擎与账号 engine account login 登录 账号'), bodies: ['account'], more: ['engine'] },
   // 模型
-  { id: 'models', l: tr('模型与智能程度'), ic: 'artifact', group: 'model', desc: tr('模型菜单里出现哪些模型、哪些置顶，以及每个模型能调的智能程度。'), keywords: tr('model 模型 effort'), bodies: ['models'] },
+  { id: 'models', l: tr('模型与智能程度'), ic: 'artifact', group: 'model', desc: tr('模型菜单里出现哪些模型、哪些置顶，以及每个模型能调的智能程度。'), keywords: tr('model 模型 effort'), entries: MODEL_ENTRIES, bodies: ['models'] },
   { id: 'providers', l: trAs('供应商', 'Providers'), ic: 'cloud', group: 'model', desc: tr('第三方接口或中转站：地址、密钥和默认模型。每个对话可以在模型菜单里换用。'), keywords: tr('供应商 / 环境 provider 中转 api key'), bodies: ['providers', 'proxy'] },
   { id: 'gateway', l: tr('模型网关'), ic: 'gateway', group: 'model', desc: tr('把几个供应商组成一个本机入口：一个额度用完自动换下一个，不同协议之间自动转换。'), keywords: tr('gateway 网关'), bodies: ['gateway'] },
   // 扩展

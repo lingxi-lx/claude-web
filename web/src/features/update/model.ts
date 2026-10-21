@@ -5,8 +5,13 @@ import { tr } from '@/i18n';
 /** desktop/src/main.ts `UpdateState`. */
 export interface UpdateState {
   status: 'idle' | 'checking' | 'available' | 'none' | 'downloading' | 'downloaded' | 'error';
-  /** auto: the Windows installer downloads and installs; manual: macOS (unsigned), the portable exe — a download link */
+  /**
+   * auto: downloads and installs by itself (the Windows installer; a Mac app that can replace its .app); manual: a
+   * download link (the portable exe, a Mac app that cannot, Linux)
+   */
   mode?: 'auto' | 'manual';
+  /** manual on macOS: why this app cannot update itself (worded by the main process) */
+  why?: string;
   version?: string;
   percent?: number;
   error?: string;
@@ -58,7 +63,7 @@ export interface PromptCopy {
 }
 
 /** The words, by kind and by what this build is. */
-export function promptCopy(p: Prompt, o: { platform: string; mode?: UpdateState['mode']; portable?: boolean; running: number }): PromptCopy {
+export function promptCopy(p: Prompt, o: { platform: string; mode?: UpdateState['mode']; why?: string; portable?: boolean; running: number }): PromptCopy {
   const title = p.required ? tr('这一版必须更新：v{version}', { version: p.version }) : p.kind === 'ready' ? tr('新版本 v{version} 已准备好', { version: p.version }) : tr('有新版本 v{version}', { version: p.version });
   if (p.kind === 'ready') {
     return {
@@ -72,7 +77,7 @@ export function promptCopy(p: Prompt, o: { platform: string; mode?: UpdateState[
   if (o.platform === 'darwin') {
     return {
       title,
-      lead: tr('macOS 版没有 Apple 签名，不能自己安装更新：点下面的按钮下载新版。'),
+      lead: o.mode === 'auto' ? tr('自动下载没有成功：点下面的按钮手动下载新版。') : o.why ?? tr('这份 Claude Web 不能自己更新：点下面的按钮下载新版。'),
       primary: tr('下载新版本'),
       later: p.required ? undefined : tr('稍后：明天或下次打开软件时再提醒。'),
       after: tr('下载好以后：退出本软件，打开下载的 dmg，把 Claude Web 拖进「应用程序」，选「替换」。对话和设置都会保留。'),

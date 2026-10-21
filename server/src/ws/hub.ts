@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import type { WebSocket, WebSocketServer } from 'ws';
 import { CLAUDE_PROVIDER_ID, type ClientRequest, type OpenSessionParams, type RemoteStatus, type ServerEvent, type WireDown, type WireUp } from '../protocol.js';
 import { RunnerPool } from '../runtime/pool.js';
-import { SessionRunner, setPromptSuggestions } from '../runtime/session-runner.js';
+import { SessionRunner, setPromptSuggestions, setThinkingLanguageSetting } from '../runtime/session-runner.js';
+import { THINKING_LANGUAGE_KEY } from '../runtime/thinking-language.js';
 import { setSessionsMcpEnabled } from '../sessions-mcp/tools.js';
 import { setDesktopSkillsEnabled } from '../runtime/desktop-skills.js';
 import { listProjectFiles, rankFiles } from '../files/find.js';
@@ -31,6 +32,7 @@ import type { SkillsService } from '../skills/service.js';
 import type { McpService } from '../mcp/service.js';
 import type { DiagService } from '../diag/service.js';
 import { detectTools } from '../tools/detect.js';
+import { runCode } from '../tools/run-code.js';
 import { ClientLogGate } from '../diag/client-log.js';
 import type { RemoteService } from '../remote/service.js';
 import type { AnywhereService } from '../remote/anywhere/service.js';
@@ -56,8 +58,12 @@ import { applyLanguage } from '../i18n/boot.js';
 import { LANGUAGE_KEY } from '../i18n/core.js';
 import { expandSessionRefs } from '../library/briefing.js';
 import type { LibraryService } from '../library/service.js';
+import { scanLocalHistory } from '../library/local-scan.js';
 import type { GatewayService } from '../gateway/service.js';
 import { handleGatewayRequest, isGatewayRequest } from '../gateway/handlers.js';
+import type { UpstreamService } from '../upstreams/service.js';
+import type { MaintenanceScheduler } from '../upstreams/tasks.js';
+import { handleUpstreamRequest, isUpstreamRequest } from '../upstreams/handlers.js';
 
 import type { AgentConfigService } from '../agent-config/service.js';
 import { handleAgentConfig, isAgentConfigRequest } from '../agent-config/handlers.js';
@@ -124,8 +130,12 @@ export interface Services {
   /** 从其它工具导入 (import/) */
   importer: ImportService;
   version: string;
-  /** Local model gateway (/gateway/<group>/…). */
+  /** Local model gateway (/gateway/<group>/…, /<group>/v1/… and the /v1 root). */
   gateway: GatewayService;
+  /** 账号池: Claude subscription accounts and the pools they are grouped into (upstreams.*). */
+  upstreams: UpstreamService;
+  /** 任务中心: the scheduler behind tasks.* (check-in, keepalive, growth, …). */
+  tasks: MaintenanceScheduler;
   /** 联网: web search, and the browser tools carried out by the window hosting the built-in browser (web.* / browser.*). */
   web: WebService;
   /** 操控电脑: the user's answer to an agent asking for control of applications (computer/access.ts). */
@@ -192,6 +202,11 @@ export class Hub {
     });
     s.library.on('discovered', (kinds) => this.broadcast({ kind: 'library.discovered', kinds }));
     s.gateway.on('changed', () => this.broadcast({ kind: 'gateway.changed' }));
+    s.gateway.on('audit', (lines) => this.broadcast({ kind: 'gateway.log', lines }));
+    s.gateway.on('promptHeavy', (e: { sessionId: string; bytes: number }) => this.broadcast({ kind: 'gateway.promptHeavy', ...e }));
+    s.upstreams.on('changed', () => this.broadcast({ kind: 'upstreams.changed' }));
+    s.tasks.on('changed', () => this.broadcast({ kind: 'upstreams.changed' }));
+    s.tasks.on('notice', (text: string, notify?: boolean) => this.broadcast({ kind: 'notice', text, notify: !!notify }));
     s.web.on('changed', () => this.broadcast({ kind: 'web.changed' }));
 
     s.federation?.on('event', (e: ServerEvent) => this.broadcast(e, true));
@@ -304,7 +319,10 @@ export class Hub {
       if (src instanceof SessionRunner) await src.flushed();
       // 只聊天 carries over: the copy gets a new id the pool has no record for (it records it once opened)
       const chatOnly = !!s.meta.sessionMeta(params.sessionId).chatOnly;
+      const thinkingLanguage = s.meta.sessionMeta(params.sessionId).thinkingLanguage;
       const newId = await s.sessions.fork(params.sessionId, params.resumeAt);
+      // …and so does its 思考语言, before the pool reads it for the new id
+      if (thinkingLanguage) await s.meta.setSessionMeta(newId, { thinkingLanguage });
       params = { ...params, sessionId: newId, fork: false, resumeAt: undefined, ...(chatOnly ? { features: { ...params.features, chatOnly: true } } : {}) };
     }
     const before = params.sessionId ? s.pool.get(params.sessionId) : undefined;
@@ -447,6 +465,8 @@ export class Hub {
         return s.meta.allSessionMeta();
       case 'session.setMeta':
         await s.meta.setSessionMeta(req.sessionId, req.patch);
+        // 思考用的语言 of this conversation: its running process restarts with it once idle
+        if ('thinkingLanguage' in req.patch) s.pool.thinkingLanguageChanged(req.sessionId, req.patch.thinkingLanguage ?? '');
         return null;
       case 'schedules.list':
         return s.meta.schedules();
@@ -477,8 +497,11 @@ export class Hub {
         return runClaudeCli(req.args, { cwd: req.cwd, timeoutMs: 120_000 });
       case 'providers.list':
         return s.providers.list();
-      case 'providers.upsert':
-        return s.providers.upsert(req.provider);
+      case 'providers.upsert': {
+        const saved = await s.providers.upsert(req.provider);
+        s.pool.providerSaved(saved.id);
+        return saved;
+      }
       case 'providers.remove':
         await s.providers.remove(req.id);
         return null;
@@ -511,6 +534,9 @@ export class Hub {
         await s.meta.setSetting(req.key, req.value);
         // the language of what the server words from now on (the page reloads itself)
         if (req.key === LANGUAGE_KEY) applyLanguage(req.value);
+        // 思考用的语言 (跟随界面语言 follows the language above): running conversations restart with it once idle
+        if (req.key === THINKING_LANGUAGE_KEY) setThinkingLanguageSetting(req.value);
+        if (req.key === THINKING_LANGUAGE_KEY || req.key === LANGUAGE_KEY) s.pool.thinkingLanguageChanged();
         // takes effect on the next session start — running children keep the servers they were given
         if (req.key === 'memory.mcp') setMemoryMcpEnabled(req.value !== false);
         if (req.key === 'ui.promptSuggestions') setPromptSuggestions(req.value !== false);
@@ -527,6 +553,8 @@ export class Hub {
       // ---- unified session library ----
       case 'library.sources':
         return s.library.sources();
+      case 'library.localScan':
+        return scanLocalHistory();
       case 'library.read':
         return s.library.read(req.sessionId, req.cursor, req.limit);
       case 'library.rename':
@@ -752,7 +780,7 @@ export class Hub {
       case 'config.mcp':
         return s.config.mcp();
       case 'config.mcp.add':
-        return s.config.mcpAdd(req.name, req.json, req.scope, req.cwd);
+        return s.config.mcpAddWarm(req.name, req.json, req.scope, req.cwd);
       case 'config.mcp.remove':
         return s.config.mcpRemove(req.name, req.scope, req.cwd);
       case 'config.auth':
@@ -898,6 +926,12 @@ export class Hub {
         if (line) (req.level === 'warn' ? console.warn : console.error)(line);
         return null;
       }
+      case 'code.run': {
+        // executes arbitrary code as the user: a window on this machine only, never a phone or a peer
+        this.localWindowOnly(ws, tr('运行代码'));
+        const live = req.sessionId ? s.pool.get(req.sessionId) : undefined;
+        return runCode(req.lang, req.code, { cwd: live?.info.cwd ?? req.cwd });
+      }
       case 'mcp.registry':
         return s.mcp.registry(req.query, req.limit);
       case 'mcp.health':
@@ -1033,6 +1067,7 @@ export class Hub {
         s.terminal.close(req.termId);
         return null;
     }
+    if (isUpstreamRequest(req)) return handleUpstreamRequest(s.upstreams, s.tasks, req);
     if (isGatewayRequest(req)) return handleGatewayRequest(s.gateway, req);
     throw new Error(`unknown request ${(req as any).kind}`);
   }

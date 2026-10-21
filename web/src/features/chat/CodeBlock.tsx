@@ -4,10 +4,27 @@ import { highlight, normalizeLang } from './highlight';
 import { Icon } from '@/ui/icons';
 import { ws } from '@/ws/client';
 import { desktop } from '@/desktop';
+import { dlg } from '@/ui/dialog';
 import { BLANK_CHECK_MS, BLANK_REPORTS_MAX, blankMessage, blankProblem, browserOf, nextStep, type BlankFix, type BlankInfo, type BlankProblem, type CodeProbe } from './code-blank';
 import { tr } from '@/i18n';
 
 const MermaidBlock = lazy(() => import('./MermaidBlock'));
+
+/** Where a code block may run: only the conversation's own view passes this (a tool card or side chat does not). */
+export interface CodeRunContext { sessionId?: string; cwd?: string }
+
+/** The languages the server's code.run knows how to start (tools/run-code.ts). */
+const RUNNABLE = new Set(['bash', 'sh', 'zsh', 'shell', 'cmd', 'bat', 'powershell', 'ps1', 'pwsh', 'python', 'python3', 'py', 'javascript', 'js', 'node']);
+
+interface CodeRunResult {
+  ok: boolean;
+  code: number | null;
+  stdout: string;
+  stderr: string;
+  durationMs: number;
+  truncated: boolean;
+  timedOut: boolean;
+}
 
 // ---- blank-block guard (see code-blank.ts) ----
 const OWN_TAGS = new Set(['CODE', 'SPAN', 'TABLE', 'TBODY', 'TR', 'TD']);
@@ -78,6 +95,8 @@ export interface CodeBlockProps {
   maxLines?: number;
   className?: string;
   footer?: React.ReactNode;
+  /** offered by the conversation view: run this block here (the server runs it in the conversation's folder) */
+  run?: CodeRunContext;
 }
 
 /** How long the copy button shows its check (UI refresh §6). */
@@ -99,13 +118,40 @@ function useCopy() {
   };
 }
 
+/** The whole code of each drawn block (its `.code` root), for the selection menu's 复制代码块 (SelectionMenu.tsx). */
+const CODE_OF = new WeakMap<Element, string>();
+export function codeOf(block: Element): string | undefined {
+  return CODE_OF.get(block);
+}
+
 /** Highlighted code with a header (language, size, copy, wrap) — used by markdown fences and tool cards. */
-export const CodeBlock = memo(function CodeBlock({ code, lang, title, startLine = 1, lineNumbers, streaming, wrap: wrap0, maxLines = 0, className, footer }: CodeBlockProps) {
+export const CodeBlock = memo(function CodeBlock({ code, lang, title, startLine = 1, lineNumbers, streaming, wrap: wrap0, maxLines = 0, className, footer, run: runAt }: CodeBlockProps) {
+  const rootRef = useRef<HTMLDivElement>(null);
   const [wrap, setWrap] = useState(!!wrap0);
   const [all, setAll] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [ran, setRan] = useState<CodeRunResult | null>(null);
   const { ok, copy } = useCopy();
   const l = normalizeLang(lang);
+  const canRun = !!runAt && !streaming && RUNNABLE.has((lang ?? '').trim().toLowerCase());
   const text = code.endsWith('\n') ? code.slice(0, -1) : code;
+  useEffect(() => { if (rootRef.current) CODE_OF.set(rootRef.current, text); }, [text]);
+  const doRun = async () => {
+    const confirmed = await dlg.confirm(tr('运行这段代码？'), {
+      message: tr('代码会以你的身份在这台电脑上执行。输出最多 64 KB，30 秒后停止。'),
+      okLabel: tr('运行'),
+    });
+    if (!confirmed) return;
+    setRunning(true);
+    setRan(null);
+    try {
+      setRan(await ws.request<CodeRunResult>({ kind: 'code.run', lang: (lang ?? '').trim().toLowerCase(), code: text, cwd: runAt!.cwd, sessionId: runAt!.sessionId }));
+    } catch (e: any) {
+      setRan({ ok: false, code: null, stdout: '', stderr: e?.message ?? String(e), durationMs: 0, truncated: false, timedOut: false });
+    } finally {
+      setRunning(false);
+    }
+  };
   const lines = useMemo(() => text.split('\n'), [text]);
   const truncated = maxLines > 0 && !all && lines.length > maxLines;
   const shown = truncated ? lines.slice(0, maxLines).join('\n') : text;
@@ -143,11 +189,16 @@ export const CodeBlock = memo(function CodeBlock({ code, lang, title, startLine 
     return () => { clearTimeout(t); watch.disconnect(); };
   }, [guarded, shown, shownLines, l, lineNumbers, wrap, fix, streaming, lang, lines.length, text.length]);
   return (
-    <div className={clsx('code', wrap && 'wrap', className)}>
+    <div ref={rootRef} className={clsx('code', wrap && 'wrap', className)}>
       <div className="code-head">
         <span className="code-lang" title={title}>{label}</span>
         <span className="code-meta">{tr('{linesCount} 行{v}', { linesCount: lines.length, v: text.length > 2000 ? ` · ${(text.length / 1024).toFixed(1)} KB` : '' })}</span>
         <span className="grow" />
+        {canRun && (
+          <button className="code-btn" disabled={running} title={running ? tr('运行中…') : tr('运行')} aria-label={running ? tr('运行中…') : tr('运行')} onClick={() => void doRun()}>
+            {running ? <span className="spinner" /> : <Icon name="play" size={14} />}
+          </button>
+        )}
         {!isMermaid && <button className={clsx('code-btn', wrap && 'on')} title={tr('自动换行')} onClick={() => setWrap(!wrap)} aria-label={tr('自动换行')} aria-pressed={wrap}><Icon name="refresh" size={14} /></button>}
         {/* the icon turns into a check for a moment (keyed: the check is a new node, so it pops in) */}
         <button className={clsx('code-btn', ok && 'ok')} title={ok ? tr('已复制') : tr('复制')} aria-label={ok ? tr('已复制') : tr('复制')} onClick={() => copy(text)}><Icon key={ok ? 'ok' : 'copy'} name={ok ? 'check' : 'copy'} size={14} className={ok ? 'pop' : undefined} /></button>
@@ -175,6 +226,17 @@ export const CodeBlock = memo(function CodeBlock({ code, lang, title, startLine 
             <code className={l ? `language-${l}` : undefined}>{body}</code>
           )}
         </pre>
+      )}
+      {ran && (
+        <div className="code-run" data-ok={ran.ok}>
+          <div className="code-run-h">
+            <span>{ran.timedOut ? tr('超时，已停止') : ran.truncated ? tr('输出太多，已停止') : ran.ok ? tr('完成') : tr('退出码 {code}', { code: String(ran.code ?? '?') })}</span>
+            <span className="sub">{ran.durationMs} ms</span>
+            <button className="link" onClick={() => setRan(null)}>{tr('收起')}</button>
+          </div>
+          {ran.stdout && <pre>{ran.stdout}</pre>}
+          {ran.stderr && <pre className="err">{ran.stderr}</pre>}
+        </div>
       )}
       {(truncated || footer) && (
         <div className="code-foot">

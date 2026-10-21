@@ -2,11 +2,11 @@
 // server boots inside the app, the page is served, both engines resolve from app.asar.unpacked and run,
 // the terminal (node-pty + spawn-helper + the SDK's native claude binary) produces output, the WebRTC addon
 // (node-datachannel) loads from app.asar.unpacked, and the app finds a new
-// version by itself (a local update feed advertising 99.0.0): the Windows installer build downloads it, macOS only
-// reports it (unsigned: the prompt offers the download instead).
+// version by itself (a local update feed advertising 99.0.0): the Windows installer build downloads it, macOS downloads,
+// checks and unpacks it (desktop/src/mac-update.ts; the swap itself is update-policy.test.ts), Linux only reports it.
 //   node scripts/smoke-packaged.mjs "<path to app executable>" [screenshot.png]
 import { spawn, spawnSync, execFileSync } from 'node:child_process';
-import { cpSync, mkdtempSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, mkdirSync, mkdtempSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
@@ -24,8 +24,30 @@ cpSync(appRoot, copyRoot, { recursive: true, verbatimSymlinks: true });
 const exe = path.join(copyRoot, path.relative(appRoot, built));
 const token = randomBytes(12).toString('hex');
 
-// a generic update feed (desktop/src/main.ts CW_UPDATE_FEED): 99.0.0 with a 1 MB stand-in file
-const upPayload = Buffer.alloc(1 << 20, 7);
+// a generic update feed (desktop/src/main.ts CW_UPDATE_FEED): 99.0.0 with a 1 MB stand-in file — on macOS a zip of a
+// stand-in app the downloader accepts (bundle id and version in Info.plist, an executable)
+function standInMacZip() {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'cw-smoke-upd-'));
+  const app = path.join(dir, 'Claude Web.app');
+  mkdirSync(path.join(app, 'Contents', 'MacOS'), { recursive: true });
+  writeFileSync(path.join(app, 'Contents', 'Info.plist'), [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
+    '<plist version="1.0"><dict>',
+    '<key>CFBundleIdentifier</key><string>com.claude-web.desktop</string>',
+    '<key>CFBundleShortVersionString</key><string>99.0.0</string>',
+    '<key>CFBundleExecutable</key><string>Claude Web</string>',
+    '</dict></plist>',
+    '',
+  ].join('\n'));
+  const bin = path.join(app, 'Contents', 'MacOS', 'Claude Web');
+  writeFileSync(bin, '#!/bin/sh\nexit 0\n');
+  chmodSync(bin, 0o755);
+  const zip = path.join(dir, 'up.zip');
+  execFileSync('/usr/bin/ditto', ['-c', '-k', '--keepParent', app, zip]);
+  return readFileSync(zip);
+}
+const upPayload = process.platform === 'darwin' ? standInMacZip() : Buffer.alloc(1 << 20, 7);
 const upSha = createHash('sha512').update(upPayload).digest('base64');
 const upFile = process.platform === 'darwin' ? `ClaudeWeb-99.0.0-mac-${process.arch}.zip` : 'ClaudeWeb-99.0.0-win-x64.exe';
 const upYml = [
@@ -184,11 +206,17 @@ if (process.platform === 'win32') {
 // the app's own update check (desktop/src/main.ts): main.log records each step
 {
   const mainLog = () => { try { return readFileSync(path.join(ud, 'main.log'), 'utf8'); } catch { return ''; } };
-  const want = process.platform === 'win32' ? '[update] downloaded 99.0.0' : '[update] available 99.0.0';
+  const selfUpdating = process.platform === 'win32' || process.platform === 'darwin';
+  const want = selfUpdating ? '[update] downloaded 99.0.0' : '[update] available 99.0.0';
   for (let i = 0; i < 120 && !mainLog().includes(want); i++) await sleep(500);
   const steps = mainLog().split('\n').filter((l) => l.includes('[update]')).map((l) => l.slice(l.indexOf('[update]'))).join(' | ');
-  check(process.platform === 'win32' ? 'finds and downloads a new version by itself (installer build)' : 'finds a new version by itself (unsigned build: offers the download)', mainLog().includes(want), `${steps || 'no [update] lines'} · feed: ${feedHits.join(', ')}`);
-  if (process.platform !== 'win32') check('… and downloads nothing itself', !feedHits.some((u) => u.startsWith(`/${upFile}`)));
+  check(
+    process.platform === 'win32' ? 'finds and downloads a new version by itself (installer build)'
+      : process.platform === 'darwin' ? 'finds, downloads, checks and unpacks a new version by itself (macOS, the app in a writable folder)'
+      : 'finds a new version by itself (offers the download)',
+    mainLog().includes(want), `${steps || 'no [update] lines'} · feed: ${feedHits.join(', ')}`);
+  if (process.platform === 'darwin') check('… the new app waits unpacked for the restart', existsSync(path.join(ud, 'update', 'new', 'Claude Web.app', 'Contents', 'Info.plist')));
+  if (!selfUpdating) check('… and downloads nothing itself', !feedHits.some((u) => u.startsWith(`/${upFile}`)));
 }
 if (shot && process.platform === 'darwin') { try { await sleep(1500); execFileSync('screencapture', ['-x', shot]); console.log(`screenshot: ${shot}`); } catch (e) { console.log(`screenshot failed: ${e.message}`); } }
 

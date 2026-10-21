@@ -24,7 +24,15 @@ const agents = { http: new http.Agent({ keepAlive: true }), https: new https.Age
  * Send one request; resolves when response headers arrive. `headerTimeoutMs` bounds the wait for
  * the status line; `signal` aborts (client went away / attempt abandoned).
  */
-export function sendUpstream(url: string, opts: { method: string; headers: Record<string, string>; body?: Buffer; signal?: AbortSignal; headerTimeoutMs: number }): Promise<UpstreamResponse> {
+export function sendUpstream(url: string, opts: {
+  method: string;
+  headers: Record<string, string>;
+  body?: Buffer;
+  signal?: AbortSignal;
+  headerTimeoutMs: number;
+  /** per-account proxy: wins over the process-wide one when it returns an agent */
+  agentFor?: (u: URL) => http.Agent | undefined;
+}): Promise<UpstreamResponse> {
   return new Promise((resolve, reject) => {
     let u: URL;
     try { u = new URL(url); } catch { reject(new UpstreamError(tr('无效的上游地址：{url}', { url }))); return; }
@@ -32,8 +40,9 @@ export function sendUpstream(url: string, opts: { method: string; headers: Recor
     if (!mod) { reject(new UpstreamError(tr('不支持的协议：{protocol}', { protocol: u.protocol }))); return; }
     const headers = { ...opts.headers };
     if (opts.body) headers['content-length'] = String(opts.body.length);
-    // through the user's proxy when there is one (net/proxy.ts): a CONNECT tunnel, so the request bytes stay the client's
-    const agent = proxyAgentFor(u) ?? (u.protocol === 'https:' ? agents.https : agents.http);
+    // through the user's proxy when there is one (net/proxy.ts): a CONNECT tunnel, so the request bytes stay the client's;
+    // an account with a proxy of its own goes through that instead
+    const agent = opts.agentFor?.(u) ?? proxyAgentFor(u) ?? (u.protocol === 'https:' ? agents.https : agents.http);
     const req = mod.request(u, { method: opts.method, headers, agent });
     let settled = false;
     const fail = (e: Error) => { if (settled) return; settled = true; clearTimeout(timer); req.destroy(); reject(e); };

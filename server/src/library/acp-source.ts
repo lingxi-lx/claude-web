@@ -12,7 +12,7 @@ const IDLE_MS = 300_000; // library-only process, never shared with a live chat 
 const INIT_TIMEOUT_MS = 30_000;
 const LIST_TIMEOUT_MS = 30_000;
 
-interface Probed { hasList: boolean; loadSession: boolean; version?: string }
+interface Probed { hasList: boolean; loadSession: boolean; /** `sessionCapabilities.resume` (DeepSeek Harness & co.) */ resumeSession?: boolean; version?: string }
 
 function toMs(v: unknown): number {
   if (typeof v === 'number') return v;
@@ -80,9 +80,10 @@ export class AcpListSource implements SessionSource {
         this.probed = {
           hasList: !!agentCaps.sessionCapabilities?.list,
           loadSession: !!agentCaps.loadSession,
+          resumeSession: !!agentCaps.sessionCapabilities?.resume,
           version: r?.agentInfo?.version,
         };
-        this.caps = { resume: this.probed.loadSession, rename: false, archive: false, delete: false, fork: false };
+        this.caps = { resume: !!(this.probed.loadSession || this.probed.resumeSession), rename: false, archive: false, delete: false, fork: false };
         rpc.notify('initialized', {});
       } catch (e) {
         rpc.kill();

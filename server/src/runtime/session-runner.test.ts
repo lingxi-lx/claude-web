@@ -210,6 +210,140 @@ describe('SessionRunner', () => {
   });
 });
 
+// 2026-10-19 user report: a DeepSeek conversation compacted every 1.5–2 minutes (cache hit 26–33%) on a guessed 128K
+// window; setting 1M in settings did nothing to the conversation already running — its process had the old env
+describe('SessionRunner: the provider saved in settings', () => {
+  const prov = { id: 'ds', name: 'DS', type: 'anthropic', baseUrl: 'https://relay', apiKey: 'sk', createdAt: 0, models: ['deepseek-v4.1-flash'] } as any;
+  it('a change reaches the next process (once the turn is done); the same settings again restart nothing', async () => {
+    queries.length = 0;
+    const r = new SessionRunner({ sessionId: 'w-1', cwd: '/x', model: 'deepseek-v4.1-flash' } as any, prov);
+    await tick();
+    await r.reprovide({ ...prov });
+    await tick();
+    expect(queries).toHaveLength(1);
+    await r.reprovide({ ...prov, contextWindows: { 'deepseek-v4.1-flash': 1_000_000 } });
+    await tick();
+    expect(queries).toHaveLength(2);
+    await r.reprovide({ ...prov, id: 'other', contextWindows: { 'deepseek-v4.1-flash': 5 } }); // not its provider
+    await tick();
+    expect(queries).toHaveLength(2);
+    await r.close();
+  });
+
+  it('idle but with background subagents running: the restart waits until they are back (it would kill them)', async () => {
+    queries.length = 0;
+    const r = new SessionRunner({ sessionId: 'w-2', cwd: '/x', model: 'deepseek-v4.1-flash' } as any, prov);
+    await tick();
+    r.send('go');
+    queries[0].push({ type: 'system', subtype: 'task_started', task_id: 'bg1', session_id: 'w-2', uuid: 's1' });
+    queries[0].push({ type: 'result', subtype: 'success', session_id: 'w-2', uuid: 'r1', is_error: false, result: 'waiting for them' });
+    await tick();
+    expect(r.hasBackgroundWork()).toBe(true);
+    await r.reprovide({ ...prov, contextWindows: { 'deepseek-v4.1-flash': 1_000_000 } });
+    await tick();
+    expect(queries).toHaveLength(1); // not now
+    // the subagent is back; its notification's turn ends → now
+    queries[0].push({ type: 'system', subtype: 'task_notification', task_id: 'bg1', status: 'completed', session_id: 'w-2', uuid: 's2' });
+    queries[0].push({ type: 'result', subtype: 'success', session_id: 'w-2', uuid: 'r2', is_error: false, result: 'all back' });
+    await tick();
+    await tick();
+    expect(queries).toHaveLength(2);
+    await r.close();
+  });
+});
+
+// 2026-10-19 user: 「子代理设置什么样，那就会派什么子代理，硬绑定，不要用户在提示词还要另外 trigger」
+describe('SessionRunner: a subagent model picked → the work is delegated', () => {
+  it('the system prompt tells the main model to use subagents only when one is picked; 只聊天 never', async () => {
+    const appended = (i: number): string => queries[i].options.systemPrompt.append ?? '';
+    queries.length = 0;
+    const same = new SessionRunner({ sessionId: 'sp-0', cwd: '/x' } as any);
+    await tick();
+    expect(appended(0)).not.toContain('# Subagents');
+    await same.close();
+    queries.length = 0;
+    const r = new SessionRunner({ sessionId: 'sp-1', cwd: '/x', subagentModel: 'claude-haiku-4-5' } as any);
+    await tick();
+    expect(appended(0)).toContain('# Subagents');
+    expect(appended(0)).toContain('(claude-haiku-4-5)');
+    await r.close();
+    // a pick that cannot be reached (its provider gone): the subagents stay on the main model — no section either
+    queries.length = 0;
+    const gone = new SessionRunner({ sessionId: 'sp-3', cwd: '/x', subagentModel: 'cw-x:nope:deepseek-v4.1-flash' } as any);
+    await tick();
+    expect(queries[0].options.env.CLAUDE_CODE_SUBAGENT_MODEL).toBeUndefined();
+    expect(appended(0)).not.toContain('# Subagents');
+    await gone.close();
+    queries.length = 0;
+    const chat = new SessionRunner({ sessionId: 'sp-2', cwd: '/x', subagentModel: 'claude-haiku-4-5', features: { chatOnly: true } } as any);
+    await tick();
+    expect(appended(0)).not.toContain('# Subagents');
+    await chat.close();
+  });
+});
+
+// 2026-10-20 user: picked a language, Opus 5.5 still thought in English — the system prompt alone was not enough
+describe('SessionRunner: 思考用的语言 — a reminder with every prompt and tool result', () => {
+  it('hooks add it as additionalContext when a language is set; none without', async () => {
+    queries.length = 0;
+    const off = new SessionRunner({ sessionId: 'th-0', cwd: '/x' } as any);
+    await tick();
+    expect(queries[0].options.hooks).toBeUndefined();
+    await off.close();
+    queries.length = 0;
+    const r = new SessionRunner({ sessionId: 'th-1', cwd: '/x' } as any, undefined, { thinkingLanguage: 'zh-CN' });
+    await tick();
+    const h = queries[0].options.hooks;
+    for (const ev of ['UserPromptSubmit', 'PostToolUse'] as const) {
+      const out = await h[ev][0].hooks[0]({} as any, undefined, { signal: new AbortController().signal });
+      expect(out.hookSpecificOutput.hookEventName).toBe(ev);
+      expect(out.hookSpecificOutput.additionalContext).toContain('简体中文 (Simplified Chinese)');
+    }
+    await r.close();
+  });
+});
+
+describe('SessionRunner: 思考用的语言', () => {
+  const appended = (i: number): string => queries[i].options.systemPrompt.append ?? '';
+  it('the setting / the conversation’s pick go into the system prompt; a change restarts once, the same one nothing', async () => {
+    const { setThinkingLanguageSetting } = await import('./session-runner.js');
+    queries.length = 0;
+    const off = new SessionRunner({ sessionId: 'tl-0', cwd: '/x' } as any);
+    await tick();
+    expect(appended(0)).not.toContain('Thinking language');
+    await off.close();
+    setThinkingLanguageSetting('ja');
+    try {
+      queries.length = 0;
+      const r = new SessionRunner({ sessionId: 'tl-1', cwd: '/x' } as any);
+      await tick();
+      expect(appended(0)).toContain('日本語 (Japanese)');
+      await r.refreshThinkingLanguage(); // the same instruction: no restart
+      await tick();
+      expect(queries).toHaveLength(1);
+      await r.refreshThinkingLanguage('fr'); // this conversation's own pick
+      await tick();
+      expect(queries).toHaveLength(2);
+      expect(appended(1)).toContain('Français (French)');
+      await r.refreshThinkingLanguage('off');
+      await tick();
+      expect(queries).toHaveLength(3);
+      expect(appended(2)).not.toContain('Thinking language');
+      await r.close();
+      // picked when it opens (pool: SessionMeta.thinkingLanguage)
+      queries.length = 0;
+      const own = new SessionRunner({ sessionId: 'tl-2', cwd: '/x' } as any, undefined, { thinkingLanguage: 'ko' });
+      await tick();
+      expect(appended(0)).toContain('한국어 (Korean)');
+      setThinkingLanguageSetting('de'); // the conversation keeps its own
+      await own.refreshThinkingLanguage();
+      await tick();
+      expect(queries).toHaveLength(1);
+      await own.close();
+    } finally { setThinkingLanguageSetting(''); }
+  });
+});
+
 describe('SessionRunner prompt-cache routing (cache shim)', () => {
   const prov = { id: 'ds', name: 'DS', type: 'openai', baseUrl: 'https://relay/v1', apiKey: 'sk', createdAt: 0, shim: { base: 'http://127.0.0.1:9/gateway/~p/ds', key: 'cws-x' } } as any;
   const baseOf = (i: number) => queries[i].options.env.OPENAI_BASE_URL as string;
@@ -521,6 +655,90 @@ describe('SessionRunner on a conversation that never ran a turn (user report: sw
       await tick();
       expect(queries[0].options.resume).toBe('fresh-2');
       expect(queries[0].options.sessionId).toBeUndefined();
+      await r.close();
+    });
+  });
+
+  // 2026-10-19 user report: a conversation on deepseek-v4.1-flash (its answers had thinking " " with no signature),
+  // switched to claude-opus-5-5 — 400 「messages.179.content.0.thinking: each thinking block must contain non-whitespace
+  // thinking」 on every turn, the engine sending that history each time
+  const blankThinking = async (dir: string, id: string, thinking = ' ') => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    fs.mkdirSync(path.join(dir, 'projects', 'C--work-app'), { recursive: true });
+    const file = path.join(dir, 'projects', 'C--work-app', `${id}.jsonl`);
+    const use = { type: 'tool_use', id: 't1', name: 'Read', input: { file_path: 'a' } };
+    fs.writeFileSync(file, `${JSON.stringify({ type: 'assistant', uuid: 'a1', message: { role: 'assistant', model: 'deepseek-v4.1-flash', content: [{ type: 'thinking', thinking, signature: '' }, use] } })}\n`);
+    return () => JSON.parse(fs.readFileSync(file, 'utf8').trim()).message.content.map((b: any) => b.type);
+  };
+
+  it('refused for a blank thinking block in the history: the process starts over and the resume reads the transcript without it', async () => {
+    await withConfigDir(async (dir) => {
+      const types = await blankThinking(dir, 'think-1');
+      queries.length = 0;
+      const r = new SessionRunner({ sessionId: 'think-1', cwd: '/x' } as any);
+      await tick();
+      expect(types()).toEqual(['thinking', 'tool_use']); // not on every resume: only after that 400
+      r.send('go on');
+      queries[0].push({ type: 'result', subtype: 'success', session_id: 'think-1', uuid: 'r1', is_error: true, result: 'API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"messages.179.content.0.thinking: each thinking block must contain non-whitespace thinking"},"request_id":"req_011CgBFTYeFCxNiPHoaRoY5U"}' });
+      await tick();
+      await tick();
+      expect(queries).toHaveLength(2);
+      expect(queries[1].options.resume).toBe('think-1');
+      expect(types()).toEqual(['tool_use']);
+      await r.close();
+    });
+  });
+
+  // the same conversation, once the blank ones were gone, on a real Opus turn: 「messages.3.content.0: Invalid
+  // `signature` in `thinking` block」 — every DeepSeek thinking block had signature ""
+  const ds = { id: 'ds', name: 'DS', type: 'anthropic', baseUrl: 'https://relay', apiKey: 'sk', createdAt: 0, models: ['deepseek-v4.1-flash', 'claude-opus-5-5'] } as any;
+
+  it('refused for an unsigned thinking block: the resume reads the transcript without any (whatever the model is called)', async () => {
+    await withConfigDir(async (dir) => {
+      const types = await blankThinking(dir, 'sig-1', 'plan the gateway');
+      queries.length = 0;
+      const r = new SessionRunner({ sessionId: 'sig-1', cwd: '/x', model: 'relay-model-x' } as any, ds);
+      await tick();
+      r.send('go on');
+      queries[0].push({ type: 'result', subtype: 'success', session_id: 'sig-1', uuid: 'r1', is_error: true, result: 'API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"messages.3.content.0: Invalid `signature` in `thinking` block"},"request_id":"req_011CgBgGgwBErAmFwvT6i2cw"}' });
+      await tick();
+      await tick();
+      expect(queries).toHaveLength(2);
+      expect(types()).toEqual(['tool_use']);
+      await r.close();
+    });
+  });
+
+  it('from another vendor\'s model to Claude: always another process, the unsigned thinking taken out first; between other models it stays', async () => {
+    await withConfigDir(async (dir) => {
+      const types = await blankThinking(dir, 'sig-2', 'plan the gateway');
+      queries.length = 0;
+      const r = new SessionRunner({ sessionId: 'sig-2', cwd: '/x', model: 'deepseek-v4.1-flash' } as any, ds);
+      await tick();
+      (r as any).q.setModel = async () => {}; // the engine could switch in place
+      await r.setModel('deepseek-v4-pro');
+      await tick();
+      expect(queries).toHaveLength(1);
+      expect(types()).toEqual(['thinking', 'tool_use']);
+      await r.setModel('claude-opus-5-5');
+      await tick();
+      expect(queries).toHaveLength(2);
+      expect(types()).toEqual(['tool_use']);
+      await r.close();
+    });
+  });
+
+  it('switching model takes blank blocks out before the next process resumes (no 400 first)', async () => {
+    await withConfigDir(async (dir) => {
+      const types = await blankThinking(dir, 'think-2');
+      queries.length = 0;
+      const r = new SessionRunner({ sessionId: 'think-2', cwd: '/x', model: 'sonnet' } as any);
+      await tick();
+      await r.setModel('opus'); // the fake rejects setModel → the runner restarts its process
+      await tick();
+      expect(queries).toHaveLength(2);
+      expect(types()).toEqual(['tool_use']);
       await r.close();
     });
   });
@@ -1176,11 +1394,14 @@ describe('the subagents model (the composer 子代理 chip)', () => {
       const r = new SessionRunner({ sessionId: 'sub1', cwd: '/x', model: 'gpt-big', subagentModel: 'gpt-mini' } as any, p);
       await tick();
       expect(queries[0].options.env.CLAUDE_CODE_SUBAGENT_MODEL).toBe('gpt-mini');
+      // the official binary puts an agent's own model (Explore: inherit) first unless forced (2026-10-19, real run)
+      expect(queries[0].options.env.CLAUDE_CODE_SUBAGENT_MODEL_FORCE).toBe('1');
       expect(r.info.subagentModel).toBe('gpt-mini');
       await r.setSubagentModel('');
       await tick();
       expect(queries).toHaveLength(2);
       expect(queries[1].options.env.CLAUDE_CODE_SUBAGENT_MODEL).toBeUndefined();
+      expect(queries[1].options.env.CLAUDE_CODE_SUBAGENT_MODEL_FORCE).toBeUndefined();
       expect(r.info.subagentModel).toBeUndefined();
       await r.setSubagentModel('');
       await tick();
@@ -1269,6 +1490,58 @@ describe('the subagents model (the composer 子代理 chip)', () => {
       eng.kind = 'claude';
       setSplitHook(null);
       if (savedBase !== undefined) process.env.ANTHROPIC_BASE_URL = savedBase;
+    }
+  });
+
+  it('the account through the user’s own relay (settings.json env): the route passes its requests on to that relay; our base URL goes over theirs through --settings, their token stays theirs', async () => {
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const { setSplitHook } = await import('../gateway/split.js');
+    const { crossValue } = await import('../models/subagent.js');
+    const ROUTE = 'http://127.0.0.1:1/gateway/~s/t/k/cwx-k';
+    const asked: any[][] = [];
+    setSplitHook({ endpoint: (main, sub, model) => { asked.push([main, sub, model]); return ROUTE; }, target: (id) => (id === 'ds' ? { type: 'openai' } : null) });
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-own-relay-'));
+    const was = { cfg: process.env.CLAUDE_CONFIG_DIR, data: process.env.CLAUDE_WEB_DIR, base: process.env.ANTHROPIC_BASE_URL };
+    process.env.CLAUDE_CONFIG_DIR = path.join(dir, 'cfg');
+    process.env.CLAUDE_WEB_DIR = path.join(dir, 'data');
+    delete process.env.ANTHROPIC_BASE_URL;
+    fs.mkdirSync(process.env.CLAUDE_CONFIG_DIR, { recursive: true });
+    fs.writeFileSync(path.join(process.env.CLAUDE_CONFIG_DIR, 'settings.json'), JSON.stringify({ env: { ANTHROPIC_BASE_URL: 'https://kiro.invalid/api', ANTHROPIC_AUTH_TOKEN: 'user-token', ANTHROPIC_DEFAULT_HAIKU_MODEL: 'claude-sonnet-5' } }));
+    try {
+      for (const kind of ['claude', 'ccb'] as const) {
+        eng.kind = kind;
+        queries.length = 0;
+        asked.length = 0;
+        const r = new SessionRunner({ sessionId: `own-${kind}`, cwd: dir, model: 'claude-opus-5-5', subagentModel: crossValue('ds', 'deepseek-v4.1') } as any);
+        await tick();
+        expect(asked).toEqual([[{ base: 'https://kiro.invalid/api' }, { kind: 'provider', providerId: 'ds' }, 'deepseek-v4.1']]);
+        const o = queries[0].options;
+        expect(o.env.ANTHROPIC_BASE_URL).toBe(ROUTE);
+        expect(o.env.CLAUDE_CODE_SUBAGENT_MODEL).toBe('cw-sub/deepseek-v4.1');
+        expect(o.env.ANTHROPIC_AUTH_TOKEN).not.toBe('user-token'); // the engine reads the user's token from their settings itself
+        expect(JSON.parse(fs.readFileSync(o.settings, 'utf8'))).toEqual({ env: { ANTHROPIC_BASE_URL: ROUTE } });
+        await r.close();
+        expect(fs.existsSync(o.settings)).toBe(false);
+      }
+      // the relay only in this process's environment: the plain variable is enough, nothing written
+      eng.kind = 'claude';
+      fs.writeFileSync(path.join(process.env.CLAUDE_CONFIG_DIR, 'settings.json'), '{}');
+      process.env.ANTHROPIC_BASE_URL = 'https://env-relay.invalid';
+      queries.length = 0;
+      asked.length = 0;
+      const e = new SessionRunner({ sessionId: 'own-env', cwd: dir, model: 'claude-opus-5-5', subagentModel: crossValue('ds', 'deepseek-v4.1') } as any);
+      await tick();
+      expect(asked[0][0]).toEqual({ base: 'https://env-relay.invalid' });
+      expect(queries[0].options.env.ANTHROPIC_BASE_URL).toBe(ROUTE);
+      expect(queries[0].options.settings).toBeUndefined();
+      await e.close();
+    } finally {
+      eng.kind = 'claude';
+      setSplitHook(null);
+      for (const [k, v] of [['CLAUDE_CONFIG_DIR', was.cfg], ['CLAUDE_WEB_DIR', was.data], ['ANTHROPIC_BASE_URL', was.base]] as const) if (v === undefined) delete process.env[k]; else process.env[k] = v;
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 });

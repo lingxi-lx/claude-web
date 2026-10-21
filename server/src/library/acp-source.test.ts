@@ -37,6 +37,16 @@ describe('AcpListSource (mock ACP agent)', () => {
     }
   });
 
+  it('counts sessionCapabilities.resume as resumable (DeepSeek Harness; no standard loadSession)', async () => {
+    const src = new AcpListSource('dsh', () => launch({ MOCK_ACP_RESUME: '1' }));
+    try {
+      expect((await src.status()).enabled).toBe(true);
+      expect(src.caps).toEqual({ resume: true, rename: false, archive: false, delete: false, fork: false });
+    } finally {
+      await src.close();
+    }
+  });
+
   it('read() is unsupported: always empty with no next', async () => {
     const src = new AcpListSource('acp:e2e', () => launch({ MOCK_ACP_LIST: '1' }));
     try {

@@ -11,6 +11,16 @@ describe('context windows (provider settings → each engine)', () => {
     expect(knownContextWindow('gpt-6-astra')).toBe(272_000);
     expect(knownContextWindow('gemini-3-pro')).toBe(1_048_576);
     expect(knownContextWindow('deepseek-chat')).toBe(128_000);
+    // V4: what api.deepseek.com's own list says (2026-10-19 — on the 128K guess deepseek-v4.1-flash through a relay
+    // compacted every 1.5–2 minutes, the cache hit 26–33%; set to 1M: 201 calls, prompts to 272K, hit 97%)
+    expect(knownContextWindow('deepseek-v4.1-flash')).toBe(1_048_576);
+    expect(knownContextWindow('DeepSeek-V4.1-Flash')).toBe(1_048_576);
+    expect(knownContextWindow('deepseek-v4-pro')).toBe(1_048_576);
+    expect(knownContextWindow('deepseek-flash')).toBe(1_048_576);
+    expect(knownContextWindow('deepseek/deepseek-v4-flash')).toBe(1_048_576);
+    expect(knownContextWindow('deepseek-reasoner')).toBe(128_000);
+    expect(knownContextWindow('deepseek-v3.2')).toBe(128_000);
+    expect(knownContextWindow('deepseek-prover-v2')).toBe(128_000); // not V4 Pro
     expect(knownContextWindow('some-local-model')).toBeUndefined();
   });
 

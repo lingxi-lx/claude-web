@@ -23,9 +23,10 @@ export function classifyError(s: ErrorSignal): ErrorKind {
   const tr = (s.terminalReason ?? '').toLowerCase();
   const text = (s.text ?? '').toLowerCase();
   const st = s.status ?? undefined;
-  // the history the engine sent holds an empty text block (a picture sent alone, before 2026-10-17): the server takes
-  // it out of the transcript and starts the process over (session-runner dropEmptyText) — a retry goes through
-  if (/empty text blocks|text content blocks must be non-empty/.test(text)) return 'history';
+  // the history the engine sent holds a block the API refuses (an empty text from a picture sent alone before
+  // 2026-10-17; another vendor's blank or unsigned thinking, the conversation switched to Claude): the server takes it
+  // out of the transcript and starts the process over (session-runner dropEmptyBlocks) — a retry goes through
+  if (/empty text blocks|text content blocks must be non-empty|thinking block must contain non-whitespace|invalid `signature` in `thinking` block/.test(text)) return 'history';
   if (s.rateLimitStatus === 'rejected' || s.rateLimitErrorCode === 'credits_required') return 'quota';
   // A provider account out of money is not a usage window that resets: say so, and point at topping up.
   if (/insufficient[_ ](?:\w+[_ ])?(?:balance|funds|credit)|credit balance is too low|余额不足|余额已用完/.test(text)) return 'balance';
@@ -68,7 +69,7 @@ export const ERROR_HINT: Record<ErrorKind, string> = {
   server: tr('上游 5xx / 过载，稍后重试通常就好。'),
   refusal: tr('模型拒绝了这个请求；换个说法或换模型。'),
   aborted: tr('这一轮被中断了，可以直接继续发消息。'),
-  history: tr('这个对话的记录里有一段空文字（以前只发一张图片时留下的），接口不收。已经自动修好了：点重试或再发一次就行。'),
+  history: tr('这个对话的记录里有接口不收的内容（只发一张图片时留下的空文字，或别家模型的思考），已经自动去掉了：点重试或再发一次就行。'),
   unknown: tr('看结果行里的原始错误文本。'),
 };
 

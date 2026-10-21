@@ -4,6 +4,7 @@ import { runClaudeCli } from '../claude-exe.js';
 import { claudeDir } from '../sessions/service.js';
 import { userAnthropicEnv } from '../runtime/user-env.js';
 import { Memo } from '../runtime/memo.js';
+import { warmUp, warmupSpec } from './mcp-warm.js';
 
 /** A relay's host (`api.example.com`), or 'API Key' when only a key is set (the CLI then talks to Anthropic itself). */
 export function relayName(base: string | undefined): string {
@@ -116,6 +117,19 @@ export class ConfigService {
   }
   async mcpAdd(name: string, json: string, scope: string, cwd?: string) {
     return runClaudeCli(['mcp', 'add-json', name, json, '-s', scope], { cwd }).finally(forgetMcpList);
+  }
+  /**
+   * 添加 from the settings / 连接器 pages: add, then — for an `npx` / `uvx` entry — run it once so its package is
+   * downloaded before the page asks `claude mcp list` (see mcp-warm.ts). Bounded at 2 minutes; the answer says how it
+   * went (`warm`) but the entry is added either way. 从其它工具导入 calls `mcpAdd` and does not wait for downloads.
+   */
+  async mcpAddWarm(name: string, json: string, scope: string, cwd?: string) {
+    const r = await this.mcpAdd(name, json, scope, cwd);
+    const spec = r.code === 0 ? warmupSpec(json) : null;
+    if (!spec) return r;
+    const warm = await warmUp(spec, { cwd: scope === 'user' ? undefined : cwd });
+    forgetMcpList();
+    return { ...r, warm };
   }
   async mcpRemove(name: string, scope?: string, cwd?: string) {
     return runClaudeCli(['mcp', 'remove', name, ...(scope ? ['-s', scope] : [])], { cwd }).finally(forgetMcpList);

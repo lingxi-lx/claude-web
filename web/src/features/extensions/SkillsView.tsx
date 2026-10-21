@@ -8,6 +8,7 @@ import { dlg } from '@/ui/dialog';
 import { imeComposing } from '@/ui/ime';
 import { joinPath } from '@/features/paths';
 import { tr } from '@/i18n';
+import { Select } from '@/ui/Select';
 
 /** Collections worth starting from (a GitHub `owner/repo`; the installer takes every folder with a SKILL.md). */
 const SUGGESTED = [
@@ -109,10 +110,7 @@ export function SkillsView() {
         <div className="cx-h"><h3>{tr('从 GitHub 或文件夹安装')}</h3></div>
         <div className="cx-form">
           <input className="field" value={src} placeholder={tr('owner/repo、GitHub 链接，或本机的文件夹路径')} aria-label={tr('来源')} onChange={(e) => setSrc(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !imeComposing(e.nativeEvent) && src.trim()) void install(src.trim()); }} />
-          <select className="field" value={scope} aria-label={tr('装给谁用')} title={tr('装给谁用')} onChange={(e) => setScope(e.target.value as Scope)}>
-            <option value="user">{tr('所有项目')}</option>
-            <option value="project" disabled={!cwd}>{tr('只这个项目')}</option>
-          </select>
+          <Select className="field" value={scope} aria-label={tr('装给谁用')} title={tr('装给谁用')} onValueChange={(value) => setScope(String(value) as Scope)} options={[{ value: 'user', label: tr('所有项目') }, { value: 'project', label: tr('只这个项目'), disabled: !cwd }]} />
           <button className="btn primary" disabled={!!busy || !src.trim()} onClick={() => void install(src.trim())}>{busy?.startsWith('install:') ? tr('安装中…') : tr('安装')}</button>
         </div>
       </section>

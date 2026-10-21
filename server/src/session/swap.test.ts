@@ -245,6 +245,58 @@ describe('swapProvider (model with the profile)', () => {
     await swap.afterSwitch('nothing-running'); // no switch: resolves at once
   });
 
+  // 2026-10-19 user report: DeepSeek's answers had thinking " " (no signature); on Claude every turn was a 400
+  // 「each thinking block must contain non-whitespace thinking」 — the next provider reads the history cleaned
+  it('another provider: blank blocks are taken out of the transcript before the new process resumes; the same provider leaves it alone', async () => {
+    const prev = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = dir;
+    try {
+      fs.mkdirSync(path.join(dir, 'projects', 'C--proj'), { recursive: true });
+      const use = { type: 'tool_use', id: 't1', name: 'Read', input: {} };
+      const line = JSON.stringify({ type: 'assistant', uuid: 'a1', message: { role: 'assistant', content: [{ type: 'thinking', thinking: ' ' }, use] } });
+      const write = (id: string) => { const f = path.join(dir, 'projects', 'C--proj', `${id}.jsonl`); fs.writeFileSync(f, `${line}\n`); return () => JSON.parse(fs.readFileSync(f, 'utf8').trim()).message.content.length; };
+      const s1 = write('s1');
+      await swap.swapProvider({ ...deps, pool: livePool({ s1: { providerId: 'prov-a' } }) }, 's1', undefined, 'Claude 账号');
+      expect(s1()).toBe(1);
+      const s2 = write('s2');
+      await swap.swapProvider({ ...deps, pool: livePool({ s2: { providerId: 'prov-a' } }) }, 's2', 'prov-a', 'A');
+      expect(s2()).toBe(2);
+      // not running, opened on another provider than the one on record
+      const s3 = write('s3');
+      await deps.meta.setSessionMeta('s3', { providerId: 'prov-a' });
+      const pool = livePool({});
+      await swap.openOnProvider({ ...deps, pool }, { sessionId: 's3', cwd: '/proj', providerId: 'claude' }, () => 'Claude 账号', { open: async (p: any) => pool.open(p), swapped: (r: any) => r });
+      expect(s3()).toBe(1);
+    } finally {
+      if (prev === undefined) delete process.env.CLAUDE_CONFIG_DIR; else process.env.CLAUDE_CONFIG_DIR = prev;
+    }
+  });
+
+  // the real Opus turn after that: 「Invalid `signature` in `thinking` block」 — DeepSeek's thinking is all signature ""
+  it('to Claude: unsigned thinking goes too; to another vendor\'s model it stays', async () => {
+    const prev = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = dir;
+    try {
+      fs.mkdirSync(path.join(dir, 'projects', 'C--proj'), { recursive: true });
+      const use = { type: 'tool_use', id: 't1', name: 'Read', input: {} };
+      const line = JSON.stringify({ type: 'assistant', uuid: 'a1', message: { role: 'assistant', model: 'deepseek-v4.1-flash', content: [{ type: 'thinking', thinking: 'plan it', signature: '' }, use] } });
+      const write = (id: string) => { const f = path.join(dir, 'projects', 'C--proj', `${id}.jsonl`); fs.writeFileSync(f, `${line}\n`); return () => JSON.parse(fs.readFileSync(f, 'utf8').trim()).message.content.length; };
+      const ds = await deps.meta.upsertProvider({ name: 'DS', type: 'anthropic', baseUrl: 'https://relay', apiKey: 'sk', defaultModel: 'deepseek-v4.1-flash' });
+      const relayClaude = await deps.meta.upsertProvider({ name: 'RC', type: 'anthropic', baseUrl: 'https://relay2', apiKey: 'sk', defaultModel: 'claude-opus-5-5' });
+      const u1 = write('u1');
+      await swap.swapProvider({ ...deps, pool: livePool({ u1: { providerId: ds.id } }) }, 'u1', undefined, 'Claude 账号');
+      expect(u1()).toBe(1);
+      const u2 = write('u2');
+      await swap.swapProvider({ ...deps, pool: livePool({ u2: { providerId: 'prov-a' } }) }, 'u2', ds.id, 'DS');
+      expect(u2()).toBe(2);
+      const u3 = write('u3');
+      await swap.swapProvider({ ...deps, pool: livePool({ u3: { providerId: ds.id } }) }, 'u3', relayClaude.id, 'RC');
+      expect(u3()).toBe(1);
+    } finally {
+      if (prev === undefined) delete process.env.CLAUDE_CONFIG_DIR; else process.env.CLAUDE_CONFIG_DIR = prev;
+    }
+  });
+
   it('a process reopened in the gap on the old provider (IM / schedules go through the pool) is replaced, so the record is what runs', async () => {
     const runners = new Map<string, any>([['s1', { info: { sessionId: 's1', cwd: '/proj', agent: 'claude', providerId: 'prov-a' } }]]);
     const pool = {

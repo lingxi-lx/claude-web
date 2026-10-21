@@ -86,8 +86,27 @@ export class AcpDriver extends EventEmitter implements AgentDriver {
       // the shared memory store and 联网 (web search + the built-in browser), handed to the agent inline — we never
       // touch its own settings file
       const mcpServers = [...acpMcpServers({ cwd: this.cwd, sessionId: this.sessionId, agent: this.kind }), ...webAcpMcpServers({ sessionId: this.sessionId })];
-      if (params.sessionId && head?.nativeSessionId && this.caps.loadSession) {
-        try { await rpc.request('session/load', { sessionId: head.nativeSessionId, cwd: this.cwd, mcpServers }, 120_000); this.acpSessionId = head.nativeSessionId; loaded = true; } catch { /* fall back to a fresh session */ }
+      // Resume an existing session: the standard `session/load`, or the `session/resume` extension some agents
+      // advertise instead of it (DeepSeek Harness: `sessionCapabilities.resume`, no `loadSession` at all).
+      const canResume = !!this.caps?.sessionCapabilities?.resume;
+      if (params.sessionId && head?.nativeSessionId && (canResume || this.caps.loadSession)) {
+        const attempt = async (servers: any[]) => {
+          if (canResume) await rpc.request('session/resume', { sessionId: head.nativeSessionId, cwd: this.cwd, mcpServers: servers }, 120_000);
+          else await rpc.request('session/load', { sessionId: head.nativeSessionId, cwd: this.cwd, mcpServers: servers }, 120_000);
+        };
+        try {
+          try {
+            await attempt(mcpServers);
+          } catch (e) {
+            // an agent that chokes on our MCP servers must still be able to resume (DeepSeek Harness: resume with
+            // the memory MCP answers an internal error, without it resumes fine)
+            if (!mcpServers.length) throw e;
+            await attempt([]);
+            this.push(this.synth.systemNote(tr('{name} 不接受{map} MCP，本次续聊没有挂载它。', { name: this.launch.name, map: mcpServers.map((s) => (s.name === 'web' ? tr('联网') : tr('共享记忆'))).join(' / ') }), 'warning'));
+          }
+          this.acpSessionId = head.nativeSessionId;
+          loaded = true;
+        } catch { /* fall back to a fresh session */ }
       }
       if (!loaded) {
         // an agent that chokes on our server must still get a session, so retry bare once

@@ -10,8 +10,9 @@ import { imeComposing } from '@/ui/ime';
 import { mcpChanged, useMcpChanged } from '@/features/panels/ConfigPanel';
 import { MCP_CATALOG } from '@/features/settings/mcp-catalog';
 import { connectorLook } from './brands';
-import { connectorNeeds, connectorStatus, filterCatalog, type Configured } from './connectors-model';
+import { addedMessage, connectorNeeds, connectorStatus, downloadsOnFirstStart, filterCatalog, type Configured } from './connectors-model';
 import { tr } from '@/i18n';
+import { Select } from '@/ui/Select';
 
 /** A connector's mark in its tile: the service's own, or one of our icons. */
 export function ConnectorTile({ id, size = 36 }: { id: string; size?: number }) {
@@ -74,11 +75,14 @@ export function Connectors() {
       if (Object.keys(vals).length) cfg = { ...cfg, env: vals };
     }
     setBusy(name);
+    const key = `mcp-add-${name}`;
+    // npx / uvx: the server runs it once so the package is downloaded before the status is asked (up to 2 minutes)
+    if (downloadsOnFirstStart(cfg)) toast(tr('正在添加 {name}：第一次启动要先下载，可能要一两分钟…', { name }), true, 130_000, key);
     try {
-      await ws.request({ kind: 'config.mcp.add', name, json: JSON.stringify(cfg), scope, cwd });
-      toast(tr('已添加 {name}{v}', { name, v: oauth ? tr('。第一次用的时候，在对话里输入 /mcp 完成登录') : '' }), true);
+      const r = await ws.request<{ warm?: { ok: boolean; timedOut?: boolean } }>({ kind: 'config.mcp.add', name, json: JSON.stringify(cfg), scope, cwd });
+      toast(addedMessage(name, { oauth, warm: r?.warm }), true, r?.warm?.timedOut ? 12_000 : 5000, key);
       mcpChanged();
-    } catch (e: any) { toast(e.message); }
+    } catch (e: any) { toast(e.message, false, 5000, key); }
     setBusy(null);
   };
   const remove = async (name: string) => {
@@ -109,11 +113,7 @@ export function Connectors() {
         </label>
         <label className="cx-scope" title={tr('新加的连接器给谁用')}>
           <span>{tr('添加到')}</span>
-          <select className="field" value={scope} onChange={(e) => setScope(e.target.value as Scope)}>
-            <option value="user">{SCOPE_LABEL.user}</option>
-            <option value="project" disabled={!cwd}>{SCOPE_LABEL.project}</option>
-            <option value="local" disabled={!cwd}>{SCOPE_LABEL.local}</option>
-          </select>
+          <Select className="field" value={scope} onValueChange={(value) => setScope(String(value) as Scope)} aria-label={tr('新加的连接器给谁用')} options={[{ value: 'user', label: SCOPE_LABEL.user }, { value: 'project', label: SCOPE_LABEL.project, disabled: !cwd }, { value: 'local', label: SCOPE_LABEL.local, disabled: !cwd }]} />
         </label>
         <button type="button" className="btn sm" data-act="import" onClick={() => setImporting(true)} title={tr('把 Cursor、Claude Desktop、VS Code、Codex、Hermes 等工具里配好的 MCP 服务器拿过来（加给所有项目）')}>{tr('从其它工具导入…')}</button>
       </div>

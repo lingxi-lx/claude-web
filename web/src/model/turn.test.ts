@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { applyMessage, applyTranscript, createConversation, setConversationClock, type AssistantItem, type Item, type ResultItem, type ToolUseBlock, type UserItem } from './conversation';
 import { fileChanges, sessionDiffStat } from './diffstat';
-import { displayPath, fmtDuration, groupSteps, groupTurns, splitTurnBody, stepStarts, turnDone, turnMemo, turnPlan, turnStamp, turnSummary, turnSummaryParts, turnSummaryText, type TurnMemo } from './turn';
+import { displayPath, fmtDuration, groupSteps, groupTurns, splitTurnBody, stepStarts, taskPlan, turnDone, turnMemo, turnPlan, turnStamp, turnSummary, turnSummaryParts, turnSummaryText, type TurnMemo } from './turn';
 
 const FIXTURE = path.join(__dirname, '__fixtures__', 'tools.jsonl');
 const loadFixture = (): any[] => fs.readFileSync(FIXTURE, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
@@ -474,6 +474,15 @@ describe('turnPlan', () => {
     const first = todo('pending'), second = todo('in_progress');
     const [t] = groupTurns([user('go'), asst(first), asst(tool('Read', { file_path: 'x' }), second)]);
     expect(turnPlan(t)).toBe(second);
+  });
+  it('taskPlan: rounds after a result (background subagents back) keep the plan; a new user message ends it', () => {
+    const plan = todo('in_progress');
+    const items = [user('go'), asst(plan), result(1), asst(tool('Read', { file_path: 'x' })), result(1), asst(tool('Read', { file_path: 'y' }))];
+    const turns = groupTurns(items);
+    expect(turns.length).toBe(3);
+    expect(taskPlan(turns)).toBe(plan);
+    expect(taskPlan(groupTurns([...items, result(1), user('something else'), asst(tool('Read', { file_path: 'z' }))]))).toBeNull();
+    expect(taskPlan([])).toBeNull();
   });
   it('a subagent plan does not count; no plan → null', () => {
     const inner = todo('pending');

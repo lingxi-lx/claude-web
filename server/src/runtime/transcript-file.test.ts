@@ -155,9 +155,9 @@ describe('hasEntry', () => {
   });
 });
 
-describe('dropEmptyText: a picture sent alone left an empty text block that made every later turn a 400', () => {
+describe('dropEmptyBlocks: a picture sent alone left an empty text block that made every later turn a 400', () => {
   it('takes empty text blocks out, leaves the rest of the file byte for byte, and does nothing when there is nothing to fix', async () => {
-    const { dropEmptyText } = await import('./transcript-file.js');
+    const { dropEmptyBlocks } = await import('./transcript-file.js');
     const fs = await import('node:fs');
     const os = await import('node:os');
     const path = await import('node:path');
@@ -172,16 +172,70 @@ describe('dropEmptyText: a picture sent alone left an empty text block that made
       '{"type":"assistant","message":{"content":[{"type":"te',
     ];
     fs.writeFileSync(file, lines.join('\n'));
-    expect(dropEmptyText(file)).toBe(2);
+    expect(dropEmptyBlocks(file)).toBe(2);
     const out = fs.readFileSync(file, 'utf8').split('\n');
     expect(JSON.parse(out[1]).message.content).toEqual([img]);
     expect(JSON.parse(out[2]).message.content).toEqual([{ type: 'text', text: '…' }]);
     expect([out[0], out[3], out[4]]).toEqual([lines[0], lines[3], lines[4]]);
     const before = fs.statSync(file).mtimeMs;
-    expect(dropEmptyText(file)).toBe(0);
+    expect(dropEmptyBlocks(file)).toBe(0);
     expect(fs.statSync(file).mtimeMs).toBe(before);
     expect(fs.readdirSync(dir)).toEqual(['s.jsonl']);
-    expect(dropEmptyText(null)).toBe(0);
+    expect(dropEmptyBlocks(null)).toBe(0);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('takes out the blank, unsigned thinking another vendor\'s model wrote (Claude refused the history: 「each thinking block must contain non-whitespace thinking」) and keeps Claude\'s own signed ones', async () => {
+    const { dropEmptyBlocks } = await import('./transcript-file.js');
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-empty-'));
+    const file = path.join(dir, 's.jsonl');
+    const use = { type: 'tool_use', id: 't1', name: 'Read', input: { file_path: 'a' } };
+    const signedBlank = { type: 'thinking', thinking: '', signature: 'EqQBCkgIBxABGAIiQ' };
+    const real = { type: 'thinking', thinking: 'look at a first' };
+    const lines = [
+      JSON.stringify({ type: 'assistant', uuid: 'a1', message: { role: 'assistant', model: 'deepseek-v4.1-flash', content: [{ type: 'thinking', thinking: ' ' }, use] } }),
+      JSON.stringify({ type: 'assistant', uuid: 'a2', message: { role: 'assistant', model: 'claude-opus-5-5', content: [signedBlank, use] } }),
+      JSON.stringify({ type: 'assistant', uuid: 'a3', message: { role: 'assistant', content: [real, use] } }),
+      JSON.stringify({ type: 'assistant', uuid: 'a4', message: { role: 'assistant', content: [{ type: 'thinking', thinking: '\n\n', signature: '' }, use] } }),
+      JSON.stringify({ type: 'assistant', uuid: 'a5', message: { role: 'assistant', content: [{ type: 'thinking', thinking: '' }] } }),
+      JSON.stringify({ type: 'assistant', uuid: 'a6', message: { role: 'assistant', content: [{ type: 'text', text: '\n' }, use] } }),
+    ];
+    fs.writeFileSync(file, lines.join('\n'));
+    expect(dropEmptyBlocks(file)).toBe(4);
+    const out = fs.readFileSync(file, 'utf8').split('\n').map((l) => JSON.parse(l).message.content);
+    expect(out).toEqual([[use], [signedBlank, use], [real, use], [use], [{ type: 'text', text: '…' }], [use]]);
+    expect(dropEmptyBlocks(file)).toBe(0);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  // 2026-10-19, real Opus turn on that conversation once the blank ones were gone: 「messages.3.content.0: Invalid
+  // `signature` in `thinking` block」 — DeepSeek's 325 thinking blocks all had signature ""
+  it('`unsigned` (the history goes to Claude): also every thinking block without a signature; signed ones stay', async () => {
+    const { dropEmptyBlocks } = await import('./transcript-file.js');
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-unsigned-'));
+    const file = path.join(dir, 's.jsonl');
+    const use = { type: 'tool_use', id: 't1', name: 'Read', input: {} };
+    const signed = { type: 'thinking', thinking: 'mine', signature: 'EqQBCkgIBxABGAIiQ' };
+    const redacted = { type: 'redacted_thinking', data: 'abc' };
+    const lines = [
+      { type: 'assistant', uuid: 'a1', message: { role: 'assistant', model: 'deepseek-v4.1-flash', content: [{ type: 'thinking', thinking: 'plan it', signature: '' }, use] } },
+      { type: 'assistant', uuid: 'a2', message: { role: 'assistant', content: [{ type: 'thinking', thinking: 'no field' }, { type: 'text', text: 'hi' }] } },
+      { type: 'assistant', uuid: 'a3', message: { role: 'assistant', model: 'claude-opus-5-5', content: [signed, redacted, use] } },
+      { type: 'user', uuid: 'u1', message: { role: 'user', content: [{ type: 'text', text: 'the word "thinking" in a prompt' }] } },
+    ].map((o) => JSON.stringify(o));
+    fs.writeFileSync(file, lines.join('\n'));
+    expect(dropEmptyBlocks(file)).toBe(0); // without it: not empty, kept
+    expect(dropEmptyBlocks(file, { unsigned: true })).toBe(2);
+    const out = fs.readFileSync(file, 'utf8').split('\n');
+    expect(out.map((l) => JSON.parse(l).message.content)).toEqual([[use], [{ type: 'text', text: 'hi' }], [signed, redacted, use], [{ type: 'text', text: 'the word "thinking" in a prompt' }]]);
+    expect(out.slice(2)).toEqual(lines.slice(2));
+    expect(dropEmptyBlocks(file, { unsigned: true })).toBe(0);
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });

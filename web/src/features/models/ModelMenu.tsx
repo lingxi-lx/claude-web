@@ -136,7 +136,7 @@ export function ModelMenu(p: ModelMenuProps) {
 
   const sub = !!p.subagent;
   const menu = useMemo(() => {
-    const m = buildModelMenu({ agent: p.agent, providers, gatewayGroups: gateway.groups, gatewayEnabled: gateway.enabled, engine, settings, current: p.current, builtin: p.builtin, builtinTitle: p.builtinTitle, agentDefault: p.agentDefault, otherAgents: p.lockProvider ? undefined : p.otherAgents });
+    const m = buildModelMenu({ agent: p.agent, providers, gatewayGroups: gateway.groups, gatewayPoolModels: gateway.poolModels, gatewayEnabled: gateway.enabled, engine, settings, current: p.current, builtin: p.builtin, builtinTitle: p.builtinTitle, agentDefault: p.agentDefault, otherAgents: p.lockProvider ? undefined : p.otherAgents });
     if (!p.lockProvider) return m;
     const also = new Set(p.subagent?.alsoProviders ?? []);
     const keep = (s: ModelMenuSection) => ({ ...s, items: s.items.filter((i) => (i.providerId === p.lockProvider || also.has(i.providerId)) && !i.agent && !(sub && i.isDefault)) });

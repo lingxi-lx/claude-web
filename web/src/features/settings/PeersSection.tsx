@@ -6,6 +6,7 @@ import { dlg } from '@/ui/dialog';
 import type { PeerInfo, PeerState, RemoteHost } from '@shared';
 import { Icon } from '@/ui/icons';
 import { tr } from '@/i18n';
+import { Select } from '@/ui/Select';
 
 const STATE: Record<PeerState, { l: string; dot: string; badge: string }> = {
   online: { l: tr('在线'), dot: 'running', badge: 'ok' },
@@ -96,9 +97,7 @@ export function PeersSection() {
             <label>{tr('配对码')}<input className="field mono" inputMode="numeric" maxLength={6} value={draft.code} onChange={(e) => setDraft({ ...draft, code: e.target.value.replace(/\D/g, '') })} placeholder={tr('6 位数字')} title={tr('在那台机器的 设置 → 手机与其它电脑 里生成')} /></label>
           </> : (
             <label>{tr('SSH 主机')}
-              <select className="field" value={draft.hostId} onChange={(e) => setDraft({ ...draft, hostId: e.target.value })}>
-                {freeHosts.map((h) => <option key={h.id} value={h.id}>{h.name} · {h.target}</option>)}
-              </select>
+              <Select className="field" value={draft.hostId} onValueChange={(value) => setDraft({ ...draft, hostId: String(value) })} aria-label={tr('SSH 主机')} options={freeHosts.map((h) => ({ value: h.id, label: h.name, description: h.target }))} />
             </label>
           )}
           <label>{tr('名称（可空）')}<input className="field" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder={tr('默认用那台机器的主机名')} /></label>

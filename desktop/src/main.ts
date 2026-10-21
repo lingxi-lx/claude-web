@@ -1,17 +1,20 @@
-import { app, BrowserWindow, Menu, Tray, Notification, dialog, shell, ipcMain, nativeImage, nativeTheme, powerSaveBlocker, screen } from 'electron';
+import { app, BrowserWindow, Menu, Tray, clipboard, Notification, dialog, shell, ipcMain, nativeImage, nativeTheme, powerSaveBlocker, screen } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { ServerHost } from './server-host';
 import { KeepAwake } from './keep-awake';
 import { autoUpdater } from 'electron-updater';
-import { CHECK_EVERY_MS, FIRST_CHECK_MS, firstLine, isRequired, manualDownloadUrl, notesText, releasePage, updateMode, type UpdateMode } from './update-policy';
+import { CHECK_EVERY_MS, FIRST_CHECK_MS, firstLine, isRequired, macBundle, macSelfUpdateBlocker, macZip, manualDownloadUrl, notesText, releaseFileUrl, releasePage, updateMode, type MacBlocker, type ReleaseFile, type UpdateMode } from './update-policy';
+import { MacSelfUpdate } from './mac-update';
 import { execFileSync } from 'node:child_process';
 import { captureGuest } from './browser-capture';
+import { geminiForget, geminiLogin, geminiRefresh } from './gemini-login';
 import { cleanUserAgent } from './user-agent';
 import os from 'node:os';
 import { ZOOM_STEPS, cleanZoom, fitWindow, minWindow, nextZoom, scaleCaption, trafficLightY, zoomAsk, zoomLimit, type ZoomAsk } from './zoom';
 import { getLocale, initLanguage, tr } from './i18n.js';
 import { SCHEME, linkFromArgv, parseDeepLink, type DeepLink } from './deep-link';
+import { menuItems } from './context-menu';
 
 const isMac = process.platform === 'darwin';
 
@@ -69,9 +72,17 @@ let titleBar = { bg: '', fg: '', overlay: '', height: 0 };
 const overlayDefault = (dark: boolean) => (process.platform === 'win32' ? '#00000000' : dark ? '#1b1a18' : '#fefdfc');
 let gpuCrashes = 0;
 /** What the renderer's update prompt and settings page show (web: features/update/model.ts). */
-type UpdateState = { status: string; mode: UpdateMode; version?: string; percent?: number; error?: string; notes?: string; required?: boolean; url?: string; page?: string };
+type UpdateState = { status: string; mode: UpdateMode; version?: string; percent?: number; error?: string; notes?: string; required?: boolean; url?: string; page?: string; why?: string };
 const UPDATE_REPO = 'ypyik0669/claude-web'; // electron-builder.yml `publish`
-let updateState: UpdateState = { status: 'idle', mode: updateMode(process.platform, process.env) };
+/** The .app this Mac app runs from, and why it cannot replace it (null: it can; see mac-update.ts). */
+const macApp = isMac ? macBundle(process.execPath) : null;
+const macBlock: MacBlocker | null = isMac ? macSelfUpdateBlocker({ packaged: app.isPackaged, bundle: macApp, writable: canWrite(macApp) }) : null;
+function canWrite(bundle: string | null): boolean {
+  if (!bundle) return false;
+  try { fs.accessSync(path.dirname(bundle), fs.constants.W_OK); fs.accessSync(bundle, fs.constants.W_OK); return true; } catch { return false; }
+}
+let updateState: UpdateState = { status: 'idle', mode: updateMode(process.platform, process.env, isMac && !macBlock) };
+let macUpdate: MacSelfUpdate | null = null;
 const host = new ServerHost();
 const stateFile = () => path.join(app.getPath('userData'), 'window-state.json');
 
@@ -252,10 +263,37 @@ function createWindow(url: string | null, winId = 'main', bounds?: Bounds, hidde
       if (/^https?:/.test(target) && !win.isDestroyed()) win.webContents.send('desktop:browserPopup', { url: target });
       return { action: 'deny' };
     });
+    attachContextMenu(guest, win);
   });
+  attachContextMenu(win.webContents, win);
   win.on('focus', () => { pendingCount = 0; updateBadge(); });
   void win.loadURL(url ? windowUrl(url, winId) : splashUrl(dark));
   return win;
+}
+
+/**
+ * The right-click menu (context-menu.ts decides what is in it) for one of our pages or a built-in browser page
+ * (`wc`) shown in `win`. Our own menus preventDefault() the DOM event, and then this event never fires — see
+ * context-menu.ts. The edit items call `wc` directly rather than menu roles: a role acts on whatever has focus,
+ * which for a <webview> page is not always the page that was clicked.
+ */
+function attachContextMenu(wc: Electron.WebContents, win: BrowserWindow) {
+  wc.on('context-menu', (_e, params) => {
+    const items = menuItems(params);
+    if (!items.length || win.isDestroyed()) return;
+    const template = items.map((it): Electron.MenuItemConstructorOptions => {
+      switch (it.type) {
+        case 'separator': return { type: 'separator' };
+        case 'edit': return { label: it.label, enabled: it.enabled, click: () => { if (!wc.isDestroyed()) wc[it.role](); } };
+        case 'replace': return { label: it.label, click: () => wc.replaceMisspelling(it.word) };
+        case 'addWord': return { label: it.label, click: () => wc.session.addWordToSpellCheckerDictionary(it.word) };
+        case 'quote': return { label: it.label, click: () => { if (!win.isDestroyed()) win.webContents.send('desktop:quoteSelection', it.text); } };
+        case 'copyLink': return { label: it.label, click: () => clipboard.writeText(it.url) };
+        case 'copyImage': return { label: it.label, click: () => wc.copyImageAt(params.x, params.y) };
+      }
+    });
+    Menu.buildFromTemplate(template).popup({ window: win });
+  });
 }
 
 function updateBadge() {
@@ -507,7 +545,7 @@ function mainLog(line: string) {
 function setUpdate(patch: Partial<UpdateState>) {
   const prev = updateState;
   const fresh = patch.version !== undefined && patch.version !== prev.version;
-  updateState = fresh ? { status: prev.status, mode: prev.mode, ...patch } : { ...prev, ...patch };
+  updateState = fresh ? { status: prev.status, mode: prev.mode, why: prev.why, ...patch } : { ...prev, ...patch };
   if (patch.status !== 'downloading') delete updateState.percent;
   if (patch.status !== 'error') delete updateState.error;
   if (updateState.status !== prev.status || fresh) mainLog(`[update] ${updateState.status}${updateState.version ? ` ${updateState.version}` : ''}${updateState.error ? ` ${updateState.error}` : ''}`);
@@ -515,12 +553,45 @@ function setUpdate(patch: Partial<UpdateState>) {
 }
 /** A generic feed instead of GitHub (end-to-end checks: scripts/smoke-packaged.mjs serves one). */
 const updateFeed = () => process.env.CW_UPDATE_FEED || undefined;
+/** A Mac app's own download (mac-update.ts) of the version found last: what 安装并重启 after a failed start waits for. */
+let macJob: { version: string; file: ReleaseFile; done: Promise<boolean>; running: boolean } | null = null;
+/** The last swap failed for this version (App Management said no, say): it is a manual download from now on. */
+let macFailed: { version: string; error: string } | null = null;
+function macDownload(version: string, file: ReleaseFile): Promise<boolean> {
+  // the same download while it runs; once it has failed, the next check (or 下载) starts over
+  if (macJob?.version === version && macJob.running) return macJob.done;
+  const url = releaseFileUrl(UPDATE_REPO, version, file.url, updateFeed());
+  setUpdate({ status: 'downloading', percent: 0 });
+  const job: NonNullable<typeof macJob> = { version, file, running: true, done: Promise.resolve(false) };
+  job.done = macUpdate!.fetch(version, url, file, (percent) => { if (updateState.status === 'downloading') setUpdate({ status: 'downloading', percent }); }).then(
+    () => { job.running = false; setUpdate({ status: 'downloaded', version }); return true; },
+    (e) => { job.running = false; setUpdate({ status: 'error', error: firstLine(e) }); return false; },
+  );
+  macJob = job;
+  return job.done;
+}
+const macWhy = (b: MacBlocker | null): string | undefined =>
+  b === 'translocated' || b === 'not-bundle' ? tr('这份 Claude Web 是直接从 dmg 或「下载」文件夹里打开的，不能自己更新。把它拖进「应用程序」、从那里打开，以后就会自动更新。')
+  : b === 'read-only' ? tr('这份 Claude Web 所在的文件夹（{dir}）没有写入权限，不能自己更新。', { dir: path.dirname(macApp ?? '') })
+  : undefined;
+
 function setupUpdater() {
   const mode = updateState.mode;
-  autoUpdater.autoDownload = mode === 'auto';
-  // 稍后 on a downloaded update: the installer runs when the app quits
-  autoUpdater.autoInstallOnAppQuit = mode === 'auto';
+  // macOS downloads and installs by itself (macDownload), not through electron-updater's Squirrel.Mac
+  autoUpdater.autoDownload = mode === 'auto' && !isMac;
+  // 稍后 on a downloaded update: the installer runs when the app quits (macOS: the will-quit handler)
+  autoUpdater.autoInstallOnAppQuit = mode === 'auto' && !isMac;
   autoUpdater.allowPrerelease = false;
+  if (isMac) {
+    if (macBlock) { updateState.why = macWhy(macBlock); mainLog(`[update] this app cannot replace itself (${macBlock}${macApp ? `: ${macApp}` : ''}); new versions are a download`); }
+    else if (!macUpdate) {
+      macUpdate = new MacSelfUpdate(path.join(app.getPath('userData'), 'update'));
+      const last = macUpdate.takeResult();
+      if (last?.ok) mainLog(`[update] installed ${last.version}`);
+      else if (last) mainLog(`[update] installing ${last.version} failed: ${last.error}`);
+      macFailed = macUpdate.failed();
+    }
+  }
   (autoUpdater as any).logger = null;
   const feed = updateFeed();
   if (feed) {
@@ -534,14 +605,27 @@ function setupUpdater() {
   autoUpdater.on('checking-for-update', () => setUpdate({ status: 'checking' }));
   autoUpdater.on('update-available', (i) => {
     const notes = notesText(i.releaseNotes);
-    setUpdate({
+    const found: Partial<UpdateState> = {
       status: 'available',
       version: i.version,
       notes,
       required: isRequired(notes),
       page: releasePage(UPDATE_REPO, i.version),
       url: manualDownloadUrl({ repo: UPDATE_REPO, version: i.version, platform: process.platform, arch: process.arch, arm64Translated: app.runningUnderARM64Translation, portable: !!process.env.PORTABLE_EXECUTABLE_FILE, feed }),
-    });
+    };
+    if (!macUpdate) { setUpdate(found); return; }
+    const zip = macFailed?.version === i.version ? null : macZip(i.files, process.arch, app.runningUnderARM64Translation);
+    if (!zip) {
+      // this version only: a later one tries to install itself again
+      const why = macFailed?.version === i.version
+        ? tr('上次自动安装 v{version} 没有成功（{error}）。如果 macOS 提示阻止了修改 App，到「系统设置 → 隐私与安全性 → App 管理」里允许 Claude Web；这一版请手动下载。', { version: i.version, error: macFailed.error })
+        : tr('这一版没有给这台 Mac 的更新包，请手动下载。');
+      mainLog(`[update] ${i.version}: ${macFailed?.version === i.version ? 'the last install failed' : 'no zip for this Mac in latest-mac.yml'}; offering the download`);
+      setUpdate({ ...found, mode: 'manual', why });
+      return;
+    }
+    setUpdate({ ...found, mode: 'auto', why: undefined });
+    void macDownload(i.version, zip);
   });
   autoUpdater.on('update-not-available', () => setUpdate({ status: 'none' }));
   autoUpdater.on('download-progress', (p) => setUpdate({ status: 'downloading', percent: p.percent }));
@@ -557,8 +641,9 @@ function checkForUpdate(manual = false) {
 }
 /**
  * The server would not start: a newer version may already fix it (v0.2.7 shipped without a package and every install
- * died at start, before the usual check 15 s in — nobody could update out of it). Windows installed version only: look,
- * download, offer to install. True when the installer is taking over.
+ * died at start, before the usual check 15 s in — nobody could update out of it). Builds that install by themselves
+ * only (the Windows installer, a Mac app that can replace itself): look, download, offer to install. True when the
+ * installer is taking over.
  */
 async function updateInsteadOfFailing(failure: string): Promise<boolean> {
   if ((!app.isPackaged && !updateFeed()) || updateState.mode !== 'auto' || readFlags().autoUpdate === false) return false;
@@ -566,9 +651,13 @@ async function updateInsteadOfFailing(failure: string): Promise<boolean> {
   try {
     setupUpdater();
     const found = await within(autoUpdater.checkForUpdates(), 20_000);
-    if (!found?.isUpdateAvailable || !found.downloadPromise) return false;
+    if (!found?.isUpdateAvailable) return false;
     const version = found.updateInfo.version;
-    if (!(await within(found.downloadPromise, 10 * 60_000))) return false;
+    // macOS: update-available (emitted before checkForUpdates resolves) started macDownload, or made it a download link
+    const downloaded: Promise<unknown> | null = macUpdate
+      ? updateState.mode === 'auto' && macJob?.version === version ? macJob.done : null
+      : found.downloadPromise ?? null;
+    if (!downloaded || !(await within(downloaded, 10 * 60_000))) return false;
     const { response } = await dialog.showMessageBox({
       type: 'error',
       title: APP_NAME,
@@ -580,14 +669,24 @@ async function updateInsteadOfFailing(failure: string): Promise<boolean> {
     });
     // 退出 already saw the failure in this dialog: no second error box
     if (response !== 0) { app.quit(); return true; }
-    quitting = true;
     mainLog(`[update] installing ${version} (the server would not start)`);
-    autoUpdater.quitAndInstall(true, true);
-    return true;
+    return installAndRestart();
   } catch (e) {
     mainLog(`[update] could not update after a failed start: ${firstLine(e)}`);
     return false;
   }
+}
+/** Quit into the downloaded update and start the new version. */
+function installAndRestart(): boolean {
+  if (macUpdate) {
+    if (!macApp || !macUpdate.install(macApp, true)) return false;
+    quitting = true;
+    app.quit();
+    return true;
+  }
+  quitting = true;
+  autoUpdater.quitAndInstall(true, true); // the installer runs silently, then starts the app
+  return true;
 }
 /** Automatic checks: shortly after start, then every few hours — unless turned off in settings (flags.json). */
 function scheduleUpdateChecks() {
@@ -642,6 +741,11 @@ ipcMain.handle('desktop:zoom:set', (e, v: unknown) => {
 });
 // a picture of a page of the built-in browser, for an Agent's browser_screenshot (browser-capture.ts)
 ipcMain.handle('desktop:browser:capture', (e, id: unknown) => captureGuest(e.sender, id));
+// 网关 → 添加 Gemini 账号: sign in to Google in this computer's Chrome and hand back its cookies (gemini-login.ts)
+ipcMain.handle('desktop:gemini:login', (_e, partition: unknown, proxyServer: unknown) =>
+  geminiLogin(partition, typeof proxyServer === 'string' ? proxyServer : undefined));
+ipcMain.handle('desktop:gemini:forget', (_e, partition: unknown) => geminiForget(partition));
+ipcMain.handle('desktop:gemini:refresh', (_e, partition: unknown) => geminiRefresh(partition));
 ipcMain.handle('desktop:loginItem:get', () => app.getLoginItemSettings().openAtLogin);
 ipcMain.handle('desktop:loginItem:set', (_e, on: boolean) => app.setLoginItemSettings({ openAtLogin: on, args: ['--hidden'] }));
 ipcMain.handle('desktop:window:new', () => {
@@ -658,16 +762,15 @@ ipcMain.handle('desktop:update:state', () => updateState);
 ipcMain.handle('desktop:update:check', () => checkForUpdate(true));
 ipcMain.handle('desktop:update:download', () => {
   if (updateState.mode !== 'auto') { if (updateState.url) void shell.openExternal(updateState.url); return; }
+  if (macUpdate) { if (macJob) void macDownload(macJob.version, macJob.file); return; }
   autoUpdater.downloadUpdate().catch((e) => setUpdate({ status: 'error', error: firstLine(e) }));
 });
-/** 立即重启更新: the installer runs silently and starts the new version (only once it is downloaded). */
+/** 立即重启更新: the new version is installed and started (only once it is downloaded). */
 ipcMain.handle('desktop:update:install', () => {
   if (updateState.mode !== 'auto' || updateState.status !== 'downloaded') return false;
-  quitting = true;
   saveState();
   mainLog(`[update] installing ${updateState.version}`);
-  autoUpdater.quitAndInstall(true, true);
-  return true;
+  return installAndRestart();
 });
 ipcMain.handle('desktop:flags:set', (_e, f: Record<string, unknown>) => { writeFlags(f); });
 ipcMain.handle('desktop:flags:get', () => readFlags());
@@ -727,6 +830,9 @@ app.on('child-process-gone', (_e, d) => {
 app.on('before-quit', () => { quitting = true; saveState(); });
 app.on('will-quit', (e) => {
   keepAwake.set(false);
+  // 稍后 on a downloaded update (macOS; Windows: autoInstallOnAppQuit): it is swapped in once the app is gone. Only once:
+  // install() hands the staged app over, and 立即重启更新 has already handed it over with a relaunch.
+  if (macUpdate && macApp && updateState.status === 'downloaded' && macUpdate.install(macApp, false)) mainLog(`[update] installing ${updateState.version} on quit`);
   if (host.info) {
     e.preventDefault();
     host.info = null;

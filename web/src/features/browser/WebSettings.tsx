@@ -9,6 +9,7 @@ import { Row } from '@/features/settings/controls';
 import { showPanel } from '@/features/workbench/right-panel';
 import './browser.css';
 import { tr } from '@/i18n';
+import { Select } from '@/ui/Select';
 
 /** The search services that need a key of their own → the setting it is kept in (protected on the server, never sent back). */
 const KEY_SETTING: Record<string, string> = { brave: 'web.search.braveKey' };
@@ -61,9 +62,7 @@ export function WebSettings() {
         <Row label={tr('用什么搜索')} hint={st && !st.host
           ? tr('现在没有桌面窗口连着（网页版、手机）：只能由这台电脑直接去抓 Bing 和 DuckDuckGo 的结果页，容易被限流；Google、Yahoo、百度要桌面版的内置浏览器。')
           : tr('搜索是在内置浏览器里做的：打开搜索网站的结果页，把结果读出来，不用密钥。自动 = 依次试 DuckDuckGo、Bing、Yahoo、百度，哪个给出对题的结果就用哪个。哪一家能用和你的网络有关，用下面的「试一下」看看。')}>
-          <select className="field" aria-label={tr('用什么搜索')} data-id="web-search" disabled={!st} value={st?.engine ?? 'auto'} onChange={(e) => void set('web.search.engine', e.target.value)}>
-            {(st?.engines ?? []).map((e) => <option key={e.id} value={e.id}>{e.label}{e.browser && !st?.host ? tr('（要桌面版）') : ''}</option>)}
-          </select>
+          <Select className="field" aria-label={tr('用什么搜索')} data-id="web-search" disabled={!st} value={st?.engine ?? 'auto'} onValueChange={(value) => void set('web.search.engine', String(value))} options={(st?.engines ?? []).map((e) => ({ value: e.id, label: e.label, description: e.browser && !st?.host ? tr('要桌面版') : undefined }))} />
         </Row>
         {current?.needsKey && (
           <Row label={tr('Brave Search 的密钥')} hint={current.hasKey ? tr('已经保存在这台电脑上（加密）。填一个新的会替换它。') : tr('保存在这台电脑上（加密），只在搜索时发给这家服务。')}>

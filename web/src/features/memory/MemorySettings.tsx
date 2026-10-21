@@ -9,7 +9,7 @@ import { tr } from '@/i18n';
 
 const AGENTS = [
   { l: 'Claude', how: tr('Agent SDK 的 mcpServers（进程内注入）') },
-  { l: 'Codex', how: tr('-c mcp_servers.memory.* 命令行覆盖') },
+  { l: 'Codex', how: tr('-c mcp_servers.claude-web-memory.* 命令行覆盖') },
   { l: tr('Gemini / Qwen / Kimi / 其它 Agent'), how: tr('session/new 的 mcpServers 字段') },
 ];
 

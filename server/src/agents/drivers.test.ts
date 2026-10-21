@@ -71,6 +71,18 @@ describe('AcpDriver (mock agent)', () => {
     expect(d.state).toBe('closed');
   });
 
+  it('resumes through session/resume when the agent advertises it instead of loadSession (DeepSeek Harness)', async () => {
+    const id = 'dsh-resume-1';
+    await transcripts.create({ sessionId: id, agent: 'dsh', cwd: tmp, title: '', createdAt: Date.now(), nativeSessionId: 'acp-old' });
+    const d = new AcpDriver('dsh', { command: process.execPath, args: [path.join(here, '__mocks__', 'acp-agent.mjs')], env: { MOCK_ACP_RESUME: '1' }, name: 'Mock DSH' }, { sessionId: id, cwd: tmp }, transcripts, null);
+    const msgs = collect(d);
+    await waitFor(() => d.state === 'idle');
+    // the mock only answers this way after a session/resume (session/new would be acp-sess-1)
+    await waitFor(() => msgs.some((m) => JSON.stringify(m).includes('resumed acp-old')));
+    expect((await transcripts.head(id))?.nativeSessionId).toBe('acp-old');
+    await d.close();
+  });
+
   it('plan updates become TodoWrite; denied permission marks the tool result as error', async () => {
     const d = new AcpDriver('qwen', { command: process.execPath, args: [path.join(here, '__mocks__', 'acp-agent.mjs')], env: {}, name: 'Mock' }, { cwd: tmp }, transcripts, null);
     const msgs = collect(d);
@@ -96,7 +108,7 @@ describe('AcpDriver (mock agent)', () => {
     await waitFor(() => d.state === 'idle');
     d.send('what mcp servers do you have');
     await waitFor(() => msgs.some((m) => m.type === 'result'));
-    expect(textOf(msgs)).toContain('[mcp: memory]');
+    expect(textOf(msgs)).toContain('[mcp: claude-web-memory]');
     await d.close();
 
     // an agent that rejects inline MCP servers must still get a usable session
@@ -120,7 +132,7 @@ describe('AcpDriver (mock agent)', () => {
       await waitFor(() => d.state === 'idle');
       d.send('what mcp servers do you have');
       await waitFor(() => msgs.some((m) => m.type === 'result'));
-      expect(textOf(msgs)).toContain('[mcp: memory,web]');
+      expect(textOf(msgs)).toContain('[mcp: claude-web-memory,web]');
       await d.close();
 
       const d2 = new AcpDriver('qwen', { command: process.execPath, args: [mock], env: { MOCK_REJECT_MCP: '1' }, name: 'Picky' }, { cwd: tmp }, transcripts, null);

@@ -7,6 +7,7 @@ import type { SkillInfo } from '@shared';
 import { Icon } from '@/ui/icons';
 import { joinPath } from '@/features/paths';
 import { tr } from '@/i18n';
+import { Select } from '@/ui/Select';
 
 const SUGGESTED = [
   { src: 'anthropics/skills', l: tr('Anthropic 官方 skills 合集'), d: tr('docx / pptx / xlsx / pdf 等文档技能') },
@@ -61,10 +62,7 @@ export function SkillsSection() {
         <h5>{tr('安装')}</h5>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <input className="field" style={{ flex: 1 }} placeholder={tr('owner/repo、owner/repo/子目录、GitHub 链接或本地路径')} value={src} onChange={(e) => setSrc(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !imeComposing(e.nativeEvent) && src && install()} />
-          <select className="field" value={scope} onChange={(e) => setScope(e.target.value as any)}>
-            <option value="user">{tr('用户级 ~/.claude/skills')}</option>
-            <option value="project" disabled={!cwd}>{tr('项目级 .claude/skills')}</option>
-          </select>
+          <Select className="field" value={scope} onValueChange={(value) => setScope(String(value) as typeof scope)} aria-label={tr('安装范围')} options={[{ value: 'user', label: tr('用户级 ~/.claude/skills') }, { value: 'project', label: tr('项目级 .claude/skills'), disabled: !cwd }]} />
           <button className="btn sm primary" disabled={busy || !src.trim()} onClick={() => install()}>{busy ? tr('处理中…') : tr('安装')}</button>
           <button className="btn sm" disabled={busy} onClick={create}><Icon name="plus" size={12} /> {tr('新建')}</button>
         </div>

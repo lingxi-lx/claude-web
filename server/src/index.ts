@@ -36,7 +36,8 @@ import { AgentTranscripts } from './agents/transcript.js';
 import { CanonicalLog } from './session/canonical.js';
 import { MemoryService } from './memory/service.js';
 import { setMemoryMcpEnabled } from './memory/launcher.js';
-import { setPromptSuggestions } from './runtime/session-runner.js';
+import { setPromptSuggestions, setThinkingLanguageSetting } from './runtime/session-runner.js';
+import { THINKING_LANGUAGE_KEY } from './runtime/thinking-language.js';
 import { LocalEnvStore } from './runtime/local-env.js';
 import { setSessionsDeps, setSessionsMcpEnabled } from './sessions-mcp/tools.js';
 import { setDesktopSkillsEnabled } from './runtime/desktop-skills.js';
@@ -57,8 +58,13 @@ import { LibraryIndex } from './library/index-db.js';
 import { ClaudeSource } from './library/claude-source.js';
 import { CodexSource } from './library/codex-source.js';
 import { OpenCodeSource } from './library/opencode-source.js';
+import { CursorSource } from './library/cursor-source.js';
+import { DshSource } from './library/dsh-source.js';
 import { AcpListSource } from './library/acp-source.js';
 import { GatewayService } from './gateway/service.js';
+import { AuditLog } from './gateway/audit.js';
+import { UpstreamService } from './upstreams/service.js';
+import { MaintenanceScheduler } from './upstreams/tasks.js';
 import { setSplitHook } from './gateway/split.js';
 import { ImportService } from './import/service.js';
 import { AgentConfigService } from './agent-config/service.js';
@@ -316,6 +322,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   const memory = new MemoryService();
   setMemoryMcpEnabled(meta.settings()['memory.mcp'] !== false);
   setPromptSuggestions(meta.settings()['ui.promptSuggestions'] !== false);
+  setThinkingLanguageSetting(meta.settings()[THINKING_LANGUAGE_KEY]);
   setSessionsMcpEnabled(meta.settings()['sessions.mcp'] !== false);
   setDesktopSkillsEnabled(meta.settings()['claude.desktopSkills'] !== false);
   const localEnvStore = new LocalEnvStore(path.join(dataDir(), 'local-env.json'), secrets);
@@ -340,8 +347,30 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   pool.accountLoggedOut = () => config.knownLoggedOut();
   const ledger = new LedgerService((id) => meta.provider(id)?.type);
   pool.on('message', (sessionId: string, m: unknown) => ledger.observe(sessionId, m, meta.sessionMeta(sessionId).providerId));
-  gateway = new GatewayService({ meta, secrets, member: (id) => providers.member(id), ledger });
+  // 账号池: Claude subscription logins, pools, and the targets a pool resolves to
+  const upstreams = new UpstreamService({ meta, secrets });
+  // 任务中心: our scheduler, so the sidecars' own timers stay off
+  const tasks = new MaintenanceScheduler({ meta, upstreams, notify: (line) => console.log(`[tasks] ${line}`) });
+  const gatewayAudit = new AuditLog(path.join(dataDir(), 'logs'), () => meta.gatewayAudit());
+  gateway = new GatewayService({
+    meta,
+    secrets,
+    ledger,
+    audit: gatewayAudit,
+    upstreams,
+    member: (id) => providers.member(id),
+    // account / pool members go through the upstream service; provider members through the profile
+    resolveMember: async (m, model, sessionKey) => {
+      const own = await upstreams.resolveMembers(m, model, sessionKey);
+      if (own.length || m.accountId || m.upstreamGroupId) return own;
+      const p = m.providerId ? providers.member(m.providerId) : null;
+      return p ? [p] : [];
+    },
+  });
   await gateway.init();
+  // every group is a provider profile too: the model menu lists a group's models without a manual profile
+  await gateway.syncProfiles().catch(() => {});
+  upstreams.onGatewayGroups = () => { void gateway.syncProfiles().catch(() => {}); };
   providers.gatewayEndpoint = (groupId) => gateway.endpoint(groupId);
   providers.shimEndpoint = (providerId) => gateway.shimEndpoint(providerId);
   setSplitHook({ endpoint: (main, sub, model) => gateway.splitEndpoint(main, sub, model), target: (id) => providers.subagentTarget(id) });
@@ -361,6 +390,8 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       new ClaudeSource(sessionsSvc),
       new CodexSource(() => agents.launch('codex')),
       new OpenCodeSource(() => agents.launch('opencode')),
+      new CursorSource(),
+      new DshSource(),
     ],
     new LibraryIndex(),
     transcripts,
@@ -418,8 +449,9 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       add: (name, json) => config.mcpAdd(name, json, 'user'),
     },
   });
-  const services = { importer, customCss, orchestra, background, characters, remote, anywhere, tunnels, im, vcs: new VcsService(gitSvc), goals, android: new AndroidService(), pool, sessions: sessionsSvc, config, usage: new UsageService(async (sid) => providerTimeline(await canonical.providerSwitches(sid), meta.sessionMeta(sid).providerId, (id) => { const p = meta.provider(id); return p ? { type: p.type, name: p.name } : undefined; })), files, terminal, meta, limits: new LimitsService(), schedules: new ScheduleService(meta, pool), providers, git: gitSvc, search: new SearchService(), skills: new SkillsService(), mcp: new McpService(), diag: new DiagService(version), ledger, agents, transcripts, canonical, memory, library, version, federation, agentConfig: new AgentConfigService({ agents, backupDir: path.join(dataDir(), 'config-backups') }), gateway, web, computer, localEnv: localEnvStore, previews };
+  const services = { importer, customCss, orchestra, background, characters, remote, anywhere, tunnels, im, vcs: new VcsService(gitSvc), goals, android: new AndroidService(), pool, sessions: sessionsSvc, config, usage: new UsageService(async (sid) => providerTimeline(await canonical.providerSwitches(sid), meta.sessionMeta(sid).providerId, (id) => { const p = meta.provider(id); return p ? { type: p.type, name: p.name } : undefined; })), files, terminal, meta, limits: new LimitsService(), schedules: new ScheduleService(meta, pool), providers, git: gitSvc, search: new SearchService(), skills: new SkillsService(), mcp: new McpService(), diag: new DiagService(version), ledger, agents, transcripts, canonical, memory, library, version, federation, agentConfig: new AgentConfigService({ agents, backupDir: path.join(dataDir(), 'config-backups') }), gateway, upstreams, tasks, web, computer, localEnv: localEnvStore, previews };
   new Hub(wss, services);
+  tasks.start();
   // model lists older than a day (or never pulled) are refreshed in the background — list only, no tokens
   void providers.autoRefreshModels();
 
@@ -489,6 +521,9 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       await federation.close();
       await tunnels.closeAll();
       await anywhere.stop(); // the phones' links and the broker connections, before the listener they bridge to
+      await tasks.stop(); // before the sidecars it drives
+      await gateway.stop(); // the LAN listener, the audit buffer and the key counters
+      await upstreams.stop();
       await remote.stop();
       await orchestra.shutdown(); // before the pool: session closes must not fail / advance runs
       await pool.closeAll();

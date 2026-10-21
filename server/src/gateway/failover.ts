@@ -1,6 +1,6 @@
 // Failover policy for gateway groups: which member to try next, what an upstream failure means, and how
 // long a member cools down. Pure functions + a small state table so it can be unit-tested without HTTP.
-import type { GatewayGroup, GatewayMember } from './types.js';
+import { memberKey, type GatewayGroup, type GatewayMember } from './types.js';
 
 export const BACKOFF_BASE_MS = 60_000;
 export const BACKOFF_MAX_MS = 30 * 60_000;
@@ -82,26 +82,29 @@ export function classify(status: number, headers: Headers, bodyText: string, str
   return { action: 'final' };
 }
 
-/** Mutable per-member runtime state, keyed by group + provider. */
+/** Mutable per-member runtime state, keyed by group + member key (`p:` provider, `a:` account, `u:` pool). */
 export class MemberStates {
   private map = new Map<string, MemberRuntime>();
   private rr = new Map<string, Map<string, number>>(); // smooth weighted round-robin current weights
-  get(groupId: string, providerId: string): MemberRuntime {
-    const k = `${groupId}\u0000${providerId}`;
+  /** a bare id is a provider id (old callers); `a:` / `u:` keys are already qualified */
+  private norm(id: string) { return id.includes(':') ? id : `p:${id}`; }
+  get(groupId: string, id: string): MemberRuntime {
+    const k = `${groupId}\u0000${this.norm(id)}`;
     let s = this.map.get(k);
     if (!s) { s = { strikes: 0, cooldownUntil: 0, disabled: false }; this.map.set(k, s); }
     return s;
   }
-  peek(groupId: string, providerId: string): MemberRuntime | undefined {
-    return this.map.get(`${groupId}\u0000${providerId}`);
+  peek(groupId: string, id: string): MemberRuntime | undefined {
+    return this.map.get(`${groupId}\u0000${this.norm(id)}`);
   }
-  reset(groupId: string, providerId?: string) {
-    for (const k of [...this.map.keys()]) if (k.startsWith(`${groupId}\u0000`) && (!providerId || k === `${groupId}\u0000${providerId}`)) this.map.delete(k);
-    if (!providerId) this.rr.delete(groupId);
+  reset(groupId: string, id?: string) {
+    const key = id ? this.norm(id) : undefined;
+    for (const k of [...this.map.keys()]) if (k.startsWith(`${groupId}\u0000`) && (!key || k === `${groupId}\u0000${key}`)) this.map.delete(k);
+    if (!id) this.rr.delete(groupId);
   }
 
   available(groupId: string, m: GatewayMember, now = Date.now()) {
-    const s = this.peek(groupId, m.providerId);
+    const s = this.peek(groupId, memberKey(m));
     return !s || (!s.disabled && s.cooldownUntil <= now);
   }
 
@@ -120,11 +123,12 @@ export class MemberStates {
     for (const m of avail) {
       const w = Math.max(1, Math.floor(m.weight ?? 1));
       total += w;
-      const v = (cw.get(m.providerId) ?? 0) + w;
-      cw.set(m.providerId, v);
-      if (!best || v > (cw.get(best.providerId) ?? 0)) best = m;
+      const key = memberKey(m);
+      const v = (cw.get(key) ?? 0) + w;
+      cw.set(key, v);
+      if (!best || v > (cw.get(memberKey(best)) ?? 0)) best = m;
     }
-    cw.set(best!.providerId, (cw.get(best!.providerId) ?? 0) - total);
+    cw.set(memberKey(best!), (cw.get(memberKey(best!)) ?? 0) - total);
     return [best!, ...avail.filter((m) => m !== best)];
   }
 
@@ -169,7 +173,7 @@ export class MemberStates {
   nextAvailable(g: GatewayGroup): { at: number; rate: boolean } | null {
     let best: { at: number; rate: boolean } | null = null;
     for (const m of g.members) {
-      const s = this.peek(g.id, m.providerId);
+      const s = this.peek(g.id, memberKey(m));
       if (!s || s.disabled) continue;
       if (!best || s.cooldownUntil < best.at) best = { at: s.cooldownUntil, rate: s.cooldownKind === 'rate' };
     }

@@ -153,18 +153,38 @@ export function repairLeaf(file: string | null, sessionId: string, opts: { ignor
   }
 }
 
-/** A text block with nothing to read: the API refuses one (and one with cache_control on it) in any message. */
-const emptyText = (b: any) => b?.type === 'text' && typeof b.text === 'string' && !b.text.trim();
+/**
+ * A block the Anthropic API refuses anywhere in the history: a text block with nothing to read (and one with
+ * cache_control on it), and a thinking block that is only whitespace with no signature — what another vendor's model
+ * (deepseek-v4.1-flash, 2026-10-19) wrote now and then. Claude's own blank thinking (display omitted) is signed: kept.
+ */
+const emptyBlock = (b: any) =>
+  (b?.type === 'text' && typeof b.text === 'string' && !b.text.trim())
+  || (b?.type === 'thinking' && !String(b.thinking ?? '').trim() && !b.signature);
 
 /**
- * Takes empty text blocks out of a transcript's messages (2026-10-17: a message that was only a picture went out as
- * [image, text ""] — every later turn of that conversation was refused with 400 「cache_control cannot be set for empty
- * text blocks」 / 「text content blocks must be non-empty」, for good: the engine sends its history again each time).
- * A message left with nothing gets a placeholder. Only after that 400 (it reads the whole file) and while no process of
- * ours has the file (before the resume); rewritten through a temporary one, not at all when there is nothing to fix or
- * when the file changed while it was read (another program writing to it). Returns how many messages changed.
+ * Thinking another vendor's model wrote: no signature. Claude's own thinking is always signed, and the Anthropic API
+ * refuses any other in the history — 「Invalid `signature` in `thinking` block」 (DeepSeek's are `signature: ""`).
  */
-export function dropEmptyText(file: string | null): number {
+const unsignedThinking = (b: any) => b?.type === 'thinking' && !b.signature;
+
+/** a `"text"` / `"thinking"` field of only whitespace, as JSON writes it (a newline is `\n` in the file) */
+const BLANK_FIELD = /"(?:text|thinking)":"(?:\s|\\[nrt])*"/;
+const THINKING = /"type":"thinking"/;
+
+/**
+ * Takes empty blocks out of a transcript's messages, for good: the engine sends its history again each time, so one
+ * of them made every later turn a 400. 2026-10-17: a message that was only a picture went out as [image, text ""] —
+ * 「cache_control cannot be set for empty text blocks」 / 「text content blocks must be non-empty」. 2026-10-19: a
+ * conversation on DeepSeek switched to Claude — 「each thinking block must contain non-whitespace thinking」.
+ * A message left with nothing gets a placeholder. Only after that 400 or a model switch (it reads the whole file) and
+ * while no process of ours has the file (before the resume); rewritten through a temporary one, not at all when there
+ * is nothing to fix or when the file changed while it was read (another program writing to it). Returns how many
+ * messages changed.
+ * `unsigned`: the history goes to a Claude model — unsigned thinking goes too (the reasoning another vendor's model
+ * showed is no longer in the history; Claude never saw it anyway).
+ */
+export function dropEmptyBlocks(file: string | null, opts: { unsigned?: boolean } = {}): number {
   if (!file) return 0;
   let text: string;
   let before: { size: number; mtimeMs: number };
@@ -173,15 +193,17 @@ export function dropEmptyText(file: string | null): number {
     if (before.size > 512 * 1024 * 1024) return 0;
     text = readFileSync(file, 'utf8');
   } catch { return 0; }
-  if (!/"text":"\s*"/.test(text)) return 0;
+  const maybe = (s: string) => BLANK_FIELD.test(s) || (!!opts.unsigned && THINKING.test(s));
+  const drop = (b: any) => emptyBlock(b) || (!!opts.unsigned && unsignedThinking(b));
+  if (!maybe(text)) return 0;
   let changed = 0;
   const lines = text.split('\n').map((line) => {
-    if (!/"text":"\s*"/.test(line)) return line;
+    if (!maybe(line)) return line;
     let e: any;
     try { e = JSON.parse(line); } catch { return line; }
     const c = e?.message?.content;
-    if ((e?.type !== 'user' && e?.type !== 'assistant') || !Array.isArray(c) || !c.some(emptyText)) return line;
-    const kept = c.filter((b: any) => !emptyText(b));
+    if ((e?.type !== 'user' && e?.type !== 'assistant') || !Array.isArray(c) || !c.some(drop)) return line;
+    const kept = c.filter((b: any) => !drop(b));
     e.message.content = kept.length ? kept : [{ type: 'text', text: '…' }];
     changed++;
     return JSON.stringify(e);

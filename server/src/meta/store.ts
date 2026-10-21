@@ -2,14 +2,15 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { EventEmitter } from 'node:events';
-import type { GatewayGroup, Goal, ImBinding, ImGatewayConfig, MessageFeedback, PermissionMode, Provider, RemoteHost, Schedule, ScheduleRun, Workflow } from '../protocol.js';
+import type { GatewayAuditConfig, GatewayGroup, GatewayKey, GatewayKeyGroup, GatewayLanConfig, Goal, ImBinding, ImGatewayConfig, MessageFeedback, PermissionMode, Provider, RemoteHost, Schedule, ScheduleRun, Workflow } from '../protocol.js';
+import type { MaintenanceRun, MaintenanceTask, UpstreamAccount, UpstreamGroup } from '../upstreams/types.js';
 import type { DeviceRecord } from '../remote/service.js';
 import type { PeerRecord } from '../federation/types.js';
 import { randomBytes } from 'node:crypto';
 export type { Schedule } from '../protocol.js';
 
 export interface Workspace { id: string; path: string; name: string; addedAt: number; order: number }
-export interface SessionMeta { /** replies pinned under them (protocol.ts) */ pinnedMsgs?: { id: string; text: string }[]; /** a rename made while the conversation's process ran: shown over the transcript's title, written into it again when the process ends */ pendingTitle?: string; /** 只聊天: a resume stays without tools (protocol.ts has the same field) */ chatOnly?: boolean; /** 保持电脑唤醒 while this conversation is busy (phase 6) */ keepAwake?: boolean; pinned?: boolean; archived?: boolean; workspaceId?: string; tags?: string[]; providerId?: string; /** sidebar grouping directory when it differs from the cwd (orchestration worktrees) */ groupCwd?: string; /** prompt-cache route key when it is not the session's own id (forks keep their root's) */ cacheKey?: string; /** the model its subagents run on, picked for this provider ('' = the main model) */ subagent?: { providerId: string; model: string }; /** the permission mode it last ran with: a resume without a pick comes back in it (the SDK never says it) */ permissionMode?: PermissionMode }
+export interface SessionMeta { /** replies pinned under them (protocol.ts) */ pinnedMsgs?: { id: string; text: string }[]; /** a rename made while the conversation's process ran: shown over the transcript's title, written into it again when the process ends */ pendingTitle?: string; /** 只聊天: a resume stays without tools (protocol.ts has the same field) */ chatOnly?: boolean; /** 保持电脑唤醒 while this conversation is busy (phase 6) */ keepAwake?: boolean; pinned?: boolean; archived?: boolean; workspaceId?: string; tags?: string[]; providerId?: string; /** sidebar grouping directory when it differs from the cwd (orchestration worktrees) */ groupCwd?: string; /** prompt-cache route key when it is not the session's own id (forks keep their root's) */ cacheKey?: string; /** the model its subagents run on, picked for this provider ('' = the main model) */ subagent?: { providerId: string; model: string }; /** the permission mode it last ran with: a resume without a pick comes back in it (the SDK never says it) */ permissionMode?: PermissionMode; /** 思考用的语言 of this conversation (protocol.ts has the same field) */ thinkingLanguage?: string }
 
 interface Data {
   version: 1;
@@ -27,7 +28,15 @@ interface Data {
   imBindings: ImBinding[];
   goals: Goal[];
   gatewayGroups?: GatewayGroup[]; // model gateway failover groups
-  gateway?: { enabled?: boolean; key?: string }; // key: enc:… (SecretService)
+  gateway?: { enabled?: boolean; key?: string; localPort?: number }; // key: enc:… (SecretService)
+  upstreamAccounts?: UpstreamAccount[]; // 账号池 (embedded gateway phase A)
+  upstreamGroups?: UpstreamGroup[];
+  gatewayKeyGroups?: GatewayKeyGroup[];
+  gatewayKeys?: GatewayKey[];
+  gatewayLan?: GatewayLanConfig;
+  gatewayAudit?: GatewayAuditConfig;
+  maintenanceTasks?: MaintenanceTask[];
+  maintenanceRuns?: MaintenanceRun[];
 
   peers?: PeerRecord[]; // other machines this one federates with (tokens enc:)
   serverId?: string; // this server's stable id (federation loop guard)
@@ -257,6 +266,23 @@ export class MetaStore extends EventEmitter {
   }
   // ---- model gateway ----
   gatewayGroups(): GatewayGroup[] { return this.data.gatewayGroups ??= []; }
-  gatewayConfig(): { enabled?: boolean; key?: string } { return this.data.gateway ??= {}; }
+  gatewayConfig(): { enabled?: boolean; key?: string; localPort?: number; dismissedProfiles?: string[] } { return this.data.gateway ??= {}; }
   async saveGateway() { await this.queueSave(true); }
+
+  // ---- 账号池 / 密钥 / 局域网 / 审计 (embedded gateway phase A) ----
+  upstreamAccounts(): UpstreamAccount[] { return this.data.upstreamAccounts ??= []; }
+  upstreamGroups(): UpstreamGroup[] { return this.data.upstreamGroups ??= []; }
+  gatewayKeyGroups(): GatewayKeyGroup[] { return this.data.gatewayKeyGroups ??= []; }
+  gatewayKeys(): GatewayKey[] { return this.data.gatewayKeys ??= []; }
+  gatewayLan(): GatewayLanConfig {
+    return this.data.gatewayLan ??= { enabled: false, bind: '127.0.0.1', port: 0, ipAllowlist: [], corsOrigins: [], maxBodyBytes: 8 * 1024 * 1024 };
+  }
+  gatewayAudit(): GatewayAuditConfig {
+    return this.data.gatewayAudit ??= { enabled: true, maxBytes: 10 * 1024 * 1024, keepFiles: 5 };
+  }
+  maintenanceTasks(): MaintenanceTask[] { return this.data.maintenanceTasks ??= []; }
+  maintenanceRuns(): MaintenanceRun[] { return this.data.maintenanceRuns ??= []; }
+  async saveTasks() { await this.queueSave(true); }
+  async saveUpstreams() { await this.queueSave(true); }
+  async saveGatewayKeys() { await this.queueSave(true); }
 }

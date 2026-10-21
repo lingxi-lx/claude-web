@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GatewayGroup, Provider } from '@shared';
-import { agentModels, buildModelMenu, chipLabel, compatibleTypes, filterMenu, gatewayModels, modelKey, modelTable, pushRecent, recentKey, usableProfile, type AgentSource } from './menu';
+import { agentModels, buildModelMenu, chipLabel, compatibleTypes, filterMenu, gatewayModelHint, gatewayModels, modelKey, modelTable, pushRecent, recentKey, usableProfile, type AgentSource } from './menu';
 
 const prov = (id: string, o: Partial<Provider> = {}): Provider => ({ id, name: id, type: 'anthropic', baseUrl: 'https://x', apiKey: '…', createdAt: 0, ...o });
 const PROVIDERS: Provider[] = [
@@ -81,6 +81,36 @@ describe('gateway models', () => {
   });
   it('a gateway profile whose group is gone offers only its default', () => {
     expect(gatewayModels(prov('gw2', { type: 'gateway', gatewayGroupId: 'nope' }), GROUPS, PROVIDERS)).toEqual([]);
+  });
+  it('a sidecar pool member brings its family models (gateway.status().poolModels)', () => {
+    const groups: GatewayGroup[] = [{ id: 'gp', name: 'pool', strategy: 'failover', members: [{ upstreamGroupId: 'u1' }] }];
+    const gw = prov('gwp', { type: 'gateway', gatewayGroupId: 'gp' });
+    const poolModels = { 'u:u1': ['gemini-3.6-flash', 'gemini-3.1-pro'] };
+    expect(gatewayModels(gw, groups, PROVIDERS, poolModels)).toEqual(['gemini-3.1-pro', 'gemini-3.6-flash']);
+    const m = menu({ providers: [gw], gatewayGroups: groups, gatewayPoolModels: poolModels });
+    expect(m.items.filter((i) => i.providerId === 'gwp').map((i) => i.model)).toEqual(['gemini-3.1-pro', 'gemini-3.6-flash']);
+  });
+  it('a gateway model carries a one-line hint (speed / purpose), and only for gateway profiles', () => {
+    const groups: GatewayGroup[] = [{ id: 'gp', name: 'pool', strategy: 'failover', members: [{ upstreamGroupId: 'u1' }] }];
+    const gw = prov('gwp', { type: 'gateway', gatewayGroupId: 'gp' });
+    const poolModels = { 'u:u1': ['gemini-3.6-flash', 'gemini-4-argon-thinking', 'gemini-3.5-flash-lite'] };
+    const m = menu({ providers: [gw], gatewayGroups: groups, gatewayPoolModels: poolModels });
+    const hint = (model: string) => m.items.find((i) => i.providerId === 'gwp' && i.model === model)?.hint;
+    expect(hint('gemini-3.6-flash')).toBe('快 · 写代码推荐');
+    expect(hint('gemini-4-argon-thinking')).toBe('思考 20–40 秒');
+    expect(hint('gemini-3.5-flash-lite')).toBe('最快');
+    expect(gatewayModelHint('gemini-image')).toBe('图像生成');
+    expect(gatewayModelHint('some-unknown-model')).toBeUndefined();
+    // a normal profile's hint stays the raw id (the modelNames mapping) — not the gateway wording
+    const ds = prov('ds', { type: 'openai', models: ['deepseek-flash'], modelNames: { 'deepseek-flash': 'DeepSeek-V4.1-Flash' } });
+    expect(menu({ providers: [ds] }).items.find((i) => i.providerId === 'ds')?.hint).toBe('deepseek-flash');
+  });
+
+  it('a single sidecar account member brings them too (a:`<id>` key)', () => {
+    const groups: GatewayGroup[] = [{ id: 'ga', name: 'acct', strategy: 'failover', members: [{ accountId: 'acct_1' }] }];
+    const gw = prov('gwa', { type: 'gateway', gatewayGroupId: 'ga' });
+    const poolModels = { 'a:acct_1': ['gemini-3.6-flash'] };
+    expect(gatewayModels(gw, groups, PROVIDERS, poolModels)).toEqual(['gemini-3.6-flash']);
   });
 });
 

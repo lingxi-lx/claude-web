@@ -122,6 +122,17 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
 .menu button > svg { color: var(--ink-4); flex: none; }
 .menu button:hover > svg { color: var(--ink-2); }
 .menu button.danger { color: var(--err); }
+/* a row whose control is a select (思考语言 in a conversation's ···) */
+.menu .menu-select { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 5px 10px; border-radius: var(--r-row); font-size: var(--fs-base); color: var(--ink-1); }
+.menu .menu-select > svg { color: var(--ink-4); flex: none; }
+.menu .menu-select > select { width: auto; max-width: 150px; min-height: 28px; padding: 2px 6px; }
+/* the same row as a button opening its choices in place (a menu inside an anchored menu would close it) */
+.menu button.menu-select { width: 100%; border: 0; background: none; text-align: left; cursor: pointer; font: inherit; }
+.menu button.menu-select:hover, .menu button.menu-select.on { background: var(--layer-hover); }
+.menu .menu-value { color: var(--ink-3); font-size: var(--fs-sm); max-width: 44%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu .menu-grid.thinking-langs { grid-template-columns: 1fr 1fr; }
+.menu .menu-grid.thinking-langs button { justify-content: space-between; }
+.flip-v { transform: rotate(180deg); }
 
 .seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--r-pill); background: var(--layer-selected); }
 .seg button { padding: 3px 12px; border-radius: var(--r-pill); font-size: var(--fs-sm); color: var(--ink-3); transition: color var(--dur-fast) var(--ease-out); }
@@ -278,6 +289,10 @@ details.structured summary { cursor: pointer; color: var(--ink-3); }
 .todos .td-arc { border: 1.5px solid color-mix(in oklab, var(--accent) 25%, transparent); border-top-color: var(--accent); animation: td-turn 0.9s linear infinite; }
 @keyframes td-turn { to { transform: rotate(360deg); } }
 :root[data-reduce-motion='1'] .todos .td-arc { animation: none; }
+/* a question / permission waits for the user: the step in progress holds still, in the waiting colour */
+.plan-dock[data-waiting] .todos .td-arc { animation: none; border-color: color-mix(in oklab, var(--warn) 30%, transparent); border-top-color: var(--warn); }
+/* nothing runs any more (stopped, or the last step never ticked): it holds still */
+.plan-dock[data-idle]:not([data-waiting]) .todos .td-arc { animation: none; }
 /* in the conversation the plan is a card of its own: hairline box, rows split by hairlines */
 .tool .todos, .tl .todos, .plan-dock .todos { border: var(--hairline) solid var(--edge-subtle); border-radius: var(--r-md); padding: 2px 10px; }
 .tool .todos li, .tl .todos li, .plan-dock .todos li { padding: 6px 0; }
@@ -1501,7 +1516,7 @@ html[data-density='compact'] .sb-row.sess { height: 28px; padding: 0 10px 0 var(
 .sb-hint .line { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .sb-hint .line > svg { flex: none; }
 /* several agents' names wrap onto a second line instead of being cut off (the full text is also the tooltip) */
-.sb-hint .msg { flex: 1; min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; line-height: 1.45; color: var(--ink-2); }
+.sb-hint .msg { flex: 1; min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow-wrap: anywhere; line-height: 1.45; color: var(--ink-2); } /* 3: 「把 DeepSeek Harness 等工具里的对话也列在这里？」 wrapped past two lines in the sidebar */
 .sb-hint .link { flex: none; white-space: nowrap; color: var(--ink-1); font-weight: 600; font-size: 13px; }
 .sb-hint .picks { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 2px; }
 
@@ -1806,6 +1821,33 @@ svg.flip { transform: scaleX(-1); }
 /* popovers portalled to <body> can overlap a 52px title row (a short window): a drag region under them would
    swallow their clicks, so they are explicitly not draggable */
 html.desktop body > .menu, html.desktop .menu.cm, html.desktop .menu.dirmenu, html.desktop .menu.mm, html.desktop .ctx-card { -webkit-app-region: no-drag; }
+
+/* Shared Select: native select behavior presented with the same anchored menu surface as 更多. */
+.select-trigger { min-width: 120px; max-width: 100%; min-height: 32px; display: inline-flex; align-items: center; gap: 8px; justify-content: space-between; padding: 5px 9px; border: 1px solid transparent; border-radius: var(--r-row); background: var(--fill-subtle); color: var(--ink-1); font: inherit; text-align: left; cursor: pointer; }
+.select-trigger:hover { background: color-mix(in oklab, var(--fg) 6%, transparent); }
+.select-trigger:focus-visible { outline: 1.5px solid var(--focus-ring); outline-offset: 0; }
+.select-trigger:disabled { opacity: .45; cursor: default; }
+.select-trigger-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select-placeholder { color: var(--ink-3); }
+.menu.cm.select-popover { min-width: 220px; max-width: min(420px, calc(100vw - 16px)); padding: 6px; }
+.select-search { width: 100%; box-sizing: border-box; margin-bottom: 4px; }
+.select-options { max-height: min(360px, 60vh); overflow-y: auto; overscroll-behavior: contain; }
+.select-option { width: 100%; min-height: 38px; display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 0; border-radius: var(--r-row); background: transparent; color: var(--ink-2); font: inherit; text-align: left; cursor: pointer; }
+.select-option:hover, .select-option:focus-visible, .select-option.selected { background: var(--layer-hover); color: var(--ink-1); }
+.select-option:focus-visible { outline: 1.5px solid var(--focus-ring); outline-offset: -2px; }
+.select-option:disabled { opacity: .45; cursor: default; }
+.select-option-mark { width: 16px; min-width: 16px; display: inline-flex; align-items: center; justify-content: center; color: var(--accent-text); }
+.select-option-text { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.select-option-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select-option-description { color: var(--ink-3); font-size: var(--fs-meta); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select-empty { padding: 10px 8px; color: var(--ink-3); font-size: var(--fs-sm); }
+.select-footer { display: flex; justify-content: flex-end; padding: 6px 2px 0; border-top: var(--hairline) solid var(--edge-subtle); }
+/* where a native select used to keep its own width */
+.modal.settings .sp-row .ctl .select-trigger { min-width: 0; width: auto; max-width: 260px; }
+.zoomer .select-trigger { min-width: 72px; justify-content: center; font-variant-numeric: tabular-nums; }
+.browser-bar .select-trigger { flex: 1; min-width: 0; }
+.memory-head .select-trigger, .ledger-bar .select-trigger { min-width: 0; }
+
 
 /* ---- redesign phase 6: settings ---- */
 /* Full-window settings (spec §5.7, mock-settings.png): grouped navigation + search on the left, the page in a 660px

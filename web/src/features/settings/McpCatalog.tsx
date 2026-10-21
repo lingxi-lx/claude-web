@@ -8,6 +8,7 @@ import { imeComposing } from '@/ui/ime';
 import { mcpChanged, useMcpChanged } from '@/features/panels/ConfigPanel';
 import { MCP_CATALOG } from './mcp-catalog';
 import { tr } from '@/i18n';
+import { Select } from '@/ui/Select';
 
 export { MCP_CATALOG, type CatalogItem } from './mcp-catalog';
 
@@ -58,11 +59,7 @@ export function McpCatalog() {
       <div className="section">
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
           <input className="field" style={{ flex: 1 }} placeholder={tr('筛选目录，或搜索官方注册表…')} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !imeComposing(e.nativeEvent) && searchRegistry()} />
-          <select className="field" value={scope} onChange={(e) => setScope(e.target.value as any)} title={tr('安装到哪个范围')}>
-            <option value="user">{tr('用户级')}</option>
-            <option value="project" disabled={!cwd}>{tr('项目 .mcp.json')}</option>
-            <option value="local" disabled={!cwd}>{tr('本项目（仅本机）')}</option>
-          </select>
+          <Select className="field" value={scope} onValueChange={(value) => setScope(String(value) as typeof scope)} title={tr('安装到哪个范围')} aria-label={tr('安装到哪个范围')} options={[{ value: 'user', label: tr('用户级') }, { value: 'project', label: tr('项目 .mcp.json'), disabled: !cwd }, { value: 'local', label: tr('本项目（仅本机）'), disabled: !cwd }]} />
           <button className="btn sm" disabled={regBusy} onClick={searchRegistry}>{regBusy ? tr('搜索中…') : tr('搜注册表')}</button>
           <button className="btn sm ghost" disabled={hBusy} onClick={checkHealth}>{hBusy ? tr('检查中…') : tr('健康检查')}</button>
         </div>

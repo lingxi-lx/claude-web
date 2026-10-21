@@ -25,6 +25,9 @@ export function knownContextWindow(model: string): number | undefined {
   if (/qwen3?-coder/.test(m)) return 256_000;
   if (/grok-(4|code)/.test(m)) return 256_000;
   if (/glm-4\.[5-9]|glm-[5-9]/.test(m)) return 200_000;
+  // V4 (and the bare -flash / -pro names api.deepseek.com serves it under): 1M, what DeepSeek's own model list says —
+  // on 128K a relay's deepseek-v4.1-flash compacted every two minutes and lost its cache (2026-10-19)
+  if (/deepseek-(?:v(?:[4-9]|\d{2})|flash(?![a-z])|pro(?![a-z]))/.test(m)) return 1_048_576;
   if (/deepseek/.test(m)) return 128_000;
   return undefined;
 }

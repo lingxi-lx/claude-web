@@ -6,6 +6,7 @@ import { clsx, fmtMs, fmtTok, shortModel } from '@/util';
 import type { LedgerEntry } from '@shared';
 import { hitRate, hitRates, pickRows, profileName } from './ledger-stats';
 import { tr, dateLocale } from '@/i18n';
+import { Select } from '@/ui/Select';
 
 /** Traffic ledger: per-call latency / cache / cost table with a bar chart per hour or day, CSV export. */
 export function LedgerView({ sessionId }: { sessionId?: string }) {
@@ -44,7 +45,7 @@ export function LedgerView({ sessionId }: { sessionId?: string }) {
   return (
     <div className="ledger">
       <div className="ledger-bar">
-        <select className="field" value={days} onChange={(e) => setDays(Number(e.target.value))}>{[1, 2, 7, 30, 90].map((d) => <option key={d} value={d}>{tr('{d} 天', { d })}</option>)}</select>
+        <Select className="field" value={String(days)} onValueChange={(value) => setDays(Number(value))} aria-label={tr('统计天数')} options={[1, 2, 7, 30, 90].map((d) => ({ value: String(d), label: tr('{d} 天', { d }) }))} />
         <span className="seg mini">{(['calls', 'cost', 'latency', 'tokens'] as const).map((m) => <button key={m} className={metric === m ? 'active' : ''} onClick={() => setMetric(m)}>{{ calls: tr('调用'), cost: tr('费用'), latency: tr('延迟'), tokens: 'token' }[m]}</button>)}</span>
         <span className="seg mini" title={tr('来源')}>{(['all', 'session', 'gateway'] as const).map((k) => <button key={k} className={source === k ? 'active' : ''} title={k === 'all' ? tr('经网关 / 缓存垫片的对话同时有对话行（每轮）和网关行（每次调用）；这里只算对话行，其它客户端的网关行照算') : k === 'gateway' ? tr('每次经模型网关 / 缓存垫片的调用一行') : undefined} onClick={() => setSource(k)}>{{ all: tr('全部'), session: tr('对话'), gateway: tr('网关') }[k]}</button>)}</span>
         <label className="muted" style={{ fontSize: 13, display: 'flex', gap: 4, alignItems: 'center' }}><input type="checkbox" checked={onlyErr} onChange={(e) => setOnlyErr(e.target.checked)} /> {tr('只看失败')}</label>

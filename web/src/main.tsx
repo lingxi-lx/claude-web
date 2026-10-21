@@ -1,10 +1,3 @@
-import React from 'react';
-import { createRoot } from 'react-dom/client';
-import { App } from './app/App';
-import { ErrorBoundary } from './ui/ErrorBoundary';
-import { useStore } from './store';
-import { COMPOSER_REACH, PLACE_CONTAINER, PLACE_OPENER } from './features/composer/reach';
-import { tunnelHost } from './ws/tunnel';
 import '@fontsource-variable/inter/opsz.css';
 import '@fontsource-variable/inter/opsz-italic.css';
 import '@fontsource-variable/jetbrains-mono/wght.css';
@@ -24,21 +17,24 @@ import './styles/background.css';
 import './styles/background-page.css';
 import './styles/cafe.css';
 import './styles/corners.css';
-import { tr } from '@/i18n';
+import './styles/gateway.css';
+import { loadEnglish } from '@/i18n';
 
-document.documentElement.dataset.theme = useStore.getState().theme;
+// The page's first paint: theme, the desktop flag, the styles above. Nothing reached from this file calls `tr()` —
+// the store (and with it every table whose labels are built at module level, ui/terms.ts among them) waits for
+// boot.tsx, after the English catalogs are in. The theme is read the way the store reads it (ui-settings.ts
+// `resolveTheme`: the cached choice, else the system's), so the first paint does not flash the wrong one.
+try {
+  const cached = localStorage.getItem('cw.theme');
+  const dark = typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches;
+  document.documentElement.dataset.theme = cached || (dark ? 'dark' : 'light');
+} catch { /* storage blocked: the store sets it again once the settings arrive */ }
 if ((window as any).desktop) document.documentElement.classList.add('desktop');
-useStore.getState().init();
-(window as any).__store = useStore; // debugging aid
-// where every control of the old composer went (the table reach.test.ts checks): ui-smoke opens each place
-(window as any).__cwComposerReach = { reach: COMPOSER_REACH, container: PLACE_CONTAINER, opener: PLACE_OPENER };
-// installable on phones (LAN access); the desktop shell and dev server skip it, and so does the app inside the
-// phone shell's iframe: the shell's own Service Worker serves app/ there, an app/sw.js would compete with it
-if ('serviceWorker' in navigator && !(window as any).desktop && !tunnelHost() && location.protocol !== 'file:' && !/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) navigator.serviceWorker.register('sw.js').catch(() => {});
-createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <ErrorBoundary area={tr('应用')} full>
-      <App />
-    </ErrorBoundary>
-  </React.StrictMode>,
-);
+
+// The English catalogs are ~420 KB of source; a Chinese page (the default on a Chinese machine) never needs them,
+// so they are their own chunk, loaded before any module that calls `tr()` at the top level gets to run (boot.tsx).
+// A failed load leaves the interface Chinese rather than blank.
+void loadEnglish()
+  .catch(() => { /* English texts missing: the Chinese source text is shown */ })
+  .then(() => import('./boot'))
+  .then((m) => m.boot());

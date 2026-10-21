@@ -54,6 +54,7 @@ import { BAR_ID } from './ids';
 import { FEATURE_DEFAULTS_KEY, LEGACY_FEATURES_KEY, afterStart, capabilityTags, migrateFeatureDefaults, usable, withoutTag } from './capabilities';
 import { FILL_EVENT, MENTION_EVENT, type FillDetail, type MentionDetail } from './fill';
 import { mentionText } from './at-mention';
+import { QUOTE_EVENT, withQuote, type QuoteDetail } from './quote';
 import { applyStarter, initialCwd } from '@/features/home/model';
 import { usePageOpen } from '@/features/sections';
 import { composerCovered } from './covered';
@@ -467,6 +468,23 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     const s = seenRef.current;
     if (s?.carried && !v.trim()) setSeen({ carried: false });
   };
+  // 右键 → 引用到输入框 (quote.ts): the same composer as for REFERENCE_EVENT above takes the selection as `> …`
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  useEffect(() => {
+    const on = (ev: Event) => {
+      const d = (ev as CustomEvent<QuoteDetail>).detail;
+      if (d.handled || !pane || disabled) return;
+      const g = activeGroup(useStore.getState().layout);
+      const p = g.panes[pane.paneId];
+      if (g.focusedPaneId !== pane.paneId || !p || (p.activeTileId ?? p.tiles[0]?.id) !== pane.tileId) return;
+      d.handled = true;
+      onChangeRef.current(withQuote(textRef.current, d.text));
+      requestAnimationFrame(() => { const el = ta.current; if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } });
+    };
+    window.addEventListener(QUOTE_EVENT, on);
+    return () => window.removeEventListener(QUOTE_EVENT, on);
+  }, [pane?.paneId, pane?.tileId, disabled]);
 
   /** Upload dropped files for `sessionId` and return attachment refs. */
   const uploadAll = async (sessionId: string): Promise<AttachmentRef[]> => {

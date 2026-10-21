@@ -38,7 +38,16 @@ export class ServerHost extends EventEmitter {
       const proc = utilityProcess.fork(entry, [], {
         serviceName: 'claude-web-server',
         stdio: 'pipe',
-        env: { ...process.env, CLAUDE_WEB_SYSTEM_LANG: app.getLocale(), CLAUDE_WEB_STANDALONE: '1', PORT: '0', CLAUDE_WEB_TOKEN: this.token, CLAUDE_WEB_DIST: dist },
+        env: {
+          ...process.env,
+          CLAUDE_WEB_SYSTEM_LANG: app.getLocale(),
+          CLAUDE_WEB_STANDALONE: '1',
+          PORT: '0',
+          CLAUDE_WEB_TOKEN: this.token,
+          CLAUDE_WEB_DIST: dist,
+          // the pinned sidecars travel with the installer (electron-builder extraResources)
+          ...(app.isPackaged ? { CLAUDE_WEB_SIDECARS: path.join(process.resourcesPath, 'sidecars') } : {}),
+        },
       });
       this.proc = proc;
       proc.stdout?.on('data', (d) => this.log(String(d).trimEnd()));

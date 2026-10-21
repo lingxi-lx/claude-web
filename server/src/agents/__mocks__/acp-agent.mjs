@@ -25,9 +25,12 @@ rl.on('line', async (line) => {
   const reply = (result) => send({ jsonrpc: '2.0', id: m.id, result });
   switch (m.method) {
     case 'initialize': {
-      const agentCapabilities = process.env.MOCK_ACP_LIST === '1'
-        ? { loadSession: false, sessionCapabilities: { list: {} } }
-        : { loadSession: false };
+      const capabilities = process.env.MOCK_ACP_RESUME === '1'
+        ? { loadSession: false, sessionCapabilities: { list: {}, resume: {} } }
+        : process.env.MOCK_ACP_LIST === '1'
+          ? { loadSession: false, sessionCapabilities: { list: {} } }
+          : { loadSession: false };
+      const agentCapabilities = capabilities;
       // MOCK_ACP_INIT_DELAY_MS (default 0, so every other test is unaffected) lets a test race
       // close() against an in-flight initialize.
       const delay = Number(process.env.MOCK_ACP_INIT_DELAY_MS ?? '0');
@@ -43,6 +46,15 @@ rl.on('line', async (line) => {
           { sessionId: 's2', cwd: '/work/two', title: 'Session Two', updatedAt: 1780000000000 },
         ],
       });
+      break;
+    }
+    case 'session/resume': {
+      // DeepSeek Harness style: restores the stored session and answers with configOptions only
+      sessionCwd = m.params.cwd ?? sessionCwd;
+      lastMcp = m.params.mcpServers ?? [];
+      const sid = m.params.sessionId;
+      reply({ configOptions: [] });
+      update(sid, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: `resumed ${sid}` } });
       break;
     }
     case 'session/new': {

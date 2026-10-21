@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MCP_CATALOG } from '@/features/settings/mcp-catalog';
-import { connectorNeeds, connectorStatus, filterCatalog } from './connectors-model';
+import { addedMessage, connectorNeeds, connectorStatus, downloadsOnFirstStart, filterCatalog } from './connectors-model';
 import { brandColor, connectorLook, luminance } from './brands';
 
 describe('a connected entry says one thing', () => {
@@ -9,6 +9,8 @@ describe('a connected entry says one thing', () => {
     expect(connectorStatus({ name: 'a', status: '⚠ Needs authentication' }).tone).toBe('warn');
     expect(connectorStatus({ name: 'a', status: '✗ Failed to connect' })).toEqual({ tone: 'err', text: '连不上：Failed to connect' });
     expect(connectorStatus({ name: 'a' })).toEqual({ tone: '', text: '已添加' });
+    // an npx / uvx server that failed may only have been slow to start
+    expect(connectorStatus({ name: 'memory', target: 'npx -y @modelcontextprotocol/server-memory', status: '✗ Failed to connect' }).text).toMatch(/^连不上：Failed to connect（用 npx 启动.*检查连接/);
     // "not connected" is not "connected"
     expect(connectorStatus({ name: 'a', status: 'Not connected' }).tone).not.toBe('ok');
   });
@@ -25,6 +27,23 @@ describe('what adding asks for', () => {
     expect(connectorNeeds({ env: ['A_KEY', 'B_ID'] })).toEqual({ label: '要密钥', title: '添加时要填：A_KEY、B_ID' });
     expect(connectorNeeds({})).toBeNull();
     expect(connectorNeeds({ env: [] })).toBeNull();
+  });
+});
+
+describe('entries that download on first start', () => {
+  it('npx / uvx entries do, URLs and plain commands do not', () => {
+    expect(downloadsOnFirstStart({ type: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-memory'] })).toBe(true);
+    expect(downloadsOnFirstStart({ type: 'stdio', command: 'uvx', args: ['mcp-server-fetch'] })).toBe(true);
+    expect(downloadsOnFirstStart({ command: 'C:\\nodejs\\npx.cmd' })).toBe(true);
+    expect(downloadsOnFirstStart({ type: 'stdio', command: 'node', args: ['x.js'] })).toBe(false);
+    expect(downloadsOnFirstStart({ type: 'http', url: 'https://mcp.example/mcp' })).toBe(false);
+    // every runner-launched catalog entry is recognised
+    expect(MCP_CATALOG.filter((c) => downloadsOnFirstStart(c.json)).length).toBeGreaterThan(10);
+  });
+  it('a download that ran out of time is said, not shown as a plain success', () => {
+    expect(addedMessage('memory', { warm: { ok: false, timedOut: true } })).toContain('检查连接');
+    expect(addedMessage('memory', { warm: { ok: true } })).toBe('已添加 memory');
+    expect(addedMessage('github', { oauth: true })).toContain('/mcp');
   });
 });
 

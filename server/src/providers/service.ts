@@ -28,7 +28,11 @@ export function publicProvider(p: Provider): Provider {
  * through the local prompt-cache shim (gateway/shim.ts) — its base (the session key is appended) and the
  * internal key that replaces the real one in the child's env.
  */
-export type SessionProvider = Provider & { shim?: { base: string; key: string } };
+export type SessionProvider = Provider & {
+  shim?: { base: string; key: string };
+  /** the gateway group is all Gemini-web / WorkBuddy: a smaller tool set keeps the prompt under the sidecar's byte wall */
+  leanTools?: boolean;
+};
 
 /**
  * `<shim base>/k/<cache key>[/s/<session id>]/v1` — what ccb's OpenAI-SDK clients use as their base URL. The cache
@@ -386,7 +390,7 @@ export function needsModelRefresh(p: Provider, now = Date.now(), maxAge = MODEL_
 export class ProviderService {
   private revealed = new Map<string, string>(); // stored (possibly encrypted) value -> plaintext
   /** Set by the server once the model gateway is up: group id → local endpoint + gateway key (null = unavailable). */
-  gatewayEndpoint: ((groupId: string) => { baseUrl: string; key: string; runtime?: RuntimeKind } | null) | null = null;
+  gatewayEndpoint: ((groupId: string) => { baseUrl: string; key: string; runtime?: RuntimeKind; leanTools?: boolean } | null) | null = null;
   /** Set by the server: the prompt-cache shim for an openai / grok profile (null = not listening yet). */
   shimEndpoint: ((providerId: string) => { base: string; key: string } | null) | null = null;
   constructor(readonly meta: MetaStore, private secrets?: SecretService) {
@@ -435,7 +439,7 @@ export class ProviderService {
       const ep = this.gatewayEndpoint?.(p.gatewayGroupId ?? '');
       if (!ep) throw new Error(tr('供应商「{name}」走模型网关，但网关没有启用或组不存在（设置 → 模型网关）', { name: p.name }));
       // runtime: the profile's explicit choice, else what the group's relays need (GatewayService.needsOfficialClient)
-      return { ...p, baseUrl: ep.baseUrl, apiKey: ep.key, runtime: p.runtime ?? ep.runtime };
+      return { ...p, baseUrl: ep.baseUrl, apiKey: ep.key, runtime: p.runtime ?? ep.runtime, leanTools: ep.leanTools };
     }
     if (!p.baseUrl && (p.type === 'anthropic' || p.type === 'openai')) throw new Error(tr('供应商「{name}」没有 Base URL', { name: p.name }));
     if (!p.apiKey) throw new Error(tr('供应商「{name}」没有 API Key', { name: p.name }));
@@ -457,7 +461,8 @@ export class ProviderService {
   /** A gateway member: the profile with its plaintext key, or null when missing / undecryptable / itself a gateway. */
   member(id: string): Provider | null {
     const p = this.meta.provider(id);
-    if (!p || p.type === 'gateway' || p.type === 'claude-account') return null;
+    // a Claude account profile is a member too: the gateway sends it as an Anthropic login (Bearer + oauth beta)
+    if (!p || p.type === 'gateway') return null;
     try { return { ...p, apiKey: this.plainKey(p) }; } catch { return null; }
   }
   /**
@@ -574,9 +579,26 @@ export class ProviderService {
     const type = p.type ?? (p.id ? this.meta.provider(p.id)?.type : undefined);
     // another Claude account: no endpoint of its own, the account's models
     if (type === 'claude-account') p = { ...p, baseUrl: '', ...accountModels(), modelsAt: Date.now() };
+    // the user added a group's profile by hand: the auto-creation is welcome again if they delete this one
+    if (type === 'gateway' && p.gatewayGroupId) {
+      const cfg = this.meta.gatewayConfig();
+      if (cfg.dismissedProfiles?.includes(p.gatewayGroupId)) {
+        cfg.dismissedProfiles = cfg.dismissedProfiles.filter((x) => x !== p.gatewayGroupId);
+        await this.meta.saveGateway();
+      }
+    }
     return publicProvider(await this.meta.upsertProvider(p));
   }
   async remove(id: string) {
+    // a group's auto profile: deleting it says "I do not want this group in the menu", so it is not recreated
+    const p = this.meta.provider(id);
+    if (p?.type === 'gateway' && p.gatewayGroupId) {
+      const cfg = this.meta.gatewayConfig();
+      const list = new Set(cfg.dismissedProfiles ?? []);
+      list.add(p.gatewayGroupId);
+      cfg.dismissedProfiles = [...list];
+      await this.meta.saveGateway();
+    }
     await this.meta.removeProvider(id);
   }
   /**

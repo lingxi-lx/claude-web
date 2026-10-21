@@ -47,6 +47,19 @@ export function turnPlan(t: Turn | undefined): ToolUseBlock | null {
   return plan;
 }
 
+/**
+ * The plan of the task in progress: the last turn's, or — when the last turns are rounds the agent went on with by
+ * itself (a background subagent came back: `cont-` turns, no message from the user) — the latest one before them, up to
+ * the turn the user's message started. 2026-10-19: the plan vanished while the agent waited for its subagents.
+ */
+export function taskPlan(turns: readonly Turn[]): ToolUseBlock | null {
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const plan = turnPlan(turns[i]);
+    if (plan || turns[i].user) return plan;
+  }
+  return null;
+}
+
 const unfinished = (t: Turn): boolean => t.body.some((it) => it.kind === 'assistant' && (it.streaming || it.blocks.some((b) => b.type === 'tool_use' && (b.status === 'pending' || b.status === 'running' || b.status === 'streaming'))));
 
 /**

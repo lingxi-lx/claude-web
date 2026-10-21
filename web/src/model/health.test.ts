@@ -85,6 +85,10 @@ describe('an empty text block in the history', () => {
     const { classifyError, ERROR_LABEL } = await import('./health');
     expect(classifyError({ status: 400, text: 'API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"messages.18.content.1.text: cache_control cannot be set for empty text blocks"}}' })).toBe('history');
     expect(classifyError({ text: 'messages: text content blocks must be non-empty' })).toBe('history');
+    // another vendor's blank thinking, the conversation switched to Claude (2026-10-19)
+    expect(classifyError({ status: 400, text: 'API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"messages.179.content.0.thinking: each thinking block must contain non-whitespace thinking"},"request_id":"req_011CgBFTYeFCxNiPHoaRoY5U"}' })).toBe('history');
+    // …and its unsigned thinking (the next real turn on Opus)
+    expect(classifyError({ status: 400, text: 'API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"messages.3.content.0: Invalid `signature` in `thinking` block"},"request_id":"req_011CgBgGgwBErAmFwvT6i2cw"}' })).toBe('history');
     expect(ERROR_LABEL.history).toBe('对话记录有误');
   });
 });

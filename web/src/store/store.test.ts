@@ -53,6 +53,47 @@ beforeEach(async () => {
   });
 });
 
+// 2026-10-19 user report: thinking on deepseek-v4.1-flash crawled on long after the relay had finished. Every delta
+// was a store update and a render of the whole conversation — 10–33 ms each in a real window, so ~30–95 deltas/s
+// against a model that streams one token per delta at 100+ tokens/s.
+describe('streamed deltas', () => {
+  const sev = (event: any) => ({ kind: 'session.event', sessionId: 's1', message: { type: 'stream_event', event, session_id: 's1', uuid: `u-${Math.random()}`, parent_tool_use_id: null } });
+  const frames: (() => void)[] = [];
+  beforeEach(() => { frames.length = 0; vi.stubGlobal('requestAnimationFrame', (f: () => void) => { frames.push(f); return frames.length; }); });
+
+  it('go into the conversation at once but render once per frame; anything else renders at once and takes them along', () => {
+    emit(sev({ type: 'message_start', message: { id: 'm1', model: 'deepseek-v4.1-flash' } }));
+    emit(sev({ type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '' } }));
+    frames.splice(0).forEach((f) => f());
+    const v0 = useStore.getState().open.s1.version;
+    for (let i = 0; i < 50; i++) emit(sev({ type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: 'ab' } }));
+    const o = useStore.getState().open.s1;
+    expect((o.conv.items.at(-1) as any).blocks[0].thinking).toHaveLength(100);
+    expect(o.version).toBe(v0); // not yet rendered
+    expect(frames.length).toBe(1); // one frame asked for, not 50
+    const s0 = useStore.getState().open.s1.streamed ?? 0;
+    frames.splice(0).forEach((f) => f());
+    expect(useStore.getState().open.s1.version).toBe(v0 + 1);
+    // counted apart: earlier turns are drawn against `version - streamed`, which a frame of deltas leaves alone
+    expect(useStore.getState().open.s1.streamed).toBe(s0 + 1);
+    // a frame with nothing new does not render
+    expect(frames.length).toBe(0);
+    // more deltas, then something else before the frame: it renders at once, the frame later has nothing left to do
+    emit(sev({ type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: 'cd' } }));
+    emit({ kind: 'session.state', sessionId: 's1', state: 'running' });
+    const v1 = useStore.getState().open.s1.version;
+    expect(v1).toBeGreaterThan(v0 + 1);
+    frames.splice(0).forEach((f) => f());
+    expect(useStore.getState().open.s1.version).toBe(v1);
+  });
+
+  it('a conversation that is not open ignores them (as before)', () => {
+    emit({ kind: 'session.event', sessionId: 'nope', message: { type: 'stream_event', event: { type: 'message_start', message: { id: 'x' } }, session_id: 'nope', uuid: 'u', parent_tool_use_id: null } });
+    frames.splice(0).forEach((f) => f());
+    expect(useStore.getState().open.nope).toBeUndefined();
+  });
+});
+
 describe('send', () => {
   it('stamps turnStartedAt on the local echo (the SDK never echoes the user message)', async () => {
     await useStore.getState().send('s1', 'hi');

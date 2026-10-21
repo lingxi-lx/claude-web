@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BACKOFF_MAX_MS, MemberStates, classify, cooldownFromHeaders, mapModel, parseDuration } from './failover.js';
 import { passthroughHeaders, replaceTopLevelString } from './upstream.js';
-import type { GatewayGroup } from './types.js';
+import { memberKey, type GatewayGroup } from './types.js';
 
 const g = (over: Partial<GatewayGroup> = {}): GatewayGroup => ({ id: 'g1', name: 'G', strategy: 'failover', members: [{ providerId: 'a' }, { providerId: 'b' }, { providerId: 'c' }], ...over });
 
@@ -55,6 +55,14 @@ describe('MemberStates', () => {
     expect(firsts.filter((x) => x === 'a')).toHaveLength(4);
     expect(firsts.filter((x) => x === 'b')).toHaveLength(2);
     expect(s.order(grp)).toHaveLength(2); // the rest stays available as fallback
+  });
+});
+
+describe('memberKey', () => {
+  it('keys each member reference kind', () => {
+    expect(memberKey({ providerId: 'a' })).toBe('p:a');
+    expect(memberKey({ accountId: 'acct_1' })).toBe('a:acct_1');
+    expect(memberKey({ upstreamGroupId: 'pool' })).toBe('u:pool');
   });
 });
 

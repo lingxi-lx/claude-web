@@ -15,6 +15,8 @@ export * from './background/types.js';
 export * from './characters/core/types.js';
 import type { LinkKind } from './remote/anywhere/core/link.js';
 export type { LinkKind } from './remote/anywhere/core/link.js';
+import type { UpstreamRequest } from './upstreams/types.js';
+export * from './upstreams/types.js';
 
 export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'dontAsk' | 'auto';
 // `ultra` is Codex-only (its own enum member). `ultracode` is NOT here on purpose: in Claude Code it is a
@@ -72,6 +74,16 @@ export interface SourceCaps {
   fork: boolean;
 }
 
+/** One thing 本机发现 saw on this computer (`library.localScan`). `readable`: a source can list / read it. */
+export interface LocalHistorySource {
+  id: string;
+  name: string;
+  path: string;
+  readable: boolean;
+  /** why it cannot be read (or how it can) */
+  detail?: string;
+}
+
 /** One row of the "join a source" onboarding list (settings/library). */
 export interface SourceStatus {
   kind: AgentKind;
@@ -88,6 +100,8 @@ export interface SourceStatus {
   loading?: boolean;
   error?: string;
   disabledReason?: string;
+  /** what its official interface allows: a read-only source can be viewed and searched, not continued */
+  caps?: SourceCaps;
 }
 
 export interface OpenSessionParams {
@@ -210,14 +224,14 @@ export const CLAUDE_PROVIDER_ID = 'claude';
 export interface ModelRefreshResult { id: string; name: string; ok: boolean; count: number; error?: string; ms: number }
 
 /** Multi-agent (phase 5): built-in kinds plus user-defined ACP agents (`acp:<id>`). */
-export type AgentKind = 'claude' | 'codex' | 'opencode' | 'gemini' | 'qwen' | 'kimi' | `acp:${string}`;
+export type AgentKind = 'claude' | 'codex' | 'opencode' | 'gemini' | 'qwen' | 'kimi' | 'cursor' | 'dsh' | `acp:${string}`;
 
 /**
  * Session library ids (shared by server/src/library/ids.ts and the web client): Claude keeps its bare
  * UUID; these built-in kinds are `<kind>-<native id>`; a custom ACP agent `acp:<id>` is
  * `acp_<id with '-' escaped as '~'>-<native id>`. No colons anywhere.
  */
-export const LIBRARY_ID_PREFIXED_KINDS = ['codex', 'opencode', 'gemini', 'qwen', 'kimi'] as const satisfies readonly AgentKind[];
+export const LIBRARY_ID_PREFIXED_KINDS = ['codex', 'opencode', 'gemini', 'qwen', 'kimi', 'cursor', 'dsh'] as const satisfies readonly AgentKind[];
 
 /** Inverse of `libraryId`. An id with no recognised prefix is a native Claude id. */
 export function parseLibraryId(id: string): { kind: AgentKind; nativeId: string } {
@@ -340,7 +354,7 @@ export interface SessionMeta {
   /** replies pinned with 📌 under them (the info column's 钉住 card): their item id and first words */
   pinnedMsgs?: { id: string; text: string }[];
   /** a rename made while the conversation's process ran (server/src/meta/store.ts) */
-  pendingTitle?: string; /** 只聊天: started without tools; a resume keeps it that way */ chatOnly?: boolean; /** 保持电脑唤醒 while this conversation is busy */ keepAwake?: boolean; /** 代码审查卡: findings dismissed here, `<toolUseId>#<index>` */ reviewDismissed?: string[]; /** 任务 chip: suggestions dismissed (tool use ids), and started (tool use id → the new conversation) */ taskDismissed?: string[]; taskStarted?: Record<string, string>; /** PR 监控条: 自动修 CI on, and the failures it already asked about */ prAutoFix?: boolean; prFixed?: string[]; pinned?: boolean; archived?: boolean; workspaceId?: string; tags?: string[]; providerId?: string; /** sidebar grouping directory when it differs from the cwd (orchestration worktrees) */ groupCwd?: string; /** prompt-cache route key when it is not the session's own id (forks keep their root's) */ cacheKey?: string; /** the model its subagents run on, picked for this provider ('' = the main model) */ subagent?: { providerId: string; model: string }; /** the permission mode it last ran with: a resume without a pick comes back in it (the SDK never says it) */ permissionMode?: PermissionMode }
+  pendingTitle?: string; /** 只聊天: started without tools; a resume keeps it that way */ chatOnly?: boolean; /** 保持电脑唤醒 while this conversation is busy */ keepAwake?: boolean; /** 代码审查卡: findings dismissed here, `<toolUseId>#<index>` */ reviewDismissed?: string[]; /** 任务 chip: suggestions dismissed (tool use ids), and started (tool use id → the new conversation) */ taskDismissed?: string[]; taskStarted?: Record<string, string>; /** PR 监控条: 自动修 CI on, and the failures it already asked about */ prAutoFix?: boolean; prFixed?: string[]; pinned?: boolean; archived?: boolean; workspaceId?: string; tags?: string[]; providerId?: string; /** sidebar grouping directory when it differs from the cwd (orchestration worktrees) */ groupCwd?: string; /** prompt-cache route key when it is not the session's own id (forks keep their root's) */ cacheKey?: string; /** the model its subagents run on, picked for this provider ('' = the main model) */ subagent?: { providerId: string; model: string }; /** the permission mode it last ran with: a resume without a pick comes back in it (the SDK never says it) */ permissionMode?: PermissionMode; /** 思考用的语言 for this conversation: '' / absent = the setting `ai.thinkingLanguage`, 'off' = none here, 'auto' = the interface language, else a THINKING_LANGUAGES id */ thinkingLanguage?: string }
 export interface Schedule { id: string; name: string; cwd: string; prompt: string; everyMinutes: number; cron?: string; enabled: boolean; lastRunAt?: number; nextRunAt?: number; sessionId?: string; model?: string; permissionMode?: string; freshSession?: boolean; lastError?: string; runs?: number; /** 手动: only 立即运行 starts it */ manual?: boolean; /** each run in its own worktree (with freshSession) */ worktree?: boolean }
 export interface LimitWindow { label: string; percent: number; resetsAt: string | null; active: boolean; severity?: string }
 // ---- remote access / phones / IM (phase 6) ----
@@ -598,6 +612,8 @@ export type ClientRequest =
   | { kind: 'diag.bundle' }
   /** a renderer error an ErrorBoundary caught: written to the server log (server.log in the desktop build) */
   | { kind: 'client.log'; level: 'error' | 'warn'; area: string; message: string; stack?: string; componentStack?: string; url?: string }
+  /** run a chat code block on this computer (the user confirmed; a window on this machine only) */
+  | { kind: 'code.run'; lang: string; code: string; cwd?: string; sessionId?: string }
   | { kind: 'mcp.registry'; query: string; limit?: number }
   | { kind: 'mcp.health'; cwd?: string }
   | { kind: 'secrets.status' }
@@ -665,6 +681,8 @@ export type ClientRequest =
   | { kind: 'terminal.close'; termId: string }
   // ---- unified session library (phase 13) ----
   | { kind: 'library.sources' }
+  /** 本机发现: other agents / editors that keep data here, and whether their conversations can be read */
+  | { kind: 'library.localScan' }
   | { kind: 'library.read'; sessionId: string; cursor?: string; limit?: number }
   | { kind: 'library.rename'; sessionId: string; title: string }
   | { kind: 'library.archive'; sessionIds: string[]; archived: boolean }
@@ -683,6 +701,7 @@ export type ClientRequest =
   /** One search with the configured engine → WebSearchAnswer. */
   | { kind: 'web.search'; query: string; count?: number }
   | GatewayRequest
+  | UpstreamRequest
   // ---- other agents' configuration center (phase 17) ----
   | AgentConfigRequest
   // ---- multi-agent orchestration ----

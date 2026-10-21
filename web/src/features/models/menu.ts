@@ -70,6 +70,8 @@ export interface BuildMenuInput {
   agent: AgentKind;
   providers: Provider[];
   gatewayGroups?: GatewayGroup[];
+  /** gateway.status().poolModels: upstreamGroupId → its sidecar family's models */
+  gatewayPoolModels?: Record<string, string[]>;
   settings: Record<string, unknown>;
   current?: { providerId?: string; model?: string | null };
   /** the agent's own model list when it reported one (session info); defaults to the catalog */
@@ -160,7 +162,12 @@ export function pushRecent(list: string[] | undefined, key: string, max = RECENT
 }
 
 /** A gateway profile's models: the same set `/gateway/<group>/v1/models` serves (GatewayService.serveModels). */
-export function gatewayModels(p: Provider, groups: GatewayGroup[] | undefined, providers: Provider[]): string[] {
+export function gatewayModels(
+  p: Provider,
+  groups: GatewayGroup[] | undefined,
+  providers: Provider[],
+  poolModels?: Record<string, string[]>,
+): string[] {
   const ids = new Set<string>();
   const g = groups?.find((x) => x.id === p.gatewayGroupId);
   if (g) {
@@ -170,6 +177,9 @@ export function gatewayModels(p: Provider, groups: GatewayGroup[] | undefined, p
       const mp = providers.find((x) => x.id === m.providerId);
       for (const x of mp?.models ?? []) ids.add(x);
       if (mp?.defaultModel) ids.add(mp.defaultModel);
+      // a sidecar account or pool (Gemini / WorkBuddy) keeps its models outside any profile
+      const key = m.accountId ? `a:${m.accountId}` : m.upstreamGroupId ? `u:${m.upstreamGroupId}` : '';
+      if (key) for (const x of poolModels?.[key] ?? []) ids.add(x);
     }
   }
   if (p.defaultModel) ids.add(p.defaultModel);
@@ -177,8 +187,13 @@ export function gatewayModels(p: Provider, groups: GatewayGroup[] | undefined, p
 }
 
 /** The models a profile offers, in list order, with its default model included. */
-export function profileModels(p: Provider, groups: GatewayGroup[] | undefined, providers: Provider[]): string[] {
-  if (p.type === 'gateway') return gatewayModels(p, groups, providers);
+export function profileModels(
+  p: Provider,
+  groups: GatewayGroup[] | undefined,
+  providers: Provider[],
+  poolModels?: Record<string, string[]>,
+): string[] {
+  if (p.type === 'gateway') return gatewayModels(p, groups, providers, poolModels);
   // an image / embedding / speech model is not something to hold a conversation with (an image-only key listed 3)
   const list = (p.models ?? []).filter(isChatModel);
   if (p.defaultModel && !list.includes(p.defaultModel)) list.unshift(p.defaultModel);
@@ -187,6 +202,23 @@ export function profileModels(p: Provider, groups: GatewayGroup[] | undefined, p
 
 /** How a provider's model shows: the name its model list gave (「DeepSeek-V4.1-Flash」 for `deepseek-flash`), else the id. */
 export const providerModelName = (p: Pick<Provider, 'modelNames'> | undefined, model: string): string => p?.modelNames?.[model] || model;
+
+/**
+ * One line about a gateway (account-pool) model, since those are raw ids like `gemini-3.6-flash`: what it costs in
+ * time and what it is for. Gemini web has no native tool calling, so "写代码推荐" really means "fast enough".
+ */
+export function gatewayModelHint(model: string): string | undefined {
+  const m = model.toLowerCase();
+  if (/(^|[-_:])thinking$/.test(m)) return tr('思考 20–40 秒');
+  if (m.includes('flash-lite')) return tr('最快');
+  if (m.includes('flash')) return tr('快 · 写代码推荐');
+  if (m.includes('argon')) return tr('旗舰 · 最慢');
+  if (/(^|[-_:])pro$/.test(m)) return tr('更强 · 较慢');
+  if (m.includes('image') || m.includes('canvas')) return tr('图像生成');
+  if (m.includes('music')) return tr('音乐生成');
+  if (m.includes('video')) return tr('视频生成');
+  return undefined;
+}
 
 const strList = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
 
@@ -238,9 +270,13 @@ export function buildModelMenu(i: BuildMenuInput): ModelMenu {
   for (const p of i.providers) {
     const compatible = types.includes(p.type);
     const unavailable = compatible ? profileUnavailable(p, i) ?? undefined : undefined;
-    const models = profileModels(p, i.gatewayGroups, i.providers);
+    const models = profileModels(p, i.gatewayGroups, i.providers, i.gatewayPoolModels);
     const list = models.length
-      ? models.map((m) => make(p.id, p.name, m, providerModelName(p, m), compatible, { profileDefault: m === p.defaultModel, unavailable, ...(providerModelName(p, m) !== m ? { hint: m } : {}) }))
+      ? models.map((m) => {
+        // a gateway model is a raw id from an account pool: say what it is good for (speed / coding / thinking)
+        const hint = p.type === 'gateway' ? gatewayModelHint(m) : providerModelName(p, m) !== m ? m : undefined;
+        return make(p.id, p.name, m, providerModelName(p, m), compatible, { profileDefault: m === p.defaultModel, unavailable, ...(hint ? { hint } : {}) });
+      })
       : [make(p.id, p.name, '', tr('默认模型'), compatible, { isDefault: true, unavailable })];
     items.push(...list);
     if (!compatible) continue;
@@ -369,7 +405,13 @@ export function foldMenu<M extends { sections: ModelMenuSection[] }>(m: M, opene
 }
 
 /** Settings → Models, "by model": each model id once, with every profile that serves it. */
-export function modelTable(providers: Provider[], groups: GatewayGroup[] | undefined, query = '', ownName = tr('Claude 账号')): ModelRow[] {
+export function modelTable(
+  providers: Provider[],
+  groups: GatewayGroup[] | undefined,
+  query = '',
+  ownName = tr('Claude 账号'),
+  poolModels?: Record<string, string[]>,
+): ModelRow[] {
   const rows = new Map<string, ModelRow>();
   const add = (model: string, id: string, name: string, isDefault: boolean) => {
     let r = rows.get(model);
@@ -379,7 +421,7 @@ export function modelTable(providers: Provider[], groups: GatewayGroup[] | undef
     r.keys.push(modelKey('claude', id, model));
   };
   for (const m of modelsFor('claude')) add(m.value, OWN_PROVIDER, ownName, false);
-  for (const p of providers) for (const m of profileModels(p, groups, providers)) add(m, p.id, p.name, m === p.defaultModel);
+  for (const p of providers) for (const m of profileModels(p, groups, providers, poolModels)) add(m, p.id, p.name, m === p.defaultModel);
   const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
   return [...rows.values()]
     .filter((r) => !terms.length || terms.every((t) => `${r.model} ${r.providers.map((x) => x.name).join(' ')}`.toLowerCase().includes(t)))

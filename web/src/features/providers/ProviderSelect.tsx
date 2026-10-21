@@ -7,6 +7,7 @@ import { compatibleTypes, profileUnavailable } from '@/features/models/menu';
 import { useGatewayStatus } from '@/features/models/data';
 import { connectModel } from './ConnectModel';
 import { tr } from '@/i18n';
+import { Select } from '@/ui/Select';
 
 const ADD = '__add';
 
@@ -41,13 +42,12 @@ export function ProviderSelect({ agent, value, onChange, first, own, className =
     if (!compatibleTypes(agent).includes(p.type)) { toast(tr('「{name}」已添加，但这个 Agent 用不了这种格式的供应商', { name: p.name })); return; }
     onChange(p.id);
   };
-  return (
-    <select className={className} value={missing ? '__missing' : value} onChange={(e) => void pick(e.target.value)} data-provider-select>
-      <option value="" title={first.title}>{first.label}</option>
-      {own && <option value="claude">{own}</option>}
-      {missing && <option value="__missing" disabled>{tr('（已删除的供应商）')}</option>}
-      {list.map(({ p, why }) => <option key={p.id} value={p.id} disabled={!!why} title={why ?? p.baseUrl ?? ''}>{p.name}{p.defaultModel ? ` · ${p.defaultModel}` : ''}{why ? `（${why}）` : ''}</option>)}
-      <option value={ADD}>{tr('添加供应商…')}</option>
-    </select>
-  );
+  const options = [
+    { value: '', label: first.label, description: first.title },
+    ...(own ? [{ value: 'claude', label: own }] : []),
+    ...(missing ? [{ value: '__missing', label: tr('（已删除的供应商）'), disabled: true }] : []),
+    ...list.map(({ p, why }) => ({ value: p.id, label: `${p.name}${p.defaultModel ? ` · ${p.defaultModel}` : ''}`, description: why ?? p.baseUrl ?? undefined, disabled: !!why })),
+    { value: ADD, label: tr('添加供应商…') },
+  ];
+  return <Select className={className} value={missing ? '__missing' : value} onValueChange={(v) => void pick(String(v))} options={options} searchable={options.length > 10} aria-label={tr('供应商')} data-provider-select />;
 }

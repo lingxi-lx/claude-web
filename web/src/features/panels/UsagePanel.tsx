@@ -6,6 +6,7 @@ import { fmtTok, shortModel, basename } from '@/util';
 import { byTokens, fmtCost, tokensOf } from '@/model/cost';
 import { hitRate } from './ledger-stats';
 import { tr } from '@/i18n';
+import { Select } from '@/ui/Select';
 
 /** `costUnknown`: how many calls had no real price (non-Claude models) — shown as 「费用未知」, not $0 */
 interface Bucket { input: number; output: number; cacheRead: number; cacheWrite: number; turns: number; costUsd: number; costUnknown?: number }
@@ -75,9 +76,7 @@ export function UsagePanel() {
         <button className={tab === 'global' ? 'active' : ''} onClick={() => setTab('global')}>{tr('全局')}</button>
         <button className={tab === 'ledger' ? 'active' : ''} onClick={() => setTab('ledger')}>{tr('账本')}</button>
         {tab === 'global' && (
-          <select value={days} onChange={(e) => setDays(Number(e.target.value))} style={{ marginLeft: 'auto', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 4, fontSize: 13 }}>
-            {[7, 30, 90, 365].map((d) => <option key={d} value={d}>{tr('{d} 天', { d })}</option>)}
-          </select>
+          <Select className="field sm" value={String(days)} onValueChange={(value) => setDays(Number(value))} aria-label={tr('统计天数')} options={[7, 30, 90, 365].map((d) => ({ value: String(d), label: tr('{d} 天', { d }) }))} style={{ marginLeft: 'auto' }} />
         )}
       </div>
       {err && <div className="empty" style={{ color: 'var(--red)' }}>{err}</div>}

@@ -67,7 +67,7 @@ export function UpdateSection() {
       <div className="sub" style={{ marginTop: 6 }}>
         {tr('{v} 更新来自 GitHub Releases，离线或连不上 GitHub 时只会在这里显示错误，不影响使用。', { v: manual
           ? d.platform === 'darwin'
-            ? tr('macOS 版没有 Apple 签名，不能自己安装更新：有新版本时会弹窗给出下载链接，下载后把新版拖进「应用程序」替换即可。')
+            ? tr('{why}有新版本时会弹窗给出下载链接，下载后把新版拖进「应用程序」替换即可。', { why: st.why ?? tr('这份 Claude Web 不能自己更新。') })
             : tr('免安装版不能自己更新：有新版本时会弹窗给出下载链接，用新的 exe 替换即可。')
           : tr('新版本会在后台下载好，然后弹窗问你要不要重启；选「稍后」就在下次退出软件时自动安装。') })}
       </div>
