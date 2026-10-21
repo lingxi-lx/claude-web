@@ -2441,11 +2441,21 @@ function driver() {
             await closeMenus();
             await js(`window.__store.getState().openSettings({ section: 'appearance' })`);
             await waitFor(`!!document.querySelector('.sp [data-entry="ui.theme"] .theme-sw')`, 4000);
-            const sw = await js(`(() => { const row = document.querySelector('.sp [data-entry="ui.theme"]'); return { select: !!row.querySelector('select'), picks: [...row.querySelectorAll('.theme-sw [role="radio"]')].map((b) => b.dataset.themePick), on: row.querySelector('.theme-sw [aria-checked="true"]')?.dataset.themePick ?? null }; })()`);
+            const sw = await js(`(() => { const row = document.querySelector('.sp [data-entry="ui.theme"]'); return { select: !!row.querySelector('select'), picks: [...row.querySelectorAll('.theme-sw:not(.ascii) [role="radio"]')].map((b) => b.dataset.themePick), ascii: [...row.querySelectorAll('.theme-sw.ascii [role="radio"]')].map((b) => b.dataset.themePick), on: row.querySelector('.theme-sw [aria-checked="true"]')?.dataset.themePick ?? null }; })()`);
             await click('.sp [data-entry="ui.theme"] [data-theme-pick="nord"]');
             const nord = await waitFor(`document.documentElement.dataset.theme === 'nord' && document.querySelector('.sp [data-entry="ui.theme"] [data-theme-pick="nord"]')?.getAttribute('aria-checked') === 'true'`, 2000);
             await shot('settings-appearance-themes');
             check('设置 → 外观: every theme is a swatch (跟随系统 first), no dropdown; a click applies it', !sw.select && sw.picks.length >= 7 && sw.picks[0] === 'system' && sw.on === 'light' && nord, JSON.stringify({ sw, nord }));
+            // 字符画主题 (docs/notes/ascii-themes.md): a row of their own above the classic ones; picking one puts its colours on
+            // <html data-ascii> over the classic theme of its brightness, and the classic swatch takes it off again
+            await click('.sp [data-entry="ui.theme"] [data-theme-pick="ascii:phosphor"]');
+            const phos = await waitFor(`document.documentElement.dataset.ascii === 'phosphor' && document.documentElement.dataset.theme === 'dark' && !!document.getElementById('cw-ascii-theme') && getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() === '#060a07'`, 2000);
+            await shot('settings-appearance-ascii-phosphor');
+            await click('.sp [data-entry="ui.theme"] [data-theme-pick="ascii:paper"]');
+            const paper = await waitFor(`document.documentElement.dataset.ascii === 'paper' && document.documentElement.dataset.theme === 'light'`, 2000);
+            await click('.sp [data-entry="ui.theme"] [data-theme-pick="nord"]');
+            const off = await waitFor(`!document.documentElement.dataset.ascii && !document.getElementById('cw-ascii-theme') && document.documentElement.dataset.theme === 'nord'`, 2000);
+            check('设置 → 外观: the character themes in their own row; phosphor / paper put their colours on, a classic one takes them off', sw.ascii.includes('ascii:phosphor') && sw.ascii.includes('ascii:paper') && phos && paper && off, JSON.stringify({ ascii: sw.ascii, phos, paper, off }));
             // 界面缩放 is the desktop shell's (desktop/src/zoom.ts; checked against the real shell by hand): this page is a
             // browser's, with no shell to keep the factor — the row is there and says so, with no control, and the factor is 1
             const zoomRow = await js(`(() => { const row = document.querySelector('.sp [data-entry="ui.zoom"]'); if (!row) return null; return { label: row.querySelector('.l')?.textContent ?? '', hint: row.querySelector('.sub')?.textContent ?? '', ctl: !!row.querySelector('.zoomer'), factor: getComputedStyle(document.documentElement).getPropertyValue('--zoom').trim() }; })()`);
