@@ -1,0 +1,44 @@
+# 字符画主题与过程动画（2026-10-22，用户要求）
+
+设计：`docs/superpowers/specs/2026-10-22-ascii-themes-design.md`；第 1 步计划：`docs/superpowers/plans/2026-10-22-ascii-themes-p1.md`。
+第 1 步做完了骨架和两套主题（磷光 phosphor、纸刊 paper）；还剩 8 套主题、「描述一下就生成主题」的 skill、设置页的主题卡片画廊。
+
+## 结构（`web/src/themes/`）
+
+- `process.ts`：16 个过程（start think read search edit cmd test git install web agent plan tool wait compact connect）和 `processOf(name, input)`。
+  Bash / PowerShell 看命令：先 git，再装依赖（`npm i -D vitest` 是装依赖，不是测试），再测试。`RunStatus.process`（`chat/run-status.ts`）在思考时分 start（本回合还没有 assistant 输出）和 think。
+- `frames.ts`：帧表格式和 `checkAnim`。stage ≤ 2 行 × 14 格、同一个动画所有帧同宽同行数；inline 每帧 ≤ 3 格；颜色只能写令牌名。宽度按等宽格算（`strWidth`，CJK / 全角 2 格）。报错是中文，给 skill 看的（i18n 覆盖测试的允许名单里）。
+- `default-anims.ts`：经典主题用的 16 个动画，也是字符画主题缺项 / 坏项时的兜底。
+- `pack.ts`：`parsePack`（theme.json → `ThemePack`；坏的过程只记在 `broken` 里退回默认，别的错就整个不要）、`paletteCss`、`sanitizeCss`、`animFor`。
+- `registry.ts` + `builtin/<id>/{theme.json,backdrop.js,theme.css}`：内置主题。backdrop 和 css 用 Vite 的 `?raw` 读成文本，和以后 skill 生成的主题走同一条路。
+- `apply.ts`：`applyAscii(id)` 维护 `<style id="cw-ascii-theme">` 和 `html[data-ascii]`；`useActivePack()`；救命开关 `setSafeMode()`（Ctrl+Shift+0，`app/App.tsx`）。
+- `ProcessGlyph.tsx` + `ticker.ts` + `render.ts`：过程动画。一个共享时钟（30 Hz，没人登记就停），帧号变了才写 `innerHTML`，不走 React 渲染。帧预先转成转义过的 HTML。
+- `Backdrop.tsx` + `backdrop-worker.ts` + `sandbox.ts` + `watchdog.ts` + `backdrop-protocol.ts`：背景。
+
+## 主题怎么套上去
+
+- `ui.theme = 'ascii:<id>'`。`resolveTheme` 返回包的 mode（dark / light），所以 `data-theme` 仍是 dark / light，tokens.css 里所有按亮暗写的规则（暗色描边、白天的网吧……）照常生效；包的配色写在 `html:root[data-ascii='<id>']`（多一个 `html` 压过经典主题块）。
+- `store.theme` 仍是 dark / light（Monaco、xterm、Mermaid 按它走）。
+- custom.css / theme.css 的钩子：`html[data-ascii="<id>"]`。
+
+## 背景（Worker）
+
+- `<Backdrop scene="welcome|chat">`：`canvas.transferControlToOffscreen()` 交给模块 Worker；宿主转发尺寸、指针（canvas 坐标）、点击（点在按钮 / 输入框上的不算）、输入框新打的字、当前对话的过程、`quiet`（欢迎页 `.home-col` 各块的矩形，背景在那里要变淡，否则字雨压在按钮上看不清）。
+- Worker 先 `lockdown(self)`：fetch / XHR / WebSocket / EventSource / importScripts / indexedDB / caches / BroadcastChannel / Worker / navigator 全部删掉并钉成 undefined（不可再赋值），然后把 `export default` 换成 `return` 用 `new Function` 求值。
+- 帧率：欢迎页 30，对话页 15（对话页还乘 `chatDim.speed`）；离屏、窗口隐藏时 pause；减少动态效果时只画一帧。
+- 看门狗：报错、连续两秒每帧 > 50 ms、或 3 秒没有 stats（死循环）→ terminate，欢迎页换回「字流」，对话页不画，toast 一句。暂停时不算沉默。
+- 对话页的背景垫在 `.chat-main` 里（`isolation: isolate` + canvas `z-index: -1`），透明度 `chatDim.opacity`；设置「对话里的淡背景」（`ui.backdropInChat`，默认开）。
+
+## 写一个 backdrop.js 要注意
+
+- 只有 `export default { init, frame, event, resize, theme, data }`，不能 import；`frame` 必须有。
+- `getContext('2d', { alpha: false })` 自己铺底色；颜色从 `init` / `theme` 的 `colors`（基础色值）拿。
+- 拖尾用「每帧盖一层半透明底色」，别用 destination-out（8 位 alpha 永远到不了 0，会留一层雾，见「字流」的注释）。
+- 字体只能用系统等宽字体（Worker 里没有页面的 @font-face）。
+
+## 调试 / 截图
+
+- 起一个临时服务：`HOME` / `USERPROFILE` / `CLAUDE_WEB_DIR` 指到临时目录，`CLAUDE_WEB_TOKEN=<随便>`，`env -u CLAUDE_WEB_DIST -u ELECTRON_RUN_AS_NODE`，`PORT=3197 npx tsx server/src/index.ts`；URL 带 `?token=`。
+- `scripts/shot.cjs` + `SHOT_JS_FILE`：`setSetting('onboarded', true)`、`setSetting('ui.workbench', true)`、`setSetting('ui.theme', 'ascii:phosphor')`。要欢迎页：`openTile({ id, kind: 'chat' }, 'replace')`；要对话：`openTile({ id, kind: 'chat', sessionId, view: 'chat', wb: 'live' }, 'replace')`——少了 `view` / `wb` 标签里什么都不画，而且这个残缺的标签会存进布局，下次还在。
+- 运行中的对话：`node server/ws-demo-running.mjs <port> <token>`（mock agent 跑 `npm test -w server`，60 秒后结束），正好看到 test 过程的三处动画。
+- bash heredoc 会吃反斜杠、`printf` 会转义 `!`：生成帧表的脚本和截图脚本用 Write 写文件。
