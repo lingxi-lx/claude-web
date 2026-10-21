@@ -24,18 +24,18 @@ Kat 的 ASCII 花园、weather.exe、@kianbazza「loading 变成结果」、Unic
 theme.json    id、名字（中 / 英）、mode: dark|light、配色（沿用 tokens.css 的基础色值）、字体、边框字符、
               chatDim（对话页淡化：opacity / speed）、processes（16 个过程的帧表）
 backdrop.js   背景，在 Worker 里跑
-theme.css     可选，任意样式（作用域 html[data-theme="ascii:<id>"]）
+theme.css     可选，任意样式（作用域 html[data-ascii="<id>"]）
 preview.png   设置页缩略图（skill 试跑时由前端截图生成；内置主题打包时生成）
 ```
 
 - 内置：`web/src/themes/builtin/<id>/`，随应用打包。
 - 自定义：`~/.claude-web/themes/<id>/`（`CLAUDE_WEB_DIR` 下）。服务端 chokidar 监视，变动经 WS 推给前端热更新（同 custom.css）。
 - 设置：沿用 `ui.theme`，新增取值 `ascii:<id>`；`ui.welcomeBackdrop` 照旧管欢迎页背景开关；新增 `ui.backdropInChat`（默认开）。都在 meta.json。
-- 「默认」主题（现在的深色 / 浅色）也有一份帧表和 backdrop：现有「字流」「字场」迁成 backdrop 格式。
+- 「默认」主题（经典深色 / 浅色等）有一份默认帧表；背景继续用现有「字流」「字场」组件（不迁进 Worker：它们要读页面文字的位置），也是字符画背景出错时的兜底。
 
 ## 2. 运行时
 
-1. **主题加载器**：读 theme.json → 把基础色值写到 `html[data-theme="ascii:<id>"]`，语义层照旧派生（对比度测试照样拦）；
+1. **主题加载器**：读 theme.json → `data-theme` 取包的 mode（dark / light，现有亮暗规则照用），另设 `html[data-ascii="<id>"]`，把基础色值写到 `:root[data-ascii="<id>"]`，语义层照旧派生（对比度测试照样拦）；
    注入 theme.css；按需加载字体；把帧表交给动画组件。
 2. **背景宿主** `<Backdrop>`：页面里一块 canvas，`transferControlToOffscreen()` 交给 Worker 里的 backdrop.js。
    宿主转发：尺寸、devicePixelRatio、鼠标位置 / 点击、输入框打的字、当前过程（idle / think / edit …）、场景（welcome / chat）。
