@@ -1,7 +1,9 @@
 // Loaded with the home page (small): picks the tier, leaves the poster alone for T2, and otherwise loads the scene when
 // the browser is idle. ?poster=1 (scripts/poster.cjs) draws the frozen moment right away.
 import { profileOf, readTierEnv, tierOf } from './tier';
+import { installReveal } from '../client/reveal';
 
+installReveal();
 const root = document.getElementById('hero-scene');
 if (root) {
   const poster = new URLSearchParams(location.search).has('poster');
