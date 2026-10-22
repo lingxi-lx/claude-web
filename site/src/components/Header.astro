@@ -17,6 +17,7 @@ const switchHref = href(base, other, page) + (other === 'en' ? '?lang=en' : '');
   <a class="brand" href={href(base, locale, 'home')}><img src={`${base}icon.svg`} alt="" width="22" height="22" />Claude Web</a>
   <nav aria-label={c.nav.label}>
     <a class="nav-wide" href={href(base, locale, 'home', '#features')}>{c.nav.features}</a>
+    <a class="nav-wide" href={href(base, locale, 'home', '#themes')}>{c.nav.themes}</a>
     <a href={href(base, locale, 'download')} data-key-action="download-page">{c.nav.download}</a>
     <a class="nav-wide" href={href(base, locale, 'changelog')} data-key-action="changelog" aria-keyshortcuts="C">{c.nav.changelog}</a>
     <a class="nav-wide" href={REPO_URL} data-key-action="github" aria-keyshortcuts="G">GitHub</a>

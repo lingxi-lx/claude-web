@@ -2,6 +2,7 @@
 import Base from '../layouts/Base.astro';
 import DownloadButtons from '../components/DownloadButtons.astro';
 import SceneOverlays from '../components/SceneOverlays.astro';
+import Showcase from '../showcase/Showcase.astro';
 import data from '../data/site-data.json';
 import { copy } from '../copy';
 import { readmeLink } from '../readme';
@@ -62,6 +63,7 @@ const stats = [
     </div>
   </div>
 
+  <Showcase locale={locale} />
   <section class="stats" aria-label={c.stats.label}>
     {stats.map((s) => <div><strong>{s.n}</strong><span>{s.label}</span></div>)}
   </section>
