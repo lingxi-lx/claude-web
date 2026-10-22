@@ -15,7 +15,7 @@ const site = Astro.site!;
 const pageTitle = title ? `${title} · Claude Web` : c.meta.title;
 // a visitor whose browser reads Chinese lands on /zh/ — written inline so it runs before anything paints
 const redirect = locale === 'en' && page === 'home'
-  ? `(function(){var t=(${langRedirect.toString()})(location.pathname,location.search,navigator.language||'',${JSON.stringify(base)});if(t)location.replace(t);})();`
+  ? `(function(){var t=(${langRedirect.toString()})(location,navigator.language||'',document.referrer||'',${JSON.stringify(base)});if(t)location.replace(t);})();`
   : '';
 ---
 <!doctype html>
