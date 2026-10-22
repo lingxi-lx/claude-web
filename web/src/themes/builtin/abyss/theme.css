@@ -1,0 +1,70 @@
+/* 深海点阵 · Abyss — a deep-sea instrument panel: thin lavender hairlines, targeting brackets ⌜ ⌝ ⌞ ⌟ around the composer
+   and on the cards, a small uppercase readout over the greeting, a vignette of dark water over the backdrop. Everything
+   here is scoped to html[data-ascii='abyss']. */
+html[data-ascii='abyss'] {
+  --r-xs: 1px; --r-sm: 2px; --r-row: 3px; --r-md: 3px; --r-lg: 4px; --r-xl: 4px;
+  --r-bubble: 6px; --r-composer: 4px; --r-2xl: 6px;
+  --display: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --abyss-hair: color-mix(in oklab, var(--accent) 30%, transparent);
+  --abyss-br: color-mix(in oklab, var(--accent) 85%, transparent);
+  --abyss-br-dim: color-mix(in oklab, var(--accent) 55%, transparent);
+}
+
+/* the greeting: lavender-white with a little bioluminescence, a readout above it and a hairline under it */
+html[data-ascii='abyss'] .welcome .greet {
+  position: relative; font-weight: 400; letter-spacing: 0.015em; color: var(--fg);
+  text-shadow: 0 0 22px color-mix(in oklab, var(--accent) 45%, transparent);
+}
+html[data-ascii='abyss'] .welcome .greet .spark { color: var(--accent); filter: drop-shadow(0 0 6px color-mix(in oklab, var(--accent) 70%, transparent)); }
+html[data-ascii='abyss'] .welcome .greet::before {
+  content: '⌜ ABYSSAL ZONE · 4,212 M · SIGNAL CLEAR ⌟';
+  position: absolute; left: 50%; top: -24px; transform: translateX(-50%); white-space: nowrap; pointer-events: none;
+  font: 400 10px/1 var(--mono); letter-spacing: 0.3em; color: var(--fg-3); text-shadow: none;
+}
+html[data-ascii='abyss'] .welcome .greet::after {
+  content: ''; position: absolute; left: 50%; bottom: -12px; width: 220px; height: 1px; transform: translateX(-50%); pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--abyss-br-dim) 30%, var(--abyss-br-dim) 70%, transparent);
+}
+
+/* the composer: a hairline, and four brackets just outside its corners like a sonar lock */
+html[data-ascii='abyss'] .composer-box {
+  box-shadow: 0 0 0 1px var(--abyss-hair), 0 20px 44px -20px rgba(0, 0, 0, 0.85);
+}
+html[data-ascii='abyss'] .composer-box:focus-within {
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 62%, transparent), 0 0 28px -6px color-mix(in oklab, var(--accent) 45%, transparent);
+}
+html[data-ascii='abyss'] .composer-box::after {
+  content: ''; position: absolute; inset: -7px; pointer-events: none;
+  background:
+    linear-gradient(var(--abyss-br), var(--abyss-br)) left top / 13px 1px no-repeat,
+    linear-gradient(var(--abyss-br), var(--abyss-br)) left top / 1px 13px no-repeat,
+    linear-gradient(var(--abyss-br), var(--abyss-br)) right top / 13px 1px no-repeat,
+    linear-gradient(var(--abyss-br), var(--abyss-br)) right top / 1px 13px no-repeat,
+    linear-gradient(var(--abyss-br), var(--abyss-br)) left bottom / 13px 1px no-repeat,
+    linear-gradient(var(--abyss-br), var(--abyss-br)) left bottom / 1px 13px no-repeat,
+    linear-gradient(var(--abyss-br), var(--abyss-br)) right bottom / 13px 1px no-repeat,
+    linear-gradient(var(--abyss-br), var(--abyss-br)) right bottom / 1px 13px no-repeat;
+}
+html[data-ascii='abyss'] .composer-box:focus-within::after { --abyss-br: var(--accent); }
+
+/* cards: a hairline and brackets drawn inside their corners */
+html[data-ascii='abyss'] :is(.guide, .home-notice, .run-card) {
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 16%, transparent);
+  background-image:
+    linear-gradient(var(--abyss-br-dim), var(--abyss-br-dim)), linear-gradient(var(--abyss-br-dim), var(--abyss-br-dim)),
+    linear-gradient(var(--abyss-br-dim), var(--abyss-br-dim)), linear-gradient(var(--abyss-br-dim), var(--abyss-br-dim)),
+    linear-gradient(var(--abyss-br-dim), var(--abyss-br-dim)), linear-gradient(var(--abyss-br-dim), var(--abyss-br-dim)),
+    linear-gradient(var(--abyss-br-dim), var(--abyss-br-dim)), linear-gradient(var(--abyss-br-dim), var(--abyss-br-dim));
+  background-position: left top, left top, right top, right top, left bottom, left bottom, right bottom, right bottom;
+  background-size: 9px 1px, 1px 9px, 9px 1px, 1px 9px, 9px 1px, 1px 9px, 9px 1px, 1px 9px;
+  background-repeat: no-repeat;
+}
+html[data-ascii='abyss'] .chip.starter { box-shadow: inset 0 0 0 1px var(--abyss-hair); }
+html[data-ascii='abyss'] .run-card { font-family: var(--mono); letter-spacing: 0.02em; }
+html[data-ascii='abyss'] .tool-head .summary { font-family: var(--mono); }
+
+/* dark water closing in at the edges of the welcome page, over the backdrop and under the words */
+html[data-ascii='abyss'] .welcome-tile::after {
+  content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(ellipse 75% 70% at 55% 40%, transparent 55%, rgba(3, 2, 8, 0.5) 100%);
+}

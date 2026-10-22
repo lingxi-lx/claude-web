@@ -1,0 +1,80 @@
+/* 克莱因锦鲤 · Klein Koi — Klein blue lacquer with gold: thin gold borders, 回纹 key-fret corners (drawn with gradient
+   bars, no images) on the composer and the cards, a gold rule with a diamond under a serif greeting, the pond's edge
+   darkening at the corners. Everything here is scoped to html[data-ascii='koi']. */
+html[data-ascii='koi'] {
+  --r-xs: 1px; --r-sm: 2px; --r-row: 3px; --r-md: 3px; --r-lg: 4px; --r-xl: 4px;
+  --r-bubble: 6px; --r-composer: 3px; --r-2xl: 6px;
+  --display: Georgia, 'Noto Serif SC', 'Songti SC', 'STSong', 'SimSun', serif;
+  --koi-gold: var(--accent);
+  --koi-gold-dim: color-mix(in oklab, var(--accent) 62%, transparent);
+  --koi-hair: color-mix(in oklab, var(--accent) 34%, transparent);
+}
+
+/* the greeting: white serif, a gold mark, a gold rule with a diamond under it */
+html[data-ascii='koi'] .welcome .greet {
+  position: relative; font-weight: 400; letter-spacing: 0.01em; color: var(--fg);
+  text-shadow: 0 2px 14px rgba(0, 10, 50, 0.55);
+}
+html[data-ascii='koi'] .welcome .greet .spark { color: var(--koi-gold); filter: drop-shadow(0 0 6px color-mix(in oklab, var(--accent) 55%, transparent)); }
+html[data-ascii='koi'] .welcome .greet::after {
+  content: '◆'; position: absolute; left: 50%; bottom: -16px; width: 240px; transform: translateX(-50%); pointer-events: none;
+  font: 400 8px/9px var(--mono); text-align: center; color: var(--koi-gold); text-shadow: none;
+  background:
+    linear-gradient(90deg, transparent, var(--koi-gold-dim)) left center / 46% 1px no-repeat,
+    linear-gradient(90deg, var(--koi-gold-dim), transparent) right center / 46% 1px no-repeat;
+}
+
+/* the composer: a gold hairline, and key-fret corners just outside it */
+html[data-ascii='koi'] .composer-box {
+  box-shadow: 0 0 0 1px var(--koi-gold-dim), 0 18px 40px -18px rgba(0, 8, 40, 0.8);
+}
+html[data-ascii='koi'] .composer-box:focus-within {
+  box-shadow: 0 0 0 1px var(--koi-gold), 0 0 26px -6px color-mix(in oklab, var(--accent) 50%, transparent);
+}
+html[data-ascii='koi'] .composer-box::after {
+  content: ''; position: absolute; inset: -7px; pointer-events: none;
+  background:
+    linear-gradient(var(--koi-gold), var(--koi-gold)) left 0px top 0px / 15px 1.5px no-repeat,
+    linear-gradient(var(--koi-gold), var(--koi-gold)) left 0px top 0px / 1.5px 15px no-repeat,
+    linear-gradient(var(--koi-gold), var(--koi-gold)) left 4px top 4px / 8px 1.5px no-repeat,
+    linear-gradient(var(--koi-gold), var(--koi-gold)) left 4px top 4px / 1.5px 8px no-repeat,
+    linear-gradient(var(--koi-gold), var(--koi-gold)) left 10.5px top 4px / 1.5px 5.5px no-repeat,
+    linear-gradient(var(--koi-gold), var(--koi-gold)) left 7.5px top 8px / 4.5px 1.5px no-repeat,
+    linear-gradient(var(--koi-gold), var(--koi-gold)) left 0px bottom 0px / 15px 1.5px no-repeat,
+    linear-gradient(var(--koi-gold), var(--koi-gold)) left 0px bottom 0px / 1.5px 15px no-repeat,
+    linear-gradient(var(--koi-gold), var(--koi-gold)) left 4px bottom 4px / 8px 1.5px no-repeat,
+    linear-gradient(var(--koi-gold), var(--koi-gold)) left 4px bottom 4px / 1.5px 8px no-repeat,
+    linear-gradient(var(--koi-gold), var(--koi-gold)) left 10.5px bottom 4px / 1.5px 5.5px no-repeat,
+    linear-gradient(var(--koi-gold), var(--koi-gold)) left 7.5px bottom 8px / 4.5px 1.5px no-repeat,
+    linear-gradient(var(--koi-gold), var(--koi-gold)) right 0px top 0px / 15px 1.5px no-repeat,
+    linear-gradient(var(--koi-gold), var(--koi-gold)) right 0px top 0px / 1.5px 15px no-repeat,
+    linear-gradient(var(--koi-gold), var(--koi-gold)) right 4px top 4px / 8px 1.5px no-repeat,
+    linear-gradient(var(--koi-gold), var(--koi-gold)) right 4px top 4px / 1.5px 8px no-repeat,
+    linear-gradient(var(--koi-gold), var(--koi-gold)) right 10.5px top 4px / 1.5px 5.5px no-repeat,
+    linear-gradient(var(--koi-gold), var(--koi-gold)) right 7.5px top 8px / 4.5px 1.5px no-repeat,
+    linear-gradient(var(--koi-gold), var(--koi-gold)) right 0px bottom 0px / 15px 1.5px no-repeat,
+    linear-gradient(var(--koi-gold), var(--koi-gold)) right 0px bottom 0px / 1.5px 15px no-repeat,
+    linear-gradient(var(--koi-gold), var(--koi-gold)) right 4px bottom 4px / 8px 1.5px no-repeat,
+    linear-gradient(var(--koi-gold), var(--koi-gold)) right 4px bottom 4px / 1.5px 8px no-repeat,
+    linear-gradient(var(--koi-gold), var(--koi-gold)) right 10.5px bottom 4px / 1.5px 5.5px no-repeat,
+    linear-gradient(var(--koi-gold), var(--koi-gold)) right 7.5px bottom 8px / 4.5px 1.5px no-repeat;
+}
+
+/* cards: a thin gold border and small key-fret corners inside */
+html[data-ascii='koi'] :is(.guide, .home-notice, .run-card) {
+  box-shadow: inset 0 0 0 1px var(--koi-hair);
+  background-image: linear-gradient(var(--koi-gold-dim), var(--koi-gold-dim)), linear-gradient(var(--koi-gold-dim), var(--koi-gold-dim)), linear-gradient(var(--koi-gold-dim), var(--koi-gold-dim)), linear-gradient(var(--koi-gold-dim), var(--koi-gold-dim)), linear-gradient(var(--koi-gold-dim), var(--koi-gold-dim)), linear-gradient(var(--koi-gold-dim), var(--koi-gold-dim)), linear-gradient(var(--koi-gold-dim), var(--koi-gold-dim)), linear-gradient(var(--koi-gold-dim), var(--koi-gold-dim)), linear-gradient(var(--koi-gold-dim), var(--koi-gold-dim)), linear-gradient(var(--koi-gold-dim), var(--koi-gold-dim)), linear-gradient(var(--koi-gold-dim), var(--koi-gold-dim)), linear-gradient(var(--koi-gold-dim), var(--koi-gold-dim)), linear-gradient(var(--koi-gold-dim), var(--koi-gold-dim)), linear-gradient(var(--koi-gold-dim), var(--koi-gold-dim)), linear-gradient(var(--koi-gold-dim), var(--koi-gold-dim)), linear-gradient(var(--koi-gold-dim), var(--koi-gold-dim)), linear-gradient(var(--koi-gold-dim), var(--koi-gold-dim)), linear-gradient(var(--koi-gold-dim), var(--koi-gold-dim)), linear-gradient(var(--koi-gold-dim), var(--koi-gold-dim)), linear-gradient(var(--koi-gold-dim), var(--koi-gold-dim)), linear-gradient(var(--koi-gold-dim), var(--koi-gold-dim)), linear-gradient(var(--koi-gold-dim), var(--koi-gold-dim)), linear-gradient(var(--koi-gold-dim), var(--koi-gold-dim)), linear-gradient(var(--koi-gold-dim), var(--koi-gold-dim));
+  background-position: left 3px top 3px, left 3px top 3px, left 5.8px top 5.8px, left 5.8px top 5.8px, left 10.35px top 5.8px, left 8.25px top 8.6px, left 3px bottom 3px, left 3px bottom 3px, left 5.8px bottom 5.8px, left 5.8px bottom 5.8px, left 10.35px bottom 5.8px, left 8.25px bottom 8.6px, right 3px top 3px, right 3px top 3px, right 5.8px top 5.8px, right 5.8px top 5.8px, right 10.35px top 5.8px, right 8.25px top 8.6px, right 3px bottom 3px, right 3px bottom 3px, right 5.8px bottom 5.8px, right 5.8px bottom 5.8px, right 10.35px bottom 5.8px, right 8.25px bottom 8.6px;
+  background-size: 10.5px 1.05px, 1.05px 10.5px, 5.6px 1.05px, 1.05px 5.6px, 1.05px 3.85px, 3.15px 1.05px, 10.5px 1.05px, 1.05px 10.5px, 5.6px 1.05px, 1.05px 5.6px, 1.05px 3.85px, 3.15px 1.05px, 10.5px 1.05px, 1.05px 10.5px, 5.6px 1.05px, 1.05px 5.6px, 1.05px 3.85px, 3.15px 1.05px, 10.5px 1.05px, 1.05px 10.5px, 5.6px 1.05px, 1.05px 5.6px, 1.05px 3.85px, 3.15px 1.05px;
+  background-repeat: no-repeat;
+}
+html[data-ascii='koi'] .chip.starter { box-shadow: inset 0 0 0 1px var(--koi-hair); }
+html[data-ascii='koi'] .chip.starter:hover { box-shadow: inset 0 0 0 1px var(--koi-gold-dim); }
+html[data-ascii='koi'] .run-card { font-family: var(--mono); }
+html[data-ascii='koi'] .tool-head .summary { font-family: var(--mono); }
+
+/* the pond's edge: deeper blue at the corners, over the backdrop and under the words */
+html[data-ascii='koi'] .welcome-tile::after {
+  content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(ellipse 80% 75% at 50% 45%, transparent 60%, rgba(0, 12, 60, 0.45) 100%);
+}
