@@ -44,6 +44,8 @@ site/
            fetch-media.mjs # 构建时按 media.json 下载录像到 dist/themes/，校验 sha256
 ```
 
+- `site/` 原来是 9 月的单页旧宣传页（`index.html` / `page.html` / `build.mjs` / `assets/`），新站整个替换它（2026-10-22 用户确认）；
+  `scripts/icons.cjs` 改为把图标写到 `site/public/icon.svg`。
 - 主题复用：alias `@themes` → `../server/src/themes/core`，只用 `parsePack` / `paletteCss`（读各主题的 `theme.json`，给放映厅
   这一段着色）和帧表 / 默认动画（主题按钮上的小过程动画）；`@web-themes` → `../web/src/themes`，只取 `builtin/*/theme.json`
   和 `ProcessGlyph` 依赖的 `ticker.ts` / `render.ts`。不取 `backdrop.js`、背景 Worker、`apply.ts` / `registry.ts`。

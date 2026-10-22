@@ -1,0 +1,19 @@
+{
+  "name": "claude-web-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "test": "vitest run",
+    "data": "node scripts/releases.ts"
+  },
+  "devDependencies": {
+    "@astrojs/markdown-remark": "7.3.4",
+    "astro": "7.4.1",
+    "@types/node": "^26.4.1",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  }
+}
