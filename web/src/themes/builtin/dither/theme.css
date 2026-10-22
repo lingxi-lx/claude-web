@@ -1,0 +1,43 @@
+/* 抖动 · Dither — 1-bit print: square corners everywhere, edges drawn as dither (a solid ink line, a gap, then a
+   ▒ checker ring around the composer), a monospace greeting with a ░▒▓█ ramp in front and a checker rule under it.
+   The patterns are 2px repeating conic gradients — still images, no per-frame cost. Scoped to html[data-ascii='dither']. */
+html[data-ascii='dither'] {
+  --r-xs: 0px; --r-sm: 0px; --r-row: 0px; --r-md: 0px; --r-lg: 0px; --r-xl: 0px;
+  --r-bubble: 0px; --r-composer: 0px; --r-2xl: 0px;
+  --display: var(--mono);
+  --dz-check: repeating-conic-gradient(currentColor 0 25%, transparent 0 50%);
+}
+
+/* the greeting: a tone ramp in front, a checker rule under it */
+html[data-ascii='dither'] .welcome .greet {
+  font-weight: 600; letter-spacing: 0.01em; padding-bottom: 14px;
+  background: repeating-conic-gradient(color-mix(in oklab, var(--fg) 55%, transparent) 0 25%, transparent 0 50%) 50% 100% / 4px 4px repeat-x;
+}
+html[data-ascii='dither'] .welcome .greet .spark { display: none; }
+html[data-ascii='dither'] .welcome .greet::before { content: '░▒▓█'; color: var(--accent); letter-spacing: 0; font-weight: 400; font-size: 0.62em; vertical-align: 0.14em; margin-right: 0.5em; }
+
+/* the composer: solid ink edge, a ground-coloured gap, then a ▒ ring; a ░▒▓█ tag on the top edge */
+html[data-ascii='dither'] .composer-box {
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--fg) 62%, transparent), 0 0 0 3px var(--bg-1);
+}
+html[data-ascii='dither'] .composer-box::before {
+  content: ''; position: absolute; inset: -7px; padding: 3px; pointer-events: none;
+  color: color-mix(in oklab, var(--fg) 40%, transparent);
+  background: var(--dz-check) 0 0 / 4px 4px;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+html[data-ascii='dither'] .composer-box::after {
+  content: '░▒▓█'; position: absolute; top: -8px; right: 14px; pointer-events: none;
+  font: 10px/12px var(--mono); letter-spacing: 0; padding: 0 4px;
+  color: var(--accent); background: var(--bg-1);
+}
+html[data-ascii='dither'] .composer-box:focus-within {
+  box-shadow: 0 0 0 1px var(--fg), 0 0 0 3px var(--bg-1);
+}
+html[data-ascii='dither'] .composer-box:focus-within::before { color: color-mix(in oklab, var(--accent) 70%, transparent); }
+
+html[data-ascii='dither'] .composer textarea { font-family: var(--mono); }
+html[data-ascii='dither'] .run-card { font-family: var(--mono); }
+html[data-ascii='dither'] .tool-head .summary { font-family: var(--mono); }
