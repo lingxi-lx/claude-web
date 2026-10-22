@@ -112,7 +112,9 @@ export class ThemeService extends EventEmitter {
       fs.mkdirSync(this.dir, { recursive: true });
       this.watcher = fs.watch(this.dir, { recursive: true }, (_e, name) => {
         // drafts change only through theme_draft (which reports them itself): saved themes are what windows show
-        if (name && String(name).replace(/\\/g, '/').startsWith('.drafts/')) return;
+        // (a new draft folder also shows up as a change of `.drafts` itself)
+        const n = name ? String(name).replace(/\\/g, '/') : '';
+        if (n === '.drafts' || n.startsWith('.drafts/')) return;
         this.changed();
       });
       this.watcher.on('error', () => { this.watcher?.close(); this.watcher = null; });
