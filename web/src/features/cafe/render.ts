@@ -4,6 +4,7 @@
 //
 // Order: floor → walls (window, big screen, neon) → everything standing, back to front (u + v) → the lighting (the
 // whole room multiplied dark, then the light sources added) → the labels.
+// The passes are exported one by one (drawRoom / drawItems / darken / drawGlows / labels): the site draws them on layers.
 import { ADMIN, OCTOPUS, type CharacterDef, type Facing } from '@characters';
 import { toScreen, TW, TH } from './iso';
 import type { CafeMap, Seat } from './map';
@@ -123,13 +124,18 @@ function floorLayer(m: CafeMap, sz: { w: number; h: number }, o: [number, number
   return floorCan;
 }
 
-interface Item { d: number; draw: () => void }
+export type SceneSize = { w: number; h: number; ox: number; oy: number };
+export type ItemKind = 'furniture' | 'desk' | 'chair' | 'chairBack' | 'machine' | 'queue' | 'actor' | 'admin' | 'glass';
+/** One standing thing of the room, in drawing order (back to front by `d`). */
+export interface ItemTag { d: number; kind: ItemKind; u: number; v: number; key?: string }
+interface Item extends ItemTag { draw: () => void }
 
-export function render(out: Ctx, cw: number, ch: number, w: World, view: View, look: Look) {
+/** The neon strip flickers for a moment every 13 s. */
+const flickering = (look: Look) => !look.still && ((look.now / 1000) % 13) > 12.6;
+
+/** The room itself: background, walls (window, big screen, neon, sign, posters), the floor and the door mat. */
+export function drawRoom(c: Ctx, w: World, sz: SceneSize, look: Look) {
   const m = w.map;
-  const sz = sceneSize(m);
-  const c = scene(sz.w, sz.h);
-  if (!c) return;
   const o: [number, number] = [sz.ox, sz.oy];
   const now = look.now;
   c.globalCompositeOperation = 'source-over';
@@ -163,7 +169,7 @@ export function render(out: Ctx, cw: number, ch: number, w: World, view: View, l
     onUWall(c, o, su0 + 0.8, su0 + 0.8 + len, 34 - i * 3, 35 - i * 3, '#4fe0c0');
   }
   // neon strips and the sign
-  const flick = !look.still && ((now / 1000) % 13) > 12.6;
+  const flick = flickering(look);
   onUWall(c, o, 1, m.cols - 1, 48, 49.5, flick ? '#5a2048' : '#ff3cbe');
   onVWall(c, o, 1, m.rows - 1, 48, 49.5, '#3cdcff');
   // the sign: lettering lying on the back-right wall (the wall rises 1 px for every 2 along u)
@@ -199,17 +205,22 @@ export function render(out: Ctx, cw: number, ch: number, w: World, view: View, l
     poly(c, [pt(ox, oy, d.u - 0.5, d.v), pt(ox, oy, d.u + 1.5, d.v), pt(ox, oy, d.u + 1.5, d.v + 1), pt(ox, oy, d.u - 0.5, d.v + 1)], '#1d4a3a');
     poly(c, [pt(ox, oy, d.u + 0.3, d.v + 0.75), pt(ox, oy, d.u + 0.7, d.v + 0.75), pt(ox, oy, d.u + 0.5, d.v + 0.25)], '#4fe08a');
   }
+}
 
-  // ---- what stands, back to front ----
+/** What stands in the room, back to front (u + v); only what `pick` keeps when it is given (the site's layers). */
+export function drawItems(c: Ctx, w: World, sz: SceneSize, look: Look, pick?: (it: ItemTag) => boolean) {
+  const m = w.map;
+  const o: [number, number] = [sz.ox, sz.oy];
+  const now = look.now;
   const items: Item[] = [];
-  const add = (d: number, draw: () => void) => items.push({ d, draw });
-  for (const f of m.furniture) add(f.u + (f.w ?? 1) + f.v + (f.d ?? 1) - 1, () => drawFurniture(c, o, f, w, now, look));
+  const add = (tag: ItemTag, draw: () => void) => items.push({ ...tag, draw });
+  for (const f of m.furniture) add({ d: f.u + (f.w ?? 1) + f.v + (f.d ?? 1) - 1, kind: 'furniture', u: f.u, v: f.v, key: f.kind }, () => drawFurniture(c, o, f, w, now, look));
   for (const s of m.seats) {
     const a = s.key ? w.actors.find((x) => x.key === s.key) : undefined;
-    add(s.u + s.v + 1.4, () => drawDesk(c, o, s, a, now, look));
+    add({ d: s.u + s.v + 1.4, kind: 'desk', u: s.u, v: s.v }, () => drawDesk(c, o, s, a, now, look));
     // the gaming chair: its seat under whoever sits there, its back (on the viewer's side) over them
-    add(s.chair.u + s.chair.v + 0.4, () => box(c, o, s.chair.u + 0.25, s.chair.v + 0.2, 0.55, 0.55, 4, P.chairTop, P.chairL, P.chairR));
-    add(s.chair.u + s.chair.v + 0.95, () => {
+    add({ d: s.chair.u + s.chair.v + 0.4, kind: 'chair', u: s.chair.u, v: s.chair.v }, () => box(c, o, s.chair.u + 0.25, s.chair.v + 0.2, 0.55, 0.55, 4, P.chairTop, P.chairL, P.chairR));
+    add({ d: s.chair.u + s.chair.v + 0.95, kind: 'chairBack', u: s.chair.u, v: s.chair.v }, () => {
       box(c, o, s.chair.u + 0.25, s.chair.v + 0.72, 0.55, 0.12, 9, '#d8404f', P.chairL, P.chairR, 4);
       box(c, o, s.chair.u + 0.4, s.chair.v + 0.7, 0.25, 0.14, 2, '#f2f2f2', '#d0d0d0', '#e0e0e0', 9.5);
     });
@@ -217,28 +228,29 @@ export function render(out: Ctx, cw: number, ch: number, w: World, view: View, l
   // the counter's till and the admin's desk lamp are part of the counter (furniture)
   for (const mc of m.machines) {
     const t = look.session?.tasks.find((x) => x.id === mc.taskId);
-    add(mc.u + mc.v + 1, () => drawMachine(c, o, mc.u, mc.v, t?.status === 'running', now, look));
+    add({ d: mc.u + mc.v + 1, kind: 'machine', u: mc.u, v: mc.v, key: mc.taskId }, () => drawMachine(c, o, mc.u, mc.v, t?.status === 'running', now, look));
   }
   // the overflow queue: the guests who found no seat, standing at the door
   for (let i = 0; i < Math.min(m.overflow, m.queue.length); i++) {
     const q = m.queue[i];
-    add(q.u + q.v + 0.5, () => drawCharacter(c, o, look.chars.get('octopus') ?? OCTOPUS, look.agentColors[i % look.agentColors.length], q.u + 0.5, q.v + 0.5, 'nw', 'stand', 0));
+    add({ d: q.u + q.v + 0.5, kind: 'queue', u: q.u, v: q.v }, () => drawCharacter(c, o, look.chars.get('octopus') ?? OCTOPUS, look.agentColors[i % look.agentColors.length], q.u + 0.5, q.v + 0.5, 'nw', 'stand', 0));
   }
   for (const x of w.actors) {
     if (x.hidden) continue;
-    add(x.u + x.v + 0.5, () => drawActor(c, o, x, now, look));
+    add({ d: x.u + x.v + 0.5, kind: 'actor', u: x.u, v: x.v, key: x.key }, () => drawActor(c, o, x, now, look));
   }
-  add(w.admin.u + w.admin.v + 0.5, () => drawActor(c, o, w.admin, now, look));
+  add({ d: w.admin.u + w.admin.v + 0.5, kind: 'admin', u: w.admin.u, v: w.admin.v, key: 'admin' }, () => drawActor(c, o, w.admin, now, look));
   // the glass of the VIP room and the balcony, in front of what is behind it
-  add(m.vip.u0 + m.vip.v1 + 0.9, () => drawGlass(c, o, m));
+  add({ d: m.vip.u0 + m.vip.v1 + 0.9, kind: 'glass', u: m.vip.u0, v: m.vip.v1 }, () => drawGlass(c, o, m));
   items.sort((a, b) => a.d - b.d);
-  for (const it of items) it.draw();
+  for (const it of items) if (!pick || pick(it)) it.draw();
+}
 
-  // ---- light ----
-  c.globalCompositeOperation = 'multiply';
-  c.fillStyle = 'rgb(150,140,188)';
-  c.fillRect(0, 0, sz.w, sz.h);
-  c.globalCompositeOperation = 'lighter';
+function glowPass(c: Ctx, w: World, sz: SceneSize, look: Look) {
+  const m = w.map;
+  const o: [number, number] = [sz.ox, sz.oy];
+  const [wu0, wu1] = m.wall.window, [su0, su1] = m.wall.screen;
+  const flick = flickering(look);
   const glow = (u: number, v: number, h: number, r: number, col: string) => {
     const [x, y] = pt(o[0], o[1], u, v, h);
     const g = c.createRadialGradient(x, y, 0, x, y, r);
@@ -262,7 +274,40 @@ export function render(out: Ctx, cw: number, ch: number, w: World, view: View, l
   for (const mc of m.machines) glow(mc.u + 0.5, mc.v + 0.5, 8, 18, 'rgba(80,255,140,0.28)');
   glow(1, m.rows - 8, 8, 14, 'rgba(80,255,140,0.2)'); // the power-bank cabinet
   glow(m.door.u + 0.5, m.door.v + 0.5, 2, 22, 'rgba(80,255,140,0.22)'); // the door mat
+}
+
+/** Night: everything drawn so far multiplied dark. */
+export function darken(c: Ctx, sz: SceneSize) {
+  c.globalCompositeOperation = 'multiply';
+  c.fillStyle = 'rgb(150,140,188)';
+  c.fillRect(0, 0, sz.w, sz.h);
   c.globalCompositeOperation = 'source-over';
+}
+
+/** The light sources, added ('lighter'): over the darkened room, or on a transparent canvas of their own. */
+export function drawGlows(c: Ctx, w: World, sz: SceneSize, look: Look) {
+  c.globalCompositeOperation = 'lighter';
+  glowPass(c, w, sz, look);
+  c.globalCompositeOperation = 'source-over';
+}
+
+/** The product's lighting: darken, then the light sources. */
+export function drawLight(c: Ctx, w: World, sz: SceneSize, look: Look) {
+  c.globalCompositeOperation = 'multiply';
+  c.fillStyle = 'rgb(150,140,188)';
+  c.fillRect(0, 0, sz.w, sz.h);
+  c.globalCompositeOperation = 'lighter';
+  glowPass(c, w, sz, look);
+  c.globalCompositeOperation = 'source-over';
+}
+
+export function render(out: Ctx, cw: number, ch: number, w: World, view: View, look: Look) {
+  const sz = sceneSize(w.map);
+  const c = scene(sz.w, sz.h);
+  if (!c) return;
+  drawRoom(c, w, sz, look);
+  drawItems(c, w, sz, look);
+  drawLight(c, w, sz, look);
 
   // ---- onto the page ----
   out.setTransform(1, 0, 0, 1, 0, 0);
@@ -479,7 +524,7 @@ function bubble(c: Ctx, x: number, y: number, text: string, size: number) {
   c.fillText(t, x, y - 5 - ph / 2 + 0.5);
 }
 
-function labels(c: Ctx, w: World, view: View, sz: { ox: number; oy: number }, look: Look) {
+export function labels(c: Ctx, w: World, view: View, sz: { ox: number; oy: number }, look: Look) {
   const s = Math.max(0.6, Math.min(1.6, view.scale / 2.2));
   const size = Math.round(11 * s);
   const m = w.map;
