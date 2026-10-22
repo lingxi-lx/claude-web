@@ -4,7 +4,7 @@
 
 **Goal:** 在 `site/` 做出一个能上线的 Astro 静态官网：中英两套的首页（首屏先用现成的网吧动图占位）、下载页、更新内容页，自动识别系统的下载按钮，键盘快捷键，GitHub Pages 自动发布。
 
-**Architecture:** `site/` 是新的 npm workspace，Astro 7 静态输出，部署在主域名 `psycioxyxs.my` 的根上（`base: '/'`）。所有可见文字都在 `site/src/copy.ts` 里用 `tr('中文')` 写，英文在 `site/src/i18n/en.ts`，借用产品共享的 `@i18n` 核心（`server/src/i18n/core.ts`）和现有的 i18n 覆盖测试。`.astro` 文件只管结构，不写字。版本和下载链接由构建时的脚本从 GitHub API 抓成 JSON。前端只有一个很小的脚本：识别系统、快捷键、复制按钮。
+**Architecture:** `site/` 是一个独立的 npm 包（自己的 `package-lock.json` 和 `node_modules`，**不是**根目录的 workspace：Astro 要 `cookie@2`，和产品经 express 带进来的 `cookie@0.7` 冲突，而且装进根目录会顺带升级产品的 vite / zod），Astro 7 静态输出，部署在主域名 `psycioxyxs.my` 的根上（`base: '/'`）。所有可见文字都在 `site/src/copy.ts` 里用 `tr('中文')` 写，英文在 `site/src/i18n/en.ts`，借用产品共享的 `@i18n` 核心（`server/src/i18n/core.ts`）和现有的 i18n 覆盖测试。`.astro` 文件只管结构，不写字。版本和下载链接由构建时的脚本从 GitHub API 抓成 JSON。前端只有一个很小的脚本：识别系统、快捷键、复制按钮。
 
 **Tech Stack:** Astro 7.4.1、@astrojs/markdown-remark 7.3.4、Vitest 4、TypeScript 7、Node 22.22+（类型擦除直接跑 `.ts` 脚本）、GitHub Actions + Pages。
 
@@ -16,7 +16,9 @@
 ## Global Constraints
 
 - Node ≥ 22.22.0。`astro` 精确锁 `7.4.1`（7.4.2 要求 Node ≥ 22.23.4，本机是 22.22.1）。
-- `site/` 的依赖只有：`astro` 7.4.1、`@astrojs/markdown-remark` 7.3.4、`vitest` ^4.1.11、`typescript` ^7.0.2。不装 three / gsap / lenis / React。
+- `site/` 的依赖只有：`astro` 7.4.1、`@astrojs/markdown-remark` 7.3.4、`vitest` ^4.1.11、`typescript` ^7.0.2、`@types/node` ^26.4.1。不装 three / gsap / lenis / React。
+- `site/` 是独立包：依赖装在 `site/node_modules`（`npm install --prefix site`），锁文件是 `site/package-lock.json`；根目录的 `package.json` 的 `workspaces` 和根 `package-lock.json` **不改**，产品的依赖版本一个都不能动。命令一律用 `--prefix site`，不用 `-w site`。
+- 工作区里可能有用户自己没提交的 server / web 改动：只 `git add` 本任务点名的路径，绝不 `git add -A` / `git add .`，也不要还原别人的改动。
 - 站点地址 `https://psycioxyxs.my/`：GitHub Pages 的自定义域名（DNS 在 Cloudflare），`base: '/'`，`trailingSlash: 'always'`。英文在 `/`，中文在 `/zh/`。
   用 Actions 发布时 Pages 不读 CNAME 文件，域名在仓库的 Pages 设置里绑定（Task 7 Step 11）。
 - 用户看得见的字都是 `site/src/*.ts` 里的 `tr('中文')`，英文写在 `site/src/i18n/en.ts`（`EN_SITE`）。`.astro` 文件里不能出现中文。如果某个中文 key 在产品的英文表里已经有了，英文必须一样：`下载` → `Download`，`更新内容` → `What’s new`（弯引号），`复制` → `Copy`，`已复制` → `Copied`。
@@ -67,7 +69,7 @@
 - Modify: 根 `package.json`、`scripts/icons.cjs:5,25-26`、`docs/superpowers/specs/2026-10-21-website-design.md` §2
 
 **Interfaces:**
-- Produces: workspace 名 `claude-web-site`；脚本 `npm run build -w site`、`npm test -w site`、`npm run data -w site`；别名 `@i18n` → `server/src/i18n/core.ts`（Astro 和 Vitest 两边都配）。
+- Produces: 包名 `claude-web-site`（独立包，不是 workspace）；脚本 `npm run build --prefix site`、`npm test --prefix site`、`npm run data --prefix site`；别名 `@i18n` → `server/src/i18n/core.ts`（Astro 和 Vitest 两边都配）。
 
 - [ ] **Step 1: 删掉旧页**
 
@@ -96,6 +98,7 @@ ls site
   "devDependencies": {
     "@astrojs/markdown-remark": "7.3.4",
     "astro": "7.4.1",
+    "@types/node": "^26.4.1",
     "typescript": "^7.0.2",
     "vitest": "^4.1.11"
   }
@@ -203,30 +206,33 @@ mkdir -p site/public && cp web/public/icon.svg site/public/icon.svg
   console.log('wrote site/public/icon.svg');
 ```
 
-- [ ] **Step 7: 根 `package.json` 接上 site**
+- [ ] **Step 7: 根 `package.json` 接上 site（只加脚本，`workspaces` 不动）**
 
-`workspaces` 改成 `["server", "web", "desktop", "site"]`；`scripts` 里：
+`scripts` 里：
 
 ```json
-    "test": "npm test -w server && npm test -w web && npm test -w desktop && npm test -w site",
-    "build:site": "npm run build -w site",
+    "test": "npm test -w server && npm test -w web && npm test -w desktop && npm test --prefix site",
+    "build:site": "npm run build --prefix site",
+    "site:install": "npm install --prefix site",
     "typecheck": "tsc --noEmit -p server && tsc --noEmit -p web && tsc --noEmit -p desktop && tsc --noEmit -p site",
 ```
 
 （`build:site` 加在 `build:all` 后面，其它脚本不动。）
 
-- [ ] **Step 8: 装依赖**
+- [ ] **Step 8: 装依赖（只装进 site/）**
 
 ```bash
-npm install --ignore-scripts
+npm install --prefix site
+git diff --quiet package-lock.json && echo root-lock-unchanged
+git check-ignore -q site/node_modules && echo site-node_modules-ignored
 ```
 
-预期：`package-lock.json` 多出 `site` 和 astro 相关的条目，没有报错。`--ignore-scripts` 是为了不重新跑 Electron、node-pty 的安装脚本。
+预期：生成 `site/package-lock.json` 和 `site/node_modules`；打印 `root-lock-unchanged` 和 `site-node_modules-ignored`。根目录的 `package-lock.json` 必须没变。
 
 - [ ] **Step 9: 构建、类型检查**
 
 ```bash
-npm run build -w site && ls site/dist && tsc --noEmit -p site
+npm run build --prefix site && ls site/dist && tsc --noEmit -p site
 ```
 
 预期：Astro 输出 `1 page(s) built`；`site/dist` 里有 `index.html` 和 `icon.svg`；tsc 没有输出。
@@ -243,12 +249,13 @@ npm run build -w site && ls site/dist && tsc --noEmit -p site
 - [ ] **Step 11: 提交**
 
 ```bash
-git add -A site package.json package-lock.json scripts/icons.cjs docs/superpowers/specs/2026-10-21-website-design.md
+git add -A site
+git add package.json scripts/icons.cjs docs/superpowers/specs/2026-10-21-website-design.md
 git status --short
 git commit -m "feat(官网): site/ 换成 Astro workspace（替换 9 月的旧宣传页），能构建出空页面"
 ```
 
-`git status --short` 里应只有上面这些路径；如果出现别的文件，不要一起提交。
+`git status --short` 里暂存区（第一列）应只有上面这些路径（含 `site/package-lock.json`，不含根 `package-lock.json`）；用户自己的改动留在未暂存区，不要动。
 
 ---
 
@@ -326,7 +333,7 @@ describe('langRedirect', () => {
 
 - [ ] **Step 2: 运行，确认失败**
 
-Run: `npm test -w site -- src/i18n/paths.test.ts`
+Run: `npm test --prefix site -- src/i18n/paths.test.ts`
 Expected: FAIL，提示找不到 `./paths`。
 
 - [ ] **Step 3: 写 `site/src/i18n/paths.ts`**
@@ -358,7 +365,7 @@ export function langRedirect(pathname: string, search: string, navLang: string, 
 
 - [ ] **Step 4: 运行，确认通过**
 
-Run: `npm test -w site -- src/i18n/paths.test.ts`
+Run: `npm test --prefix site -- src/i18n/paths.test.ts`
 Expected: PASS（4 组测试）。
 
 - [ ] **Step 5: 写 `site/src/i18n/index.ts` 和 `site/src/i18n/languages.ts`**
@@ -627,7 +634,7 @@ describe('the site\'s words', () => {
 - [ ] **Step 11: 跑官网测试和全仓的 i18n 覆盖**
 
 ```bash
-npm test -w site
+npm test --prefix site
 env -u CLAUDE_CODE_ENTRYPOINT npx vitest run --root web src/i18n/coverage.test.ts
 node scripts/i18n/extract.mjs --check
 tsc --noEmit -p site
@@ -724,7 +731,7 @@ describe('isAppRelease / mb', () => {
 
 - [ ] **Step 2: 运行，确认失败**
 
-Run: `npm test -w site -- src/data/releases.test.ts`
+Run: `npm test --prefix site -- src/data/releases.test.ts`
 Expected: FAIL，找不到 `./releases`。
 
 - [ ] **Step 3: 写 `site/src/data/releases.ts`**
@@ -779,7 +786,7 @@ export const mb = (bytes: number): string => `${Math.round(bytes / 1048576)} MB`
 
 - [ ] **Step 4: 运行，确认通过**
 
-Run: `npm test -w site -- src/data/releases.test.ts`
+Run: `npm test --prefix site -- src/data/releases.test.ts`
 Expected: PASS。
 
 - [ ] **Step 5: 写抓取脚本 `site/scripts/releases.ts`**
@@ -845,7 +852,7 @@ try {
 然后：
 
 ```bash
-npm run data -w site
+npm run data --prefix site
 ```
 
 预期：打印 `site data: 0.3.1, <n> stars, <m> releases`（如果那时已经有更新的版本，就是那个版本号）。JSON 里 `stars`、`releases` 变成数字。如果打印的是 `kept the committed file (…)`，就保留种子文件继续往下做，并在汇报里写明。
@@ -888,7 +895,7 @@ describe('readmeLink', () => {
 
 - [ ] **Step 8: 运行，确认失败**
 
-Run: `npm test -w site -- src/readme.test.ts`
+Run: `npm test --prefix site -- src/readme.test.ts`
 Expected: FAIL，找不到 `./readme`。
 
 - [ ] **Step 9: 写 `site/src/readme.ts`**
@@ -935,7 +942,7 @@ export function readmeLink(locale: Locale, enPrefix: string): string {
 
 - [ ] **Step 10: 运行，确认通过**
 
-Run: `npm test -w site -- src/readme.test.ts`
+Run: `npm test --prefix site -- src/readme.test.ts`
 Expected: PASS。如果「the two READMEs have their headings in the same order」失败，先打印两边的 `headings()` 对比，找出是哪一处标题对不上，在汇报里写明，不要改 README。
 
 - [ ] **Step 11: 写 `site/src/changelog.test.ts`**
@@ -977,7 +984,7 @@ describe('changelogBody', () => {
 
 - [ ] **Step 12: 运行，确认失败**
 
-Run: `npm test -w site -- src/changelog.test.ts`
+Run: `npm test --prefix site -- src/changelog.test.ts`
 Expected: FAIL，找不到 `./changelog`。
 
 - [ ] **Step 13: 写 `site/src/changelog.ts`**
@@ -999,7 +1006,7 @@ export function changelogBody(md: string): string {
 - [ ] **Step 14: 跑官网全部测试、类型检查**
 
 ```bash
-npm test -w site && tsc --noEmit -p site
+npm test --prefix site && tsc --noEmit -p site
 ```
 
 预期：全过，tsc 没有输出。
@@ -1092,7 +1099,7 @@ describe('keyAction', () => {
 
 - [ ] **Step 3: 运行，确认失败**
 
-Run: `npm test -w site -- src/client`
+Run: `npm test --prefix site -- src/client`
 Expected: FAIL，找不到 `./os` 和 `./keys`。
 
 - [ ] **Step 4: 写 `site/src/client/os.ts` 和 `site/src/client/keys.ts`**
@@ -1130,7 +1137,7 @@ export function keyAction(e: KeyLike): KeyAction | null {
 
 - [ ] **Step 5: 运行，确认通过**
 
-Run: `npm test -w site -- src/client`
+Run: `npm test --prefix site -- src/client`
 Expected: PASS。
 
 - [ ] **Step 6: 写 `site/src/client/main.ts`**
@@ -1542,7 +1549,7 @@ import Home from '../../views/Home.astro';
 - [ ] **Step 8: 跑测试、构建，检查产物**
 
 ```bash
-npm test -w site && tsc --noEmit -p site && npm run build -w site
+npm test --prefix site && tsc --noEmit -p site && npm run build --prefix site
 grep -c 'data-chapter=' site/dist/index.html site/dist/zh/index.html
 grep -o 'location.replace' site/dist/index.html | head -1
 grep -c 'location.replace' site/dist/zh/index.html
@@ -1556,7 +1563,7 @@ grep -o '下载 Windows 版' site/dist/zh/index.html | head -1
 - [ ] **Step 9: 在浏览器里看一遍**
 
 ```bash
-npm run preview -w site
+npm run preview --prefix site
 ```
 
 打开 `http://localhost:4321/`，确认下面几点（用 Chrome DevTools 的「Sensors」或 UA 覆盖来切系统）：
@@ -1714,7 +1721,7 @@ import ChangelogView from '../../../views/ChangelogView.astro';
 - [ ] **Step 4: 构建，检查产物**
 
 ```bash
-npm test -w site && npm run build -w site
+npm test --prefix site && npm run build --prefix site
 ls site/dist/download site/dist/zh/download site/dist/changelog site/dist/zh/changelog
 grep -c 'data-os-block=' site/dist/download/index.html
 grep -o 'id="source"' site/dist/zh/download/index.html
@@ -1727,7 +1734,7 @@ grep -c 'href="docs/' site/dist/changelog/index.html
 
 - [ ] **Step 5: 在浏览器里看一遍**
 
-`npm run preview -w site`，打开 `/download/` 和 `/zh/changelog/`：
+`npm run preview --prefix site`，打开 `/download/` 和 `/zh/changelog/`：
 
 1. Windows UA 下 Windows 那一节排在最前，macOS UA 下 macOS 那一节排在最前；每个文件后面显示大小。
 2. 「复制」点了变成「已复制」，1.5 秒后变回来；剪贴板里是那 5 行命令。
@@ -1814,7 +1821,7 @@ describe('firstLoadBytes', () => {
 
 - [ ] **Step 3: 运行，确认失败**
 
-Run: `npm test -w site -- scripts/budget.test.ts`
+Run: `npm test --prefix site -- scripts/budget.test.ts`
 Expected: FAIL，找不到 `./budget.ts`。
 
 - [ ] **Step 4: 写 `site/scripts/budget.ts`**
@@ -1823,7 +1830,7 @@ Expected: FAIL，找不到 `./budget.ts`。
 // The first load of each home page stays within budget (docs/superpowers/specs/2026-10-21-website-design.md §7):
 // the HTML and what it loads right away (stylesheets, icons, scripts, images, video posters) — not what a script
 // fetches later on purpose (the scene's lazy chunk, the theme recordings).
-//   node site/scripts/budget.ts        (after astro build; `npm run build -w site` runs it)
+//   node site/scripts/budget.ts        (after astro build; `npm run build --prefix site` runs it)
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -1874,7 +1881,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 
 - [ ] **Step 5: 运行测试，接进构建**
 
-Run: `npm test -w site -- scripts/budget.test.ts`
+Run: `npm test --prefix site -- scripts/budget.test.ts`
 Expected: PASS。
 
 `site/package.json` 的 `build` 改成：
@@ -1886,7 +1893,7 @@ Expected: PASS。
 然后：
 
 ```bash
-npm run build -w site
+npm run build --prefix site
 ```
 
 预期：最后两行类似 `index.html: first load 0.4x MB of 1.5 MB`、`zh/index.html: first load 0.5x MB of 1.5 MB`（中文那张动图大一些），退出码 0。
@@ -1936,13 +1943,17 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      # the site needs Astro and the shared i18n sources only: no install scripts (no Electron download, no node-pty build)
+          cache-dependency-path: |
+            package-lock.json
+            site/package-lock.json
+      # the root install gives the shared i18n scanner its vite; the site's own install has Astro. The site needs Astro and the shared i18n sources only: no install scripts (no Electron download, no node-pty build)
       - run: npm ci --ignore-scripts
+      - run: npm ci --prefix site
       - run: node site/scripts/releases.ts
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - run: npm test -w site
-      - run: npm run build -w site
+      - run: npm test --prefix site
+      - run: npm run build --prefix site
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site/dist
@@ -1967,8 +1978,9 @@ jobs:
 
 ## 跑起来
 
-- `npm run dev -w site`（http://localhost:4321/）、`npm run build -w site`（构建 + 首次加载预算检查）、`npm run preview -w site`、`npm test -w site`。
-- `npm run data -w site`：从 GitHub API 刷新 `site/src/data/site-data.json`（最新版本、安装包、星标）。CI 每次构建前也会跑；API 不通时用仓库里那份。
+- `npm run dev --prefix site`（http://localhost:4321/）、`npm run build --prefix site`（构建 + 首次加载预算检查）、`npm run preview --prefix site`、`npm test --prefix site`。
+- `npm run data --prefix site`：从 GitHub API 刷新 `site/src/data/site-data.json`（最新版本、安装包、星标）。CI 每次构建前也会跑；API 不通时用仓库里那份。
+- `site/` 是独立包（自己的 lockfile 和 node_modules，`npm install --prefix site`），不是根 workspace：Astro 要 `cookie@2`，根目录里 express 带的是 `cookie@0.7`，放进 workspace 会解析错、构建失败，还会顺带升级产品的 vite / zod。
 - Astro 精确锁 7.4.1：7.4.2 要 Node ≥ 22.23.4，本机是 22.22.1。升级前先看 `npm view astro@<v> engines`。
 
 ## 文案
@@ -2005,11 +2017,11 @@ jobs:
 - [ ] **Step 9: 最后整体检查**
 
 ```bash
-npm test -w site
+npm test --prefix site
 tsc --noEmit -p site
 env -u CLAUDE_CODE_ENTRYPOINT npx vitest run --root web src/i18n/coverage.test.ts
 node scripts/i18n/extract.mjs --check
-npm run build -w site
+npm run build --prefix site
 ```
 
 预期：全部通过，`EN_SITE: 0 missing, 0 unused`，构建末尾两行预算都在 1.5 MB 以内。
