@@ -32,7 +32,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # the github-pages environment only deploys from main, and a release run is on the tag: re-dispatch this workflow on main so the site rebuilds from main with the new release data
+  redispatch:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - run: gh workflow run site.yml --ref main --repo "$GITHUB_REPOSITORY"
+        env:
+          GH_TOKEN: ${{ github.token }}
   build:
+    if: github.event_name != 'release'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

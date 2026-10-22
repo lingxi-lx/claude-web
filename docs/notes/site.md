@@ -34,9 +34,11 @@
 
 ## 发布
 
-- `.github/workflows/site.yml`：push main（站点、README、CHANGELOG、i18n 相关路径）或发 release 时构建并发布。第一次要把 Pages 的来源设成 GitHub Actions、绑定自定义域名 `psycioxyxs.my`；Actions 发布不读 CNAME 文件，域名只在 Pages 设置里。
-- 现状：Pages（来源 GitHub Actions）和自定义域名已经设好；DNS 记录在 Cloudflare（zone `psycioxyxs.my`，备注「GitHub Pages - Claude Web site」）。第一次发布后、证书签好（approved）再打开 Enforce HTTPS。
-- DNS（Cloudflare）：根域名 4 条 A（185.199.108.153 / 109.153 / 110.153 / 111.153）和 4 条 AAAA（2606:50c0:8000::153 … 8003::153），
-  代理状态「仅 DNS」（灰云），否则 GitHub 签不出 HTTPS 证书；证书签好后在 Pages 设置里勾上 Enforce HTTPS。
+- `.github/workflows/site.yml`：push main（站点、README、CHANGELOG、i18n 相关路径）或发 release 时构建并发布。
+- 发 release 时不在 tag 上构建：`github-pages` 环境只允许 main 部署，所以 release 那次只跑 `redispatch`，用 `gh workflow run site.yml --ref main` 在 main 上重跑一次，下一次运行里官网就是新版本和新安装包。
+- Pages 设置（已设好）：来源 GitHub Actions，自定义域名 `psycioxyxs.my`；Actions 发布不读 CNAME 文件，域名只在 Pages 设置里。
+- DNS（Cloudflare，zone `psycioxyxs.my`，备注「GitHub Pages - Claude Web site」，已建好）：根域名 4 条 A（185.199.108.153 / 109.153 / 110.153 / 111.153）、
+  4 条 AAAA（2606:50c0:8000::153 … 8003::153），`www` CNAME → `ypyik0669.github.io`；全部「仅 DNS」（灰云），否则 GitHub 签不出 HTTPS 证书。
+- 第一次发布后，等证书签好（`gh api repos/ypyik0669/claude-web/pages -q .https_certificate.state` 是 `approved`）再在 Pages 设置里打开 Enforce HTTPS。
 - 首页首次加载 ≤ 1.5 MB（`site/scripts/budget.ts`，构建时检查，超了构建失败）；只算 HTML 直接引用的文件，脚本之后按需拉的不算。
 - 分享图 `site/public/og/{en,zh}.png`：网吧动图第一帧，`ffmpeg -i docs/images/<lang>/cafe.gif -frames:v 1 -vf "scale=1200:630:force_original_aspect_ratio=increase:flags=neighbor,crop=1200:630"`（最近邻放大保住像素）。
