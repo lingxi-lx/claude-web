@@ -52,7 +52,9 @@ export function AccountsTab() {
     }, tr('已删除'));
   };
   const signIn = (a: UpstreamAccountView) => run(a.id, async () => {
-    const r = await signInGemini({ accountId: a.id });
+    // sign in through the exit the account already uses: on a network that only reaches Google through
+    // it, a direct login window would never load the page
+    const r = await signInGemini({ accountId: a.id, proxyId: a.sidecarProxy?.id });
     if (!r) return;
     if (r.account.health === 'ok') toast(tr('登录已更新'), true);
     else toast(tr('登录了，但检查没通过：{e}', { e: r.account.lastError ?? tr('没有登录态') }));
