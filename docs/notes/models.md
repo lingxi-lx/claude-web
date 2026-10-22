@@ -122,6 +122,7 @@
 
 ### 思考用的语言：每轮提醒 + Claude 的限制（2026-10-20 用户：换了语言思考还是英文）
 
-- 只有系统提示那一段不够，照参考插件加了**每轮提醒**：SDK 钩子 `UserPromptSubmit` / `PostToolUse` 返回 `additionalContext`（`thinking-language.ts` 的 `thinkingLanguageReminder`，runner 的 `thinkingHooks`），引擎把它作为 system reminder 放进最新一条消息，对话里不显示，也不动缓存前缀。
+- **2026-10-22 撤掉了每轮提醒**：开着它时，`claude-opus-5-5` 和 `claude-fable-5-1` 在这个应用里频繁被接口判「appears to violate our Usage Policy」（账本里 opus-5-5 官方请求约 20% 被拒，`deepseek-v4.1-flash` 只有 0.1%），而官方桌面版同模型、同权限模式（都是 bypass）、同一段对话不拒；用户把思考语言设成「不指定」后，同一对话马上能继续 → 触发源是提醒。现在只留系统提示里的一节，措辞也改平（`Think in …` 一句，去掉 chain-of-thought / analysis / planning / deliberation 这种「改写思维过程」的说法）。代价：Claude 可能又用英文思考（本来也管不住，见下面那条）。
+- 只有系统提示那一段不够，照参考插件加了**每轮提醒**（2026-10-20，2026-10-22 已撤）：SDK 钩子 `UserPromptSubmit` / `PostToolUse` 返回 `additionalContext`，引擎把它作为 system reminder 放进最新一条消息，对话里不显示，也不动缓存前缀。
 - 假上游抓包（`cw-real/fake-upstream.cjs`）确认请求里有 `# Thinking language` 段和 `[Thinking language]` 提醒。
 - 真机：DeepSeek V4.1（aizhongzhuan，OpenAI 格式）设日语 → 三段思考全是日语；设简体中文 + 中文提问 → 中文。**Claude（Opus 5.5，账号）不照做**：连用户消息里直接写「思考过程必须全部用简体中文」都还是英文——Claude 显示的思考是官方的摘要（`thinking.display: summarized`），语言我们管不了。设置里的说明写了这一点。

@@ -21,10 +21,9 @@ describe('思考用的语言', () => {
 
   it('the section names the language and leaves the answer to the user’s language', () => {
     const p = thinkingLanguagePrompt(thinkingLanguageFor(undefined, 'ja', 'zh'));
-    expect(p).toContain('日本語 (Japanese)');
-    expect(p).toContain('in Japanese');
-    expect(p).toContain('never changes the final answer language');
-    expect(thinkingLanguagePrompt(thinkingLanguageFor(undefined, 'en', 'zh'))).toContain('process: English.');
+    expect(p).toContain('Think in 日本語 (Japanese)');
+    expect(p).toContain("Answer in the user's language");
+    expect(thinkingLanguagePrompt(thinkingLanguageFor(undefined, 'en', 'zh'))).toContain('Think in English.');
     expect(thinkingLanguagePrompt(null)).toBe('');
   });
 });

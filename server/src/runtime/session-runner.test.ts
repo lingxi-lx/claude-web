@@ -282,9 +282,10 @@ describe('SessionRunner: a subagent model picked → the work is delegated', () 
   });
 });
 
-// 2026-10-20 user: picked a language, Opus 5.5 still thought in English — the system prompt alone was not enough
-describe('SessionRunner: 思考用的语言 — a reminder with every prompt and tool result', () => {
-  it('hooks add it as additionalContext when a language is set; none without', async () => {
+// 2026-10-22: the per-step reminder hook tripped the API's safety classifier on Opus 5.5 / Fable 5.1 — the system
+// prompt carries the language, and no hook is handed to the SDK any more
+describe('SessionRunner: 思考用的语言 — the system prompt only', () => {
+  it('no hooks are handed out, with or without a language', async () => {
     queries.length = 0;
     const off = new SessionRunner({ sessionId: 'th-0', cwd: '/x' } as any);
     await tick();
@@ -293,12 +294,7 @@ describe('SessionRunner: 思考用的语言 — a reminder with every prompt and
     queries.length = 0;
     const r = new SessionRunner({ sessionId: 'th-1', cwd: '/x' } as any, undefined, { thinkingLanguage: 'zh-CN' });
     await tick();
-    const h = queries[0].options.hooks;
-    for (const ev of ['UserPromptSubmit', 'PostToolUse'] as const) {
-      const out = await h[ev][0].hooks[0]({} as any, undefined, { signal: new AbortController().signal });
-      expect(out.hookSpecificOutput.hookEventName).toBe(ev);
-      expect(out.hookSpecificOutput.additionalContext).toContain('简体中文 (Simplified Chinese)');
-    }
+    expect(queries[0].options.hooks).toBeUndefined();
     await r.close();
   });
 });

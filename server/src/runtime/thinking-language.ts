@@ -40,23 +40,16 @@ export function thinkingLanguageFor(own: unknown, global: unknown, locale: Local
 }
 
 /**
- * The short reminder that goes with every prompt and tool result (SDK hooks, as a system reminder the chat does not
- * show) — what the reference plugin does each step. The system-prompt section alone was not enough: Opus 5.5 under
- * Claude Code's long prompt kept thinking in English (2026-10-20, 48 of 57 thinking blocks after the pick).
- * Appended to the newest message only, so the cached prefix stays.
+ * The system-prompt section for that language ('' = none). Stable text: the prompt cache keeps its prefix.
+ *
+ * 2026-10-22: the per-step reminder (hook `additionalContext`, on every prompt and every tool result) was taken out.
+ * With it on, Opus 5.5 and Fable 5.1 refused ordinary work here ("appears to violate our Usage Policy") while the
+ * desktop app — same model, same permission mode, same conversation — did not; with the language off, the same
+ * conversation went on. The wording also lost the chain-of-thought / analysis / deliberation phrasing: a plain
+ * preference reads less like an instruction to rewrite the model's behaviour.
  */
-export function thinkingLanguageReminder(lang: { name: string; english: string } | null): string {
-  if (!lang) return '';
-  const label = lang.name === lang.english ? lang.name : `${lang.name} (${lang.english})`;
-  return `[Thinking language] The user wants your reasoning/thinking process written in ${label}. Continue your entire chain-of-thought in ${lang.english}. Your final answer follows the user's own language.`;
-}
-
-/** The system-prompt section for that language ('' = none). Stable text: the prompt cache keeps its prefix. */
 export function thinkingLanguagePrompt(lang: { name: string; english: string } | null): string {
   if (!lang) return '';
   const label = lang.name === lang.english ? lang.name : `${lang.name} (${lang.english})`;
-  return [
-    '# Thinking language',
-    `The user configured the language of your thinking/reasoning process: ${label}. Write your entire internal reasoning — chain-of-thought, analysis, planning, and deliberation — in ${lang.english}. Keep code, identifiers, file paths, and technical terms as they are. Your final answer to the user follows the user's own language; this setting never changes the final answer language.`,
-  ].join('\n');
+  return ['# Thinking language', `Think in ${label}. Keep code, identifiers, file paths, and technical terms as they are. Answer in the user's language.`].join('\n');
 }

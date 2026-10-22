@@ -18,13 +18,13 @@ import { turnShare, type RunningTotals } from '../usage/turn-cost.js';
 import { claudeMcpServer } from '../memory/launcher.js';
 import { webAllowedTools, webClaudeMcpServer, webMcpEnabled } from '../web/launcher.js';
 import { cafePluginDir } from '../characters/tools.js';
+import { asciiPluginDir } from '../themes/tools.js';
 import { computerAllowedTools, computerClaudeMcpServer } from '../computer/launcher.js';
 import { ENGINE_SEARCH_TOOL, engineSearchOff, userPickedSearchAdapter } from '../web/engine-search.js';
 import { markUnknownCost } from '../usage/pricing.js';
 import type { AttachmentRef, EffortLevel, ModelInfo, OpenSessionParams, PermissionMode, PermissionRequestEvent, PermissionResponse, Provider, RunnerState, SessionFeatures, SessionInfoSnapshot, SideTurn } from '../protocol.js';
 import { getLocale, tr } from '../i18n/index.js';
-import { asciiPluginDir } from '../themes/tools.js';
-import { thinkingLanguageFor, thinkingLanguagePrompt, thinkingLanguageReminder } from './thinking-language.js';
+import { thinkingLanguageFor, thinkingLanguagePrompt } from './thinking-language.js';
 import { subagentPolicyPrompt } from './subagent-policy.js';
 import { localEnv } from './local-env.js';
 import { SESSIONS_ALLOWED, SESSIONS_SERVER, sessionsMcpEnabled, sessionsMcpServer } from '../sessions-mcp/tools.js';
@@ -537,8 +537,8 @@ export class SessionRunner extends EventEmitter {
       abortController: this.abort,
       allowDangerouslySkipPermissions: true,
       canUseTool: (toolName, input, o) => this.onCanUseTool(toolName, input, o),
-      // 思考用的语言: a reminder on each prompt and tool result too (thinkingHooks)
-      ...(this.thinkingSection ? { hooks: this.thinkingHooks() } : {}),
+      // 思考用的语言 goes in the system prompt only: the per-step reminder hook tripped the API's safety classifier
+      // (see thinking-language.ts, 2026-10-22)
       ...extra,
     };
     this.q = query({ prompt: this.input, options });
@@ -1111,20 +1111,6 @@ export class SessionRunner extends EventEmitter {
 
   private thinkingLanguageSection(): string {
     return thinkingLanguagePrompt(thinkingLanguageFor(this.ownThinkingLanguage, thinkingLanguageSetting, getLocale()));
-  }
-
-  /**
-   * The same language as a reminder on every prompt and tool result (hook `additionalContext`: a system reminder in
-   * the newest message, not shown in the chat). Read at each call, from the language the process was started with.
-   */
-  private thinkingHooks(): Options['hooks'] {
-    const text = () => thinkingLanguageReminder(thinkingLanguageFor(this.ownThinkingLanguage, thinkingLanguageSetting, getLocale()));
-    if (!text()) return undefined;
-    const add = (hookEventName: 'UserPromptSubmit' | 'PostToolUse') => async () => {
-      const additionalContext = this.thinkingSection ? text() : '';
-      return additionalContext ? { hookSpecificOutput: { hookEventName, additionalContext } } : {};
-    };
-    return { UserPromptSubmit: [{ hooks: [add('UserPromptSubmit')] }], PostToolUse: [{ hooks: [add('PostToolUse')] }] } as Options['hooks'];
   }
 
   /**
