@@ -26,7 +26,7 @@
 
 ```
 site/
-  astro.config.mjs        # 静态输出，base 为 /claude-web/（Pages 的仓库路径），alias 同 web/vite.config.ts
+  astro.config.mjs        # 静态输出，部署在主域名 psycioxyxs.my 的根上（base 为 /，GitHub Pages 自定义域名），alias 同 web/vite.config.ts
   package.json            # astro、vitest；不装 three / gsap / lenis
   src/
     pages/ index.astro  download.astro  changelog.astro  zh/{index,download,changelog}.astro

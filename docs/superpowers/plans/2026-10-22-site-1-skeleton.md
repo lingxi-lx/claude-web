@@ -4,7 +4,7 @@
 
 **Goal:** 在 `site/` 做出一个能上线的 Astro 静态官网：中英两套的首页（首屏先用现成的网吧动图占位）、下载页、更新内容页，自动识别系统的下载按钮，键盘快捷键，GitHub Pages 自动发布。
 
-**Architecture:** `site/` 是新的 npm workspace，Astro 7 静态输出，`base` 为 `/claude-web/`。所有可见文字都在 `site/src/copy.ts` 里用 `tr('中文')` 写，英文在 `site/src/i18n/en.ts`，借用产品共享的 `@i18n` 核心（`server/src/i18n/core.ts`）和现有的 i18n 覆盖测试。`.astro` 文件只管结构，不写字。版本和下载链接由构建时的脚本从 GitHub API 抓成 JSON。前端只有一个很小的脚本：识别系统、快捷键、复制按钮。
+**Architecture:** `site/` 是新的 npm workspace，Astro 7 静态输出，部署在主域名 `psycioxyxs.my` 的根上（`base: '/'`）。所有可见文字都在 `site/src/copy.ts` 里用 `tr('中文')` 写，英文在 `site/src/i18n/en.ts`，借用产品共享的 `@i18n` 核心（`server/src/i18n/core.ts`）和现有的 i18n 覆盖测试。`.astro` 文件只管结构，不写字。版本和下载链接由构建时的脚本从 GitHub API 抓成 JSON。前端只有一个很小的脚本：识别系统、快捷键、复制按钮。
 
 **Tech Stack:** Astro 7.4.1、@astrojs/markdown-remark 7.3.4、Vitest 4、TypeScript 7、Node 22.22+（类型擦除直接跑 `.ts` 脚本）、GitHub Actions + Pages。
 
@@ -17,7 +17,8 @@
 
 - Node ≥ 22.22.0。`astro` 精确锁 `7.4.1`（7.4.2 要求 Node ≥ 22.23.4，本机是 22.22.1）。
 - `site/` 的依赖只有：`astro` 7.4.1、`@astrojs/markdown-remark` 7.3.4、`vitest` ^4.1.11、`typescript` ^7.0.2。不装 three / gsap / lenis / React。
-- 站点地址 `https://ypyik0669.github.io/claude-web/`，`base: '/claude-web/'`，`trailingSlash: 'always'`。英文在 `/`，中文在 `/zh/`。
+- 站点地址 `https://psycioxyxs.my/`：GitHub Pages 的自定义域名（DNS 在 Cloudflare），`base: '/'`，`trailingSlash: 'always'`。英文在 `/`，中文在 `/zh/`。
+  用 Actions 发布时 Pages 不读 CNAME 文件，域名在仓库的 Pages 设置里绑定（Task 7 Step 11）。
 - 用户看得见的字都是 `site/src/*.ts` 里的 `tr('中文')`，英文写在 `site/src/i18n/en.ts`（`EN_SITE`）。`.astro` 文件里不能出现中文。如果某个中文 key 在产品的英文表里已经有了，英文必须一样：`下载` → `Download`，`更新内容` → `What’s new`（弯引号），`复制` → `Copy`，`已复制` → `Copied`。
 - 用词：叫「对话」，不叫「会话」；不出现 档案 / 引擎 / 窗格 / 停靠 / ACP / effort / ultracode。
 - 不用 localStorage。语言就是 URL：从中文页切到英文页的链接带 `?lang=en`，带了这个参数就不再自动跳转。
@@ -112,10 +113,10 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-// Served by GitHub Pages at https://ypyik0669.github.io/claude-web/
+// Served by GitHub Pages on the custom domain https://psycioxyxs.my/ (bound in the repo's Pages settings)
 export default defineConfig({
-  site: 'https://ypyik0669.github.io',
-  base: '/claude-web/',
+  site: 'https://psycioxyxs.my',
+  base: '/',
   trailingSlash: 'always',
   output: 'static',
   build: { format: 'directory' },
@@ -287,6 +288,13 @@ describe('href', () => {
   });
   it('takes a base without its slash too', () => {
     expect(href('/claude-web', 'zh', 'download')).toBe('/claude-web/zh/download/');
+  });
+  it('works at the domain root (the real site: base "/")', () => {
+    expect(href('/', 'en', 'home')).toBe('/');
+    expect(href('/', 'zh', 'download', '#source')).toBe('/zh/download/#source');
+    expect(langRedirect('/', '', 'zh-CN', '/')).toBe('/zh/');
+    expect(langRedirect('/zh/', '', 'zh-CN', '/')).toBeNull();
+    expect(langRedirect('/download/', '', 'zh-CN', '/')).toBeNull();
   });
 });
 
@@ -1551,9 +1559,9 @@ grep -o '下载 Windows 版' site/dist/zh/index.html | head -1
 npm run preview -w site
 ```
 
-打开 `http://localhost:4321/claude-web/`，确认下面几点（用 Chrome DevTools 的「Sensors」或 UA 覆盖来切系统）：
+打开 `http://localhost:4321/`，确认下面几点（用 Chrome DevTools 的「Sensors」或 UA 覆盖来切系统）：
 
-1. 浏览器语言是中文时，自动跳到 `/claude-web/zh/`；点右上角「English」回到英文页，并且不会再被跳回中文页（网址带 `?lang=en`）。
+1. 浏览器语言是中文时，自动跳到 `/zh/`；点右上角「English」回到英文页，并且不会再被跳回中文页（网址带 `?lang=en`）。
 2. Windows UA 只显示「Download for Windows」，macOS UA 只显示 macOS 按钮和「Intel Mac」链接，iPhone UA 两个都显示。
 3. 按 `D` 打开的是自己系统的安装包链接，`R` 跳到下载页的 #source，`C` 去更新内容，`G` 去 GitHub。
 4. DevTools Console 里没有报错。
@@ -1719,7 +1727,7 @@ grep -c 'href="docs/' site/dist/changelog/index.html
 
 - [ ] **Step 5: 在浏览器里看一遍**
 
-`npm run preview -w site`，打开 `/claude-web/download/` 和 `/claude-web/zh/changelog/`：
+`npm run preview -w site`，打开 `/download/` 和 `/zh/changelog/`：
 
 1. Windows UA 下 Windows 那一节排在最前，macOS UA 下 macOS 那一节排在最前；每个文件后面显示大小。
 2. 「复制」点了变成「已复制」，1.5 秒后变回来；剪贴板里是那 5 行命令。
@@ -1768,22 +1776,23 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { BUDGET, firstLoadBytes, firstLoadRefs } from './budget.ts';
 
-const BASE = '/claude-web/';
+const BASE = '/';
 const HTML = [
-  '<link rel="stylesheet" href="/claude-web/_astro/a.css">',
-  '<link rel="icon" type="image/svg+xml" href="/claude-web/icon.svg">',
-  '<link rel="canonical" href="/claude-web/">',
-  '<link rel="alternate" hreflang="zh" href="/claude-web/zh/">',
-  '<script type="module" src="/claude-web/_astro/main.js?v=1"></script>',
-  '<img src="/claude-web/_astro/cafe.gif" alt="">',
+  '<link rel="stylesheet" href="/_astro/a.css">',
+  '<link rel="icon" type="image/svg+xml" href="/icon.svg">',
+  '<link rel="canonical" href="/">',
+  '<link rel="alternate" hreflang="zh" href="/zh/">',
+  '<script type="module" src="/_astro/main.js?v=1"></script>',
+  '<script src="//cdn.example.test/x.js"></script>',
+  '<img src="/_astro/cafe.gif" alt="">',
   '<img src="https://example.test/remote.png" alt="">',
-  '<video poster="/claude-web/poster.webp"></video>',
-  '<a href="/claude-web/download/">x</a>',
-  '<img data-src="/claude-web/lazy.png" alt="">',
+  '<video poster="/poster.webp"></video>',
+  '<a href="/download/">x</a>',
+  '<img data-src="/lazy.png" alt="">',
 ].join('\n');
 
 describe('firstLoadRefs', () => {
-  it('counts what loads with the page: stylesheets, icons, scripts, images, posters', () => {
+  it('counts what loads with the page: stylesheets, icons, scripts, images, posters (not other sites)', () => {
     expect(firstLoadRefs(HTML, BASE).sort()).toEqual(['_astro/a.css', '_astro/cafe.gif', '_astro/main.js', 'icon.svg', 'poster.webp']);
   });
 });
@@ -1833,7 +1842,8 @@ export function firstLoadRefs(html: string, base: string): string[] {
     const value = attr(tag, kind === 'link' ? 'href' : kind === 'video' ? 'poster' : 'src');
     if (!value) continue;
     const ref = value.split(/[?#]/)[0];
-    if (ref.startsWith(base)) out.add(ref.slice(base.length));
+    // //host/x is another site even when the base is "/"
+    if (!ref.startsWith('//') && ref.startsWith(base)) out.add(ref.slice(base.length));
   }
   return [...out];
 }
@@ -1851,7 +1861,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const dist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../dist');
   let over = false;
   for (const page of ['index.html', 'zh/index.html']) {
-    const n = firstLoadBytes(dist, fs.readFileSync(path.join(dist, page), 'utf8'), '/claude-web/');
+    const n = firstLoadBytes(dist, fs.readFileSync(path.join(dist, page), 'utf8'), '/');
     console.log(`${page}: first load ${(n / 1048576).toFixed(2)} MB of ${(BUDGET / 1048576).toFixed(1)} MB`);
     if (n > BUDGET) over = true;
   }
@@ -1886,9 +1896,9 @@ npm run build -w site
 ```yaml
 name: Site
 
-# Builds site/ (Astro) and publishes it to GitHub Pages: https://ypyik0669.github.io/claude-web/
+# Builds site/ (Astro) and publishes it to GitHub Pages on the custom domain https://psycioxyxs.my/
 # Runs when the site or what it shows changes on main, and when a release is published (new version, new installers).
-# One-time setup in the repo: Settings → Pages → Source = GitHub Actions.
+# One-time setup: Pages source = GitHub Actions, custom domain psycioxyxs.my (docs/notes/site.md → 发布).
 
 on:
   push:
@@ -1952,12 +1962,12 @@ jobs:
 ```markdown
 # 官网（2026-10-22）
 
-`site/`：Astro 静态站，发布在 https://ypyik0669.github.io/claude-web/ 。设计：`docs/superpowers/specs/2026-10-21-website-design.md`；
+`site/`：Astro 静态站，发布在 https://psycioxyxs.my/ （GitHub Pages 自定义域名，DNS 在 Cloudflare）。设计：`docs/superpowers/specs/2026-10-21-website-design.md`；
 调研：`reports/Claude Web 官网设计参考调研.md`。9 月的单页旧宣传页（`site/index.html` / `page.html` / `build.mjs`）已被替换，git 历史里有。
 
 ## 跑起来
 
-- `npm run dev -w site`（http://localhost:4321/claude-web/）、`npm run build -w site`（构建 + 首次加载预算检查）、`npm run preview -w site`、`npm test -w site`。
+- `npm run dev -w site`（http://localhost:4321/）、`npm run build -w site`（构建 + 首次加载预算检查）、`npm run preview -w site`、`npm test -w site`。
 - `npm run data -w site`：从 GitHub API 刷新 `site/src/data/site-data.json`（最新版本、安装包、星标）。CI 每次构建前也会跑；API 不通时用仓库里那份。
 - Astro 精确锁 7.4.1：7.4.2 要 Node ≥ 22.23.4，本机是 22.22.1。升级前先看 `npm view astro@<v> engines`。
 
@@ -1978,7 +1988,9 @@ jobs:
 
 ## 发布
 
-- `.github/workflows/site.yml`：push main（站点、README、CHANGELOG、i18n 相关路径）或发 release 时构建并发布。第一次要在仓库设置里把 Pages 的来源设成 GitHub Actions。
+- `.github/workflows/site.yml`：push main（站点、README、CHANGELOG、i18n 相关路径）或发 release 时构建并发布。第一次要把 Pages 的来源设成 GitHub Actions、绑定自定义域名 `psycioxyxs.my`；Actions 发布不读 CNAME 文件，域名只在 Pages 设置里。
+- DNS（Cloudflare）：根域名 4 条 A（185.199.108.153 / 109.153 / 110.153 / 111.153）和 4 条 AAAA（2606:50c0:8000::153 … 8003::153），
+  代理状态「仅 DNS」（灰云），否则 GitHub 签不出 HTTPS 证书；证书签好后在 Pages 设置里勾上 Enforce HTTPS。
 - 首页首次加载 ≤ 1.5 MB（`site/scripts/budget.ts`，构建时检查，超了构建失败）；只算 HTML 直接引用的文件，脚本之后按需拉的不算。
 ```
 
@@ -2015,8 +2027,10 @@ git commit -m "feat(官网): 分享图、首次加载 1.5 MB 预算检查、GitH
 
 ```bash
 gh api -X POST repos/ypyik0669/claude-web/pages -f build_type=workflow
+gh api -X PUT repos/ypyik0669/claude-web/pages -f cname=psycioxyxs.my
 git push origin main
 gh run watch --exit-status $(gh run list --workflow site.yml --limit 1 --json databaseId -q '.[0].databaseId')
 ```
 
-然后打开 https://ypyik0669.github.io/claude-web/ 和 `/zh/`，把 Task 5 Step 9 和 Task 6 Step 5 的检查再做一遍。
+DNS 由用户在 Cloudflare 上配（见 `docs/notes/site.md` → 发布：4 条 A、4 条 AAAA，灰云）。`gh api repos/ypyik0669/claude-web/pages -q .https_certificate.state` 变成 `approved` 后，
+`gh api -X PUT repos/ypyik0669/claude-web/pages -F https_enforced=true`。然后打开 https://psycioxyxs.my/ 和 `/zh/`，把 Task 5 Step 9 和 Task 6 Step 5 的检查再做一遍。
