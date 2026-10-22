@@ -39,6 +39,7 @@ export function copy(locale: Locale) {
       title: tr('Claude Code，有了界面。'),
       sub: tr('桌面版和网页版：对话、审阅、分屏、手机远程。底下跑的是官方 Claude Code，也能带 Codex、Gemini CLI 这些。'),
       fine: tr('免费开源 · Windows、macOS 和网页 · 不用注册'),
+      hint: tr('滚动看它们干活'),
     },
     dl: {
       win: tr('下载 Windows 版'),
@@ -58,6 +59,30 @@ export function copy(locale: Locale) {
     install: {
       title: tr('装上就能用'),
       body: tr('桌面版自带运行环境，不用另装 Node.js；网页版从源码跑，几条命令。'),
+    },
+    scene: {
+      labels: {
+        agents: tr('网吧全景：三个子代理进门、找座位、开机干活'),
+        turns: tr('api 的座位：一回合折成一行，点开是时间线'),
+        permission: tr('api 举手了：它要运行一条命令，等你允许'),
+        review: tr('tests 的座位：改了 2 个文件，点开看逐行对比'),
+        checkout: tr('前台：tests 干完了，正在结账'),
+        elsewhere: tr('门口：另一台电脑上的 lint 进来了'),
+        gateway: tr('大屏：网关的本机地址和账号'),
+      } as Record<string, string>,
+      turn: { summary: tr('干了 52 秒 · 读 1 个文件 · 改 2 个 · 跑 1 条命令'), run: tr('运行') },
+      permission: {
+        badge: tr('需要你'),
+        title: tr('{name} 想运行一条命令', { name: 'api' }),
+        allow: tr('允许'),
+        deny: tr('拒绝'),
+        allowed: tr('好，接着干'),
+        denied: tr('好吧，换个办法'),
+      },
+      review: { card: tr('改了 2 个文件') },
+      receipt: { title: tr('结账 · {name}', { name: 'tests' }), took: tr('用了 {time}', { time: '0:21' }), tab: tr('网费 {yuan}', { yuan: '¥0.03' }) },
+      elsewhere: { other: tr('其它电脑'), phone: tr('手机上的远程'), anyModel: tr('子代理可以用任何一家的模型') },
+      gateway: { title: tr('本机网关'), online: tr('在线'), standby: tr('备用'), geminiWeb: tr('Gemini 网页'), claude: tr('Claude 账号') },
     },
     footer: {
       notice: tr('社区项目，与 Anthropic 无关。“Claude” 和 “Claude Code” 是 Anthropic 的商标。'),

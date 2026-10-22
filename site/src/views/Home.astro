@@ -1,6 +1,7 @@
 ---
 import Base from '../layouts/Base.astro';
 import DownloadButtons from '../components/DownloadButtons.astro';
+import SceneOverlays from '../components/SceneOverlays.astro';
 import data from '../data/site-data.json';
 import { copy } from '../copy';
 import { readmeLink } from '../readme';
@@ -23,27 +24,36 @@ const stats = [
 ].filter((s) => s !== null);
 ---
 <Base locale={locale} page="home">
-  <section class="hero" aria-labelledby="hero-title">
-    <div class="hero-scene" id="hero-scene">
-      <img src={cafe.src} width={cafe.width} height={cafe.height} alt={c.meta.sceneAlt} fetchpriority="high" />
+  <div class="stage" id="stage">
+    <div class="stage-scene" id="hero-scene">
+      <img class="scene-poster" src={cafe.src} width={cafe.width} height={cafe.height} alt="" fetchpriority="high" />
+      <div class="scene-a11y" role="img" aria-label={c.meta.sceneAlt} data-scene-label-el></div>
+      <SceneOverlays locale={locale} />
+      <div class="scene-tip" role="status" hidden></div>
     </div>
-    <div class="hero-copy">
-      <h1 id="hero-title">{c.hero.title}</h1>
-      <p class="hero-sub">{c.hero.sub}</p>
-      <DownloadButtons locale={locale} />
-      <p class="hero-fine">{c.hero.fine}</p>
-    </div>
-  </section>
 
-  <div id="features" class="chapters">
-    {c.chapters.map((ch, i) => (
-      <section class="chapter" id={`ch-${ch.id}`} data-chapter={ch.id} aria-labelledby={`ch-${ch.id}-t`}>
-        <p class="chapter-n">{String(i + 1).padStart(2, '0')}</p>
-        <h2 id={`ch-${ch.id}-t`}>{ch.title}</h2>
-        <p>{ch.body}</p>
-        <a class="chapter-more" href={readmeLink(locale, ch.readme)}>{c.chapterMore} →</a>
-      </section>
-    ))}
+    <section class="hero" data-hero aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <h1 id="hero-title">{c.hero.title}</h1>
+        <p class="hero-sub">{c.hero.sub}</p>
+        <DownloadButtons locale={locale} />
+        <p class="hero-fine">{c.hero.fine}</p>
+        <p class="hero-hint" aria-hidden="true">{c.hero.hint} ↓</p>
+      </div>
+    </section>
+
+    <div id="features" class="chapters">
+      {c.chapters.map((ch, i) => (
+        <section class="chapter" id={`ch-${ch.id}`} data-chapter={ch.id} data-scene-label={c.scene.labels[ch.id]} aria-labelledby={`ch-${ch.id}-t`}>
+          <div class="chapter-card">
+            <p class="chapter-n">{String(i + 1).padStart(2, '0')}</p>
+            <h2 id={`ch-${ch.id}-t`}>{ch.title}</h2>
+            <p>{ch.body}</p>
+            <a class="chapter-more" href={readmeLink(locale, ch.readme)}>{c.chapterMore} →</a>
+          </div>
+        </section>
+      ))}
+    </div>
   </div>
 
   <section class="stats" aria-label={c.stats.label}>
