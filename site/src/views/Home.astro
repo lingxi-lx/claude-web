@@ -1,0 +1,59 @@
+---
+import Base from '../layouts/Base.astro';
+import DownloadButtons from '../components/DownloadButtons.astro';
+import data from '../data/site-data.json';
+import { copy } from '../copy';
+import { readmeLink } from '../readme';
+import { AGENTS } from '../data/agents';
+import type { SiteData } from '../data/releases';
+import type { Locale } from '../i18n';
+import cafeEn from '../../../docs/images/en/cafe.gif';
+import cafeZh from '../../../docs/images/zh/cafe.gif';
+
+interface Props { locale: Locale }
+const { locale } = Astro.props;
+const c = copy(locale);
+const d = data as SiteData;
+const cafe = locale === 'zh' ? cafeZh : cafeEn;
+const num = (n: number) => n.toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US');
+const stats = [
+  d.stars != null ? { n: num(d.stars), label: c.stats.stars } : null,
+  d.releases != null ? { n: num(d.releases), label: c.stats.releases } : null,
+  { n: num(AGENTS.length), label: c.stats.agents },
+].filter((s) => s !== null);
+---
+<Base locale={locale} page="home">
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="hero-scene" id="hero-scene">
+      <img src={cafe.src} width={cafe.width} height={cafe.height} alt={c.meta.sceneAlt} fetchpriority="high" />
+    </div>
+    <div class="hero-copy">
+      <h1 id="hero-title">{c.hero.title}</h1>
+      <p class="hero-sub">{c.hero.sub}</p>
+      <DownloadButtons locale={locale} />
+      <p class="hero-fine">{c.hero.fine}</p>
+    </div>
+    <p class="hero-scroll" aria-hidden="true">{c.hero.scroll} ↓</p>
+  </section>
+
+  <div id="features" class="chapters">
+    {c.chapters.map((ch, i) => (
+      <section class="chapter" id={`ch-${ch.id}`} data-chapter={ch.id} aria-labelledby={`ch-${ch.id}-t`}>
+        <p class="chapter-n">{String(i + 1).padStart(2, '0')}</p>
+        <h2 id={`ch-${ch.id}-t`}>{ch.title}</h2>
+        <p>{ch.body}</p>
+        <a class="chapter-more" href={readmeLink(locale, ch.readme)}>{c.chapterMore} →</a>
+      </section>
+    ))}
+  </div>
+
+  <section class="stats" aria-label={c.stats.label}>
+    {stats.map((s) => <div><strong>{s.n}</strong><span>{s.label}</span></div>)}
+  </section>
+
+  <section class="install" id="install" aria-labelledby="install-t">
+    <h2 id="install-t">{c.install.title}</h2>
+    <p>{c.install.body}</p>
+    <DownloadButtons locale={locale} />
+  </section>
+</Base>

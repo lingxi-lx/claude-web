@@ -1,0 +1,50 @@
+---
+import '../styles/tokens.css';
+import '../styles/site.css';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import { copy } from '../copy';
+import { href, langRedirect, type Page } from '../i18n/paths';
+import type { Locale } from '../i18n';
+
+interface Props { locale: Locale; page: Page; title?: string }
+const { locale, page, title } = Astro.props;
+const c = copy(locale);
+const base = import.meta.env.BASE_URL;
+const site = Astro.site!;
+const pageTitle = title ? `${title} · Claude Web` : c.meta.title;
+// a visitor whose browser reads Chinese lands on /zh/ — written inline so it runs before anything paints
+const redirect = locale === 'en' && page === 'home'
+  ? `(function(){var t=(${langRedirect.toString()})(location.pathname,location.search,navigator.language||'',${JSON.stringify(base)});if(t)location.replace(t);})();`
+  : '';
+---
+<!doctype html>
+<html lang={locale === 'zh' ? 'zh-CN' : 'en'} data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    {redirect && <script is:inline set:html={redirect} />}
+    <title>{pageTitle}</title>
+    <meta name="description" content={c.meta.description} />
+    <meta name="theme-color" content="#12110f" />
+    <link rel="icon" type="image/svg+xml" href={`${base}icon.svg`} />
+    <link rel="canonical" href={new URL(href(base, locale, page), site).href} />
+    <link rel="alternate" hreflang="en" href={new URL(href(base, 'en', page), site).href} />
+    <link rel="alternate" hreflang="zh" href={new URL(href(base, 'zh', page), site).href} />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={pageTitle} />
+    <meta property="og:description" content={c.meta.description} />
+    <meta property="og:image" content={new URL(`${base}og/${locale}.png`, site).href} />
+    <meta property="og:image:alt" content={c.meta.sceneAlt} />
+    <meta name="twitter:card" content="summary_large_image" />
+  </head>
+  <body>
+    <a class="skip" href="#main">{c.nav.skip}</a>
+    <Header locale={locale} page={page} />
+    <main id="main"><slot /></main>
+    <Footer locale={locale} page={page} />
+    <script>
+      import '../client/main';
+    </script>
+  </body>
+</html>
