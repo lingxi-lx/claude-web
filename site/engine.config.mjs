@@ -13,6 +13,8 @@ export function engineAlias(site) {
     { find: /^@cafe\//, replacement: `${slash(path.join(repo, 'web/src/features/cafe'))}/` },
     { find: /^@characters$/, replacement: slash(path.join(repo, 'server/src/characters/core/index.ts')) },
     { find: /^@shared$/, replacement: slash(path.join(repo, 'server/src/protocol.ts')) },
+    { find: /^@themes$/, replacement: slash(path.join(repo, 'server/src/themes/core/index.ts')) },
+    { find: /^@web-themes\//, replacement: `${slash(path.join(repo, 'web/src/themes'))}/` },
   ];
 }
 

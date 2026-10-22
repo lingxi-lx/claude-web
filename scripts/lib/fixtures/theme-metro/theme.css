@@ -1,0 +1,32 @@
+/* 磷光 · Phosphor — a CRT terminal: square corners, metro edges with a little bloom, a monospace greeting with a
+   block cursor, scanlines over the welcome backdrop. Everything here is scoped to html[data-ascii='metro']. */
+html[data-ascii='metro'] {
+  --r-xs: 0px; --r-sm: 1px; --r-row: 2px; --r-md: 2px; --r-lg: 3px; --r-xl: 3px;
+  --r-bubble: 3px; --r-composer: 3px; --r-2xl: 4px;
+  --display: var(--mono);
+}
+
+html[data-ascii='metro'] .welcome .greet { font-weight: 600; letter-spacing: 0.04em; text-shadow: 0 0 12px color-mix(in oklab, var(--accent) 45%, transparent); }
+html[data-ascii='metro'] .welcome .greet .spark { display: none; }
+html[data-ascii='metro'] .welcome .greet::before { content: '>'; color: var(--accent); }
+html[data-ascii='metro'] .welcome .greet::after { content: '█'; color: var(--accent); animation: phos-blink 1.06s steps(1, end) infinite; }
+@keyframes phos-blink { 50% { opacity: 0; } }
+
+html[data-ascii='metro'] .composer-box {
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 38%, transparent), 0 0 18px -4px color-mix(in oklab, var(--accent) 30%, transparent);
+}
+html[data-ascii='metro'] .composer-box:focus-within {
+  box-shadow: 0 0 0 1px var(--accent), 0 0 24px -2px color-mix(in oklab, var(--accent) 45%, transparent);
+}
+html[data-ascii='metro'] .composer textarea { font-family: var(--mono); }
+html[data-ascii='metro'] .run-card { font-family: var(--mono); }
+
+/* scanlines over the backdrop (under the page's words): a still gradient, no per-frame cost */
+html[data-ascii='metro'] .welcome-tile::after {
+  content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: repeating-linear-gradient(to bottom, transparent 0 2px, rgba(0, 0, 0, 0.22) 2px 3px);
+}
+html[data-ascii='metro'] .welcome-tile { isolation: isolate; }
+
+@media (prefers-reduced-motion: reduce) { html[data-ascii='metro'] .welcome .greet::after { animation: none; } }
+html[data-ascii='metro'][data-reduce-motion='1'] .welcome .greet::after { animation: none; }
