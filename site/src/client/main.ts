@@ -20,12 +20,15 @@ addEventListener('keydown', (e) => {
   el.click();
 });
 
+// Copy buttons hold plain text: the label is swapped with textContent (child elements would be lost).
 for (const b of document.querySelectorAll<HTMLButtonElement>('button[data-copy]')) {
+  const label = b.textContent;
+  let restore: ReturnType<typeof setTimeout> | undefined;
   b.addEventListener('click', () => {
-    const label = b.textContent;
     void navigator.clipboard.writeText(b.dataset.copy ?? '').then(() => {
       b.textContent = b.dataset.copied ?? label;
-      setTimeout(() => { b.textContent = label; }, 1500);
+      clearTimeout(restore);
+      restore = setTimeout(() => { b.textContent = label; }, 1500);
     });
   });
 }
