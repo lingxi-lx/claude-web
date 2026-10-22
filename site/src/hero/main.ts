@@ -8,6 +8,7 @@ import { anchorFor, cameraView, CAMERA_MS, easeView, HERO_LOOK, type ChapterLook
 import { pointerNorm } from './motion';
 import { installChapters } from './overlays';
 import { installInteract } from './interact';
+import { installPost } from './post';
 import type { TierProfile } from './tier';
 
 export interface HeroOptions { profile: TierProfile; poster: boolean }
@@ -118,6 +119,7 @@ export function startHero(root: HTMLElement, opts: HeroOptions): Hero {
       document.documentElement.dataset.posterReady = '1';
     });
   } else sync();
+  if (opts.profile.post && !hero.still) installPost(hero);
   if (!hero.still) { installChapters(hero); installInteract(hero); }
   return hero;
 }

@@ -35,6 +35,7 @@ img { max-width: 100%; }
 .stage-scene > img, .stage-scene canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .stage-scene > img { object-fit: cover; image-rendering: pixelated; }
 .stage-scene canvas { image-rendering: pixelated; }
+.stage-scene .scene-post { image-rendering: auto; }
 .stage-scene[data-live] > img { visibility: hidden; }
 .stage-scene::after { content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: linear-gradient(90deg, color-mix(in oklab, var(--bg-1) 88%, transparent) 0, color-mix(in oklab, var(--bg-1) 45%, transparent) 34%, transparent 62%), linear-gradient(0deg, var(--bg-1), transparent 22%); }
 .scene-a11y { position: absolute; inset: 0; pointer-events: none; }
