@@ -1,0 +1,66 @@
+/* 水墨 · Sumi Ink — rice paper and black ink: a Songti greeting with a brushed underline and a cinnabar seal beside it,
+   a deckled, dry-brushed edge on the composer, ink-grey hairlines. Everything here is scoped to html[data-ascii='ink']. */
+html[data-ascii='ink'] {
+  --r-xs: 1px; --r-sm: 2px; --r-row: 3px; --r-md: 3px; --r-lg: 4px; --r-xl: 5px;
+  --r-bubble: 4px; --r-composer: 4px; --r-2xl: 6px;
+  /* Songti where it has good Latin (macOS); elsewhere a book serif for Latin, with SimSun / Noto Serif for the CJK */
+  --display: 'Songti SC', 'STSong', 'Palatino Linotype', 'Book Antiqua', Georgia, 'Noto Serif SC', 'Noto Serif CJK SC', 'Source Han Serif SC', 'SimSun', serif;
+}
+
+/* the greeting: Songti, with a brush stroke under it that thins out to the right */
+html[data-ascii='ink'] .welcome .greet {
+  font-weight: 600; letter-spacing: 0.06em; color: var(--fg); padding-bottom: 10px;
+  /* a brush stroke: pressed down hard at the left, lifting off toward the right, with a dry-brush hair under it */
+  background:
+    linear-gradient(to right, transparent 0%, color-mix(in oklab, var(--fg) 88%, transparent) 4%, color-mix(in oklab, var(--fg) 72%, transparent) 45%, color-mix(in oklab, var(--fg) 20%, transparent) 90%, transparent 100%)
+      center bottom / 62% 3px no-repeat,
+    linear-gradient(to right, transparent 10%, color-mix(in oklab, var(--fg) 32%, transparent) 30%, transparent 75%)
+      center calc(100% - 4px) / 62% 1px no-repeat;
+}
+html[data-ascii='ink'] .welcome .greet .spark { display: none; }
+/* the seal (印章) beside it: a cinnabar square, 墨 cut in white, slightly askew, its edge worn */
+html[data-ascii='ink'] .welcome .greet::after {
+  content: '墨'; display: inline-flex; align-items: center; justify-content: center;
+  width: 1.3em; height: 1.3em; font-size: 0.62em; line-height: 1; letter-spacing: 0;
+  font-family: var(--display); font-weight: 600;
+  color: var(--accent-fg); background: var(--accent);
+  border-radius: 2px 3px 1px 3px;
+  box-shadow:
+    inset 0 0 0 2px var(--accent),
+    inset 0 0 0 3px color-mix(in oklab, var(--accent-fg) 85%, transparent),
+    inset 0 0 6px 2px color-mix(in oklab, var(--accent) 60%, #000 10%),
+    0 0 0 0.5px color-mix(in oklab, var(--accent) 70%, transparent);
+  transform: rotate(-4deg) translateY(2px);
+  opacity: 0.94;
+}
+
+/* the composer: a deckled sheet — uneven layered edges in ink grey, a dry-brush mark along the bottom */
+html[data-ascii='ink'] .composer-box {
+  background: var(--bg-elev);
+  border-color: color-mix(in oklab, var(--fg) 30%, transparent);
+  box-shadow:
+    1px 0 0 -0.5px color-mix(in oklab, var(--fg) 30%, transparent),
+    -1px 1px 0 0 color-mix(in oklab, var(--fg) 10%, transparent),
+    2px 3px 0 -1px color-mix(in oklab, var(--fg) 14%, transparent),
+    -2px -1px 0 -1px color-mix(in oklab, var(--fg) 9%, transparent),
+    0 6px 14px -8px color-mix(in oklab, var(--fg) 22%, transparent);
+}
+html[data-ascii='ink'] .composer-box:focus-within {
+  border-color: color-mix(in oklab, var(--fg) 55%, transparent);
+  box-shadow:
+    1px 0 0 -0.5px color-mix(in oklab, var(--fg) 45%, transparent),
+    -1px 1px 0 0 color-mix(in oklab, var(--fg) 16%, transparent),
+    2px 3px 0 -1px color-mix(in oklab, var(--fg) 22%, transparent),
+    -2px -1px 0 -1px color-mix(in oklab, var(--fg) 12%, transparent),
+    0 0 0 3px color-mix(in oklab, var(--accent) 12%, transparent),
+    0 6px 14px -8px color-mix(in oklab, var(--fg) 26%, transparent);
+}
+html[data-ascii='ink'] .composer-box::after {
+  content: ''; position: absolute; left: 10%; right: 22%; bottom: -3px; height: 2px; pointer-events: none;
+  border-radius: 2px 1px 3px 1px;
+  background: linear-gradient(to right, transparent, color-mix(in oklab, var(--fg) 50%, transparent) 10%, color-mix(in oklab, var(--fg) 32%, transparent) 65%, transparent);
+  opacity: 0.55;
+}
+
+html[data-ascii='ink'] .run-card { border-color: color-mix(in oklab, var(--fg) 22%, transparent); }
+html[data-ascii='ink'] .tool-head { border-color: color-mix(in oklab, var(--fg) 12%, transparent); }

@@ -1,0 +1,45 @@
+/* 字母乐园 · Letterbox — neo-brutalist: chunky rounded corners, ink outlines with a hard offset shadow on the composer,
+   chips and cards, a black-weight greeting with a little hand-written note tilted beside it. Everything here is scoped
+   to html[data-ascii='letters']. */
+html[data-ascii='letters'] {
+  --r-xs: 4px; --r-sm: 7px; --r-row: 9px; --r-md: 11px; --r-lg: 14px; --r-xl: 16px;
+  --r-bubble: 18px; --r-composer: 18px; --r-2xl: 22px;
+  --display: 'Arial Black', 'Segoe UI Black', 'Helvetica Neue', 'Microsoft YaHei', 'PingFang SC', system-ui, sans-serif;
+}
+
+html[data-ascii='letters'] .welcome .greet { font-weight: 600; letter-spacing: -0.015em; color: var(--fg); }
+html[data-ascii='letters'] .welcome .greet .spark { color: var(--accent); }
+/* the hand-written note */
+html[data-ascii='letters'] .welcome .greet::after {
+  content: 'abc!'; font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', 'Chalkboard SE', cursive; font-style: italic;
+  font-weight: 400; font-size: 15px; line-height: 1; letter-spacing: 0.02em; color: var(--accent-text);
+  transform: rotate(-9deg) translateY(-1.1em); padding: 2px 6px; border-bottom: 2px solid var(--accent);
+}
+
+/* the composer: ink outline, hard shadow; the shadow turns the pop colour while you type */
+html[data-ascii='letters'] .composer-box {
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 2px var(--fg), 6px 6px 0 2px var(--fg);
+}
+html[data-ascii='letters'] .composer-box:focus-within {
+  box-shadow: 0 0 0 2px var(--fg), 6px 6px 0 2px var(--accent);
+}
+
+/* chips and cards: the same outline, a smaller shadow; they lift a little under the pointer */
+html[data-ascii='letters'] .welcome .chip.starter {
+  background: var(--bg-elev); color: var(--fg-1);
+  box-shadow: 0 0 0 1.5px var(--fg), 3px 3px 0 1.5px var(--fg);
+  transition: transform 120ms ease-out, box-shadow 120ms ease-out;
+}
+html[data-ascii='letters'] .welcome .chip.starter:hover { transform: translate(-1px, -1px); box-shadow: 0 0 0 1.5px var(--fg), 4px 4px 0 1.5px var(--accent); }
+html[data-ascii='letters'] .welcome .chip.starter:active { transform: translate(2px, 2px); box-shadow: 0 0 0 1.5px var(--fg), 1px 1px 0 1.5px var(--fg); }
+html[data-ascii='letters'] .welcome .guide { background: var(--bg-elev); box-shadow: 0 0 0 2px var(--fg), 5px 5px 0 2px var(--fg); }
+html[data-ascii='letters'] .run-card { background: var(--bg-elev); box-shadow: 0 0 0 2px var(--fg), 4px 4px 0 2px var(--fg); }
+html[data-ascii='letters'] .msg.user .bubble { box-shadow: 0 0 0 2px var(--fg), 4px 4px 0 2px var(--accent); }
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-ascii='letters'] .welcome .chip.starter { transition: none; }
+  html[data-ascii='letters'] .welcome .chip.starter:hover, html[data-ascii='letters'] .welcome .chip.starter:active { transform: none; }
+}
+html[data-ascii='letters'][data-reduce-motion='1'] .welcome .chip.starter { transition: none; }
+html[data-ascii='letters'][data-reduce-motion='1'] .welcome .chip.starter:hover, html[data-ascii='letters'][data-reduce-motion='1'] .welcome .chip.starter:active { transform: none; }

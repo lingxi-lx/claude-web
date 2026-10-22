@@ -1,0 +1,58 @@
+/* 月光字雨 · Moonfall — a night of falling words: moon-white hairlines, a soft glow of moonlight around the composer,
+   a crescent before the greeting and a small vertical-writing label at the top of the welcome page.
+   Everything here is scoped to html[data-ascii='moon']. */
+html[data-ascii='moon'] {
+  --r-sm: 4px; --r-row: 6px; --r-md: 7px; --r-lg: 10px; --r-xl: 12px;
+  --r-bubble: 14px; --r-composer: 16px; --r-2xl: 18px;
+  --display: 'Yu Gothic UI', 'Hiragino Sans', 'Segoe UI', 'PingFang SC', 'Microsoft YaHei UI', system-ui, sans-serif;
+}
+
+/* the greeting: thin, widely spaced, lit from behind; a crescent instead of the spark */
+html[data-ascii='moon'] .welcome .greet {
+  font-weight: 300; letter-spacing: 0.14em; color: var(--fg);
+  text-shadow: 0 0 18px color-mix(in oklab, var(--accent) 55%, transparent), 0 0 2px color-mix(in oklab, var(--fg) 40%, transparent);
+}
+html[data-ascii='moon'] .welcome .greet .spark { display: none; }
+html[data-ascii='moon'] .welcome .greet::before {
+  content: '☾'; color: var(--accent); font-weight: 300; letter-spacing: 0;
+  text-shadow: 0 0 14px var(--accent);
+  animation: moon-breathe 6s ease-in-out infinite;
+}
+@keyframes moon-breathe { 50% { opacity: 0.55; text-shadow: 0 0 6px var(--accent); } }
+
+/* a vertical label at the top left of the welcome page, set between two moon-white hairlines */
+html[data-ascii='moon'] .welcome-tile::before {
+  content: '月光字雨 · 静夜'; position: absolute; top: 64px; left: 28px; z-index: 0; pointer-events: none;
+  writing-mode: vertical-rl; text-orientation: upright;
+  font-family: var(--display); font-size: 12px; letter-spacing: 0.5em; line-height: 1;
+  color: var(--fg-2); padding: 10px 7px;
+  border-left: 1px solid color-mix(in oklab, var(--fg) 26%, transparent);
+  border-right: 1px solid color-mix(in oklab, var(--fg) 12%, transparent);
+  text-shadow: 0 0 8px color-mix(in oklab, var(--accent) 45%, transparent);
+}
+
+/* the composer: a moon-white hairline and a cool halo, brighter when you are writing */
+html[data-ascii='moon'] .composer-box {
+  border-color: color-mix(in oklab, var(--fg) 22%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--fg) 10%, transparent),
+    0 0 28px -6px color-mix(in oklab, var(--accent) 34%, transparent),
+    inset 0 1px 0 color-mix(in oklab, var(--fg) 12%, transparent);
+}
+html[data-ascii='moon'] .composer-box:focus-within {
+  border-color: color-mix(in oklab, var(--fg) 40%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--accent) 40%, transparent),
+    0 0 36px -4px color-mix(in oklab, var(--accent) 46%, transparent),
+    inset 0 1px 0 color-mix(in oklab, var(--fg) 16%, transparent);
+}
+
+/* hairlines elsewhere: the status bar over the composer and each step row */
+html[data-ascii='moon'] .run-card {
+  border-color: color-mix(in oklab, var(--fg) 16%, transparent);
+  box-shadow: 0 0 18px -8px color-mix(in oklab, var(--accent) 40%, transparent);
+}
+html[data-ascii='moon'] .tool-head { border-color: color-mix(in oklab, var(--fg) 10%, transparent); }
+
+@media (prefers-reduced-motion: reduce) { html[data-ascii='moon'] .welcome .greet::before { animation: none; } }
+html[data-ascii='moon'][data-reduce-motion='1'] .welcome .greet::before { animation: none; }
