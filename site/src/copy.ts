@@ -39,7 +39,6 @@ export function copy(locale: Locale) {
       title: tr('Claude Code，有了界面。'),
       sub: tr('桌面版和网页版：对话、审阅、分屏、手机远程。底下跑的是官方 Claude Code，也能带 Codex、Gemini CLI 这些。'),
       fine: tr('免费开源 · Windows、macOS 和网页 · 不用注册'),
-      scroll: tr('滚动看它们干活'),
     },
     dl: {
       win: tr('下载 Windows 版'),

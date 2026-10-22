@@ -40,7 +40,6 @@ export const EN_SITE: Record<string, string> = {
   "每一回合改过的文件都有一张卡，点开就是逐行对比；在哪一行留句话，它接着改。": "Every turn's changed files get a card; open it for a line-by-line diff, and leave a note on any line for it to pick up.",
   "每个子代理干完到前台结账：用了多久、多少 token、大约多少钱，一目了然。": "Each subagent checks out at the front desk when it is done: how long it took, how many tokens, roughly what it cost.",
   "派活，它们自己去干": "Hand it out, they get to work",
-  "滚动看它们干活": "Scroll to watch them work",
   "版本 {version} · {date}": "Version {version} · {date}",
   "社区项目，与 Anthropic 无关。“Claude” 和 “Claude Code” 是 Anthropic 的商标。": "A community project, not affiliated with Anthropic. “Claude” and “Claude Code” are trademarks of Anthropic.",
   "第一次打开时 macOS 可能会拦下，处理办法见": "macOS may stop it the first time you open it; for what to do, see",

@@ -37,10 +37,9 @@ img { max-width: 100%; }
 .hero h1 { margin: 0 0 16px; font-size: var(--fs-display); line-height: 1.05; letter-spacing: -0.02em; }
 .hero-sub { margin: 0 0 28px; font-size: var(--fs-lg); color: var(--fg-1); }
 .hero-fine { margin: 14px 0 0; font-size: var(--fs-sm); color: var(--fg-2); }
-.hero-scroll { position: absolute; right: clamp(16px, 4vw, 40px); bottom: 24px; margin: 0; font-size: var(--fs-sm); color: var(--fg-2); }
 
 .chapters { padding: 0 clamp(16px, 5vw, 64px); }
-.chapter { min-height: 100svh; max-width: 420px; display: flex; flex-direction: column; justify-content: center; }
+.chapter { max-width: 420px; padding-block: clamp(56px, 10vh, 112px); }
 .chapter-n { margin: 0 0 8px; font-family: var(--mono); color: var(--accent-text); }
 .chapter h2 { margin: 0 0 12px; font-size: var(--fs-xl); line-height: 1.15; }
 .chapter p { margin: 0 0 16px; color: var(--fg-1); }

@@ -41,7 +41,16 @@
 - DNS（Cloudflare，zone `psycioxyxs.my`，备注「GitHub Pages - Claude Web site」，已建好）：根域名 4 条 A（185.199.108.153 / 109.153 / 110.153 / 111.153）、
   4 条 AAAA（2606:50c0:8000::153 … 8003::153），`www` CNAME → `ypyik0669.github.io`；全部「仅 DNS」（灰云），否则 GitHub 签不出 HTTPS 证书。
 - HTTPS 已强制（2026-10-22 证书签好，覆盖 `psycioxyxs.my` 和 `www`；查证书：`gh api repos/ypyik0669/claude-web/pages -q .https_certificate.state` 是 `approved`）。
-- `concurrency` 是 `cancel-in-progress: false`（和 GitHub 的 Pages 模板一样）：发布不会被半路取消，新的运行排队等前一个发完。
+- `concurrency` 是 `cancel-in-progress: false`（和 GitHub 的 Pages 模板一样）：正在发布的那次不会被打断；但同一组里 GitHub 最多只留一个排队的运行，
+  更新的排队运行会顶掉还没开始的旧的（旧的显示为已取消）——不丢东西，因为每次都从 main 的最新提交构建。
 - PR 上的 CI（`ci.yml`）在 `build:all` 之后跑 `npm run build:site`（Astro 构建 + 1.5 MB 预算检查，不联网），官网构建坏了合并前就能看到。
 - 首页首次加载 ≤ 1.5 MB（`site/scripts/budget.ts`，构建时检查，超了构建失败）；只算 HTML 直接引用的文件，脚本之后按需拉的不算。
 - 分享图 `site/public/og/{en,zh}.png`：网吧动图第一帧，`ffmpeg -i docs/images/<lang>/cafe.gif -frames:v 1 -vf "scale=1200:630:force_original_aspect_ratio=increase:flags=neighbor,crop=1200:630"`（最近邻放大保住像素）。
+
+## 给第二份计划（首屏网吧）
+
+- 网吧场景上线前，首页 7 个章节按内容高度排（`.chapter` 只有 `padding-block`），首屏也不放「滚动看它们干活」（底下还没有会动的东西）。
+  场景上线时一起恢复：章节 `min-height: 100svh`，首屏提示加回 `tr('滚动看它们干活')` 和 `en.ts` 里的英文。
+- `#hero-scene` 现在在 `.hero` 里，`.hero` 是 `overflow: hidden`，章节（`#features`）是 `.hero` 的兄弟：要让场景跟着章节一路钉住，
+  得在 `.hero` + `#features` 外面包一层，sticky / fixed 放不进现在这个 `.hero`。另外 `site/scripts/budget.ts` 不算 CSS 里 `url()` 引的字体，
+  也不算脚本 import 出来的 chunk——像素字体和场景的 chunk 都得补进预算检查。
