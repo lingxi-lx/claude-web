@@ -31,7 +31,22 @@ async function driver() {
     if (!live) errors.push(`${page}: the scene did not start (tier ${await js('document.querySelector("#hero-scene")?.dataset.tier')})`);
     await sleep(1500);
     await shot(`hero-${lang}`);
-    // SMOKE_CHAPTERS (Task 12)
+    const ids = await js('[...document.querySelectorAll("section.chapter[data-chapter]")].map((s) => s.dataset.chapter)');
+    if (ids.length !== 7) errors.push(`${page}: ${ids.length} chapters, want 7`);
+    for (const id of ids) {
+      await js(`document.getElementById("ch-${id}").scrollIntoView({ block: "center" })`);
+      const ok = await waitFor(`document.querySelector("#hero-scene").dataset.chapter === "${id}"`, 4000);
+      if (!ok) errors.push(`${page}: chapter ${id} did not take the stage`);
+      await sleep(900);
+      if (id !== 'agents') {
+        const shown = await js(`(() => { const o = document.querySelector('[data-overlay="${id}"]'); return !!o && !o.hidden && o.getBoundingClientRect().width > 0; })()`);
+        if (!shown && id !== 'permission') errors.push(`${page}: the ${id} card is not showing`);
+      }
+      if (['turns', 'permission', 'gateway'].includes(id)) await shot(`ch-${id}-${lang}`);
+    }
+    await js('window.scrollTo(0, document.body.scrollHeight)');
+    await sleep(600);
+    await shot(`install-${lang}`);
   }
   console.log(`screenshots: ${E.SMOKE_OUT}`);
   if (errors.length) { console.error(errors.join('\n')); app.exit(1); return; }

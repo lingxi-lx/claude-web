@@ -44,13 +44,28 @@
 - `concurrency` 是 `cancel-in-progress: false`（和 GitHub 的 Pages 模板一样）：正在发布的那次不会被打断；但同一组里 GitHub 最多只留一个排队的运行，
   更新的排队运行会顶掉还没开始的旧的（旧的显示为已取消）——不丢东西，因为每次都从 main 的最新提交构建。
 - PR 上的 CI（`ci.yml`）在 `build:all` 之后跑 `npm run build:site`（Astro 构建 + 1.5 MB 预算检查，不联网），官网构建坏了合并前就能看到。
-- 首页首次加载 ≤ 1.5 MB（`site/scripts/budget.ts`，构建时检查，超了构建失败）；只算 HTML 直接引用的文件，脚本之后按需拉的不算。
-- 分享图 `site/public/og/{en,zh}.png`：网吧动图第一帧，`ffmpeg -i docs/images/<lang>/cafe.gif -frames:v 1 -vf "scale=1200:630:force_original_aspect_ratio=increase:flags=neighbor,crop=1200:630"`（最近邻放大保住像素）。
+- 首页首次加载 ≤ 1.5 MB、场景 JS gzip ≤ 400 KB（`site/scripts/budget.ts`，构建时检查，超了构建失败）。
+- 分享图 `site/public/og/{en,zh}.png` 由 `npm run poster --prefix site` 从海报裁出来，底部叠产品名。
 
-## 给第二份计划（首屏网吧）
+## 首屏网吧（第二份计划，2026-10-22）
 
-- 网吧场景上线前，首页 7 个章节按内容高度排（`.chapter` 只有 `padding-block`），首屏也不放「滚动看它们干活」（底下还没有会动的东西）。
-  场景上线时一起恢复：章节 `min-height: 100svh`，首屏提示加回 `tr('滚动看它们干活')` 和 `en.ts` 里的英文。
-- `#hero-scene` 现在在 `.hero` 里，`.hero` 是 `overflow: hidden`，章节（`#features`）是 `.hero` 的兄弟：要让场景跟着章节一路钉住，
-  得在 `.hero` + `#features` 外面包一层，sticky / fixed 放不进现在这个 `.hero`。另外 `site/scripts/budget.ts` 不算 CSS 里 `url()` 引的字体，
-  也不算脚本 import 出来的 chunk——像素字体和场景的 chunk 都得补进预算检查。
+- 场景就是产品的网吧引擎：`site/engine.config.mjs` 给 astro 和 vitest 配别名（`@cafe/*` → `web/src/features/cafe/*`、`@characters`、`@shared`、`@/i18n` → `site/src/hero/engine-i18n.ts`），
+  另有一个小插件把 `server/src/characters/core` 里的 `../../i18n/index.js` 改指到同一个垫片（不然服务端 110 KB 英文表会进包）。
+  官网只经 `site/src/hero/engine.ts` 拿引擎；不引 `Cafe.tsx` / `state.ts`（zustand、WS），`AGENT_NIGHT` 抄在 `hero/palette.ts`。
+- 产品的 `render()` 拆成了 `drawRoom / drawItems(pick) / darken / drawGlows / drawLight / labels`，`render()` 还是同一串调用；
+  `web/src/features/cafe/render.test.ts` 用记录调用的假 Canvas 算哈希快照，画面一变就红。改产品网吧的画法时要有意识地 `-u` 更新快照。
+- 引擎画的字（招牌、门口牌、小票、网管喊话）按页面 `<html lang>` 出中英；英文是 `site/scripts/engine-en.ts` 从产品两份英文表抽出来的
+  `hero/engine-en.generated.ts`（`prebuild` / `pretest` 自动重生成，测试查是否最新、是否缺英文）。产品新加了引擎里的字，官网构建会因缺英文失败——先给产品补英文。
+- 分层：L0 房间、L1 后面的东西、L2 前台一带（`hero/layers.ts` 的 `isFront`）、L3 只有光；L1/L2 用 multiply 压暗后要用 `destination-in` 把透明区还原。
+  视差系数 0.4 / 0.7 / 1.0 / 0.55，最多 12 个原生像素；触屏关。
+- 演示日 `hero/demo.ts`：60 s 循环、固定种子、按 50 ms 定步走（帧长不影响结果），`jumpTo(phase)` 给章节用。引擎没有「举手」状态，「需要你」是 DOM 权限卡；
+  docs 去吃泡面靠种子（`DEMO_SEED`），改了 sim 的随机顺序要重找种子（`demo.test.ts` 会红）。
+- 三档（`hero/tier.ts`）：T0 桌面鼠标 + 多于 4 核 + 真 WebGL2 → 加后处理（`hero/post.ts`）；T1 其它和手机；T2（减少动画、无 Canvas、爬虫）只有海报。
+  标签页隐藏或舞台滚出视口时 rAF 停。
+- 首屏海报：`npm run build --prefix site && npm run poster --prefix site`（Electron 打开 `?poster=1`，场景停在第 20 s），同时重做分享图。场景接管时显示器一台台亮，不淡入。
+  界面、招牌或演示日改了就重拍。要先跑过一次 `npm run fonts --prefix site`（分享图的字用它的缓存）。
+- 像素标题字：Fusion Pixel Font 12px（OFL，许可在 `site/public/fonts/OFL.txt`），按标题用到的字子集化；改了大标题 / 章节标题 / 安装标题要 `npm run fonts --prefix site`（`fonts.test.ts` 会拦）。
+  只在 12 的倍数字号下清楚。
+- 预算（`site/scripts/budget.ts`）：首页首屏 ≤ 1.5 MB，算 HTML 引用的、CSS `url()` 的字体、首屏脚本静态 import 的；场景（`import()` 进来的）另算，gzip 后 ≤ 400 KB。
+- 冒烟：`npm run build --prefix site && env -u ELECTRON_RUN_AS_NODE node site/scripts/smoke.cjs`，逐章滚动、控制台有 error 就失败，截图在临时目录。
+- 彩蛋：↑↑↓↓←→←→BA 打开调试面板（速度、种子、fps）；S 开关声音（WebAudio 合成，没有音频文件）。
