@@ -8,14 +8,12 @@ import { readmeLink } from '../readme';
 import { AGENTS } from '../data/agents';
 import type { SiteData } from '../data/releases';
 import type { Locale } from '../i18n';
-import cafeEn from '../../../docs/images/en/cafe.gif';
-import cafeZh from '../../../docs/images/zh/cafe.gif';
 
 interface Props { locale: Locale }
 const { locale } = Astro.props;
 const c = copy(locale);
 const d = data as SiteData;
-const cafe = locale === 'zh' ? cafeZh : cafeEn;
+const base = import.meta.env.BASE_URL;
 const num = (n: number) => n.toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US');
 const stats = [
   d.stars != null ? { n: num(d.stars), label: c.stats.stars } : null,
@@ -26,7 +24,7 @@ const stats = [
 <Base locale={locale} page="home">
   <div class="stage" id="stage">
     <div class="stage-scene" id="hero-scene">
-      <img class="scene-poster" src={cafe.src} width={cafe.width} height={cafe.height} alt="" fetchpriority="high" />
+      <img class="scene-poster" src={`${base}poster/${locale}.webp`} width="1440" height="900" alt="" fetchpriority="high" decoding="async" />
       <div class="scene-a11y" role="img" aria-label={c.meta.sceneAlt} data-scene-label-el></div>
       <SceneOverlays locale={locale} />
       <div class="scene-tip" role="status" data-doing={JSON.stringify(c.scene.doing)} hidden></div>
