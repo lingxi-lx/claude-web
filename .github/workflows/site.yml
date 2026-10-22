@@ -1,0 +1,65 @@
+name: Site
+
+# Builds site/ (Astro) and publishes it to GitHub Pages on the custom domain https://psycioxyxs.my/
+# Runs when the site or what it shows changes on main, and when a release is published (new version, new installers).
+# One-time setup: Pages source = GitHub Actions, custom domain psycioxyxs.my (docs/notes/site.md → 发布).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - 'CHANGELOG.md'
+      - 'CHANGELOG.zh-CN.md'
+      - 'README.md'
+      - 'README.zh-CN.md'
+      - 'docs/images/**'
+      - 'server/src/i18n/core.ts'
+      - 'scripts/i18n/**'
+      - 'package-lock.json'
+      - '.github/workflows/site.yml'
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: site-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            site/package-lock.json
+      # the root install gives the shared i18n scanner its vite; the site's own install has Astro. The site needs Astro and the shared i18n sources only: no install scripts (no Electron download, no node-pty build)
+      - run: npm ci --ignore-scripts
+      - run: npm ci --prefix site
+      - run: node site/scripts/releases.ts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: npm test --prefix site
+      - run: npm run build --prefix site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/dist
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

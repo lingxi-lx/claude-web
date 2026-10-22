@@ -1,0 +1,42 @@
+# 官网（2026-10-22）
+
+`site/`：Astro 静态站，发布在 https://psycioxyxs.my/ （GitHub Pages 自定义域名，DNS 在 Cloudflare）。设计：`docs/superpowers/specs/2026-10-21-website-design.md`；
+调研：`reports/Claude Web 官网设计参考调研.md`。9 月的单页旧宣传页（`site/index.html` / `page.html` / `build.mjs`）已被替换，git 历史里有。
+
+## 跑起来
+
+- `npm run dev --prefix site`（http://localhost:4321/）、`npm run build --prefix site`（构建 + 首次加载预算检查）、`npm run preview --prefix site`、`npm test --prefix site`。
+- `npm run data --prefix site`：从 GitHub API 刷新 `site/src/data/site-data.json`（最新版本、安装包、星标）。CI 每次构建前也会跑；API 不通时用仓库里那份。
+- `site/` 是独立包（自己的 lockfile 和 node_modules，`npm install --prefix site`），不是根 workspace：Astro 要 `cookie@2`，根目录里 express 带的是 `cookie@0.7`，放进 workspace 会解析错、构建失败，还会顺带升级产品的 vite / zod。
+- 新 clone 下来先 `npm run site:install`（官网有自己的 node_modules），再跑根目录的 `npm run typecheck` / `npm test`——这两个现在也查官网；CI 里是 `npm ci --prefix site`。
+- 没有 `site/package-lock.json` 时（重新生成锁文件），用 `npx -y npm@11 install --prefix site`：npm 10.9.4 全新安装 vitest 4.1.x 会在 npm 内部崩溃（`reading 'edgesOut'`）；有锁文件后 npm 10 正常。
+- Astro 精确锁 7.4.1：7.4.2 要 Node ≥ 22.23.4，本机是 22.22.1。升级前先看 `npm view astro@<v> engines`。
+
+## 文案
+
+- 所有字都在 `site/src/copy.ts` 的 `tr('中文')` 里，英文在 `site/src/i18n/en.ts`（`EN_SITE`）。`scripts/i18n/scan.mjs` 的 `AREAS` 有 `site/src`，
+  所以 `web/src/i18n/coverage.test.ts` 和 `node scripts/i18n/extract.mjs --check` 都管到官网；和产品同一句中文的，英文必须一样。
+- `.astro` 只写结构，不写中文（`site/src/i18n/text.test.ts` 会拦）。语言名「中文 / English」在 `i18n/languages.ts`（覆盖测试的白名单里）。
+- 两种语言在同一个进程里构建，所以官网不用核心的 `t()` / `setLocale`，每页用 `makeTr(locale)`（底下是 `tIn`）。
+- 「详细说明」链到 README：`readmeLink(locale, '3. ')` 按英文标题开头找，中文 README 按同一位置取标题，锚点按 GitHub 的规则现算。两份 README 的标题顺序必须一致。
+
+## 更新内容
+
+- 更新内容页直接渲染 CHANGELOG。`changelogBody` 把代码以外像标签的 `<…>`（`<kbd>` 除外）转义掉，所以 CHANGELOG 里写 `<relay host>` 这种占位符会原样显示；有一条测试拿真的两份 CHANGELOG 跑。
+
+## 语言和系统
+
+- 英文在 `/`，中文在 `/zh/`。英文首页里内联了一小段脚本（`i18n/paths.ts` 的 `langRedirect` 直接序列化进页面）：浏览器是中文就跳 `/zh/`；
+  带 `?lang=` 的不跳（切到英文的链接都带 `?lang=en`）。不用 localStorage。`langRedirect` 不能引用函数体外的任何东西。
+- 只有从站外进来的才跳：`langRedirect(loc, navLang, referrer, base)` 里 `document.referrer` 是本站的就不跳；跳的时候保留 `#锚点`。选了英文不会跨访问记住（没有 referrer 的下一次访问照样跳），这是有意的（不用 localStorage）。
+- `client/main.ts` 给 `<html>` 设 `data-os`，CSS 只显示自己系统的下载按钮（`data-os`），下载页把自己的系统排最前（`data-os-block`）。
+  快捷键 D / R / C / G 找 `[data-key-action]`，同名多个时优先 `data-key-os` 等于自己系统的。
+
+## 发布
+
+- `.github/workflows/site.yml`：push main（站点、README、CHANGELOG、i18n 相关路径）或发 release 时构建并发布。第一次要把 Pages 的来源设成 GitHub Actions、绑定自定义域名 `psycioxyxs.my`；Actions 发布不读 CNAME 文件，域名只在 Pages 设置里。
+- 现状：Pages（来源 GitHub Actions）和自定义域名已经设好；DNS 记录在 Cloudflare（zone `psycioxyxs.my`，备注「GitHub Pages - Claude Web site」）。第一次发布后、证书签好（approved）再打开 Enforce HTTPS。
+- DNS（Cloudflare）：根域名 4 条 A（185.199.108.153 / 109.153 / 110.153 / 111.153）和 4 条 AAAA（2606:50c0:8000::153 … 8003::153），
+  代理状态「仅 DNS」（灰云），否则 GitHub 签不出 HTTPS 证书；证书签好后在 Pages 设置里勾上 Enforce HTTPS。
+- 首页首次加载 ≤ 1.5 MB（`site/scripts/budget.ts`，构建时检查，超了构建失败）；只算 HTML 直接引用的文件，脚本之后按需拉的不算。
+- 分享图 `site/public/og/{en,zh}.png`：网吧动图第一帧，`ffmpeg -i docs/images/<lang>/cafe.gif -frames:v 1 -vf "scale=1200:630:force_original_aspect_ratio=increase:flags=neighbor,crop=1200:630"`（最近邻放大保住像素）。
