@@ -29,6 +29,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build:all
+      - run: npm run build:site
       # end-to-end over the real WebSocket with mock agents (no model calls)
       - name: e2e (mock agents; phase 7 reads public GitHub issues with the workflow token)
         shell: bash

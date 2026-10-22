@@ -30,6 +30,7 @@ export function copy(locale: Locale) {
     nav: {
       skip: tr('跳到正文'),
       label: tr('网站导航'),
+      footer: tr('页脚链接'),
       features: tr('功能'),
       download: tr('下载'),
       changelog: tr('更新内容'),

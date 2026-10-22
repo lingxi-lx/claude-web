@@ -13,6 +13,8 @@ const c = copy(locale);
 const base = import.meta.env.BASE_URL;
 const site = Astro.site!;
 const pageTitle = title ? `${title} · Claude Web` : c.meta.title;
+const canonical = new URL(href(base, locale, page), site).href;
+const enUrl = new URL(href(base, 'en', page), site).href;
 // a visitor whose browser reads Chinese lands on /zh/ — written inline so it runs before anything paints
 const redirect = locale === 'en' && page === 'home'
   ? `(function(){var t=(${langRedirect.toString()})(location,navigator.language||'',document.referrer||'',${JSON.stringify(base)});if(t)location.replace(t);})();`
@@ -28,10 +30,13 @@ const redirect = locale === 'en' && page === 'home'
     <meta name="description" content={c.meta.description} />
     <meta name="theme-color" content="#12110f" />
     <link rel="icon" type="image/svg+xml" href={`${base}icon.svg`} />
-    <link rel="canonical" href={new URL(href(base, locale, page), site).href} />
-    <link rel="alternate" hreflang="en" href={new URL(href(base, 'en', page), site).href} />
+    <link rel="canonical" href={canonical} />
+    <link rel="alternate" hreflang="en" href={enUrl} />
     <link rel="alternate" hreflang="zh" href={new URL(href(base, 'zh', page), site).href} />
+    <link rel="alternate" hreflang="x-default" href={enUrl} />
     <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:locale" content={locale === 'zh' ? 'zh_CN' : 'en_US'} />
     <meta property="og:title" content={pageTitle} />
     <meta property="og:description" content={c.meta.description} />
     <meta property="og:image" content={new URL(`${base}og/${locale}.png`, site).href} />

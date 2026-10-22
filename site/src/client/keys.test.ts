@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { keyAction } from './keys';
 
 const key = (k: string, more: Partial<Parameters<typeof keyAction>[0]> = {}) =>
-  keyAction({ key: k, ctrlKey: false, metaKey: false, altKey: false, isComposing: false, editable: false, ...more });
+  keyAction({ key: k, ctrlKey: false, metaKey: false, altKey: false, isComposing: false, editable: false, repeat: false, ...more });
 
 describe('keyAction', () => {
   it('D R C G, either case', () => {
@@ -22,5 +22,8 @@ describe('keyAction', () => {
     expect(key('d', { altKey: true })).toBeNull();
     expect(key('d', { editable: true })).toBeNull();
     expect(key('d', { isComposing: true })).toBeNull();
+  });
+  it('not again while the key is held down', () => {
+    expect(key('d', { repeat: true })).toBeNull();
   });
 });

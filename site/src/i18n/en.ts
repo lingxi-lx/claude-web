@@ -53,4 +53,5 @@ export const EN_SITE: Record<string, string> = {
   "跳到正文": "Skip to content",
   "这个版本没有这个安装包": "Not in this release",
   "需要 Node.js 22.13+ 和 Git。装好后打开 http://127.0.0.1:3090。": "Needs Node.js 22.13+ and Git. Then open http://127.0.0.1:3090.",
+  "页脚链接": "Footer links",
 };

@@ -49,7 +49,7 @@ const blocks: { id: string; os: 'win' | 'mac'; name: string; rows: Row[] }[] = [
         <h2 id="h-source">{c.dl.source}</h2>
         <p>{c.download.sourceNeeds}</p>
         <pre><code>{SOURCE_COMMANDS}</code></pre>
-        <button class="btn" type="button" data-copy={SOURCE_COMMANDS} data-copied={c.download.copied}>{c.download.copy}</button>
+        <button class="btn" type="button" aria-live="polite" data-copy={SOURCE_COMMANDS} data-copied={c.download.copied}>{c.download.copy}</button>
       </section>
     </div>
   </article>

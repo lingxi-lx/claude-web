@@ -30,7 +30,8 @@
   带 `?lang=` 的不跳（切到英文的链接都带 `?lang=en`）。不用 localStorage。`langRedirect` 不能引用函数体外的任何东西。
 - 只有从站外进来的才跳：`langRedirect(loc, navLang, referrer, base)` 里 `document.referrer` 是本站的就不跳；跳的时候保留 `#锚点`。选了英文不会跨访问记住（没有 referrer 的下一次访问照样跳），这是有意的（不用 localStorage）。
 - `client/main.ts` 给 `<html>` 设 `data-os`，CSS 只显示自己系统的下载按钮（`data-os`），下载页把自己的系统排最前（`data-os-block`）。
-  快捷键 D / R / C / G 找 `[data-key-action]`，同名多个时优先 `data-key-os` 等于自己系统的。
+  快捷键 D / R / C / G 找 `[data-key-action]`，同名多个时优先 `data-key-os` 等于自己系统的。按住不放的重复按键（`repeat`）不算；
+  系统是 `other`（Linux / ChromeOS / 手机，没有对应安装包）时 D 去下载页（页头「下载」链接的 `data-key-action="download-page"`），不会点到 Windows 的 exe。
 
 ## 发布
 
@@ -39,6 +40,8 @@
 - Pages 设置（已设好）：来源 GitHub Actions，自定义域名 `psycioxyxs.my`；Actions 发布不读 CNAME 文件，域名只在 Pages 设置里。
 - DNS（Cloudflare，zone `psycioxyxs.my`，备注「GitHub Pages - Claude Web site」，已建好）：根域名 4 条 A（185.199.108.153 / 109.153 / 110.153 / 111.153）、
   4 条 AAAA（2606:50c0:8000::153 … 8003::153），`www` CNAME → `ypyik0669.github.io`；全部「仅 DNS」（灰云），否则 GitHub 签不出 HTTPS 证书。
-- 第一次发布后，等证书签好（`gh api repos/ypyik0669/claude-web/pages -q .https_certificate.state` 是 `approved`）再在 Pages 设置里打开 Enforce HTTPS。
+- HTTPS 已强制（2026-10-22 证书签好，覆盖 `psycioxyxs.my` 和 `www`；查证书：`gh api repos/ypyik0669/claude-web/pages -q .https_certificate.state` 是 `approved`）。
+- `concurrency` 是 `cancel-in-progress: false`（和 GitHub 的 Pages 模板一样）：发布不会被半路取消，新的运行排队等前一个发完。
+- PR 上的 CI（`ci.yml`）在 `build:all` 之后跑 `npm run build:site`（Astro 构建 + 1.5 MB 预算检查，不联网），官网构建坏了合并前就能看到。
 - 首页首次加载 ≤ 1.5 MB（`site/scripts/budget.ts`，构建时检查，超了构建失败）；只算 HTML 直接引用的文件，脚本之后按需拉的不算。
 - 分享图 `site/public/og/{en,zh}.png`：网吧动图第一帧，`ffmpeg -i docs/images/<lang>/cafe.gif -frames:v 1 -vf "scale=1200:630:force_original_aspect_ratio=increase:flags=neighbor,crop=1200:630"`（最近邻放大保住像素）。

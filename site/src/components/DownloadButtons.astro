@@ -14,9 +14,9 @@ const r = (data as SiteData).release;
 ---
 <div class="dl">
   <div class="dl-main">
-    <a class="btn btn-primary" data-os="win" data-key-action="download" data-key-os="win" aria-keyshortcuts="D" href={r?.win.installer?.url ?? RELEASES_URL}>{c.dl.win}<kbd>D</kbd></a>
-    <a class="btn btn-primary" data-os="mac" data-key-action="download" data-key-os="mac" aria-keyshortcuts="D" href={r?.mac.arm64?.url ?? RELEASES_URL}>{c.dl.mac}<kbd>D</kbd></a>
-    <a class="btn" data-key-action="source" aria-keyshortcuts="R" href={href(base, locale, 'download', '#source')}>{c.dl.source}<kbd>R</kbd></a>
+    <a class="btn btn-primary" data-os="win" data-key-action="download" data-key-os="win" aria-keyshortcuts="D" href={r?.win.installer?.url ?? RELEASES_URL}>{c.dl.win}<kbd aria-hidden="true">D</kbd></a>
+    <a class="btn btn-primary" data-os="mac" data-key-action="download" data-key-os="mac" aria-keyshortcuts="D" href={r?.mac.arm64?.url ?? RELEASES_URL}>{c.dl.mac}<kbd aria-hidden="true">D</kbd></a>
+    <a class="btn" data-key-action="source" aria-keyshortcuts="R" href={href(base, locale, 'download', '#source')}>{c.dl.source}<kbd aria-hidden="true">R</kbd></a>
   </div>
   <p class="dl-alt">
     <a data-os="mac" href={r?.mac.x64?.url ?? RELEASES_URL}>{c.dl.macIntel}</a>

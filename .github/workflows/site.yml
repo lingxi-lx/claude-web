@@ -29,7 +29,7 @@ permissions:
 
 concurrency:
   group: site-pages
-  cancel-in-progress: true
+  cancel-in-progress: false # a deploy is never cut off midway; a newer run waits (as GitHub's Pages starter workflow)
 
 jobs:
   # the github-pages environment only deploys from main, and a release run is on the tag: re-dispatch this workflow on main so the site rebuilds from main with the new release data
