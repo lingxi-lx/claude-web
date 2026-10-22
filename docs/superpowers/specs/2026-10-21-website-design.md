@@ -13,11 +13,12 @@
 做：
 
 - `site/`：Astro 静态站，三个页面 `/`（首页）、`/download`、`/changelog`，中英各一套（`/` 与 `/zh/`）。
-- 首页首屏是满屏的网吧，复用产品的网吧引擎；滚动 8 章，场景随章节演戏；结尾下载区；页脚。
+- 首页首屏是满屏的网吧，复用产品的网吧引擎；滚动 7 章，场景随章节演戏；结尾下载区；页脚。
 - GitHub Pages 部署（`.github/workflows/site.yml`）。
 
-- **全站换皮**：导航里的「换皮」把整站切到产品的 10 套字符画主题之一（磷光、深海点阵、锦鲤、月光字雨、抖动、景深球、花园；
-  纸刊、字母乐园、水墨），背景、配色、过程动画一起换；默认是网吧夜景（§5.1）。
+- **主题放映厅**：首屏 7 章之后单独一段。产品在 10 套字符画主题（磷光、深海点阵、锦鲤、月光字雨、抖动、景深球、花园；
+  纸刊、字母乐园、水墨）下各录一段真实界面的视频，外加一段「描述一个新主题」，访客切换、拖动、对比（§5.1）。
+  录像由 `scripts/record-themes.cjs` 在本机从真实应用录出（§5.2）。官网本身不换皮，也不跑主题的背景程序。
 
 不做：博客、文档站（README 继续承担）、评论、埋点统计、真 3D（留接口）、音乐（只有短音效且默认关）。
 
@@ -34,17 +35,18 @@ site/
     hero/                 # 首屏：Scene.ts（分层渲染 + 视差）、post.ts（WebGL 后处理）、demo.ts（演示日脚本）、
                           # chapters.ts（章节表）、Hero.tsx（挂载、滚动、指针、键盘）、tier.ts（分级与降级）
     sections/             # 章节文案与叠在场景上的 DOM 气泡（回合折叠行、权限卡、diff 卡、小票）
+    showcase/             # 主题放映厅：Showcase.tsx（窗口、切换、拖动、对比）、clips.ts（片段表、时间标记）
     components/           # DownloadButton、SoundToggle、LangSwitch、Footer
-    styles/ tokens.css    # 从 web/src/tokens.css 取暗 / 亮两套值，变量名与产品一致（字符画主题的 paletteCss 直接覆盖它们）；复制常量，不 import，避免把产品样式整份拖进来
+    styles/ tokens.css    # 从 web/src/tokens.css 取暗 / 亮两套值，变量名与产品一致；复制常量，不 import，避免把产品样式整份拖进来
   public/ og/*.png  poster/*.png  sfx/*.ogg
+  media.json              # 主题录像清单：文件名 → sha256 / 字节数（录像本身不进仓库，§5.2）
   scripts/ releases.mjs   # 构建时抓 GitHub Releases → src/data/releases.json
+           fetch-media.mjs # 构建时按 media.json 下载录像到 dist/themes/，校验 sha256
 ```
 
-- 主题复用：alias `@themes` → `../server/src/themes/core`（过程、帧表、默认动画、`parsePack`、`paletteCss`），
-  `@web-themes` → `../web/src/themes`：取 `builtin/`（10 个文件夹，`import.meta.glob` 原样可用）、`backdrop-worker.ts` +
-  `worker-url.ts` + `watchdog.ts` + `backdrop-protocol.ts`（背景 Worker 与看门狗）、`ProcessGlyph` 依赖的 `ticker.ts` / `render.ts`。
-  官网只跑内置主题：Worker 对内置主题跳过 CSP 自检（`isBuiltin`），GitHub Pages 发不了响应头也不影响。
-  不引用 `apply.ts` / `registry.ts`（连着产品设置）；官网有自己的 `site/src/theme/skin.ts`（见 §5.1）。
+- 主题复用：alias `@themes` → `../server/src/themes/core`，只用 `parsePack` / `paletteCss`（读各主题的 `theme.json`，给放映厅
+  这一段着色）和帧表 / 默认动画（主题按钮上的小过程动画）；`@web-themes` → `../web/src/themes`，只取 `builtin/*/theme.json`
+  和 `ProcessGlyph` 依赖的 `ticker.ts` / `render.ts`。不取 `backdrop.js`、背景 Worker、`apply.ts` / `registry.ts`。
 - 引擎复用：alias `@cafe` → `../web/src/features/cafe`，`@shared` / `@characters` / `@i18n` 与 `web/vite.config.ts` 一致。
   官网只引用 `iso.ts`、`map.ts`、`path.ts`、`sim.ts`、`bake.ts`、`render.ts`、`money.ts` 和 `@characters` 的内置角色；
   不引用 `Cafe.tsx` / `state.ts`（它们连着产品的 zustand 和 WS）。
@@ -64,15 +66,16 @@ site/
 
 从上到下：
 
-1. **首屏**（100 vh，场景钉住）：满屏网吧；左上 logo + 导航（功能 / 下载 / 更新 / GitHub / 语言 / 声音 / 换皮）；
+1. **首屏**（100 vh，场景钉住）：满屏网吧；左上 logo + 导航（功能 / 主题 / 下载 / 更新 / GitHub / 语言 / 声音；「主题」跳到放映厅）；
    左侧叠标题区：H1「Claude Code，有了界面。」（英：`Claude Code, with a face.`），副标一句「桌面版和网页版，
    对话、审阅、分屏、手机远程；底下跑的是官方 Claude Code，也能带 Codex、Gemini CLI 这些」；主按钮按系统自动
    写「下载 Windows 版」/「下载 macOS 版」，次按钮「从源码跑 `R`」，按钮下一行「免费开源 · Windows、macOS 和网页 · 不用注册」。
    右下角一行提示「滚动看它们干活 ↓」。
-2. **8 章**（每章 100 vh，场景继续钉住，左侧文案换、场景里演对应的戏，见 §4）。
-3. **三联数字**：GitHub stars / 版本数 / 支持的 agent 数（构建时从 releases.json 和 GitHub API 取，取不到就不显示这块）。
-4. **下载区**：前台特写（场景镜头推到前台），按钮同首屏；点击后打印机吐一张小票（§5）。
-5. **页脚**：一行「社区项目，与 Anthropic 无关；"Claude"、"Claude Code" 是 Anthropic 的商标」+「© Claude Web contributors · MIT」+ GitHub / Releases / 更新内容 / 语言。
+2. **7 章**（每章 100 vh，场景继续钉住，左侧文案换、场景里演对应的戏，见 §4）。
+3. **主题放映厅**（场景在第 7 章后解除钉住、滚走）：标题「十套皮，换着穿」（英：`Ten skins. Same app.`），见 §5.1。
+4. **三联数字**：GitHub stars / 版本数 / 支持的 agent 数（构建时从 releases.json 和 GitHub API 取，取不到就不显示这块）。
+5. **下载区**：前台特写（同一个 `World` 再挂一块小画布，镜头固定在前台，进视口才跑），按钮同首屏；点击后打印机吐一张小票（§5）。
+6. **页脚**：一行「社区项目，与 Anthropic 无关；"Claude"、"Claude Code" 是 Anthropic 的商标」+「© Claude Web contributors · MIT」+ GitHub / Releases / 更新内容 / 语言。
 
 ### 3.2 下载页 `/download`
 
@@ -141,7 +144,6 @@ L3 以 `lighter` 叠上。指针用 `pointermove` 更新目标、每帧以 `--ea
 | 5 | 「干完了，结账」 | 推到前台 | 小票：时长、token、约 $ | 用量 / 费用 |
 | 6 | 「不止 Claude，也不止这台电脑」 | 拉远，门口进来穿别的颜色的客人 | 三个 chip：Codex / Gemini CLI / 其它电脑；手机壳小图；一行「子代理可以用任何一家的模型」 | 多 agent、联邦、手机远程、子代理任意模型 |
 | 7 | 「一个地址，接所有账号」 | 大屏特写 | 大屏上显示 `/v1` 地址和账号列表（Claude / Gemini 网页 / WorkBuddy 各一行，状态灯在跳） | 网关 |
-| 8 | 「换一身皮，或者描述一个」 | 场景淡出，整屏交给当前皮肤的背景 | 10 张主题卡（和设置 → 外观的画廊同款：悬停才实跑背景和四个过程动画），点一张即全站换皮；最后一张「描述一个新主题」展示一段预录的对话：用户一句话 → ascii-theme 试跑截图 → 应用 | 字符画主题、ascii-theme skill |
 
 左侧文案区固定宽 420 px（手机全宽、在场景下方），标题 `--fs-display`，正文一两句，不堆功能表。
 每章右下角一个小「试试」链接跳到 README 对应节。
@@ -168,25 +170,61 @@ L3 以 `lighter` 叠上。指针用 `pointermove` 更新目标、每帧以 `--ea
 | Konami 码 | 露出调试面板：调光、加速脚本、换种子、显示 fps | 无 |
 | 声音 | 默认关；右上「声音：关」开关；开了之后：键盘敲击（按屏幕亮的人数混）、结账「叮」、泡面吸溜；都是 ≤ 50 KB 的 ogg，总共 ≤ 200 KB，首次开才加载 | 减少动画时整段禁用 |
 | 开机预加载 | 没有独立 loader：poster 先显示，场景 JS 到位后显示器逐台亮起（0.8 s）接管，不是淡入 | 直接接管 |
-| 全站换皮 | 见 §5.1 | 减少动画：只换配色和静态一帧 |
+| 主题放映厅 | 见 §5.1 | 见 §5.1 末尾 |
 
-### 5.1 全站换皮（`site/src/theme/skin.ts`）
+### 5.1 主题放映厅（`site/src/showcase/`）
 
-- 皮肤 = 「网吧」（默认，§4 的场景）或产品的 10 套内置字符画主题之一。状态在 URL：`?skin=phosphor`（可分享），不用 localStorage。
-- 切到字符画主题时：`paletteCss(pack)` 写进 `<style id="site-skin">`、`html[data-ascii=<id>]` 和 `data-theme`（dark / light）跟包走——
-  官网的令牌（`styles/tokens.css`）按产品同名变量写，所以按钮、卡片、文字颜色一起换；首屏场景画布淡出，
-  换成该主题的背景 Worker（`<canvas>` `transferControlToOffscreen()` 交给 `backdrop-worker`，场景 `welcome`，30 fps），
-  宿主照产品转发尺寸、指针、点击、`quiet` 矩形（标题区和按钮，背景在那里变淡）；花园的 `data()` 喂一份假的项目列表。
-- 所有过程动画（第 2 章时间线、下载按钮按下后的「install」、章节号旁的小图标）用 `ProcessGlyph` + 当前皮肤的帧表；网吧皮肤用默认动画。
-- 切换动效：View Transitions（同文档，已 Baseline）做一次 400 ms 的圆形揭开，圆心在点击处；不支持时直接换。
-- 章节滚动在字符画皮肤下照常：左侧文案换章，背景不跟章节演戏（它不是网吧），第 8 章的画廊仍在。
-  点导航「换皮」或第 8 章任一卡片切换；`Esc` 或再点「网吧」回默认。
-- 看门狗照产品：背景报错 / 卡顿就换回网吧场景并在角落提示一句。
+**布局**：中间一个 16:10 的应用窗口（DOM 画的标题栏，标题「Claude Web — 磷光」随主题变），里面放当前主题的录像；
+窗口下面一条细时间轴，带三个标记「首页 / 跑一回合 / 等你批准」；再下面一排 11 个主题按钮（名字 + 亮 / 暗小标 +
+一个用该主题帧表实跑的小过程动画，`ProcessGlyph`，纯 DOM 不跑背景），最后一个是「描述一个新的 →」。
+整段的背景色、强调色、文字色取当前主题 `theme.json` 的配色（`paletteCss` 只作用在这一段的容器上，颜色变量用 `@property`
+注册，切换时 400 ms 过渡）；亮色主题时这一段整体变亮。默认选中「磷光」。
 
-| 皮肤 | 首次加载 | 切到时加载 |
-| --- | --- | --- |
-| 网吧 | 引擎 + 精灵（§7 预算内） | — |
-| 字符画主题 | 不加载 | Worker 脚本（一次）+ 该主题的 `theme.json` / `backdrop.js` / `theme.css`（单套 7–25 KB 未压缩） |
+**同一条时间线**：10 段主题录像由同一个录制脚本（§5.2）按同一套动作录出，长度都是 12 s、循环播放：
+
+| 秒 | 录像里的画面 |
+| --- | --- |
+| 0–3 | 首页，主题背景在动；鼠标划过背景（背景对指针有反应的主题会起涟漪 / 拖尾） |
+| 3–5 | 点进一个对话 |
+| 5–10 | 发一句话，一回合开始：时间线里逐步出现 读文件 → 改文件 → 跑测试，每步前面是该主题的过程动画，回复逐字流出 |
+| 10–12 | 停在权限卡「要运行 `npm test` 吗？」，然后接回 0 s |
+
+**交互**（这一段的全部交互，不再加）：
+
+| 交互 | 做法 |
+| --- | --- |
+| 切换 | 点主题按钮；这一段有焦点时 ← → 或数字键 1–9、0。新录像从**同一秒**接着放（`currentTime` 对齐），从点击处圆形揭开（新 `<video>` 叠在上面，`clip-path: circle()` 400 ms 展开，结束后撤掉旧的）。按钮悬停时预加载那段录像 |
+| 拖动 | 在窗口上横向按住拖（或拖时间轴）＝ 前后拖动画面，松手接着放；点三个标记直接跳过去 |
+| 对比 | 窗口右上「对比」开关：打开后窗口被一条竖线分成两半，左边是上一个主题、右边是当前主题，同一秒同步播放，竖线跟着指针走（触屏：拖竖线） |
+| 暂停 | 点窗口或空格：暂停 / 继续 |
+| 分享 | 当前主题写进 URL：`?theme=phosphor#themes`，打开即选中并滚到这一段 |
+
+**「描述一个新的」**：第 11 段录像，单独一条 15 s 的时间线：在输入框里打一句「深夜的地铁站，绿色的指示灯在闪」
+→ ascii-theme 开始干活，过程动画走一遍 → 对话里出现试跑截图卡 → 点「应用」→ 整个界面换成新主题。
+这一段不能对比（没有对应的「上一个」）。窗口下方一行「这是 Claude Web 自己生成的；你也可以描述一个」。
+
+**加载**：这一段进入视口前一屏才开始加载；先只加载 11 张海报（webp，1280×800，各 ≤ 80 KB），当前主题的录像随后加载，
+其它的悬停或切到时才加载。全部不计入首页 1.5 MB 预算（§7）。
+
+**降级**：手机用 720×450 的小版录像，主题按钮变成可横滑的一条，没有「对比」，拖动只在时间轴上；
+`prefers-reduced-motion`：不自动播放，只换海报，窗口中间一个「播放」按钮；视频加载失败就停在海报上。
+
+### 5.2 录制（`scripts/record-themes.cjs`）
+
+- 基于 `scripts/readme-shots.cjs` 的做法：`scripts/lib/demo.cjs` 起临时 HOME + 假上游 + 演示项目，Electron 离屏窗口
+  1280×800、`deviceScaleFactor` 2（录完缩到 1280×800，字更清楚），`setFrameRate(30)`，用 `paint` 事件逐帧存 PNG。
+- 每段录像前切到对应主题（写主题画廊用的那个设置项），等背景就绪，然后执行**同一份**动作脚本：鼠标轨迹用
+  `sendInputEvent` 回放、点击、发消息；假上游按固定剧本回放这一回合（读 / 改 / 测试三个工具调用、一张 `npm test` 的权限卡），
+  不花 token、每次一样。每帧带时间戳，ffmpeg 按时间戳重采样成恒定 30 fps，保证 10 段的第 n 秒是同一个动作（误差 ≤ 1 帧）。
+- 「描述一个新的」那段：假上游回放一段预先写好的 ascii-theme 过程（工具调用写出主题文件，主题本身放在
+  `scripts/lib/fixtures/theme-metro/`），试跑和应用走产品真实的流程。
+- 输出（每段、中英各一）：`<id>.<lang>.webm`（AV1，`libsvtav1`）、`<id>.<lang>.mp4`（H.264 兜底，给不支持 AV1 的 Safari）、
+  `-sm` 小版两种、`<id>.<lang>.webp` 海报（取第 7 s 那一帧）；完成后打印每个文件的大小，单段大版超过 1.5 MB 就报警。
+- 用法：`node scripts/record-themes.cjs [--lang en|zh] [--only phosphor,ink]`；界面或主题有改动时手动重录，不进 CI
+  （CI 上 Electron 离屏录制不稳定、也慢）。
+- 录像不进仓库（11 段 × 2 种语言 × 4 种编码，几十 MB）：录完上传到一个 GitHub Release（tag `site-media`，不是正式版本，
+  标成 pre-release），同时更新 `site/media.json`（文件名、sha256、字节数）并提交；官网构建时 `fetch-media.mjs` 按清单下载、
+  校验后放进 `dist/themes/`，由 Pages 同源提供（Release 的下载地址会重定向、不适合直接当 `<video src>`）。
 
 ## 6. 文案与双语
 
@@ -199,6 +237,7 @@ L3 以 `lighter` 叠上。指针用 `pointermove` 更新目标、每帧以 `--ea
 ## 7. 性能与降级
 
 预算：首页首次加载 ≤ 1.5 MB（含字体、poster、引擎 JS），场景 JS 懒加载（`requestIdleCallback` 或首屏可见后），音效按需。
+主题放映厅的海报和录像不算在内（滚到附近才加载，§5.1）。
 字体：标题用一款像素位图字（只用于 H1 和章节标题，subset），正文系统 UI 栈，命令用等宽系统字体；不加载 Inter。
 
 三层，共用同一套精灵与脚本（`hero/tier.ts` 决定）：
@@ -225,8 +264,10 @@ L3 以 `lighter` 叠上。指针用 `pointermove` 更新目标、每帧以 `--ea
   `chapters.ts` 每章的 `look` 落在地图内；`tier.ts` 的分级表。
 - 文案：i18n 覆盖测试和 wording 测试扩展到 `site/`。
 - `render.ts` 拆分后 `npm test -w web` 全过；产品的 ui-smoke 不受影响。
-- 换皮：`skin.ts` 对 10 套内置主题都能 `parsePack` 成功并生成配色；`?skin=` 非法值回到网吧；
-  每套主题在官网的令牌下过 `contrast.ts` 的对比度检查（文字 / 按钮）。用 Playwright 逐套切换截图，控制台无错误。
+- 放映厅：`clips.ts` 的片段表和 `media.json` 一一对应（每个主题、每种语言、每种编码都有，加上海报）；10 套内置主题的
+  `theme.json` 都能 `parsePack` 并生成配色，每套在这一段的文字 / 按钮上过 `contrast.ts` 的对比度检查；`?theme=` 非法值回到磷光。
+  Playwright 打开构建好的站点：逐个切换，断言新录像的 `currentTime` 与切换前相差 ≤ 0.1 s、控制台无错误；对比模式两段同步。
+- `fetch-media.mjs`：sha256 不符时构建失败；下载不到时用占位海报并在构建日志里警告，不让整站构建失败。
 - 预算：构建后 `scripts/site-budget.mjs` 统计 `dist/` 首屏引用的资源总量，超过 1.5 MB 构建失败。
 - 手动：Chrome 的 Lighthouse（性能 ≥ 90、无障碍 ≥ 90）；一台集显笔记本上 T0 ≥ 50 fps；iPhone / Android 各看一遍 T1。
 
