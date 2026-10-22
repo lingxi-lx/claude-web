@@ -31,6 +31,7 @@ import { installCafe } from '@/features/cafe/state';
 import { CharacterLibrary } from '@/features/cafe/CharacterLibrary';
 import { BackgroundSide } from '@/features/background/BackgroundSide';
 import { installBrowserHost } from '@/features/browser/host';
+import { installThemes } from '@/themes/trial';
 import { useSection } from '@/features/sections';
 import { Rail } from '@/features/rail/Rail';
 import { RAIL_WIDTH } from '@/features/rail/rail-model';
@@ -113,6 +114,8 @@ export function App() {
   useEffect(() => installCafe(), []);
   // this window as the browser an Agent's web tools work in (the desktop app only)
   useEffect(() => installBrowserHost(), []);
+  // the user's own character themes, and the theme skill's trial runs (themes/trial.ts)
+  useEffect(() => installThemes(), []);
   useEffect(() => installZoom(), []);
   useEffect(() => installChecklist(), []);
   useEffect(() => installAccountDefault(), []);

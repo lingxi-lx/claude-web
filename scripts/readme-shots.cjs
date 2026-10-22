@@ -4,7 +4,7 @@
 // three projects, a fake upstream, one conversation waiting for a permission and one still working) is driven in a
 // real Chromium (Electron); every picture is a capture of that window (offscreen: works with the screen locked).
 // Output: <out>/{characters,home,chat,split,models,subagent,settings,connect,mission,automation,background,permission,
-// language,mobile}.png and <out>/cafe.gif (frames of the café canvas put together with ffmpeg).
+// language,themes,theme-home,mobile}.png and <out>/cafe.gif (frames of the café canvas put together with ffmpeg).
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -97,6 +97,17 @@ async function driver() {
   if (want('language')) {
     await reset(); await store("st.openSettings({ section: 'appearance' })"); await waitFor('!!document.querySelector(".modal.settings")', 5000); await sleep(1200);
     await png('language'); await js('window.__store.setState({ settingsOpen: null })');
+  }
+  // 字符画主题: the gallery with one card live under the pointer, then the start page in one of them
+  if (want('themes')) {
+    await reset(); await store("st.openSettings({ section: 'appearance', reveal: 'ui.theme' })"); await waitFor('!!document.querySelector(".theme-gallery")', 5000);
+    await js(`(() => { const c = document.querySelector('.theme-gallery [data-theme-pick="ascii:moon"]'); c?.dispatchEvent(new PointerEvent('pointerover', { bubbles: true })); c?.dispatchEvent(new PointerEvent('pointerenter', { bubbles: false })); })()`);
+    await sleep(3000);
+    await png('themes'); await js('window.__store.setState({ settingsOpen: null })');
+  }
+  if (want('theme-home')) {
+    await reset(); await store("st.setSetting('ui.theme', 'ascii:koi')"); await newConv(); await sleep(4000);
+    await png('theme-home'); await store("st.setSetting('ui.theme', 'dark')"); await sleep(800);
   }
   if (want('automation')) { await reset(); await click('.rail-btn[data-id="automation"]'); await sleep(2200); await png('automation'); await click('.rail-btn[data-id="chat"]'); await sleep(500); }
   if (want('background') || want('cafe') || want('characters')) {

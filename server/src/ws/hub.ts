@@ -73,6 +73,8 @@ import type { IncomingMessage } from 'node:http';
 import type { OrchestraService } from '../orchestra/service.js';
 import { parseProxySetting, proxy } from '../net/proxy.js';
 import { CharacterService, handleCharacters, isCharactersRequest } from '../characters/service.js';
+import type { ThemeService } from '../themes/service.js';
+import { usable } from '../themes/tools.js';
 import { handleOrchestra, isOrchestraRequest } from '../orchestra/handlers.js';
 import { handleBackground, isBackgroundRequest, type BackgroundService } from '../background/service.js';
 import { isWebKeySetting, maskWebSettings, type WebService } from '../web/service.js';
@@ -98,6 +100,7 @@ export interface Services {
   /** 后台: every conversation's running sub-agents / workflows / commands (background/service.ts). */
   background: BackgroundService;
   characters: CharacterService;
+  themes: ThemeService;
   git: GitService;
   search: SearchService;
   skills: SkillsService;
@@ -215,6 +218,7 @@ export class Hub {
     s.background.on('changed', (session) => this.broadcast({ kind: 'background.changed', session }));
     s.characters.on('changed', () => this.broadcast({ kind: 'characters.changed' }));
     s.customCss.on('changed', () => this.broadcast({ kind: 'customCss.changed' }));
+    s.themes.on('changed', () => this.broadcast({ kind: 'themes.changed' }));
     s.agents.events.on('reported', () => this.broadcast({ kind: 'agents.changed' }));
   }
 
@@ -237,7 +241,7 @@ export class Hub {
     // startup discovery happens before anyone is connected: tell each new client what's waiting to be joined
     void this.s.library.detect().then((kinds) => { if (kinds.length) this.send(ws, { type: 'event', event: { kind: 'library.discovered', kinds } }); }).catch(() => {});
     // a window that hosted the built-in browser is gone with its connection: what it was asked fails now, not in 30 s
-    ws.on('close', () => { this.clients.delete(ws); this.s.web.dropConnection(ws); });
+    ws.on('close', () => { this.clients.delete(ws); this.s.web.dropConnection(ws); this.s.themes.dropConnection(ws); });
     // without a listener, a malformed frame / oversized payload makes ws emit an 'error' that crashes the server
     ws.on('error', () => this.clients.delete(ws));
     ws.on('message', async (raw) => {
@@ -594,6 +598,19 @@ export class Hub {
         return { markdown: readChangelog(String(req.lang ?? 'en')), version: s.version };
       case 'shell.editors':
         return { editors: await installedEditors() };
+      case 'themes.list':
+        return s.themes.list().filter(usable);
+      case 'themes.delete':
+        this.localWindowOnly(ws, tr('字符画主题'));
+        return { deleted: s.themes.remove(String(req.id)) };
+      case 'themes.trialHost':
+        // a draft runs in a window on this machine (a phone or a peer is not handed someone's code)
+        this.localWindowOnly(ws, tr('字符画主题'));
+        s.themes.setHost(ws, !!req.on, (r) => this.send(ws, { type: 'event', event: { kind: 'themes.trial', id: r.id, source: { id: r.source.id, json: r.source.json, backdrop: r.source.backdrop, css: r.source.css } } }));
+        return null;
+      case 'themes.trialResult':
+        this.localWindowOnly(ws, tr('字符画主题'));
+        return { taken: s.themes.trialResult(ws, String(req.id), { png: req.png, errors: req.errors, avgMs: req.avgMs, maxMs: req.maxMs, note: req.note }) };
       case 'ui.customCss':
         return s.customCss.read();
       case 'ui.customCss.create':

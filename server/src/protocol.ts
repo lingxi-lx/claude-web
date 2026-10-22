@@ -710,6 +710,14 @@ export type ClientRequest =
   | BackgroundRequest
   // ---- 网吧: the character library ----
   | CharactersRequest
+  // ---- 字符画主题: the user's own themes (themes/service.ts) ----
+  /** saved themes → ThemeSource[] (usable ones only) */
+  | { kind: 'themes.list' }
+  | { kind: 'themes.delete'; id: string }
+  /** this window runs the theme skill's trial runs (`themes.trial` events) */
+  | { kind: 'themes.trialHost'; on: boolean }
+  /** the answer to a `themes.trial` event */
+  | { kind: 'themes.trialResult'; id: string; png?: string; errors: string[]; avgMs?: number; maxMs?: number; note?: string }
 
   // ---- cross-machine sessions (federation) ----
   | PeerRequest;
@@ -731,6 +739,10 @@ export type ServerEvent =
   | { kind: 'transcripts.changed'; sessionIds: string[] }
   /** ~/.claude-web/custom.css was written / made / removed: windows read it again (ui.customCss) */
   | { kind: 'customCss.changed' }
+  /** a saved character theme was added / changed / removed: windows ask again (themes.list) */
+  | { kind: 'themes.changed' }
+  /** run this theme draft for the skill and answer with themes.trialResult (to one window) */
+  | { kind: 'themes.trial'; id: string; source: { id: string; json: string; backdrop?: string; css?: string } }
   /** an agent said what it offers and that changed (AgentInfo.reportedModels): ask agents.list again */
   | { kind: 'agents.changed' }
   | { kind: 'meta.changed' }

@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useRef } from 'react';
 import { clsx } from '@/util';
 import { useActivePack } from './apply';
 import { animFor } from '@themes';
-import type { Process } from '@themes';
+import type { Process, ThemePack } from '@themes';
 import { frameHtml } from './render';
 import { play } from './ticker';
 
@@ -14,8 +14,9 @@ const reduced = () => (typeof matchMedia === 'function' && matchMedia('(prefers-
  * rows of fourteen cells, the status tab over the composer. `done` / `fail` play their ending once, then `onEnd`
  * hands the slot back (the step's own icon). Motion reduced: the first frame, still; an ending ends at once.
  */
-export function ProcessGlyph({ process, size = 'inline', phase = 'loop', onEnd, className }: { process: Process; size?: 'inline' | 'stage'; phase?: 'loop' | 'done' | 'fail'; onEnd?: () => void; className?: string }) {
-  const pack = useActivePack();
+export function ProcessGlyph({ process, size = 'inline', phase = 'loop', onEnd, className, pack: given }: { process: Process; size?: 'inline' | 'stage'; phase?: 'loop' | 'done' | 'fail'; onEnd?: () => void; className?: string; /** another theme's frames (设置 → 外观's cards) instead of the one in use */ pack?: ThemePack | null }) {
+  const active = useActivePack();
+  const pack = given === undefined ? active : given;
   const ref = useRef<HTMLSpanElement>(null);
   const end = useRef(onEnd);
   end.current = onEnd;

@@ -316,3 +316,34 @@ div.code { border: 0; border-radius: var(--r-lg); background-color: var(--surfac
 /* a character theme's backdrop behind a conversation (themes/Backdrop): under everything in the column, faint */
 .chat-main { position: relative; isolation: isolate; }
 .chat-main > .chat-bd { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; animation: fadein 0.6s; }
+
+/* 设置 → 外观's character themes (settings/ThemeGallery): a card per theme in its own colours; the card under the
+   pointer runs its backdrop and four process animations */
+.sp-row:has(> .ctl > .theme-gallery) { flex-wrap: wrap; }
+.sp-row > .ctl:has(> .theme-gallery) { flex: 1 1 100%; display: flex; flex-direction: column; gap: var(--sp-4); }
+.theme-gallery { align-self: stretch; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--sp-3); }
+.theme-gallery .tc-wrap { position: relative; }
+.theme-gallery .tc { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 4px; border-radius: var(--r-lg); text-align: left; color: var(--ink-3); font-size: 13px; }
+.theme-gallery .tc:hover, .theme-gallery .tc:focus-visible, .theme-gallery .tc.on { color: var(--ink-1); }
+.theme-gallery .tc-pic { position: relative; display: grid; place-items: center; height: 92px; overflow: hidden; border-radius: var(--r-md); background: var(--tc-bg, var(--surface-2)); border: var(--hairline) solid var(--edge-default); }
+.theme-gallery .tc:hover .tc-pic { border-color: var(--edge-strong); }
+.theme-gallery .tc.on .tc-pic { outline: 2px solid var(--tc-accent, var(--accent)); outline-offset: 2px; }
+.theme-gallery .tc-pic > .preview-bd { position: absolute; inset: 0; width: 100%; height: 100%; animation: fadein 0.3s; }
+.theme-gallery .tc-still { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; padding: 12px; background: linear-gradient(135deg, var(--tc-side) 0 22%, transparent 22%); }
+.theme-gallery .tc-sun { position: absolute; top: 14px; right: 16px; width: 22px; height: 22px; border-radius: 50%; background: radial-gradient(circle, var(--tc-accent) 0 40%, transparent 41%), repeating-conic-gradient(var(--tc-accent) 0 6deg, transparent 6deg 30deg); opacity: 0.85; }
+.theme-gallery .tc-ln { height: 4px; width: 70%; border-radius: 2px; background: var(--tc-fg); opacity: 0.6; }
+.theme-gallery .tc-ln.short { width: 42%; background: var(--tc-accent-text); opacity: 0.8; }
+.theme-gallery .tc-procs { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-around; padding: 4px 2px; background: color-mix(in oklab, var(--tc-bg) 78%, transparent); }
+.theme-gallery .tc-procs .pg.stage { font-size: 7px; line-height: 7px; color: var(--accent-text); }
+.theme-gallery .tc-nm { display: flex; align-items: center; gap: 6px; padding: 0 2px; }
+.theme-gallery .tc-own { font-size: 11px; padding: 0 5px; border-radius: var(--r-pill); background: var(--layer-hover); color: var(--ink-3); }
+.theme-gallery .tc-nm > svg { margin-left: auto; color: var(--accent-text); }
+.theme-gallery .tc.new .tc-pic { background: transparent; border-style: dashed; color: var(--ink-3); }
+.theme-gallery .tc.new:hover .tc-pic { color: var(--ink-1); border-color: var(--edge-strong); }
+
+/* the theme skill's draft card (chat/tools/ThemeDraftTool): what is still wrong, then the trial picture */
+.theme-draft { display: flex; flex-direction: column; gap: var(--sp-2); }
+.theme-draft.running { flex-direction: row; align-items: center; color: var(--ink-3); }
+.theme-draft .td-name { font-weight: 600; color: var(--ink-1); }
+.theme-draft .td-text { margin: 0; white-space: pre-wrap; font-size: var(--fs-small, 12px); color: var(--ink-2); max-height: 240px; overflow: auto; }
+.theme-draft .td-shot { width: 100%; max-width: 720px; border-radius: var(--r-md); border: var(--hairline) solid var(--edge-default); }

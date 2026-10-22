@@ -12,6 +12,7 @@ import { TaskChipBody } from './TaskChip';
 import { WEB_TOOLS, webToolLabel, webToolOf, type WebTool } from '@/features/browser/web-tools';
 import { COMPUTER_TOOLS, computerToolLabel, computerToolOf, type ComputerTool } from '@/features/computer/computer-tools';
 import { tr } from '@/i18n';
+import { ThemeDraftBody } from './ThemeDraftTool';
 
 export type ToolCategory = 'read' | 'edit' | 'cmd' | 'web' | 'skill' | 'mcp' | 'agent' | 'plan' | 'other';
 
@@ -47,6 +48,8 @@ const DEFS: Record<string, ToolDef> = {
   Agent: { icon: 'agent', category: 'agent', standalone: true, label: (i) => ({ verb: i.subagent_type ? `[${i.subagent_type}]` : tr('子代理'), arg: s(i, 'description') || s(i, 'prompt').slice(0, 80) }), Body: AgentBody },
   Task: { icon: 'agent', category: 'agent', standalone: true, label: (i) => ({ verb: i.subagent_type ? `[${i.subagent_type}]` : tr('任务'), arg: s(i, 'description') || s(i, 'prompt').slice(0, 80) }), Body: AgentBody },
   // /code-review's findings (CLAUDE_CODE_REPORT_FINDINGS, set by the runner): a card of its own in the conversation
+  // 字符画主题: the theme skill's draft, with its trial picture (server themes/tools.ts)
+  mcp__web__theme_draft: { icon: 'sparkle', category: 'other', standalone: true, defaultOpen: true, label: (i) => ({ verb: tr('主题草稿'), arg: [i?.json?.name?.zh, i?.json?.id].filter(Boolean).join(' · ') }), Body: ThemeDraftBody },
   // 跨对话工具: a task worth its own conversation (server sessions-mcp suggest_task)
   mcp__sessions__suggest_task: { icon: 'sparkle', category: 'other', standalone: true, defaultOpen: true, label: (i) => ({ verb: tr('建议的任务'), arg: String(i.title ?? '') }), Body: TaskChipBody },
   ReportFindings: { icon: 'approval', category: 'other', standalone: true, defaultOpen: true, label: (i) => ({ verb: tr('代码审查'), arg: Array.isArray(i.findings) ? (i.findings.length ? tr('{n} 个发现', { n: i.findings.length }) : tr('没发现问题')) : '' }), Body: FindingsBody },

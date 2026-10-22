@@ -14,6 +14,7 @@ const subs = new Set<() => void>();
 export function applyAscii(id: string | null) {
   wanted = id;
   const pack = safe ? null : getPack(id);
+  // the same pack object = nothing changed (a user theme the server sent again is a new object: its CSS may differ)
   if (pack === active) return;
   active = pack;
   const root = document.documentElement;

@@ -29,7 +29,7 @@ export const ROW_MENU = ['open-tab', 'open-split', 'resume', 'pin', 'explorer', 
 /** On the rows themselves. */
 export const ROW = ['status', 'kids', 'more', 'less', 'select-bar'] as const;
 /** The account row at the bottom and its popover. */
-export const ACCOUNT = ['account', 'quota', 'connection', 'today', 'theme', 'usage', 'settings', 'config', 'appearance', 'shortcuts', 'palette'] as const;
+export const ACCOUNT = ['account', 'quota', 'connection', 'today', 'theme', 'usage', 'settings', 'config', 'ascii-themes', 'appearance', 'shortcuts', 'palette'] as const;
 /** The light, dismissable hint. */
 export const HINT = ['library-join', 'library-later'] as const;
 
@@ -109,7 +109,7 @@ export const LEGACY: { old: string; now: `${Place}:${string}`[] }[] = [
 ];
 
 /** Where the spec's new L0 / L1 entries live (§4.2 / §5.1), beyond the old ones. */
-export const ADDED: `${Place}:${string}`[] = ['top:app-menu', 'top:back', 'top:forward', 'top:chat', 'top:background', 'top:extensions', 'top:more', 'top:automation', 'automation:schedules', 'automation:goals', 'automation:orchestra', 'section:attention', 'section:projects', 'head:filter', 'account:account', 'account:today', 'account:shortcuts', 'filter:library', 'row:less', 'project:move-top', 'project:move-up', 'project:move-down'];
+export const ADDED: `${Place}:${string}`[] = ['top:app-menu', 'top:back', 'top:forward', 'top:chat', 'top:background', 'top:extensions', 'top:more', 'top:automation', 'automation:schedules', 'automation:goals', 'automation:orchestra', 'section:attention', 'section:projects', 'head:filter', 'account:account', 'account:today', 'account:shortcuts', 'filter:library', 'row:less', 'project:move-top', 'project:move-up', 'project:move-down', 'account:ascii-themes'];
 
 export function resolves(ref: `${Place}:${string}`): boolean {
   const [place, id] = ref.split(':') as [Place, string];

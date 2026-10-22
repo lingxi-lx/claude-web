@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 // The backdrop worker (spec 2026-10-22 §2): owns the canvas (OffscreenCanvas from <Backdrop>), runs the theme's
 // backdrop code with the network taken away, paces frames, and reports how long they take (themes/watchdog.ts).
-import { cspHolds, loadBackdrop, lockdown, type BackdropModule } from './sandbox';
+import { loadBackdrop, lockdown, type BackdropModule } from './sandbox';
 import type { ToWorker } from './backdrop-protocol';
 
 const post = (m: unknown) => (self as unknown as DedicatedWorkerGlobalScope).postMessage(m);
@@ -9,8 +9,10 @@ let mod: BackdropModule | null = null;
 let fps = 30, speed = 1, scene = 'welcome', process = 'idle', running = false, reduce = false;
 let mouse: { x: number; y: number; down: boolean } | null = null;
 let quiet: { x: number; y: number; w: number; h: number }[] = [];
-/** the last `data`: it can come while the theme's code is still loading (the CSP probe), and is handed over after init */
+/** the last `data`: it can come before init (the page may still be checking the CSP), and is handed over after init */
 let lastData: unknown;
+/** the canvas the theme draws into (a trial run asks for a picture of it: `snapshot`) */
+let canvasRef: OffscreenCanvas | null = null;
 let t = 0, lastAt = 0, lastDraw = 0, spent = 0, frames = 0, statAt = 0;
 
 const raf: (f: () => void) => void = typeof (self as any).requestAnimationFrame === 'function'
@@ -45,15 +47,19 @@ function start() {
   raf(loop);
 }
 
+// the page checks this script's CSP (worker-url.ts sandboxReady): a Worker does not say where it was loaded from
+post({ type: 'hello', url: self.location.href });
+
 self.onmessage = (e: MessageEvent<ToWorker>) => {
   const m = e.data;
   switch (m.type) {
     case 'init': {
       scene = m.scene; speed = m.speed; fps = m.scene === 'chat' ? 15 : 30; reduce = m.reduce;
-      const realFetch = (self as any).fetch?.bind(self) as typeof fetch | undefined;
+      canvasRef = m.canvas;
       lockdown(self);
-      // a theme that is not built in runs only where the worker's CSP really cuts the network
-      const ready = m.trusted || !realFetch ? Promise.resolve(true) : cspHolds(realFetch, `${m.probe}?cw-csp-probe=${Date.now()}`);
+      // a theme that is not built in runs only where the worker's CSP cuts the network (the page checked the header
+      // the worker script came with: sandbox.ts workerSandboxed)
+      const ready = Promise.resolve(m.trusted || m.sandboxed);
       void ready.then((ok) => {
         if (!ok) { post({ type: 'error', message: 'no network sandbox here (the backdrop worker came without its CSP); a theme that is not built in does not run' }); return; }
         guard(() => {
@@ -79,6 +85,13 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
     case 'colors': guard(() => mod?.theme?.({ colors: m.colors })); break;
     case 'data': lastData = m.data; guard(() => mod?.data?.(m.data)); break;
     case 'quiet': quiet = m.rects; break;
+    case 'snapshot': {
+      // a copy of what is on the canvas now (createImageBitmap leaves the canvas as it is), for the trial picture
+      const c = canvasRef;
+      if (!c) { post({ type: 'snapshot', bitmap: null }); break; }
+      void createImageBitmap(c).then((bitmap) => (self as any).postMessage({ type: 'snapshot', bitmap }, [bitmap]), () => post({ type: 'snapshot', bitmap: null }));
+      break;
+    }
     case 'pause': running = false; break;
     case 'resume': start(); break;
   }

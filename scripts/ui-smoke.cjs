@@ -2441,21 +2441,72 @@ function driver() {
             await closeMenus();
             await js(`window.__store.getState().openSettings({ section: 'appearance' })`);
             await waitFor(`!!document.querySelector('.sp [data-entry="ui.theme"] .theme-sw')`, 4000);
-            const sw = await js(`(() => { const row = document.querySelector('.sp [data-entry="ui.theme"]'); return { select: !!row.querySelector('select'), picks: [...row.querySelectorAll('.theme-sw:not(.ascii) [role="radio"]')].map((b) => b.dataset.themePick), ascii: [...row.querySelectorAll('.theme-sw.ascii [role="radio"]')].map((b) => b.dataset.themePick), on: row.querySelector('.theme-sw [aria-checked="true"]')?.dataset.themePick ?? null }; })()`);
+            const sw = await js(`(() => { const row = document.querySelector('.sp [data-entry="ui.theme"]'); return { select: !!row.querySelector('select'), picks: [...row.querySelectorAll('.theme-sw [role="radio"]')].map((b) => b.dataset.themePick), ascii: [...row.querySelectorAll('.theme-gallery [role="radio"]')].map((b) => b.dataset.themePick), make: !!row.querySelector('.theme-gallery [data-theme-new]'), on: row.querySelector('.theme-sw [aria-checked="true"]')?.dataset.themePick ?? null }; })()`);
             await click('.sp [data-entry="ui.theme"] [data-theme-pick="nord"]');
             const nord = await waitFor(`document.documentElement.dataset.theme === 'nord' && document.querySelector('.sp [data-entry="ui.theme"] [data-theme-pick="nord"]')?.getAttribute('aria-checked') === 'true'`, 2000);
             await shot('settings-appearance-themes');
             check('设置 → 外观: every theme is a swatch (跟随系统 first), no dropdown; a click applies it', !sw.select && sw.picks.length >= 7 && sw.picks[0] === 'system' && sw.on === 'light' && nord, JSON.stringify({ sw, nord }));
-            // 字符画主题 (docs/notes/ascii-themes.md): a row of their own above the classic ones; picking one puts its colours on
-            // <html data-ascii> over the classic theme of its brightness, and the classic swatch takes it off again
-            await click('.sp [data-entry="ui.theme"] [data-theme-pick="ascii:phosphor"]');
-            const phos = await waitFor(`document.documentElement.dataset.ascii === 'phosphor' && document.documentElement.dataset.theme === 'dark' && !!document.getElementById('cw-ascii-theme') && getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() === '#060a07'`, 2000);
-            await shot('settings-appearance-ascii-phosphor');
-            await click('.sp [data-entry="ui.theme"] [data-theme-pick="ascii:paper"]');
-            const paper = await waitFor(`document.documentElement.dataset.ascii === 'paper' && document.documentElement.dataset.theme === 'light'`, 2000);
+            // 字符画主题 (docs/notes/ascii-themes.md): the gallery above the classic swatches — ten built-in cards and 「描述一个新主题」;
+            // the card under the pointer runs its backdrop (a worker canvas) and four process animations
+            const ASCII = ['phosphor', 'abyss', 'koi', 'moon', 'dither', 'orb', 'garden', 'paper', 'letters', 'ink'];
+            await js(`document.querySelector('.sp [data-entry="ui.theme"] [data-theme-pick="ascii:koi"]')?.dispatchEvent(new PointerEvent('pointerover', { bubbles: true })), document.querySelector('.sp [data-entry="ui.theme"] [data-theme-pick="ascii:koi"]')?.dispatchEvent(new PointerEvent('pointerenter', { bubbles: false }))`);
+            const hoverLive = await waitFor(`!!document.querySelector('.sp [data-theme-pick="ascii:koi"] .preview-bd') && document.querySelectorAll('.sp [data-theme-pick="ascii:koi"] .tc-procs .pg').length === 4`, 3000);
+            await shot('settings-appearance-gallery-hover');
+            check('设置 → 外观: the ten character themes as cards, then 「描述一个新主题」; the card under the pointer runs its backdrop and four process animations', ASCII.every((id) => sw.ascii.includes(`ascii:${id}`)) && sw.make && hoverLive, JSON.stringify({ ascii: sw.ascii, make: sw.make, hoverLive }));
+            // every built-in theme put on in turn: its palette on <html data-ascii>, over the classic theme of its brightness,
+            // the welcome page's backdrop running in a worker (no console error from any of them: the run's tally says)
+            const applied = [];
+            for (const id of ASCII) {
+              await click(`.sp [data-entry="ui.theme"] [data-theme-pick="ascii:${id}"]`);
+              const ok = await waitFor(`document.documentElement.dataset.ascii === '${id}' && !!document.getElementById('cw-ascii-theme') && document.querySelector('.sp [data-theme-pick="ascii:${id}"]')?.getAttribute('aria-checked') === 'true'`, 2000);
+              applied.push([id, ok, await js(`document.documentElement.dataset.theme`)]);
+              await shot(`settings-ascii-${id}`);
+            }
+            const phosBg = await (async () => { await click('.sp [data-entry="ui.theme"] [data-theme-pick="ascii:phosphor"]'); return waitFor(`getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() === '#060a07' && document.documentElement.dataset.theme === 'dark'`, 2000); })();
+            const paperLight = await (async () => { await click('.sp [data-entry="ui.theme"] [data-theme-pick="ascii:paper"]'); return waitFor(`document.documentElement.dataset.theme === 'light'`, 2000); })();
             await click('.sp [data-entry="ui.theme"] [data-theme-pick="nord"]');
             const off = await waitFor(`!document.documentElement.dataset.ascii && !document.getElementById('cw-ascii-theme') && document.documentElement.dataset.theme === 'nord'`, 2000);
-            check('设置 → 外观: the character themes in their own row; phosphor / paper put their colours on, a classic one takes them off', sw.ascii.includes('ascii:phosphor') && sw.ascii.includes('ascii:paper') && phos && paper && off, JSON.stringify({ ascii: sw.ascii, phos, paper, off }));
+            check('设置 → 外观: each of the ten character themes puts its colours on (phosphor dark, paper light); a classic one takes them off', applied.every(([, ok]) => ok) && phosBg && paperLight && off, JSON.stringify({ applied, phosBg, paperLight, off }));
+            // a theme of the user's own (what the theme skill saves: ~/.claude-web/themes/<id>/): the server watches the folder,
+            // the window shows it as a card marked 我的, it goes on — its backdrop only after the page saw the worker's
+            // no-network CSP — and right-click offers 改一改 / 删除; removed from the folder, the card goes
+            let mine = null;
+            if (E.SMOKE_DATA && E.SMOKE_READONLY !== '1') {
+              const src = path.join(__dirname, '..', 'web', 'src', 'themes', 'builtin', 'phosphor');
+              const dir = path.join(E.SMOKE_DATA, 'themes', 'smoke-mine');
+              fs.mkdirSync(dir, { recursive: true });
+              const j = JSON.parse(fs.readFileSync(path.join(src, 'theme.json'), 'utf8'));
+              j.id = 'smoke-mine';
+              j.name = { zh: '冒烟主题', en: 'Smoke theme' };
+              fs.writeFileSync(path.join(dir, 'backdrop.js'), fs.readFileSync(path.join(src, 'backdrop.js')));
+              fs.writeFileSync(path.join(dir, 'theme.json'), JSON.stringify(j));
+              const card = await waitFor(`!!document.querySelector('.sp [data-theme-pick="ascii:smoke-mine"] .tc-own')`, 5000);
+              await click('.sp [data-entry="ui.theme"] [data-theme-pick="ascii:smoke-mine"]');
+              const on = await waitFor(`document.documentElement.dataset.ascii === 'smoke-mine'`, 2000);
+              await js(`window.__store.getState().openSettings({ section: 'appearance' })`);
+              await js(`(() => { const b = document.querySelector('.sp [data-theme-pick="ascii:smoke-mine"]'); b?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 })); })()`);
+              const menu = await waitFor(`[...document.querySelectorAll('.menu button')].map((b) => b.textContent.trim()).join('|').includes('改一改')`, 2000);
+              await shot('settings-ascii-mine');
+              await closeMenus();
+              await click('.sp [data-entry="ui.theme"] [data-theme-pick="nord"]');
+              fs.rmSync(dir, { recursive: true, force: true });
+              const gone = await waitFor(`!document.querySelector('.sp [data-theme-pick="ascii:smoke-mine"]')`, 5000);
+              mine = { card, on, menu, gone };
+              check('a theme of the user\'s own: the folder appears as a card (我的), it goes on, right-click offers 改一改, removing the folder takes the card away', card && on && menu && gone, JSON.stringify(mine));
+            }
+            // 「描述一个新主题」: a new conversation whose input holds the ask for the ascii-theme skill
+            const tilesNow = `(() => { const st = window.__store.getState(); const g = st.layout.groups.find((x) => x.id === st.layout.activeGroupId); return Object.values(g.panes).flatMap((p) => p.tiles.map((t) => t.id)); })()`;
+            const tilesBefore = await js(tilesNow);
+            await click('.sp [data-entry="ui.theme"] [data-theme-new]');
+            const maker = await waitFor(`!document.querySelector('.sp') && [...document.querySelectorAll('.composer textarea')].some((t) => t.value.startsWith('用 ascii-theme 帮我做一个字符画主题'))`, 4000);
+            check('「描述一个新主题」 closes the settings and opens a new conversation with the ask typed in', maker, String(maker));
+            // that new conversation goes again, and the smoke conversation is back in front (later checks use its header)
+            const makerTiles = (await js(tilesNow)).filter((x) => !tilesBefore.includes(x));
+            await js(`(() => { const st = window.__store.getState(); const g = st.layout.groups.find((x) => x.id === st.layout.activeGroupId); for (const p of Object.values(g.panes)) for (const t of p.tiles) if (${JSON.stringify(makerTiles)}.includes(t.id)) st.dispatchLayout({ t: 'tile.close', paneId: p.id, tileId: t.id }); })()`);
+            await sleep(300);
+            if (SID) await js(`window.__store.getState().openInPane(${SID}, 'replace')`);
+            await js(`window.__store.getState().openSettings({ section: 'appearance' })`);
+            await waitFor(`!!document.querySelector('.sp [data-entry="ui.theme"]')`, 4000);
             // 界面缩放 is the desktop shell's (desktop/src/zoom.ts; checked against the real shell by hand): this page is a
             // browser's, with no shell to keep the factor — the row is there and says so, with no control, and the factor is 1
             const zoomRow = await js(`(() => { const row = document.querySelector('.sp [data-entry="ui.zoom"]'); if (!row) return null; return { label: row.querySelector('.l')?.textContent ?? '', hint: row.querySelector('.sub')?.textContent ?? '', ctl: !!row.querySelector('.zoomer'), factor: getComputedStyle(document.documentElement).getPropertyValue('--zoom').trim() }; })()`);

@@ -37,6 +37,7 @@ The same program comes in two forms: a **desktop app** (Windows / macOS) and a *
   - [13. Conversations on other computers](#13-conversations-on-other-computers)
   - [14. Automation: scheduled tasks, goals, multi-agent orchestration](#14-automation-scheduled-tasks-goals-multi-agent-orchestration)
   - [15. Background: watch subagents work in the café](#15-background-watch-subagents-work-in-the-café)
+- [Character themes](#character-themes)
 - [Interface language](#interface-language)
 - [Custom styles (custom.css)](#custom-styles-customcss)
 - [Keyboard shortcuts](#keyboard-shortcuts)
@@ -438,6 +439,20 @@ By default guests are little octopuses, and the admin wears a blue cap. In the c
 ![A character made this way: black-framed glasses, blue hoodie, with frames for front, back, walking, sitting and typing](docs/images/character-made.png)
 
 If you're not happy, keep talking ("bigger eyes", "switch to a red shirt"); once you like it, save it and assign it to the admin, all guests, a type of subagent (such as Explore), or a subagent with a particular name. You can also just say "make me a café character that looks like this photo" in any conversation: this is a skill that ships with the app, and it works on both the Claude and ccb runtimes. Characters are stored in `~/.claude-web/characters/`, one JSON file per character.
+
+## Character themes
+
+![Settings → Appearance: the ten character themes as cards (the one under the pointer runs its backdrop and animations), then "Describe a new theme", with the classic colour themes below](docs/images/en/themes.png)
+
+Besides the classic colour themes there are ten **character themes**: each one brings its own colours, a living ASCII-art backdrop and its own set of little animations for what Claude is doing. **Settings → Appearance** shows them as cards; point at a card and it comes alive, click it to put it on (or **Character themes…** in the account menu at the bottom of the sidebar).
+
+![The start page in the Klein Koi theme: two dot-matrix koi swimming in a blue pond behind "What do you want to do today?"](docs/images/en/theme-home.png)
+
+- **The ten**: Phosphor (green terminal rain), Abyss (a halftone jellyfish in deep water), Klein Koi (koi in a blue pond), Moonfall (character rain under the moon), Dither (a ringed planet in four dithering algorithms), Depth Orb (a cloud of points with a lens split), Garden (your projects grow as plants: one per project folder, sized by how many conversations it has), Gazette, Letterbox and Sumi Ink (the three light ones).
+- **The backdrop** fills the start page, follows the pointer, answers clicks and typing, and reacts to what Claude is doing (thinking, reading, running agents…). In a conversation it is faint, or switch it off there: **Settings → General → Conversation display → Faint background in conversations**. With "reduce motion" on in your system, it draws one still picture.
+- **Animations instead of spinners**: every step has its own: editing is a pen writing, thinking really thinks, reading turns pages, tests fill in one by one, git commits line up… sixteen of them, drawn differently by each theme.
+
+**Make your own by describing it.** Click **＋ Describe a new theme** (or just say "make me a character theme: …" in any conversation): Claude writes the theme, checks it (format, contrast, every animation), **runs it once in your window** and looks at a picture of the result before showing you, and you keep talking until you like it. Right-click one of your themes for **Change it** or **Delete**. Themes live in `~/.claude-web/themes/<id>/` (`theme.json`, `backdrop.js`, `theme.css`); a backdrop that is not built in runs in a sandbox with no network, and is taken down (back to the default) if it throws errors or gets too slow.
 
 ## Interface language
 

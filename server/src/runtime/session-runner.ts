@@ -23,6 +23,7 @@ import { ENGINE_SEARCH_TOOL, engineSearchOff, userPickedSearchAdapter } from '..
 import { markUnknownCost } from '../usage/pricing.js';
 import type { AttachmentRef, EffortLevel, ModelInfo, OpenSessionParams, PermissionMode, PermissionRequestEvent, PermissionResponse, Provider, RunnerState, SessionFeatures, SessionInfoSnapshot, SideTurn } from '../protocol.js';
 import { getLocale, tr } from '../i18n/index.js';
+import { asciiPluginDir } from '../themes/tools.js';
 import { thinkingLanguageFor, thinkingLanguagePrompt, thinkingLanguageReminder } from './thinking-language.js';
 import { subagentPolicyPrompt } from './subagent-policy.js';
 import { localEnv } from './local-env.js';
@@ -512,7 +513,7 @@ export class SessionRunner extends EventEmitter {
       // names work here
       ...(() => {
         if (chatOnly) return {};
-        const dirs = [webMcpEnabled() ? cafePluginDir() : null, desktopSkillsPlugin()].filter((d): d is string => !!d);
+        const dirs = [webMcpEnabled() ? cafePluginDir() : null, webMcpEnabled() ? asciiPluginDir() : null, desktopSkillsPlugin()].filter((d): d is string => !!d);
         return dirs.length ? { plugins: dirs.map((p) => ({ type: 'local' as const, path: p })) } : {};
       })(),
       // searching only reads: 每步询问 does not ask for every search (the browser tools follow the permission mode).

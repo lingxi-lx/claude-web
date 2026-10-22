@@ -7,6 +7,7 @@ import type { FromWorker, ToWorker } from './backdrop-protocol';
 import { REQUIRED_COLORS, type ThemePack } from '@themes';
 import { processOf } from '@themes';
 import { watchdog } from './watchdog';
+import { backdropWorker, sandboxReady } from './worker-url';
 import { backdropData } from './backdrop-data';
 import { isBuiltin } from './registry';
 
@@ -44,7 +45,17 @@ export function Backdrop({ scene }: { scene: 'welcome' | 'chat' }) {
   return <BackdropCanvas key={pack.id + scene} pack={pack} scene={scene} onFail={() => setFailed(pack.id)} />;
 }
 
-function BackdropCanvas({ pack, scene, onFail }: { pack: ThemePack; scene: 'welcome' | 'chat'; onFail: () => void }) {
+/**
+ * A theme's backdrop in a card of 设置 → 外观 (the one under the pointer): the theme's own colours (it is not the one
+ * on the page), the pointer only inside the card, no page words to keep quiet, and no toast when it fails — the card
+ * just goes still.
+ */
+export function BackdropPreview({ pack, onFail }: { pack: ThemePack; onFail?: () => void }) {
+  if (!pack.backdrop) return null;
+  return <BackdropCanvas pack={pack} scene="preview" onFail={onFail ?? (() => {})} />;
+}
+
+function BackdropCanvas({ pack, scene, onFail }: { pack: ThemePack; scene: 'welcome' | 'chat' | 'preview'; onFail: () => void }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const worker = useRef<Worker | null>(null);
   const process = useLiveProcess();
@@ -54,23 +65,26 @@ function BackdropCanvas({ pack, scene, onFail }: { pack: ThemePack; scene: 'welc
   useEffect(() => {
     const canvas = ref.current;
     if (!canvas || typeof canvas.transferControlToOffscreen !== 'function') return;
-    const w = new Worker(new URL('./backdrop-worker.ts', import.meta.url), { type: 'module' });
+    const w = backdropWorker();
     worker.current = w;
     const send = (m: ToWorker, transfer: Transferable[] = []) => w.postMessage(m, transfer);
     const wd = watchdog(performance.now());
     // motion reduced: watched until the still frame is drawn (`still`), and again around each redraw on a resize
     const reduce = reducedMotion();
+    const preview = scene === 'preview';
+    const colorsNow = () => (preview ? { ...pack.colors } : readColors());
     let dead = false;
     const die = (why: string) => {
       if (dead) return;
       dead = true;
       w.terminate();
       console.warn(`[theme ${pack.id}] backdrop stopped: ${why}`);
-      useStore.getState().toast(tr('这个主题的背景出了问题，已暂时换回默认'));
+      if (!preview) useStore.getState().toast(tr('这个主题的背景出了问题，已暂时换回默认'));
       fail.current();
     };
     w.onmessage = (e: MessageEvent<FromWorker>) => {
       if (e.data.type === 'still') { wd.pause(); return; }
+      if (e.data.type === 'snapshot' || e.data.type === 'hello') return;
       if (wd.feed(e.data.type === 'error' ? { type: 'error' } : e.data, performance.now()) === 'fail') die(e.data.type === 'error' ? e.data.message : 'too slow');
     };
     w.onerror = (e) => die(e.message || 'worker error');
@@ -79,7 +93,14 @@ function BackdropCanvas({ pack, scene, onFail }: { pack: ThemePack; scene: 'welc
     const r = canvas.getBoundingClientRect();
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const off = canvas.transferControlToOffscreen();
-    send({ type: 'init', canvas: off, source: pack.backdrop!, width: r.width, height: r.height, dpr, colors: readColors(), scene, speed: scene === 'chat' ? pack.chatDim.speed : 1, reduce, trusted: isBuiltin(pack.id), probe: new URL('./', location.href).href }, [off]);
+    const trusted = isBuiltin(pack.id);
+    // a theme that is not built in: once the page has seen the worker's CSP (one request, the first time)
+    wd.pause();
+    void (trusted ? Promise.resolve(true) : sandboxReady(w)).then((sandboxed) => {
+      if (dead) return;
+      wd.resume(performance.now());
+      send({ type: 'init', canvas: off, source: pack.backdrop!, width: r.width, height: r.height, dpr, colors: colorsNow(), scene: preview ? 'welcome' : scene, speed: scene === 'chat' ? pack.chatDim.speed : 1, reduce, trusted, sandboxed }, [off]);
+    });
 
     // where the page's words are, in canvas px: the welcome column (backdrops keep it quiet)
     const words = () => {
@@ -112,9 +133,15 @@ function BackdropCanvas({ pack, scene, onFail }: { pack: ThemePack; scene: 'welc
     io.observe(canvas);
     document.addEventListener('visibilitychange', sync);
     const at = (e: PointerEvent) => { const b = canvas.getBoundingClientRect(); return { x: e.clientX - b.left, y: e.clientY - b.top }; };
-    const onMove = (e: PointerEvent) => { const p = at(e); send({ type: 'pointer', ...p, down: e.buttons > 0 }); };
+    const inside = (p: { x: number; y: number }) => { const b = canvas.getBoundingClientRect(); return p.x >= 0 && p.y >= 0 && p.x <= b.width && p.y <= b.height; };
+    const onMove = (e: PointerEvent) => {
+      const p = at(e);
+      if (preview && !inside(p)) { send({ type: 'pointer', x: null }); return; }
+      send({ type: 'pointer', ...p, down: e.buttons > 0 });
+    };
     const onDown = (e: PointerEvent) => {
       if (e.target instanceof Element && e.target.closest('.composer, input, textarea, select, button, a, [contenteditable="true"]')) return;
+      if (preview) return;
       send({ type: 'pointer', ...at(e), down: true, click: true });
     };
     const onLeave = () => send({ type: 'pointer', x: null });
@@ -122,7 +149,7 @@ function BackdropCanvas({ pack, scene, onFail }: { pack: ThemePack; scene: 'welc
     const last = new WeakMap<EventTarget, string>();
     const onInput = (e: Event) => {
       const t = e.target;
-      if (!(t instanceof HTMLTextAreaElement) || !t.closest('.composer')) return;
+      if (preview || !(t instanceof HTMLTextAreaElement) || !t.closest('.composer')) return;
       const prev = last.get(t) ?? '';
       last.set(t, t.value);
       if (t.value.length > prev.length && t.value.startsWith(prev)) send({ type: 'type', text: t.value.slice(prev.length) });
@@ -132,7 +159,7 @@ function BackdropCanvas({ pack, scene, onFail }: { pack: ThemePack; scene: 'welc
     document.documentElement.addEventListener('pointerleave', onLeave);
     document.addEventListener('input', onInput, true);
     // the theme's colours, read again when the theme's style or the brightness changes
-    const mo = new MutationObserver(() => send({ type: 'colors', colors: readColors() }));
+    const mo = new MutationObserver(() => { if (!preview) send({ type: 'colors', colors: readColors() }); });
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-ascii'] });
     return () => {
       dead = true;
@@ -157,6 +184,6 @@ function BackdropCanvas({ pack, scene, onFail }: { pack: ThemePack; scene: 'welc
   useEffect(() => { worker.current?.postMessage({ type: 'data', data: backdropData(sessions, Date.now()) } satisfies ToWorker); }, [sessions, minute]);
 
   return (
-    <canvas ref={ref} className={scene === 'welcome' ? 'ascii-field ascii-bd' : 'ascii-bd chat-bd'} style={scene === 'chat' ? { opacity: pack.chatDim.opacity } : undefined} aria-hidden />
+    <canvas ref={ref} className={scene === 'welcome' ? 'ascii-field ascii-bd' : scene === 'chat' ? 'ascii-bd chat-bd' : 'ascii-bd preview-bd'} style={scene === 'chat' ? { opacity: pack.chatDim.opacity } : undefined} aria-hidden />
   );
 }

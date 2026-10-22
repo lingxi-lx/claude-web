@@ -3,7 +3,7 @@
 import type { IconName } from '@/ui/icons';
 import { tr } from '@/i18n';
 
-export const WEB_TOOLS = ['web_search', 'browser_open', 'browser_read', 'browser_find', 'browser_click', 'browser_type', 'browser_press_key', 'browser_scroll', 'browser_back', 'browser_screenshot', 'browser_computer', 'character_guide', 'character_draft', 'character_save', 'character_assign', 'character_list'] as const;
+export const WEB_TOOLS = ['web_search', 'browser_open', 'browser_read', 'browser_find', 'browser_click', 'browser_type', 'browser_press_key', 'browser_scroll', 'browser_back', 'browser_screenshot', 'browser_computer', 'character_guide', 'character_draft', 'character_save', 'character_assign', 'character_list', 'theme_guide', 'theme_draft', 'theme_get', 'theme_save', 'theme_apply', 'theme_list', 'theme_delete'] as const;
 export type WebTool = (typeof WEB_TOOLS)[number];
 
 /** `mcp__web__browser_open` (Claude), `web__browser_open` / `web.browser_open` / the bare name (other agents) → the tool. */
@@ -45,6 +45,14 @@ export function webToolLabel(tool: WebTool, input: Record<string, unknown> | und
     case 'character_save': return { icon: 'user', verb: tr('保存角色:'), arg: str(input, 'id') };
     case 'character_assign': return { icon: 'user', verb: input?.id === null ? tr('收回角色:') : tr('把角色给:'), arg: input?.id === null ? targetText(str(input, 'target')) : `${str(input, 'id')} → ${targetText(str(input, 'target'))}` };
     case 'character_list': return { icon: 'user', verb: tr('看角色库'), arg: '' };
+    // 字符画主题 (server/src/themes/tool-defs.ts)
+    case 'theme_guide': return { icon: 'sparkle', verb: tr('看做主题的说明'), arg: '' };
+    case 'theme_draft': { const j = input?.json as Record<string, any> | undefined; return { icon: 'sparkle', verb: tr('主题草稿:'), arg: str(j?.name, 'zh') || str(j, 'id') }; }
+    case 'theme_get': return { icon: 'sparkle', verb: tr('读主题:'), arg: str(input, 'id') };
+    case 'theme_save': return { icon: 'sparkle', verb: tr('保存主题:'), arg: str(input, 'id') };
+    case 'theme_apply': return { icon: 'sparkle', verb: tr('换上主题:'), arg: str(input, 'id') };
+    case 'theme_list': return { icon: 'sparkle', verb: tr('看有哪些主题'), arg: '' };
+    case 'theme_delete': return { icon: 'trash', verb: tr('删除主题:'), arg: str(input, 'id') };
   }
 }
 
@@ -103,5 +111,8 @@ export function webToolAsk(tool: WebTool, input: Record<string, unknown> | undef
     }
     case 'character_assign': return input?.id === null ? tr('{agent} 想把{targetText}换回默认形象', { agent, targetText: targetText(str(input, 'target')) }) : tr('{agent} 想把角色 {str} 给{targetText}', { agent, str: str(input, 'id'), targetText: targetText(str(input, 'target')) });
     case 'character_guide': case 'character_draft': case 'character_save': case 'character_list': return tr('{agent} 想改网吧的角色库', { agent });
+    case 'theme_apply': return tr('{agent} 想把界面换成主题「{id}」', { agent, id: str(input, 'id') });
+    case 'theme_delete': return tr('{agent} 想删除主题「{id}」', { agent, id: str(input, 'id') });
+    case 'theme_guide': case 'theme_draft': case 'theme_get': case 'theme_save': case 'theme_list': return tr('{agent} 想改你的字符画主题', { agent });
   }
 }

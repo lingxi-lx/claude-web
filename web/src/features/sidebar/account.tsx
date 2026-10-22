@@ -104,6 +104,7 @@ export function AccountMenu({ auth, name, onClose, side }: { auth: AccountAuth |
       <ThemeQuick dataId={id('theme')} />
       <button data-id={id('usage')} onClick={act(() => showPanel(ACCOUNT_PANELS.usage))}><Icon name="usage" size={14} /> {tr('用量与账本')}</button>
       <button data-id={id('config')} onClick={act(() => showPanel(ACCOUNT_PANELS.config))}><Icon name="config" size={14} /> {tr('配置中心（右侧面板）')}</button>
+      <button data-id={id('ascii-themes')} onClick={act(() => st().openSettings({ section: 'appearance', reveal: 'ui.theme' }))}><Icon name="sparkle" size={14} /> {tr('字符画主题…')}</button>
       <button data-id={id('appearance')} onClick={act(() => st().openSettings({ section: 'appearance' }))}><Icon name="sun" size={14} /> {tr('外观与主题…')}</button>
       <button data-id={id('shortcuts')} onClick={act(() => useStore.setState({ shortcutsOpen: true }))}><Icon name="keyboard" size={14} /> {tr('键盘快捷键')}<span className="k">?</span></button>
       <button data-id={id('palette')} onClick={act(() => useStore.setState({ paletteOpen: true }))}><Icon name="command" size={14} /> {tr('命令面板')}<span className="k">{modKey} K</span></button>

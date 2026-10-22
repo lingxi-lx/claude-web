@@ -16,7 +16,7 @@ export const BLOCKED = ['fetch', 'XMLHttpRequest', 'WebSocket', 'WebSocketStream
 /**
  * Takes the network names off the scope and off every prototype it inherits from (`WorkerGlobalScope.prototype.fetch`
  * was a way back, 2026-10-22 review). A second line only: the worker's own CSP (server/src/index.ts
- * BACKDROP_WORKER_CSP) is what really has no network, and `cspHolds` checks that it is there.
+ * BACKDROP_WORKER_CSP) is what really has no network, and `workerSandboxed` checks that it is there.
  */
 export function lockdown(scope: object) {
   for (let o: any = scope; o && o !== Object.prototype; o = Object.getPrototypeOf(o)) {
@@ -28,9 +28,20 @@ export function lockdown(scope: object) {
   }
 }
 
-/** Whether the worker's CSP stops a request (run before lockdown, with the real fetch): true = no network here. */
-export async function cspHolds(fetchFn: typeof fetch, url: string): Promise<boolean> {
-  try { await fetchFn(url, { cache: 'no-store' }); return false; } catch { return true; }
+/** The CSP a backdrop worker must come with (server/src/index.ts BACKDROP_WORKER_CSP, web/vite.config.ts in dev). */
+export const WORKER_CSP = "default-src 'none'; script-src 'self' 'unsafe-eval'";
+
+/**
+ * Whether the backdrop worker script is served with its no-network CSP (a worker's permissions are its own
+ * response's CSP). Asked once, by the page, before a theme that is not built in runs: a request from inside the
+ * worker would tell too, but every blocked one is a console error (2026-10-22: ui-smoke counts those).
+ */
+let sandboxChecked: Promise<boolean> | null = null;
+export function workerSandboxed(url: URL): Promise<boolean> {
+  sandboxChecked ??= fetch(url, { method: 'GET', cache: 'no-store' })
+    .then((r) => (r.headers.get('content-security-policy') ?? '').replace(/\s+/g, ' ').trim() === WORKER_CSP)
+    .catch(() => false);
+  return sandboxChecked;
 }
 
 /** Evaluate a backdrop's source: `export default` becomes `return`; it must give something with a `frame`. */

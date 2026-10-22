@@ -8,6 +8,7 @@ import { ZoomControl } from './ZoomControl';
 import { Mcp, McpAddJson, Overview, Plugins, ProviderProfiles, Settings, SimpleList } from '@/features/panels/ConfigPanel';
 import { CJK_FONTS, DENSITIES, FONT_SIZES, LANGUAGES } from './ui-settings';
 import { ThemeSwatches } from './ThemePicker';
+import { ThemeGallery } from './ThemeGallery';
 import { SkillsBackup, SkillsSection } from './SkillsSection';
 import { ToolsSection } from './ToolsSection';
 import { ProxySection } from './ProxySection';
@@ -79,7 +80,7 @@ const CONTROLS: Record<EntryId, (e: EntryMeta) => ReactNode> = {
   'cafe.sound': (e) => <Toggle k={e.id} label={e.label} />,
   'ui.language': (e) => <Select k={e.id} def="auto" label={e.label} options={LANGUAGES} />,
   'ai.thinkingLanguage': (e) => <Select k={e.id} def="" label={e.label} options={thinkingLanguageOptions()} />,
-  'ui.theme': (e) => <ThemeSwatches label={e.label} />,
+  'ui.theme': (e) => <><ThemeGallery /><ThemeSwatches label={e.label} /></>,
   'ui.zoom': (e) => <ZoomControl label={e.label} />,
   'ui.fontSize': (e) => <NumberSelect k={e.id} def={14} label={e.label} options={FONT_SIZES} />,
   'ui.density': (e) => <Select k={e.id} def="comfortable" label={e.label} options={DENSITIES as any} />,

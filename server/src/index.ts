@@ -74,6 +74,8 @@ import { createOrchestra } from './orchestra/handlers.js';
 import { BackgroundService } from './background/service.js';
 import { CharacterService } from './characters/service.js';
 import { characterTool } from './characters/tools.js';
+import { ThemeService } from './themes/service.js';
+import { themeTool } from './themes/tools.js';
 import { proxy } from './net/proxy.js';
 import { WebService } from './web/service.js';
 import { handleWebTool } from './web/http.js';
@@ -197,6 +199,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   let computer: ComputerAccess;
   // made after `web`, which only calls into it later (a character tool)
   let characters: CharacterService;
+  const themes = new ThemeService();
   /** the main listener's port once it is listening (PORT=0 in the desktop app: a new one every start) */
   let listenPort = 0;
   const handler = (req: http.IncomingMessage, res: http.ServerResponse) => {
@@ -343,6 +346,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     goingOut: () => proxy.refresh(),
     // 网吧's character tools ride on the same MCP server; the library is made further down
     characterTool: (tool, args) => characterTool(characters, tool, args) as any,
+    themeTool: (tool, args) => themeTool({ svc: themes, getTheme: () => meta.settings()['ui.theme'], setTheme: (v) => meta.setSetting('ui.theme', v) }, tool, args) as any,
     ownPorts: () => [listenPort, remote?.port ?? 0].filter((p) => p > 0),
   });
   await web.warm();
@@ -456,7 +460,8 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       add: (name, json) => config.mcpAdd(name, json, 'user'),
     },
   });
-  const services = { importer, customCss, orchestra, background, characters, remote, anywhere, tunnels, im, vcs: new VcsService(gitSvc), goals, android: new AndroidService(), pool, sessions: sessionsSvc, config, usage: new UsageService(async (sid) => providerTimeline(await canonical.providerSwitches(sid), meta.sessionMeta(sid).providerId, (id) => { const p = meta.provider(id); return p ? { type: p.type, name: p.name } : undefined; })), files, terminal, meta, limits: new LimitsService(), schedules: new ScheduleService(meta, pool), providers, git: gitSvc, search: new SearchService(), skills: new SkillsService(), mcp: new McpService(), diag: new DiagService(version), ledger, agents, transcripts, canonical, memory, library, version, federation, agentConfig: new AgentConfigService({ agents, backupDir: path.join(dataDir(), 'config-backups') }), gateway, upstreams, tasks, web, computer, localEnv: localEnvStore, previews };
+  themes.watch();
+  const services = { importer, customCss, orchestra, background, characters, themes, remote, anywhere, tunnels, im, vcs: new VcsService(gitSvc), goals, android: new AndroidService(), pool, sessions: sessionsSvc, config, usage: new UsageService(async (sid) => providerTimeline(await canonical.providerSwitches(sid), meta.sessionMeta(sid).providerId, (id) => { const p = meta.provider(id); return p ? { type: p.type, name: p.name } : undefined; })), files, terminal, meta, limits: new LimitsService(), schedules: new ScheduleService(meta, pool), providers, git: gitSvc, search: new SearchService(), skills: new SkillsService(), mcp: new McpService(), diag: new DiagService(version), ledger, agents, transcripts, canonical, memory, library, version, federation, agentConfig: new AgentConfigService({ agents, backupDir: path.join(dataDir(), 'config-backups') }), gateway, upstreams, tasks, web, computer, localEnv: localEnvStore, previews };
   new Hub(wss, services);
   tasks.start();
   // model lists older than a day (or never pulled) are refreshed in the background — list only, no tokens

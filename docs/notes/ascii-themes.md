@@ -1,16 +1,17 @@
 # 字符画主题与过程动画（2026-10-22，用户要求）
 
 设计：`docs/superpowers/specs/2026-10-22-ascii-themes-design.md`；第 1 步计划：`docs/superpowers/plans/2026-10-22-ascii-themes-p1.md`。
-第 1 步做完了骨架和两套主题（磷光 phosphor、纸刊 paper）；还剩 8 套主题、「描述一下就生成主题」的 skill、设置页的主题卡片画廊。
+四步都做完了：骨架、十套内置主题、「描述一下就生成主题」的 skill（ascii-theme）和它的工具、设置 → 外观的主题卡片画廊。
 
 ## 结构（`web/src/themes/`）
 
+- 纯逻辑在 `server/src/themes/core/`（前端经 `@themes` 别名引，服务端检查 skill 的草稿也用它）：`process.ts` `frames.ts` `default-anims.ts` `css-tokens.ts` `pack.ts` `contrast.ts`。前端的 `web/src/themes/` 只放和页面有关的。
 - `process.ts`：16 个过程（start think read search edit cmd test git install web agent plan tool wait compact connect）和 `processOf(name, input)`。
   Bash / PowerShell 看命令：先 git，再装依赖（`npm i -D vitest` 是装依赖，不是测试），再测试。`RunStatus.process`（`chat/run-status.ts`）在思考时分 start（本回合还没有 assistant 输出）和 think。
 - `frames.ts`：帧表格式和 `checkAnim`。stage ≤ 2 行 × 14 格、同一个动画所有帧同宽同行数；inline 每帧 ≤ 3 格；颜色只能写令牌名。宽度按等宽格算（`strWidth`，CJK / 全角 2 格）。报错是中文，给 skill 看的（i18n 覆盖测试的允许名单里）。
 - `default-anims.ts`：经典主题用的 16 个动画，也是字符画主题缺项 / 坏项时的兜底。
 - `pack.ts`：`parsePack`（theme.json → `ThemePack`；坏的过程只记在 `broken` 里退回默认，别的错就整个不要）、`paletteCss`、`sanitizeCss`、`animFor`。
-- `registry.ts` + `builtin/<id>/{theme.json,backdrop.js,theme.css}`：内置主题。backdrop 和 css 用 Vite 的 `?raw` 读成文本，和以后 skill 生成的主题走同一条路。
+- `registry.ts` + `builtin/<id>/{theme.json,backdrop.js,theme.css}`：内置主题，`builtin/index.ts` 用 `import.meta.glob` 按文件夹自动收（加一个文件夹就是加一套；`ORDER` 定设置页里的顺序）。用户自己的主题由服务端发来（`setUserThemes`），和内置的同一个格式；id 撞了内置的以内置为准。
 - `apply.ts`：`applyAscii(id)` 维护 `<style id="cw-ascii-theme">` 和 `html[data-ascii]`；`useActivePack()`；救命开关 `setSafeMode()`（Ctrl+Shift+0，`app/App.tsx`，本次启动有效；在设置里再点一个字符画主题就解除）。
 - `ProcessGlyph.tsx` + `ticker.ts` + `render.ts`：过程动画。一个共享时钟（30 Hz，没人登记就停），帧号变了才写 `innerHTML`，不走 React 渲染。帧预先转成转义过的 HTML。
 - `Backdrop.tsx` + `backdrop-worker.ts` + `sandbox.ts` + `watchdog.ts` + `backdrop-protocol.ts`：背景。
@@ -47,3 +48,25 @@
 - `scripts/shot.cjs` + `SHOT_JS_FILE`：`setSetting('onboarded', true)`、`setSetting('ui.workbench', true)`、`setSetting('ui.theme', 'ascii:phosphor')`。要欢迎页：`openTile({ id, kind: 'chat' }, 'replace')`；要对话：`openTile({ id, kind: 'chat', sessionId, view: 'chat', wb: 'live' }, 'replace')`——少了 `view` / `wb` 标签里什么都不画，而且这个残缺的标签会存进布局，下次还在。
 - 运行中的对话：`node server/ws-demo-running.mjs <port> <token>`（mock agent 跑 `npm test -w server`，60 秒后结束），正好看到 test 过程的三处动画。
 - bash heredoc 会吃反斜杠、`printf` 会转义 `!`：生成帧表的脚本和截图脚本用 Write 写文件。
+
+
+## 内置的十套（`web/src/themes/builtin/`）
+
+磷光 phosphor、深海点阵 abyss、克莱因锦鲤 koi、月光字雨 moon、抖动 dither、景深球 orb、花园 garden（暗）；纸刊 paper、字母乐园 letters、水墨 ink（亮）。
+花园的背景读 `data()`：宿主把对话列表按项目文件夹汇总（`backdrop-data.ts`：每个项目的对话数、相对大小、一天内用过、有没有在跑）发给它。
+
+做 / 改一套内置主题：`npx tsx scripts/theme-check.ts web/src/themes/builtin/<id>`——服务端那套草稿检查（格式、16 个过程、对比度、CSS 离线、能编译），再在 Node 里拿假画布把背景跑一遍（两种场景、减少动态效果、指针 / 点击 / 打字 / resize / 每个过程），报异常和每帧耗时。改完 `node scripts/gen-skill-text.mjs`（skill 的范例和 theme_get 用的是生成进 `server/src/themes/skill-text.ts` 的源码；`themes/tools.test.ts` 会拦不一致）。
+
+## 描述一下就生成主题（ascii-theme skill）
+
+- skill 源：`server/src/themes/ascii-theme.md`（也是给人看的制作说明），`scripts/gen-skill-text.mjs` 生成 `skill-text.ts`，`asciiPluginDir()` 写成本地插件 `<dataDir>/runtime/plugins/ascii/`，和网吧的 cafe 插件一起交给会话（`session-runner.ts`）。
+- 工具（`web` MCP 里，`themes/tool-defs.ts` + `themes/tools.ts`）：theme_guide / theme_draft / theme_get / theme_save / theme_apply / theme_list / theme_delete。不问就能用的：guide、draft、get、save、list（`THEME_FREE_TOOLS`）；apply（改用户设置）和 delete 照常问。
+- 主题库 `themes/service.ts`：`<dataDir>/themes/<id>/`（已保存）、`<dataDir>/themes/.drafts/<id>/`（草稿）。监视整个目录（草稿的变化不广播），`themes.changed` → 窗口重新 `themes.list`。
+- **试跑**：theme_draft 存好草稿后把它交给一个本机窗口（`themes.trialHost` 登记，`themes.trial` 事件，`themes.trialResult` 回答；做法照内置浏览器的 `browser.command`）。窗口在同一个沙箱 Worker 里跑 3 秒（中途发指针、点击、打字、思考、项目数据），再要一张快照（Worker 的 `snapshot` 消息：`createImageBitmap(canvas)` 传回来——画布交给 Worker 之后页面读不到它），和 16 个过程的三帧拼成一张图，连同报错、帧耗时回给工具结果。没有窗口 / 窗口断了 / 15 秒没回：草稿照存，告诉模型「没有试跑」。对话里 theme_draft 有自己的卡片（`chat/tools/ThemeDraftTool.tsx`）显示同样的文字和截图。
+- 不是内置的主题，背景只在 Worker 的 CSP 在场时运行：页面先 GET 一次 Worker 脚本、看它的 `Content-Security-Policy` 头（`sandbox.ts workerSandboxed`，只查一次），把结果作为 `sandboxed` 交给 Worker。以前是 Worker 自己发一个请求看会不会被拦——拦下来的那一下在控制台是一条错误，ui-smoke 会算失败。Worker 由 `worker-url.ts backdropWorker()` 统一创建：Vite 只认 `new Worker(new URL(…))` 这个写法——别处再写一个 `new URL('./backdrop-worker.ts', import.meta.url)` 会被打包成另一份原样的 `.ts` 资源（没有 CSP 头），查它就永远是「没有沙箱」。所以 Worker 的地址由它自己说：启动时第一条消息 `hello { url: self.location.href }`。
+
+## 设置 → 外观
+
+- `ThemeGallery`：每套一张卡，用它自己的颜色画；指针停在上面（或正在用的那张）才实跑背景（`BackdropPreview`：用主题自己的配色、指针只在卡片里、失败不弹提示，卡片变回静态）和四个过程动画（`ProcessGlyph` 的 `pack` 参数 + 卡片上的颜色变量）。同时只有悬停的和选中的在跑。
+- 用户的主题标「我的」，右键「改一改」（开新对话，输入框里写好「用 ascii-theme 改一改我的主题…」）/「删除」。最后一张「＋ 描述一个新主题」开新对话、填好开头。
+- 头像菜单「字符画主题…」直接跳到这一项（`openSettings({ section: 'appearance', reveal: 'ui.theme' })`）。经典的六个仍是下面那排小色块。

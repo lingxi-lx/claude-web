@@ -17,6 +17,7 @@ import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { CHARACTER_TOOLS } from '../characters/tool-defs.js';
+import { THEME_TOOLS } from '../themes/tool-defs.js';
 import { tr } from '../i18n/index.js';
 
 const PROTOCOL_VERSION = '2025-06-18';
@@ -147,6 +148,8 @@ export const TOOLS = [
   },
   // 网吧's character tools (characters/tool-defs.ts): answered by the character library, not by 联网
   ...CHARACTER_TOOLS,
+  // 字符画主题's tools (themes/tool-defs.ts): answered by the theme library
+  ...THEME_TOOLS,
 ];
 
 interface ToolAnswer { content: unknown[]; isError?: boolean }

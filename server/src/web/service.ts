@@ -86,6 +86,8 @@ export interface WebDeps {
   searchPageTimeoutMs?: number;
   /** 网吧's `character_*` tools (characters/tools.ts), served by the same MCP process */
   characterTool?: (tool: string, args: Record<string, unknown>) => Promise<ToolResult>;
+  /** 字符画主题's `theme_*` tools (themes/tools.ts), served by the same MCP process */
+  themeTool?: (tool: string, args: Record<string, unknown>) => Promise<ToolResult>;
 }
 
 interface KeptPage { url: string; title: string; text: string; elements: BrowserElement[]; at: number }
@@ -371,6 +373,7 @@ export class WebService extends EventEmitter {
 
   private async run(sid: string, tool: string, a: Record<string, unknown>): Promise<ToolResult> {
     if (tool.startsWith('character_') && this.d.characterTool) return this.d.characterTool(tool, a);
+    if (tool.startsWith('theme_') && this.d.themeTool) return this.d.themeTool(tool, a);
     const str = (k: string) => { const v = a[k]; if (typeof v !== 'string' || !v.trim()) throw new Error(tr('{tool} 需要参数 {k}（字符串）', { tool, k })); return v; };
     const num = (k: string) => (typeof a[k] === 'number' && Number.isFinite(a[k]) ? (a[k] as number) : undefined);
     /** After an action the page is shown as a glance; without one, the host's note (or a plain "done"). */
