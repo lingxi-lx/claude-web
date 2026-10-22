@@ -221,8 +221,11 @@ mkdir -p site/public && cp web/public/icon.svg site/public/icon.svg
 
 - [ ] **Step 8: 装依赖（只装进 site/）**
 
+本机的 npm 10.9.4 全新安装 vitest 4.1.x 时会在 npm 内部崩溃（`Cannot read properties of null (reading 'edgesOut')`），
+所以**第一次**生成锁文件用 npm 11；有了 `site/package-lock.json` 以后，npm 10 的 `npm install` / `npm ci`（CI 里也是）都正常。
+
 ```bash
-npm install --prefix site
+npx -y npm@11 install --prefix site
 git diff --quiet package-lock.json && echo root-lock-unchanged
 git check-ignore -q site/node_modules && echo site-node_modules-ignored
 ```
@@ -1981,6 +1984,7 @@ jobs:
 - `npm run dev --prefix site`（http://localhost:4321/）、`npm run build --prefix site`（构建 + 首次加载预算检查）、`npm run preview --prefix site`、`npm test --prefix site`。
 - `npm run data --prefix site`：从 GitHub API 刷新 `site/src/data/site-data.json`（最新版本、安装包、星标）。CI 每次构建前也会跑；API 不通时用仓库里那份。
 - `site/` 是独立包（自己的 lockfile 和 node_modules，`npm install --prefix site`），不是根 workspace：Astro 要 `cookie@2`，根目录里 express 带的是 `cookie@0.7`，放进 workspace 会解析错、构建失败，还会顺带升级产品的 vite / zod。
+- 没有 `site/package-lock.json` 时（重新生成锁文件），用 `npx -y npm@11 install --prefix site`：npm 10.9.4 全新安装 vitest 4.1.x 会在 npm 内部崩溃（`reading 'edgesOut'`）；有锁文件后 npm 10 正常。
 - Astro 精确锁 7.4.1：7.4.2 要 Node ≥ 22.23.4，本机是 22.22.1。升级前先看 `npm view astro@<v> engines`。
 
 ## 文案
