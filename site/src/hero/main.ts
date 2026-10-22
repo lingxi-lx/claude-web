@@ -7,6 +7,7 @@ import { LayeredCanvas } from './Scene';
 import { anchorFor, cameraView, CAMERA_MS, easeView, HERO_LOOK, type ChapterLook } from './chapters';
 import { pointerNorm } from './motion';
 import { installChapters } from './overlays';
+import { installInteract } from './interact';
 import type { TierProfile } from './tier';
 
 export interface HeroOptions { profile: TierProfile; poster: boolean }
@@ -117,6 +118,6 @@ export function startHero(root: HTMLElement, opts: HeroOptions): Hero {
       document.documentElement.dataset.posterReady = '1';
     });
   } else sync();
-  if (!hero.still) installChapters(hero);
+  if (!hero.still) { installChapters(hero); installInteract(hero); }
   return hero;
 }

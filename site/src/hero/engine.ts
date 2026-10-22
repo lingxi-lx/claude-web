@@ -5,3 +5,5 @@ export { buildMap, type CafeMap, type Seat } from '@cafe/map';
 export { sceneSize, onPage, fitView, hitTest, drawRoom, drawItems, darken, drawGlows, labels, type View, type Look, type ItemTag, type SceneSize } from '@cafe/render';
 export { resolveCharacter, BUILTIN, type CharacterDef } from '@characters';
 export type { BgSession, BgTask, BgAgent } from '@shared';
+export { toFloor } from '@cafe/iso';
+export type { Facing } from '@characters';

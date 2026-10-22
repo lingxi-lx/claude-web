@@ -83,6 +83,12 @@ export function copy(locale: Locale) {
       receipt: { title: tr('结账 · {name}', { name: 'tests' }), took: tr('用了 {time}', { time: '0:21' }), tab: tr('网费 {yuan}', { yuan: '¥0.03' }) },
       elsewhere: { other: tr('其它电脑'), phone: tr('手机上的远程'), anyModel: tr('子代理可以用任何一家的模型') },
       gateway: { title: tr('本机网关'), online: tr('在线'), standby: tr('备用'), geminiWeb: tr('Gemini 网页'), claude: tr('Claude 账号') },
+      doing: {
+        work: tr('在干活'), game: tr('在打游戏'), eat: tr('在吃泡面'), drink: tr('在喝饮料'), toilet: tr('上厕所'), smoke: tr('在吸烟区'),
+        power: tr('在借充电宝'), chat: tr('在聊天'), stand: tr('在闲逛'), checkin: tr('在开机'), checkout: tr('在结账'), leave: tr('下机了'), other: tr('在路上'),
+      },
+      sound: { on: tr('声音：开'), off: tr('声音：关') },
+      debug: { title: tr('调试面板'), speed: tr('速度'), seed: tr('种子'), reseed: tr('换种子') },
     },
     footer: {
       notice: tr('社区项目，与 Anthropic 无关。“Claude” 和 “Claude Code” 是 Anthropic 的商标。'),

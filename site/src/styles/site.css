@@ -65,6 +65,13 @@ img { max-width: 100%; }
 .lamp.on { background: var(--green); }
 .scene-tip { position: absolute; left: 0; top: 0; z-index: 3; pointer-events: none; padding: 8px 10px; border-radius: var(--r-sm); background: color-mix(in oklab, var(--bg-elev) 94%, transparent); font-size: var(--fs-meta); white-space: pre; }
 .scene-tip[hidden] { display: none; }
+.scene-sound { position: absolute; right: clamp(12px, 3vw, 32px); top: 72px; z-index: 4; display: none; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--line-1); border-radius: 999px; background: color-mix(in oklab, var(--bg) 80%, transparent); color: var(--fg-1); font: inherit; font-size: var(--fs-meta); cursor: pointer; }
+.stage-scene[data-live] .scene-sound { display: inline-flex; }
+.scene-sound[aria-pressed='true'] { color: var(--fg); border-color: var(--accent); }
+.scene-sound kbd { font-family: var(--mono); opacity: 0.7; }
+.scene-debug { position: absolute; right: clamp(12px, 3vw, 32px); top: 112px; z-index: 4; display: grid; gap: 6px; padding: 12px; border: 1px solid var(--line-1); border-radius: var(--r-md); background: var(--bg); font-size: var(--fs-meta); }
+.scene-debug[hidden] { display: none; }
+.scene-debug p { margin: 0; font-weight: 650; }
 
 /* the copy scrolls over the scene; only its own boxes take the pointer, the rest falls through to the scene */
 .hero, .chapters { position: relative; z-index: 3; pointer-events: none; }

@@ -1,7 +1,7 @@
-export type KeyAction = 'download' | 'source' | 'changelog' | 'github';
+export type KeyAction = 'download' | 'source' | 'changelog' | 'github' | 'sound';
 export interface KeyLike { key: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean; isComposing: boolean; editable: boolean; repeat: boolean }
 
-const KEYS: Record<string, KeyAction> = { d: 'download', r: 'source', c: 'changelog', g: 'github' };
+const KEYS: Record<string, KeyAction> = { d: 'download', r: 'source', c: 'changelog', g: 'github', s: 'sound' };
 
 /** The site's single-letter shortcuts (shown on the buttons). Off while typing or composing (an IME's Enter / letters), and once per press (a held key repeats). */
 export function keyAction(e: KeyLike): KeyAction | null {
