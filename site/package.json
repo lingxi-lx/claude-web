@@ -4,8 +4,11 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev",
+    "engine-en": "node scripts/engine-en.ts",
+    "prebuild": "node scripts/engine-en.ts",
     "build": "astro build && node scripts/budget.ts",
     "preview": "astro preview",
+    "pretest": "node scripts/engine-en.ts",
     "test": "vitest run",
     "data": "node scripts/releases.ts"
   },
