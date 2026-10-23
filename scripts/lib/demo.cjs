@@ -247,9 +247,10 @@ function scriptFor(T, ask, tools, shop) {
   if (ask.includes(T.rec) && tools.includes('Read')) {
     const cart = path.join(shop, 'src', 'cart.ts');
     return [
-      () => [...streamText(0, T.recSay[0], 10, 50), ...streamTool(1, 'toolu_rec_read', 'Read', { file_path: cart }, 12, 50), ...finish('tool_use')],
-      () => [[500, ''], ...streamText(0, T.recSay[1], 10, 50), ...streamTool(1, 'toolu_rec_edit', 'Edit', { file_path: cart, old_string: '  return total - total * (percent / 100);', new_string: '  const discount = Math.round(total * percent) / 100;\n  return Math.round((total - discount) * 100) / 100;' }, 16, 45), ...finish('tool_use')],
-      () => [[500, ''], ...streamText(0, T.recSay[2], 8, 50), ...streamTool(1, 'toolu_rec_test', 'Bash', { command: 'npm test', description: T.recTestDesc }, 6, 60), ...finish('tool_use')],
+      // paced so that, from Enter at 5.8 s, the npm test card shows at 9–10 s (the CLI's own round trips take ~2 s)
+      () => [...streamText(0, T.recSay[0], 6, 40), ...streamTool(1, 'toolu_rec_read', 'Read', { file_path: cart }, 6, 40), ...finish('tool_use')],
+      () => [[100, ''], ...streamText(0, T.recSay[1], 6, 40), ...streamTool(1, 'toolu_rec_edit', 'Edit', { file_path: cart, old_string: '  return total - total * (percent / 100);', new_string: '  const discount = Math.round(total * percent) / 100;\n  return Math.round((total - discount) * 100) / 100;' }, 8, 40), ...finish('tool_use')],
+      () => [[100, ''], ...streamText(0, T.recSay[2], 4, 40), ...streamTool(1, 'toolu_rec_test', 'Bash', { command: 'npm test', description: T.recTestDesc }, 4, 40), ...finish('tool_use')],
       () => [...streamText(0, T.recDone, 6, 40), ...finish('end_turn')],
     ];
   }
@@ -259,9 +260,10 @@ function scriptFor(T, ask, tools, shop) {
       ? streamTool(i, id, name, input, n, gap)
       : streamTool(i, id, 'ExecuteExtraTool', { tool_name: name, params: input }, n, gap));
     return [
-      () => [...streamText(0, T.themeSay[0], 10, 50), ...call(1, 'toolu_th_draft', 'mcp__web__theme_draft', metroFixture(), 40, 30), ...finish('tool_use')],
-      () => [[300, ''], ...streamText(0, T.themeSay[1], 8, 40), ...call(1, 'toolu_th_save', 'mcp__web__theme_save', { id: 'metro' }, 2, 40), ...finish('tool_use')],
-      () => [[300, ''], ...streamText(0, T.themeSay[2], 8, 40), ...call(1, 'toolu_th_apply', 'mcp__web__theme_apply', { id: 'metro' }, 2, 40), ...finish('tool_use')],
+      // short: the draft's try-out (~4 s) and the runtime's own round trips take most of the 8 s to the apply card
+      () => [...streamText(0, T.themeSay[0], 4, 30), ...call(1, 'toolu_th_draft', 'mcp__web__theme_draft', metroFixture(), 6, 30), ...finish('tool_use')],
+      () => [...streamText(0, T.themeSay[1], 4, 30), ...call(1, 'toolu_th_save', 'mcp__web__theme_save', { id: 'metro' }, 2, 30), ...finish('tool_use')],
+      () => [...streamText(0, T.themeSay[2], 4, 30), ...call(1, 'toolu_th_apply', 'mcp__web__theme_apply', { id: 'metro' }, 2, 30), ...finish('tool_use')],
       () => [...streamText(0, T.themeDone, 6, 40), ...finish('end_turn')],
     ];
   }
@@ -309,6 +311,8 @@ function startUpstream(lang, opts = {}) {
       const script = scriptFor(T, ask.text, Array.isArray(j.tools) ? j.tools.map((t) => t?.name) : [], opts.shop ?? '');
       if (script) {
         const step = msgs.slice(ask.at + 1).filter(isResult).length;
+        // which step each request got, when (debugging a recording's timing: CW_DEMO_UPSTREAM_LOG=1)
+        if (process.env.CW_DEMO_UPSTREAM_LOG) console.error(`[upstream] ${new Date().toISOString().slice(11, 23)} step ${step} ask=${JSON.stringify(ask.text.slice(0, 40))}`);
         void paced(s, [[0, head(j)], ...script[Math.min(step, script.length - 1)]()]);
         return;
       }
