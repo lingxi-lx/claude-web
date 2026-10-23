@@ -3,7 +3,10 @@
 // in English and Chinese. Nothing real is spent: a throwaway HOME, the demo repo and a fake upstream that replays the
 // same turn every time (scripts/lib/demo.cjs). Electron renders offscreen at 1280×800 ×2; every painted frame is kept
 // with its time, and ffmpeg resamples them to a constant 30 fps, so frame n is the same moment in every clip.
-//   env -u ELECTRON_RUN_AS_NODE -u CLAUDE_WEB_DIST node scripts/record-themes.cjs [--lang en|zh] [--only phosphor,describe] [--out <dir>] [--keep-frames] [--describe-runtime claude|ccb]
+//   env -u ELECTRON_RUN_AS_NODE -u CLAUDE_WEB_DIST node scripts/record-themes.cjs [--lang en|zh] [--only phosphor,describe] [--out <dir>] [--keep-frames] [--runtime claude|ccb] [--describe-runtime claude|ccb]
+// Both runtimes default to the official binary: on our engine the 连接器 panel would show its built-in `mcp-chrome` (off),
+// which no setting removes (see CONNECTORS_ALLOWED below). Before recording, the connectors the app reports and the
+// page's text are checked: only the app's own servers, none failing, nothing of this machine (home folder, user name).
 // Manual (not in CI). It never touches web/dist: the web app is built into a temp folder and the server runs from source.
 // Debugging the timing: CW_DEMO_UPSTREAM_LOG=1 prints when each scripted step was asked for (the describe clip also logs
 // when Enter was pressed); REC_WAIT=<ms> waits longer than 14 s for the apply card; --keep-frames keeps the frames, also
@@ -66,6 +69,21 @@ async function driver() {
     throw new Error(`the welcome page did not come up: ${seen} (${path.join(frames, 'no-welcome.png')})`);
   }
   await sleep(4000); // the backdrop worker up and drawing
+
+  // ---- what is on screen may be published: nothing of this machine (its home folder, its user name) and no
+  // connector but the app's own, none failing (the runner checked the API already; this is what the page holds)
+  const needles = JSON.parse(E.REC_PRIVATE || '[]');
+  const allowed = JSON.parse(E.REC_CONNECTORS || '[]');
+  const onScreen = async (when) => {
+    const seen = JSON.parse(await js(`JSON.stringify({ text: document.body.innerText, title: document.title, servers: Object.values(window.__store.getState().open ?? {}).flatMap((o) => o?.info?.mcpServers ?? []).map((s) => ({ name: s.name, status: s.status })) })`));
+    const text = `${seen.title}\n${seen.text}`.toLowerCase();
+    const found = needles.filter((s) => text.includes(s.toLowerCase()));
+    if (found.length) throw new Error(`${when}: this machine's ${found.map((s) => JSON.stringify(s)).join(', ')} is on screen`);
+    const bad = seen.servers.filter((s) => !allowed.includes(s.name) || s.status === 'failed' || s.status === 'needs-auth');
+    if (bad.length) throw new Error(`${when}: connectors on screen that may not be: ${bad.map((s) => `${s.name}=${s.status}`).join(' ')}`);
+    return seen.servers;
+  };
+  await onScreen('the first frame');
 
   // ---- recording
   let t0 = 0;
@@ -131,7 +149,11 @@ async function driver() {
   t0 = performance.now();
   wc.invalidate(); // a first frame at 0 even when nothing moves
   let failed = null; // the frames are still written when the script fails: they show what went wrong
-  try { await act(); } catch (e) { failed = e; log.push(`FAILED: ${e.message}`); }
+  try {
+    await act();
+    const servers = await onScreen('the last frame');
+    log.push(`connectors at the end: ${[...new Set(servers.map((s) => `${s.name}=${s.status}`))].join(' ') || 'none'}`);
+  } catch (e) { failed = e; log.push(`FAILED: ${e.message}`); }
   t0 = 0;
   await raw.end();
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'bgra', '-s', `${PW}x${PH}`, '-i', rawFile, '-pix_fmt', 'yuvj420p', '-q:v', '2', '-start_number', '0', path.join(frames, 'f%05d.jpg')], { stdio: ['ignore', 'ignore', 'inherit'], windowsHide: true });
@@ -175,7 +197,7 @@ async function driver() {
       while (!allow && performance.now() - t0 < Number(E.REC_WAIT || 14_000)) { allow = await centreOf(allowSel); if (!allow) await sleep(100); }
       if (!allow) throw new Error('the theme_apply permission card never showed');
       const ready = performance.now() - t0;
-      log.push(`apply card at ${(ready / 1000).toFixed(1)} s${ready > 11_000 ? ' (WARNING: later than 11 s, the 「换上新主题」 marker is early)' : ''}`);
+      log.push(`apply card at ${(ready / 1000).toFixed(1)} s${ready > 12_000 ? ' (WARNING: later than 12 s, the 「换上新主题」 marker in site/src/showcase/clips.ts is early)' : ''}`);
       const go = Math.max(ready, 10_400);
       await glide(allow, go, go + 500);
       // the card slides in: where the button ends up is measured again just before the click, and a click the card
@@ -195,6 +217,44 @@ async function driver() {
 }
 
 // ------------------------------------------------------------------------------------------------------------ runner
+// The recordings are published: the right panel's 连接器 may list only the app's own servers, connected. What else
+// turned up under the throwaway HOME (2026-10-23): our engine's built-in `weixin` plugin (can't connect: never logged in)
+// and its hard-coded `mcp-chrome` (off), and the memory server, which cannot start from the source tree in the demo
+// project's folder (`--import tsx` is not found there). weixin and the memory server are switched off with their own
+// settings; `mcp-chrome` is merged into every engine session after the settings' deny list is applied, so the clips
+// run on the official binary (--runtime), which has neither.
+const CONNECTORS_ALLOWED = ['web', 'sessions', 'preview'];
+const CONNECTORS_BAD = ['failed', 'needs-auth'];
+/** the throwaway HOME's ~/.claude/settings.json: the engine's own switches for its built-ins */
+const ENGINE_SETTINGS = { enabledPlugins: { 'weixin@builtin': false }, deniedMcpServers: [{ serverName: 'mcp-chrome' }] };
+/** what must never be on screen: this machine's home folder and user name */
+function privateNeedles() {
+  const home = os.homedir();
+  const user = os.userInfo().username;
+  return [...new Set([home, home.replace(/\\/g, '/'), user].filter((s) => s && s.length >= 3))];
+}
+
+/** what the app reports for this conversation's connectors, once none is still connecting; throws on any not allowed */
+async function checkConnectors(c, sessionId, label) {
+  let servers = [];
+  const read = async () => { servers = (await c.req({ kind: 'session.info', sessionId }))?.info?.mcpServers ?? []; };
+  const end = Date.now() + 10_000;
+  while (Date.now() < end) {
+    await read();
+    if (servers.length && !servers.some((s) => s.status === 'pending')) break;
+    await demo.sleep(500);
+  }
+  // The official binary reports its stdio servers as `pending` in system/init and the app keeps that snapshot (only a
+  // connector switch asks again: SessionRunner.toggleMcp), so the panel says 连接中 for the whole conversation though
+  // the server works. Switching it on again — what the + menu's 连接器 switch does — brings the real status.
+  for (const s of servers.filter((x) => x.status === 'pending')) await c.req({ kind: 'session.toggleMcp', sessionId, name: s.name, enabled: true });
+  if (servers.some((s) => s.status === 'pending')) await read();
+  const shown = servers.map((s) => `${s.name}=${s.status}`).join(' ');
+  const bad = servers.filter((s) => !CONNECTORS_ALLOWED.includes(s.name) || CONNECTORS_BAD.includes(s.status) || s.status === 'pending');
+  if (!servers.length || bad.length) throw new Error(`${label}: the connectors would show ${shown || 'nothing (never reported)'}; only ${CONNECTORS_ALLOWED.join(' / ')}, connected, may be on screen`);
+  console.log(`${label}: connectors ${shown}`);
+}
+
 /** the concat demuxer's list: every frame lasts until the next one, the last until the end of the clip */
 function writeConcat(dir, shots, seconds) {
   const end = seconds * 1000;
@@ -226,16 +286,24 @@ function electronRun(env) {
 async function recordOne(clip, lang, out, dist, opts) {
   const media = require('./lib/media-encode.cjs');
   const T = demo.TEXT[lang];
-  const home = demo.tmpHome(`cw-rec-${clip.id}-${lang}-`);
+  // not under %TEMP%: that is inside this machine's home folder (C:\Users\<name>\AppData\Local\Temp), and a path in the
+  // throwaway HOME can be on screen (the describe clip's theme cards: the guard caught it, 2026-10-23)
+  let home = null;
+  if (process.platform === 'win32') {
+    try { fs.mkdirSync('C:/work', { recursive: true }); home = fs.mkdtempSync(`C:/work/.rec-${clip.id}-${lang}-`); } catch { /* no write access to C:\ */ }
+  }
+  if (!home) home = demo.tmpHome(`cw-rec-${clip.id}-${lang}-`);
   const seed = demo.seedDemo(home, lang, { clean: true });
+  fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(home, '.claude', 'settings.json'), JSON.stringify(ENGINE_SETTINGS, null, 2));
   const up = await demo.startUpstream(lang, { shop: seed.shop });
-  const srv = await demo.startServer(home, { lang, shop: seed.shop, theme: `ascii:${clip.theme}`, dist, fromSource: true, settings: { 'ui.defaultMode': 'acceptEdits', 'ui.promptSuggestions': false } });
+  const srv = await demo.startServer(home, { lang, shop: seed.shop, theme: `ascii:${clip.theme}`, dist, fromSource: true, settings: { 'ui.defaultMode': 'acceptEdits', 'ui.promptSuggestions': false, 'memory.mcp': false } });
   const c = demo.client(srv.port, srv.token);
   const frames = path.join(out, '.frames', `${clip.id}.${lang}`);
   try {
     await c.ready;
     await c.req({ kind: 'settings.set', key: 'network.proxy', value: 'off' });
-    const runtime = clip.id === 'describe' ? opts.describeRuntime : 'ccb';
+    const runtime = clip.id === 'describe' ? opts.describeRuntime : opts.runtime;
     const prov = await c.req({ kind: 'providers.upsert', provider: { name: lang === 'zh' ? '中转' : 'Relay', type: 'anthropic', baseUrl: up.url, apiKey: 'sk-demo-not-real', defaultModel: 'claude-sonnet-5-5', models: ['claude-opus-5-5', 'claude-sonnet-5-5'], runtime } });
     await c.req({ kind: 'settings.set', key: 'defaultProviderId', value: prov.id });
     await c.req({ kind: 'workspaces.add', path: seed.shop });
@@ -246,8 +314,9 @@ async function recordOne(clip, lang, out, dist, opts) {
     await c.req({ kind: 'session.send', params: { sessionId: o.sessionId, text: T.recIntro, uuid: crypto.randomUUID() } });
     const sid = clip.id === 'describe' ? '' : o.sessionId;
     await demo.sleep(clip.id === 'describe' ? 10_000 : 6000);
+    await checkConnectors(c, o.sessionId, `${clip.id}.${lang}`); // the same runtime as the clip's own conversation
     fs.rmSync(frames, { recursive: true, force: true });
-    const code = await electronRun({ REC_URL: srv.url, REC_SHOP: seed.shop, REC_SID: sid, REC_CLIP: JSON.stringify(clip), REC_FRAMES: frames, REC_ASK: T.rec, REC_THEME_ASK: T.themeAsk });
+    const code = await electronRun({ REC_URL: srv.url, REC_SHOP: seed.shop, REC_SID: sid, REC_CLIP: JSON.stringify(clip), REC_FRAMES: frames, REC_ASK: T.rec, REC_THEME_ASK: T.themeAsk, REC_PRIVATE: JSON.stringify(privateNeedles()), REC_CONNECTORS: JSON.stringify(CONNECTORS_ALLOWED) });
     const shotsFile = path.join(frames, 'shots.json');
     const { shots, size, log } = fs.existsSync(shotsFile) ? JSON.parse(fs.readFileSync(shotsFile, 'utf8')) : { shots: [], size: null, log: [] };
     for (const l of log) console.log(`${clip.id}.${lang}: ${l}`);
@@ -275,7 +344,7 @@ async function runner() {
   const clips = CLIPS.filter((c) => !only || only.includes(c.id));
   if (!clips.length) throw new Error(`--only names none of: ${CLIPS.map((c) => c.id).join(' ')}`);
   const out = path.resolve(String(arg('--out', path.join(demo.ROOT, 'site', '.media-local'))));
-  const opts = { keepFrames: !!arg('--keep-frames', false), describeRuntime: String(arg('--describe-runtime', 'claude')) };
+  const opts = { keepFrames: !!arg('--keep-frames', false), describeRuntime: String(arg('--describe-runtime', 'claude')), runtime: String(arg('--runtime', 'claude')) };
   require('./lib/media-encode.cjs').webmEncoder(); // fail early on an ffmpeg without the encoders
   fs.mkdirSync(out, { recursive: true });
   // the web app, built where nothing else looks (a running dev app serves web/dist: never rebuild that)

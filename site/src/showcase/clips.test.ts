@@ -12,7 +12,8 @@ describe('the clip table', () => {
 
   it('puts the markers inside each clip', () => {
     expect(CLIPS[0].markers).toEqual([{ at: 0, key: 'home' }, { at: 5, key: 'turn' }, { at: 10, key: 'waiting' }]);
-    expect(CLIPS[10].markers.map((m) => m.key)).toEqual(['describe', 'trial', 'apply']);
+    // 换上新主题 at 12 s: the recorded apply card lands at 11.6–12.1 s (scripts/record-themes.cjs logs it)
+    expect(CLIPS[10].markers).toEqual([{ at: 0, key: 'describe' }, { at: 4, key: 'trial' }, { at: 12, key: 'apply' }]);
     for (const c of CLIPS) for (const m of c.markers) expect(m.at).toBeLessThan(c.duration);
   });
 

@@ -334,8 +334,19 @@ function startUpstream(lang, opts = {}) {
 // ---- the server and a client for it ----------------------------------------------------------------------------
 async function startServer(home, opts) {
   const token = require('node:crypto').randomBytes(12).toString('hex');
-  const env = { ...process.env, HOME: home, USERPROFILE: home, PORT: '0', CLAUDE_WEB_TOKEN: token, CLAUDE_WEB_DIR: path.join(home, '.claude-web'), CW_NO_MODEL_REFRESH: '1', CW_NO_PUBLIC_BROKERS: '1', CLAUDE_WEB_SYSTEM_LANG: opts.lang === 'zh' ? 'zh-CN' : 'en-US', CW_DEMO_SHOP: opts.shop ?? '' };
-  for (const k of Object.keys(env)) if (/^(ANTHROPIC_|CLAUDE_CODE_|OPENAI_|CLAUDE_WEB_DIST$)/.test(k) || /^(no_proxy|https?_proxy|all_proxy)$/i.test(k)) delete env[k];
+  // Nothing of this machine's own setup may reach the pictures: every Claude / Claude Web / provider variable of the
+  // shell that started us goes (a dev shell carries the desktop app's CLAUDE_WEB_SIDECARS, CLAUDE_WEB_STANDALONE,
+  // CLAUDE_CODE_PLUGIN_DIRS, CLAUDECODE…), and the per-user folders Windows apps read besides HOME (%APPDATA%: the
+  // official app's skills, other tools' configs and conversations; %LOCALAPPDATA%: Codex / OpenCode) are in the
+  // throwaway HOME too.
+  const env = { ...process.env };
+  for (const k of Object.keys(env)) if (/^(ANTHROPIC_|CLAUDE|OPENAI_|GEMINI_|CODEX_|XDG_)/.test(k) || /^(no_proxy|https?_proxy|all_proxy)$/i.test(k)) delete env[k];
+  Object.assign(env, { HOME: home, USERPROFILE: home, PORT: '0', CLAUDE_WEB_TOKEN: token, CLAUDE_WEB_DIR: path.join(home, '.claude-web'), CW_NO_MODEL_REFRESH: '1', CW_NO_PUBLIC_BROKERS: '1', CLAUDE_WEB_SYSTEM_LANG: opts.lang === 'zh' ? 'zh-CN' : 'en-US', CW_DEMO_SHOP: opts.shop ?? '' });
+  if (process.platform === 'win32') {
+    env.APPDATA = path.join(home, 'AppData', 'Roaming');
+    env.LOCALAPPDATA = path.join(home, 'AppData', 'Local');
+    for (const d of [env.APPDATA, env.LOCALAPPDATA]) fs.mkdirSync(d, { recursive: true });
+  }
   // a web build somewhere else than web/dist (the recorder builds its own: a running dev app serves web/dist)
   if (opts.dist) env.CLAUDE_WEB_DIST = opts.dist;
   fs.mkdirSync(env.CLAUDE_WEB_DIR, { recursive: true });

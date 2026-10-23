@@ -9,7 +9,7 @@ export type MarkerKey = 'home' | 'turn' | 'waiting' | 'describe' | 'trial' | 'ap
 export interface Clip { id: string; palette: string; duration: number; markers: { at: number; key: MarkerKey }[]; describe: boolean }
 
 const THEME_MARKERS: Clip['markers'] = [{ at: 0, key: 'home' }, { at: 5, key: 'turn' }, { at: 10, key: 'waiting' }];
-const DESCRIBE_MARKERS: Clip['markers'] = [{ at: 0, key: 'describe' }, { at: 4, key: 'trial' }, { at: 11, key: 'apply' }];
+const DESCRIBE_MARKERS: Clip['markers'] = [{ at: 0, key: 'describe' }, { at: 4, key: 'trial' }, { at: 12, key: 'apply' }];
 
 export const CLIPS: Clip[] = [
   ...THEME_IDS.map((id) => ({ id, palette: id, duration: 12, markers: THEME_MARKERS, describe: false })),
