@@ -104,6 +104,8 @@ export type LayoutAction =
   | { t: 'tile.patch'; paneId: string; tileId: string; patch: Partial<Tile> }
   | { t: 'tile.next'; paneId: string; dir: 1 | -1 }
   | { t: 'session.assign'; paneId: string; tileId: string; sessionId: string }
+  /** every chat tab of conversation `from` now shows `to` (it went on under another id) */
+  | { t: 'session.rekey'; from: string; to: string }
   | { t: 'dock.set'; patch: Partial<Dock> }
   /** `workbench`: whether 「显示工作台工具」 is on (default true = the pre-redesign rules, see `panelToggleEffect`) */
   | { t: 'dock.toggle'; panel: PanelId; workbench?: boolean }
@@ -618,6 +620,17 @@ function reduceLayout(s: LayoutState, a: LayoutAction): LayoutState {
       const g = findPaneGroup(s, a.paneId);
       if (!g) return s;
       return withGroup(s, g.id, (gg) => updatePane(gg, a.paneId, (p) => ({ ...p, tiles: p.tiles.map((t) => (t.id === a.tileId && t.kind === 'chat' ? { ...t, sessionId: a.sessionId } : t)) })));
+    }
+    case 'session.rekey': {
+      const hit = (t: Tile) => t.kind === 'chat' && t.sessionId === a.from;
+      if (!s.groups.some((g) => Object.values(g.panes).some((p) => p.tiles.some(hit)))) return s;
+      return {
+        ...s,
+        groups: s.groups.map((g) => ({
+          ...g,
+          panes: Object.fromEntries(Object.entries(g.panes).map(([id, p]) => [id, p.tiles.some(hit) ? { ...p, tiles: p.tiles.map((t) => (hit(t) ? { ...t, sessionId: a.to } : t)) } : p])),
+        })),
+      };
     }
 
     case 'dock.set':

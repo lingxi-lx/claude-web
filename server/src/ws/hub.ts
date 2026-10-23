@@ -198,6 +198,8 @@ export class Hub {
     s.goals.on('changed', () => this.broadcast({ kind: 'goals.changed' }));
     s.memory.on('changed', () => this.broadcast({ kind: 'memory.changed' }));
     s.library.on('changed', () => this.broadcast({ kind: 'library.changed' }));
+    s.library.on('continuationBehind', (id: string) => void this.catchUpFromSource(id, { announce: true }));
+    s.pool.on('state', (sessionId: string, state: string) => { if (state === 'idle' && this.behindPending.has(sessionId)) this.behindRetry(sessionId); });
     s.library.on('transcripts', (ids: string[]) => this.broadcast({ kind: 'transcripts.changed', sessionIds: ids }));
     s.sessions.on('transcripts', (ids: string[]) => {
       for (const id of ids) s.pool.transcriptChanged(id); // a turn from a terminal on a conversation held open here
@@ -206,7 +208,7 @@ export class Hub {
     s.library.on('discovered', (kinds) => this.broadcast({ kind: 'library.discovered', kinds }));
     s.gateway.on('changed', () => this.broadcast({ kind: 'gateway.changed' }));
     s.gateway.on('audit', (lines) => this.broadcast({ kind: 'gateway.log', lines }));
-    s.gateway.on('promptHeavy', (e: { sessionId: string; bytes: number }) => this.broadcast({ kind: 'gateway.promptHeavy', ...e }));
+    s.gateway.on('promptHeavy', (e: { sessionId: string; bytes: number; via: string }) => this.broadcast({ kind: 'gateway.promptHeavy', ...e }));
     s.upstreams.on('changed', () => this.broadcast({ kind: 'upstreams.changed' }));
     s.tasks.on('changed', () => this.broadcast({ kind: 'upstreams.changed' }));
     s.tasks.on('notice', (text: string, notify?: boolean) => this.broadcast({ kind: 'notice', text, notify: !!notify }));
@@ -280,6 +282,64 @@ export class Hub {
   /** What a conversation is waiting on the user for: its tools' requests, and what 操控电脑 asked. */
   private pendingOf(sessionId: string) {
     return [...(this.s.pool.get(sessionId)?.getPendingPermissions() ?? []), ...this.s.computer.pendingFor(sessionId)];
+  }
+
+  /**
+   * A conversation that went on from DeepSeek Harness: what was said there since goes into its transcript
+   * (LibraryService.catchUp) — only while nothing of ours is mid-turn in it. A process of it then restarts so its
+   * context has those turns. Mid-turn, it is noted and tried again once that process is idle and quiet (a write
+   * skipped then was never caught up while the process lived: verifier, 2026-10-22).
+   * `wait`: a send is coming — an idle process that is not quiet yet gets a few seconds. `announce`: nobody asked
+   * (watcher, retry) — open views re-read (`session.caughtUp`).
+   */
+  private behindPending = new Set<string>();
+  private catchingUp = new Map<string, Promise<number>>();
+  private catchUpFromSource(sessionId: string, o: { wait?: boolean; announce?: boolean } = {}): Promise<number> {
+    if (!this.s.meta.sessionMeta(sessionId).continuedFrom) return Promise.resolve(0);
+    // one at a time per conversation, each after the one before: two at once each restarted the process — two engines
+    // on one conversation (verifier, 2026-10-22). A send waiting behind one that wrote still reloads its view.
+    const prev = this.catchingUp.get(sessionId);
+    const p = (prev ?? Promise.resolve(0)).catch(() => 0).then(async (before) => {
+      const n = await this.catchUpOnce(sessionId, o);
+      return o.wait ? n + before : n;
+    });
+    this.catchingUp.set(sessionId, p);
+    void p.finally(() => { if (this.catchingUp.get(sessionId) === p) this.catchingUp.delete(sessionId); }).catch(() => {});
+    return p;
+  }
+  private async catchUpOnce(sessionId: string, o: { wait?: boolean; announce?: boolean }): Promise<number> {
+    const s = this.s;
+    // a send waits only when there is something to bring, and only for what ends soon on its own: a process starting
+    // (~5 s after a restart or an open), restarting, or inside its 3 s after a turn — up to 10 s. Background work (a
+    // dev server) kept every send waiting 11 s for nothing (verifier, 2026-10-22): that one is caught up after.
+    if (o.wait && s.pool.settling(sessionId) && (await s.library.newSince(sessionId)) > 0) {
+      for (let i = 0; i < 40 && !s.pool.quiet(sessionId) && s.pool.settling(sessionId); i++) await new Promise((r) => setTimeout(r, 250));
+    }
+    if (!s.pool.quiet(sessionId)) { this.behindLater(sessionId); return 0; }
+    this.behindPending.delete(sessionId);
+    const n = await s.library.catchUp(sessionId, () => s.pool.quiet(sessionId)).catch(() => 0);
+    // a turn started while the harness was read: next time
+    if (!n && !s.pool.quiet(sessionId)) this.behindLater(sessionId);
+    if (n && s.pool.get(sessionId)) await s.pool.reloadTranscript(sessionId);
+    if (n && o.announce) this.broadcast({ kind: 'session.caughtUp', sessionId });
+    return n;
+  }
+
+  /** Try again once the process is idle and quiet: now if it already is idle (no state change will come), else on its next `idle`. */
+  private behindLater(sessionId: string) {
+    this.behindPending.add(sessionId);
+    if (this.s.pool.stateOf(sessionId) === 'idle') this.behindRetry(sessionId);
+  }
+  /** one timer per conversation: every skipped trigger used to start its own chain */
+  private behindTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private behindRetry(sessionId: string) {
+    if (this.behindTimers.has(sessionId)) return;
+    const t = setTimeout(() => {
+      this.behindTimers.delete(sessionId);
+      if (this.behindPending.has(sessionId)) void this.catchUpFromSource(sessionId, { announce: true });
+    }, 3300);
+    t.unref?.();
+    this.behindTimers.set(sessionId, t);
   }
 
   private runner(sessionId: string) {
@@ -368,6 +428,8 @@ export class Hub {
         // ours (the mirror) — the library first brings in turns the agent's own CLI added since (Codex)
         if (head && !head.imported) return (await s.library.read(req.sessionId)).messages;
         if (head?.imported || (await s.library.kindOf(req.sessionId)) !== 'claude') return (await s.library.read(req.sessionId)).messages;
+        // a Claude conversation that went on from DeepSeek Harness: what was said there since, first
+        if (!req.cursor) await this.catchUpFromSource(req.sessionId);
         const state = s.pool.stateOf(req.sessionId);
         const msgs = withTurnStats(await s.sessions.transcript(req.sessionId), await s.ledger.rowsFor(req.sessionId), { live: state === 'running' || state === 'waiting' || state === 'starting' });
         if (!req.page) return msgs;
@@ -380,6 +442,22 @@ export class Hub {
 
       case 'session.open': {
         let params = req.params;
+        // DeepSeek Harness (SourceCaps.continueInClaude): a send goes on in the Claude conversation that replays it, on
+        // any provider — never in the harness (its own DeepSeek key). Before the head check: an earlier version left an
+        // imported `dsh` head that would start the harness again. The reply's other sessionId re-keys the client.
+        if (params.sessionId && !params.agent && s.library.continuesInClaude(params.sessionId)) {
+          const c = await s.library.continuation(params.sessionId);
+          // a new one runs where a new conversation would (what its chips showed), unless one was picked; a subagent
+          // model picked on its chips was recorded under the harness id
+          if (c.created) {
+            const sub = s.meta.sessionMeta(params.sessionId).subagent;
+            await s.meta.setSessionMeta(c.sessionId, { providerId: normProvider(params.providerId ?? s.pool.defaultProviderFor('claude')), ...(sub ? { subagent: sub } : {}) });
+          }
+          params = { ...params, sessionId: c.sessionId, cwd: c.cwd, agent: 'claude', fork: false, resumeAt: undefined };
+        }
+        // …and what was said in the harness since, before the engine reads the transcript (never while it has it); a
+        // client showing the old history reloads it (`caughtUp`)
+        const caughtUp = params.sessionId && !params.fork ? await this.catchUpFromSource(params.sessionId) : 0;
         // resuming a foreign-agent session: the transcript head knows which agent it belongs to
         if (params.sessionId && !params.agent) {
           const head = await s.transcripts.head(params.sessionId);
@@ -417,7 +495,7 @@ export class Hub {
         // account clears it; the canonical switch line); running on another one → session.setProvider's swap. Under
         // the conversation's lock (openOnProvider)
         const nameOf = (id: string) => (normProvider(id) ? s.providers.forSession(id)?.name ?? id : tr('Claude 账号'));
-        return openOnProvider({ pool: s.pool, meta: s.meta, canonical: s.canonical }, params, nameOf, {
+        const opened = await openOnProvider({ pool: s.pool, meta: s.meta, canonical: s.canonical }, params, nameOf, {
           open: async (p) => {
             const r = await this.openSession(p);
             if (worktreeRoot) { await s.meta.setSessionMeta(r.sessionId, { groupCwd: worktreeRoot }); s.sessions.emit('changed'); }
@@ -427,6 +505,7 @@ export class Hub {
           swapped: (r) => ({ ...r, pending: this.pendingOf(r.sessionId) }),
           onRecorded: () => s.sessions.emit('changed'),
         });
+        return caughtUp ? { ...opened, caughtUp } : opened;
       }
       case 'session.info': {
         const r = this.runner(req.sessionId);
@@ -559,7 +638,11 @@ export class Hub {
         return s.library.sources();
       case 'library.localScan':
         return scanLocalHistory();
+      case 'library.catchUp':
+        return this.catchUpFromSource(req.sessionId, { wait: true });
       case 'library.read':
+        // a conversation that went on from DeepSeek Harness: what was said there since comes over first (catchUp)
+        if (!req.cursor) await this.catchUpFromSource(req.sessionId);
         return s.library.read(req.sessionId, req.cursor, req.limit);
       case 'library.rename':
         await renameKept(s, req.sessionId, req.title);

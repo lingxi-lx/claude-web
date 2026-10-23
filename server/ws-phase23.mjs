@@ -196,8 +196,8 @@ async function main() {
   const init = await mcp.rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'phase23', version: '0' } });
   check('mcp initialize handshakes', init.result?.serverInfo?.name === 'claude-web-web' && !!init.result?.capabilities?.tools, JSON.stringify(init.result?.serverInfo ?? init.error));
   const tools = (await mcp.rpc('tools/list')).result?.tools ?? [];
-  check('mcp lists the eleven tools of 联网 (and the five character tools of 网吧 after them)', tools.map((t) => t.name).join(',') === 'web_search,browser_open,browser_read,browser_find,browser_click,browser_type,browser_press_key,browser_scroll,browser_back,browser_screenshot,browser_computer,character_guide,character_draft,character_save,character_assign,character_list', tools.map((t) => t.name).join(','));
-  check('… only searching and reading what is open (and the character guide / list) are marked read-only', tools.filter((t) => t.annotations?.readOnlyHint).map((t) => t.name).join(',') === 'web_search,browser_read,browser_find,browser_screenshot,character_guide,character_list');
+  check('mcp lists the eleven tools of 联网 (then the five character tools of 网吧 and the seven of 字符画主题)', tools.map((t) => t.name).join(',') === 'web_search,browser_open,browser_read,browser_find,browser_click,browser_type,browser_press_key,browser_scroll,browser_back,browser_screenshot,browser_computer,character_guide,character_draft,character_save,character_assign,character_list,theme_guide,theme_draft,theme_get,theme_save,theme_apply,theme_list,theme_delete', tools.map((t) => t.name).join(','));
+  check('… only searching and reading what is open (and the character / theme guides and lists) are marked read-only', tools.filter((t) => t.annotations?.readOnlyHint).map((t) => t.name).join(',') === 'web_search,browser_read,browser_find,browser_screenshot,character_guide,character_list,theme_guide,theme_get,theme_list');
 
   const s1 = await mcp.call('web_search', { query: 'node backpressure', count: 5 });
   const s1t = textOf(s1);

@@ -17,6 +17,12 @@ import { INDEX_TEXT_MAX, LibraryIndex } from './index-db.js';
 import { libraryId, parseLibraryId } from './ids.js';
 import type { SessionSource } from './types.js';
 import { tr } from '../i18n/index.js';
+import { randomUUID } from 'node:crypto';
+import { renameSession } from '@anthropic-ai/claude-agent-sdk';
+import { appendFileSync } from 'node:fs';
+import { currentLeaf, findClaudeTranscript, hasClaudeTranscript, writeClaudeTranscript } from '../runtime/transcript-file.js';
+import { continuationEntries } from './continue-in-claude.js';
+import { dshHome } from './dsh-source.js';
 
 const LIST_TTL_MS = 60_000;
 /** A source with a file watcher (Codex) learns about changes from it; the TTL is only a backstop. */
@@ -123,7 +129,7 @@ function defaultDataDirs(): Partial<Record<AgentKind, string[]>> {
 
 function defaultWatchDirs(): Partial<Record<AgentKind, string[]>> {
   const claude = process.env.CLAUDE_CONFIG_DIR ?? path.join(os.homedir(), '.claude');
-  return { claude: [path.join(claude, 'projects')], codex: [path.join(os.homedir(), '.codex', 'sessions')] };
+  return { claude: [path.join(claude, 'projects')], codex: [path.join(os.homedir(), '.codex', 'sessions')], dsh: [path.join(dshHome(), 'sessions')] };
 }
 
 /** user + assistant text blocks only — what the index stores for full-text search. */
@@ -167,6 +173,8 @@ export class LibraryService extends EventEmitter {
   /** A source's library id → the conversation here it was merged into (a Codex conversation started in this app). */
   private merged = new Map<string, string>();
   private resuming = new Map<string, Promise<{ agent: AgentKind; cwd: string }>>();
+  private continuing = new Map<string, Promise<{ sessionId: string; cwd: string; created: boolean }>>();
+  private catching = new Map<string, Promise<number>>();
   private indexing: Promise<void> | null = null;
   private indexAgain = false;
   private timers: NodeJS.Timeout[] = [];
@@ -372,6 +380,15 @@ export class LibraryService extends EventEmitter {
     }
     this.byId = new Map(out);
     this.merged = alias;
+    // a conversation that went on in Claude (continueInClaude) is one row: the Claude one, as recent as either
+    for (const [id, it] of out) {
+      if (!it.caps?.continueInClaude) continue;
+      const as = this.meta.sessionMeta(id).continuedAs;
+      const c = as ? out.get(as) : undefined;
+      if (!c) continue;
+      out.delete(id);
+      if (it.lastModified > c.lastModified) out.set(as!, { ...c, lastModified: it.lastModified });
+    }
     // forks / resumed children / sub-agents fold under their top-level ancestor, transitively (a
     // sub-agent spawned by a sub-agent folds under the root, and childCount counts every descendant);
     // an orphan — its parent isn't listed — stays visible; a chain that runs into a parent cycle
@@ -750,6 +767,85 @@ export class LibraryService extends EventEmitter {
     return p.finally(() => this.resuming.delete(id));
   }
 
+  /**
+   * Whether a send to `id` goes on in a Claude conversation instead (`SourceCaps.continueInClaude`: DeepSeek Harness).
+   * Cheap — the hub asks before every open of a library id.
+   */
+  continuesInClaude(id: string): boolean {
+    const route = parseLibraryId(id);
+    return route.kind !== 'claude' && !!this.source(route.kind)?.caps.continueInClaude;
+  }
+
+  /**
+   * The Claude conversation a `continueInClaude` conversation goes on in: the one it already went on in (meta
+   * `continuedAs`), else a new one whose transcript replays this history, titled like it. `created`: it was just made.
+   */
+  continuation(id: string): Promise<{ sessionId: string; cwd: string; created: boolean }> {
+    const running = this.continuing.get(id);
+    if (running) return running;
+    const p = (async () => {
+      let s = this.byId.get(id);
+      if (!s) { await this.list(); s = this.byId.get(id); }
+      if (!s) throw new Error(tr('对话库里找不到这个对话'));
+      const prev = this.meta.sessionMeta(id).continuedAs;
+      if (prev && hasClaudeTranscript(prev)) return { sessionId: prev, cwd: s.cwd, created: false };
+      const messages = await this.readAll(id);
+      const sessionId = randomUUID();
+      writeClaudeTranscript(s.cwd, sessionId, continuationEntries(messages, { cwd: s.cwd, sessionId }));
+      if (s.title) await renameSession(sessionId, s.title, { dir: s.cwd }).catch(() => {});
+      await this.meta.setSessionMeta(sessionId, { continuedFrom: id, replayed: messages.length });
+      await this.meta.setSessionMeta(id, { continuedAs: sessionId });
+      // the list shows the Claude one in its place from now on (not when the file watcher gets to it)
+      this.invalidate('claude');
+      return { sessionId, cwd: s.cwd, created: true };
+    })();
+    this.continuing.set(id, p);
+    return p.finally(() => this.continuing.delete(id));
+  }
+
+  /**
+   * What was said in the other tool after its conversation went on in Claude (`continuedFrom`), appended to the Claude
+   * conversation after its newest entry — the tool's own files are never written, so nothing goes back. Only while no
+   * process of ours is mid-turn in the Claude conversation (`canWrite`, asked right before the write): the engine owns
+   * its transcript then. Returns how many rows were written (0: nothing new, only tool results, or not now).
+   */
+  /** How many messages the other tool has that `catchUp` would bring over (nothing written). */
+  async newSince(claudeId: string): Promise<number> {
+    const m = this.meta.sessionMeta(claudeId);
+    if (!m.continuedFrom || m.replayed === undefined || !this.continuesInClaude(m.continuedFrom)) return 0;
+    return Math.max(0, (await this.readAll(m.continuedFrom).catch(() => [])).length - m.replayed);
+  }
+
+  catchUp(claudeId: string, canWrite: () => boolean = () => true): Promise<number> {
+    const m = this.meta.sessionMeta(claudeId);
+    const from = m.continuedFrom;
+    if (!from || m.replayed === undefined || !this.continuesInClaude(from)) return Promise.resolve(0);
+    const running = this.catching.get(claudeId);
+    if (running) return running;
+    const p = (async () => {
+      const file = findClaudeTranscript(claudeId);
+      if (!file) return 0;
+      const messages = await this.readAll(from);
+      const fresh = messages.slice(m.replayed);
+      if (!fresh.length) return 0;
+      let s = this.byId.get(from);
+      if (!s) { await this.list(); s = this.byId.get(from); }
+      if (!s) return 0;
+      // the read above took a while: a turn started in the meantime owns the transcript now (next time)
+      if (!canWrite()) return 0;
+      const rows = continuationEntries(fresh, { cwd: s.cwd, sessionId: claudeId, parentUuid: currentLeaf(file) ?? undefined });
+      if (rows.length) {
+        // the official binary resumes at the last `last-prompt` leaf (repairLeaf)
+        const leaf = { type: 'last-prompt', lastPrompt: '', leafUuid: rows[rows.length - 1].uuid, sessionId: claudeId };
+        appendFileSync(file, [...rows, leaf].map((r) => JSON.stringify(r)).join('\n') + '\n');
+      }
+      await this.meta.setSessionMeta(claudeId, { replayed: messages.length });
+      return rows.length;
+    })();
+    this.catching.set(claudeId, p);
+    return p.finally(() => this.catching.delete(claudeId));
+  }
+
   // ---------- index / search ----------
   /** Re-index sessions whose lastModified moved; serial and yielding, so it never blocks requests. */
   refreshIndex(): Promise<void> {
@@ -869,6 +965,8 @@ export class LibraryService extends EventEmitter {
       // Claude's list comes from SessionService (its own watcher keeps it fresh); others revalidate
       if (kind !== 'claude') this.invalidate(kind, { soft: true });
       this.scheduleIndex();
+      // said in DeepSeek Harness after the conversation went on in Claude: the Claude one catches up (hub, catchUp)
+      if (rel && kind === 'dsh') this.behind(rel);
       // a Codex thread written by Codex itself (CLI / desktop): an open view of it re-reads (user report: it froze)
       const id = rel && kind === 'codex' ? codexRolloutId(rel) : null;
       if (id) {
@@ -882,6 +980,22 @@ export class LibraryService extends EventEmitter {
       }
     }));
     this.watchers.set(kind, { close: () => { for (const w of ws) w.close(); } });
+  }
+
+  /**
+   * A file under `~/.dsh/sessions/<project>/<session>/` changed: if that conversation went on in Claude, say so
+   * (`continuationBehind`) once the harness stops writing for a moment — one turn is several appends.
+   */
+  private behindTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private behind(rel: string) {
+    const dir = rel.split(/[\\/]/)[1];
+    if (!dir) return;
+    const as = this.meta.sessionMeta(libraryId('dsh', dir)).continuedAs;
+    if (!as) return;
+    clearTimeout(this.behindTimers.get(as));
+    const t = setTimeout(() => { this.behindTimers.delete(as); this.emit('continuationBehind', as); }, 1500);
+    t.unref?.();
+    this.behindTimers.set(as, t);
   }
 
   /** Codex thread id → the conversation here that started it, from our own heads; re-read on a miss, at most every 10 s. */
@@ -925,6 +1039,8 @@ export class LibraryService extends EventEmitter {
     for (const t of this.timers) clearTimeout(t);
     this.timers = [];
     if (this.indexTimer) { clearTimeout(this.indexTimer); this.indexTimer = null; }
+    for (const t of this.behindTimers.values()) clearTimeout(t);
+    this.behindTimers.clear();
     for (const k of [...this.watchers.keys()]) this.unwatch(k);
     this.watchDirs = null;
   }

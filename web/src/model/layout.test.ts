@@ -234,6 +234,20 @@ describe('tiles', () => {
     expect(deriveActive(s)).toBe('x');
   });
 
+  // a DeepSeek Harness conversation goes on under a new Claude conversation id: its tabs follow, in every group
+  it('session.rekey points every tab of a conversation at its new id', () => {
+    let s = initialLayout();
+    const p0 = focused(s);
+    const t0 = activeGroup(s).panes[p0].tiles[0];
+    s = layoutReducer(s, { t: 'session.assign', paneId: p0, tileId: t0.id, sessionId: 'dsh-1' });
+    s = layoutReducer(s, { t: 'pane.split', paneId: p0, dir: 'row', tile: chatTile('other') });
+    s = layoutReducer(s, { t: 'group.new', tile: chatTile('dsh-1') });
+    s = layoutReducer(s, { t: 'session.rekey', from: 'dsh-1', to: 'c-1' });
+    const ids = s.groups.flatMap((g) => Object.values(g.panes).flatMap((p) => p.tiles.map((t: any) => t.sessionId)));
+    expect(ids.sort()).toEqual(['c-1', 'c-1', 'other']);
+    expect(layoutReducer(s, { t: 'session.rekey', from: 'nope', to: 'x' })).toBe(s);
+  });
+
   it('deriveActive looks past a browser / doc tab in front', () => {
     let s = initialLayout();
     const p0 = focused(s);

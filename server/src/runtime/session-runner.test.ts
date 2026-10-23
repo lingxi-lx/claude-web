@@ -444,6 +444,65 @@ describe('SessionRunner Stop (interrupt)', () => {
     await normal.close();
   });
 
+  // 2026-10-22: a fresh conversation on a Gemini-web / WorkBuddy group sent 177 KB on its first turn. Narrowing the
+  // engine's tools also takes its tool search away, so every MCP tool (the account's claude.ai connectors, the user's
+  // settings, ours) was inlined — more than the full set. No MCP and no plugins: 62 KB.
+  it('a sidecar-only gateway (leanTools): the core tools and nothing from MCP servers or plugins', async () => {
+    queries.length = 0;
+    const lean = { id: 'gw', name: '默认', type: 'anthropic', baseUrl: 'http://127.0.0.1:1/default', apiKey: 'k', createdAt: 0, models: [], leanTools: true } as any;
+    const r = new SessionRunner({ sessionId: 'lean-1', cwd: '/x', subagentModel: 'claude-haiku-4-5' } as any, lean);
+    await tick();
+    const o = queries[0].options;
+    expect(o.tools).toEqual(['Read', 'Edit', 'Write', 'Bash', 'Grep', 'Glob', 'TodoWrite']);
+    expect(o.strictMcpConfig).toBe(true);
+    expect(o.mcpServers).toEqual({});
+    expect(o.plugins).toBeUndefined();
+    // there is no Agent tool to hand work to
+    expect(JSON.stringify(o.systemPrompt)).not.toMatch(/subagent/i);
+    await r.close();
+  });
+
+  // two catch-ups at once each restarted the process: two engines resuming one conversation (verifier, 2026-10-22)
+  it('reloadTranscript: one restart at a time, and not quiet while it runs', async () => {
+    queries.length = 0;
+    const r = new SessionRunner({ sessionId: 'reload-1', cwd: '/x' } as any);
+    await tick();
+    expect(queries).toHaveLength(1);
+    (r as any).state = 'idle';
+    (r as any).lastActivity = 0;
+    expect(r.quiet()).toBe(true);
+    const a = r.reloadTranscript();
+    const b = r.reloadTranscript();
+    expect(b).toBe(a);
+    expect(r.quiet()).toBe(false);
+    await a;
+    await tick();
+    expect(queries).toHaveLength(2);
+    await r.close();
+  });
+
+  // a send waited 11 s for nothing while a dev server ran in the background (verifier, 2026-10-22)
+  it('settling: what ends soon on its own — not background work', async () => {
+    const r = new SessionRunner({ sessionId: 'settle-1', cwd: '/x' } as any);
+    await tick();
+    (r as any).state = 'idle';
+    (r as any).lastActivity = Date.now();
+    expect(r.quiet()).toBe(false);
+    expect(r.settling()).toBe(true);
+    (r as any).state = 'starting';
+    expect(r.settling()).toBe(true);
+    (r as any).bgLive.add('task-1');
+    expect(r.settling()).toBe(false);
+    (r as any).bgLive.clear();
+    (r as any).state = 'idle';
+    (r as any).lastActivity = 0;
+    expect(r.quiet()).toBe(true);
+    expect(r.settling()).toBe(false);
+    (r as any).state = 'running';
+    expect(r.settling()).toBe(false);
+    await r.close();
+  });
+
   it('本机环境变量 reach the conversation, under its own variables', async () => {
     const { setLocalEnv } = await import('./local-env.js');
     setLocalEnv({ DATABASE_URL: 'pg://local', CLAUDE_CODE_REPORT_FINDINGS: 'never' });

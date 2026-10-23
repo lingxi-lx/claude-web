@@ -211,4 +211,4 @@ export type GatewayEvent =
   | { kind: 'upstreams.changed' }
   | { kind: 'gateway.log'; lines: GatewayAuditLine[] }
   /** a conversation's outbound prompt grew past the sidecar's inline limit (Gemini web: 128 KB) — advise /compact */
-  | { kind: 'gateway.promptHeavy'; sessionId: string; bytes: number };
+  | { kind: 'gateway.promptHeavy'; sessionId: string; bytes: number; via: string };

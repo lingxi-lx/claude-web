@@ -950,6 +950,8 @@ export const EN_SERVER: Record<string, string> = {
   "{name} 的历史对话是只读的，不能接着聊；可以在对话库里查看和搜索": "The conversations from {name} are read-only and cannot be continued; you can view and search them in the conversation library",
   "本机地址 {port} 无法启用：旧监听没有关掉": "The local address on port {port} could not start: the old listener did not stop",
   "DeepSeek Harness 对话 {id}": "DeepSeek Harness conversation {id}",
+  "［图片：{name}］": "[image: {name}]",
+  "［图片］": "[image]",
   "DeepSeek Harness 桌面版": "DeepSeek Harness desktop app",
   "DeepSeek Harness 里找不到这个对话（可能已经删掉了）": "Cannot find this conversation in DeepSeek Harness (it may have been deleted)",
   "主题 id 只能用小写字母、数字和连字符": "A theme id can only use lowercase letters, digits and hyphens",

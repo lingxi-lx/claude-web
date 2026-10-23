@@ -279,6 +279,26 @@ export class RunnerPool extends EventEmitter {
     void r.yieldToOutside().catch(() => { /* already gone */ });
   }
 
+  /** Nothing of ours has the conversation's transcript open, or its Claude process is idle and quiet (`quiet()`). */
+  quiet(sessionId: string): boolean {
+    const r = this.runners.get(sessionId);
+    return !r || (r instanceof SessionRunner && r.quiet());
+  }
+
+  /** Its Claude process is not quiet yet but will be soon on its own (`SessionRunner.settling`). */
+  settling(sessionId: string): boolean {
+    const r = this.runners.get(sessionId);
+    return r instanceof SessionRunner && r.settling();
+  }
+
+  /** Restart a quiet Claude process after something was appended to its transcript, so its context has it. */
+  async reloadTranscript(sessionId: string): Promise<boolean> {
+    const r = this.runners.get(sessionId);
+    if (!(r instanceof SessionRunner) || !r.quiet()) return false;
+    await r.reloadTranscript();
+    return true;
+  }
+
   findPermission(requestId: string) {
     for (const r of this.runners.values()) if (r.getPendingPermissions().some((p) => p.requestId === requestId)) return r;
     return undefined;

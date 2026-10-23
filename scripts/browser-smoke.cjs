@@ -179,6 +179,10 @@ async function runner() {
     process.exit(2);
   }
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-bsmoke-'));
+  // the checks below quote the interface's Chinese words, so the language is pinned (as ui-smoke.cjs does): a machine
+  // whose locale is English would otherwise fail a dozen of them for no reason of the browser's
+  fs.mkdirSync(path.join(home, '.claude-web'), { recursive: true });
+  fs.writeFileSync(path.join(home, '.claude-web', 'meta.json'), JSON.stringify({ version: 1, settings: { 'ui.language': 'zh' } }));
   const site = await startSite();
   const real = !!arg('--real', false);
   // the search engines are this script's site — unless the real ones are asked for (then the user's proxy is kept too)

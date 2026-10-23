@@ -446,21 +446,28 @@ export class SessionRunner extends EventEmitter {
     // 只聊天: no tool of any kind — the engine's own (`tools: []`), ours (no MCP servers, no plugin), the user's
     // (`strictMcpConfig`: the servers in their settings files are not loaded either)
     const chatOnly = !!this.features.chatOnly;
-    const computer = this.features.computerUse && !chatOnly ? computerClaudeMcpServer({ sessionId: this.sessionId }) : {};
+    // A Gemini-web / WorkBuddy sidecar has no native tool calling: every schema rides in the prompt, past 128 KB the
+    // prompt is uploaded as an attachment and past ~163 KB its tail (the tool-call format) is cut. Narrowing the
+    // engine's tools also takes its tool search away, so every MCP tool got inlined — the account's claude.ai
+    // connectors, the user's servers, ours: 177 KB before the user said anything (2026-10-22). The core tools only
+    // (62 KB): no MCP server of any origin, no plugin, no prompt section about tools that are not there.
+    const lean = !chatOnly && !!this.provider?.leanTools;
+    const bare = chatOnly || lean;
+    const computer = this.features.computerUse && !bare ? computerClaudeMcpServer({ sessionId: this.sessionId }) : {};
     // 跨对话工具 (sessions-mcp/tools.ts): in-process, so nothing to hand out; archive_session is left to the permission mode
-    const sessionsMcp: Record<string, McpServerConfig> = sessionsMcpEnabled() && !chatOnly ? { [SESSIONS_SERVER]: sessionsMcpServer(() => this.sessionId) } : {};
+    const sessionsMcp: Record<string, McpServerConfig> = sessionsMcpEnabled() && !bare ? { [SESSIONS_SERVER]: sessionsMcpServer(() => this.sessionId) } : {};
     // 预览服务器 (preview/tools.ts): preview_start runs a command, so only its logs / stop are pre-allowed
-    const previewMcp: Record<string, McpServerConfig> = previewEnabled() && !chatOnly ? { [PREVIEW_SERVER]: previewMcpServer(this.cwd, () => this.sessionId) } : {};
-    const verify = chatOnly ? null : verifyInstructions(this.cwd);
+    const previewMcp: Record<string, McpServerConfig> = previewEnabled() && !bare ? { [PREVIEW_SERVER]: previewMcpServer(this.cwd, () => this.sessionId) } : {};
+    const verify = bare ? null : verifyInstructions(this.cwd);
     // 思考用的语言: a section of the system prompt (read once at start: a change restarts the process once idle)
     this.thinkingSection = this.thinkingLanguageSection();
     // a subagent model picked: the work goes to subagents without the user asking each time (subagent-policy.ts); the
     // pick is in the plan key, so a change restarts the process and this is read again
     // — only when the model is bound (`sub`): a pick that cannot be reached leaves the subagents on the main model, and
     // sending every piece of work to them would only cost more
-    const delegate = chatOnly || !sub ? '' : subagentPolicyPrompt(this.subagent);
+    const delegate = bare || !sub ? '' : subagentPolicyPrompt(this.subagent);
     const append = [verify, this.thinkingSection, delegate].filter(Boolean).join('\n\n');
-    const allowed = chatOnly ? [] : [...webAllowedTools(), ...(Object.keys(computer).length ? computerAllowedTools() : []), ...(Object.keys(sessionsMcp).length ? SESSIONS_ALLOWED : []), ...(Object.keys(previewMcp).length ? PREVIEW_ALLOWED : [])];
+    const allowed = bare ? [] : [...webAllowedTools(), ...(Object.keys(computer).length ? computerAllowedTools() : []), ...(Object.keys(sessionsMcp).length ? SESSIONS_ALLOWED : []), ...(Object.keys(previewMcp).length ? PREVIEW_ALLOWED : [])];
     this.preAllowed = new Set(allowed);
     const noEngineSearch = engineSearchOff({ engine: engine.kind, userChoice: 'WEB_SEARCH_ADAPTER' in fenv || userPickedSearchAdapter(this.cwd) });
     // a provider session must not inherit provider-ish env from this process (e.g. a global ANTHROPIC_API_KEY)
@@ -502,17 +509,15 @@ export class SessionRunner extends EventEmitter {
       // uninstalling claude-web must not leave an MCP entry behind in the user's own config.
       // 联网 (`web`: search + the built-in browser) goes in the same way (web/launcher.ts).
       // 操控电脑 (`computer`: the whole desktop, computer/launcher.ts) only for a conversation that has it switched on.
-      mcpServers: chatOnly ? {} : { ...claudeMcpServer({ cwd: this.cwd, sessionId: this.sessionId, agent: 'claude' }), ...webClaudeMcpServer({ sessionId: this.sessionId }), ...computer, ...sessionsMcp, ...previewMcp },
-      // A Gemini-web / WorkBuddy sidecar has no native tool calling: the whole schema rides in the prompt, and the
-      // full Claude Code set pushes a turn past the sidecar's 128 KB attachment limit (25s before the first token).
-      // The core set still covers read / search / edit / run; the rest would only add prompt bytes.
-      ...(chatOnly ? { tools: [], strictMcpConfig: true } : this.provider?.leanTools ? { tools: LEAN_TOOLS } : {}),
+      mcpServers: bare ? {} : { ...claudeMcpServer({ cwd: this.cwd, sessionId: this.sessionId, agent: 'claude' }), ...webClaudeMcpServer({ sessionId: this.sessionId }), ...computer, ...sessionsMcp, ...previewMcp },
+      // a sidecar (`lean`, see above): the core set still covers read / search / edit / run
+      ...(chatOnly ? { tools: [], strictMcpConfig: true } : lean ? { tools: LEAN_TOOLS, strictMcpConfig: true } : {}),
       // 网吧's cafe-character skill, as a local plugin (both runtimes load it: 2026-10-13), only while the `web` server
       // that answers its character_* tools is handed out
       // + the official app's download of Anthropic's skills (desktop-skills.ts), so its conversations' anthropic-skills:*
       // names work here
       ...(() => {
-        if (chatOnly) return {};
+        if (bare) return {};
         const dirs = [webMcpEnabled() ? cafePluginDir() : null, webMcpEnabled() ? asciiPluginDir() : null, desktopSkillsPlugin()].filter((d): d is string => !!d);
         return dirs.length ? { plugins: dirs.map((p) => ({ type: 'local' as const, path: p })) } : {};
       })(),
@@ -879,6 +884,20 @@ export class SessionRunner extends EventEmitter {
     return !!last && !this.known.has(last);
   }
 
+  /** Idle, nothing waiting to restart or still running in the background, quiet for a few seconds: safe to write its transcript from outside. */
+  quiet(): boolean {
+    return !this.closed && this.state === 'idle' && !this.respawning && !this.respawnPending && !this.hasBackgroundWork() && Date.now() - this.lastActivity >= 3000;
+  }
+
+  /**
+   * Not quiet yet, but about to be on its own: starting, restarting, or idle and only inside the 3 s after its last
+   * output. Background work or a restart waiting for its turn can last minutes: a send must not wait for those.
+   */
+  settling(): boolean {
+    if (this.closed || this.respawnPending || this.hasBackgroundWork()) return false;
+    return this.state === 'starting' || this.respawning || (this.state === 'idle' && !this.quiet());
+  }
+
   /**
    * Close after `wroteElsewhere()`. The official binary writes its own idea of the leaf as it exits — the turn before
    * the terminal's — so the next resume would branch the terminal's turns off again; that line does not count.
@@ -890,6 +909,26 @@ export class SessionRunner extends EventEmitter {
     await this.close();
     if (file && from !== undefined) repairLeaf(file, this.sessionId, { ignoreLeavesFrom: from });
   }
+
+  /**
+   * Rows were appended to the transcript while idle (a conversation that went on from DeepSeek Harness catching up):
+   * restart the process so its context has them. The leaf the official binary writes as it exits does not count, as
+   * in `yieldToOutside` — unlike that, the conversation stays open.
+   */
+  reloadTranscript(): Promise<void> {
+    // one restart at a time: two at once left two processes resuming the same conversation (verifier, 2026-10-22)
+    if (this.reloading) return this.reloading;
+    const file = findClaudeTranscript(this.sessionId);
+    let from: number | undefined;
+    try { from = file ? statSync(file).size : undefined; } catch { /* gone */ }
+    this.beforeRestart = file && from !== undefined ? () => repairLeaf(file, this.sessionId, { ignoreLeavesFrom: from }) : null;
+    this.reloading = this.respawn().finally(() => { this.reloading = null; });
+    return this.reloading;
+  }
+  private beforeRestart: (() => void) | null = null;
+  private reloading: Promise<void> | null = null;
+  /** respawn() is between ending the old process and starting the new one (the state still says idle then) */
+  private respawning = false;
 
   private busy() {
     return this.state === 'running' || this.state === 'waiting';
@@ -1195,23 +1234,31 @@ export class SessionRunner extends EventEmitter {
 
   /** Kill the process and start a new one resuming the same session. */
   async respawn() {
-    const old = this.q;
-    this.q = null; // detach first: the old pump sees it was replaced and doesn't report 'closed'
-    this.input.close();
-    this.input = new InputQueue();
-    this.abort.abort();
-    this.abort = new AbortController();
-    const oldChild = this.child;
+    this.respawning = true;
     try {
-      await old?.return(undefined);
-    } catch {
-      /* ignore */
+      const old = this.q;
+      this.q = null; // detach first: the old pump sees it was replaced and doesn't report 'closed'
+      this.input.close();
+      this.input = new InputQueue();
+      this.abort.abort();
+      this.abort = new AbortController();
+      const oldChild = this.child;
+      try {
+        await old?.return(undefined);
+      } catch {
+        /* ignore */
+      }
+      await this.endProcess(oldChild);
+      const repair = this.beforeRestart;
+      this.beforeRestart = null;
+      if (this.closed) return; // closed while the old process was shutting down: don't spawn an orphan
+      try { repair?.(); } catch { /* the next resume repairs what it can */ }
+      this.bgLive.clear(); // the old process's background went with it
+      this.setState('starting');
+      this.start(this.hasTranscript ? { resume: this.sessionId, extraArgs: { ...this.extraArgs } } : { sessionId: this.sessionId, extraArgs: { ...this.extraArgs } });
+    } finally {
+      this.respawning = false;
     }
-    await this.endProcess(oldChild);
-    if (this.closed) return; // closed while the old process was shutting down: don't spawn an orphan
-    this.bgLive.clear(); // the old process's background went with it
-    this.setState('starting');
-    this.start(this.hasTranscript ? { resume: this.sessionId, extraArgs: { ...this.extraArgs } } : { sessionId: this.sessionId, extraArgs: { ...this.extraArgs } });
   }
 
   async close() {

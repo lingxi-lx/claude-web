@@ -16,7 +16,7 @@ const FORWARD = new Set<ClientRequest['kind']>([
   'session.contextUsage', 'session.stopTask', 'session.fastMode', 'session.toggleMcp', 'session.canonical',
   'permission.respond',
   'transcript.load', 'transcript.subagents', 'transcript.subagent',
-  'library.read', 'library.rename', 'library.fork',
+  'library.read', 'library.catchUp', 'library.rename', 'library.fork',
   'session.rename', 'session.delete',
   // read on the machine that has the transcript / the files
   'usage.session', 'files.changed', 'files.diff',

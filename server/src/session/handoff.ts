@@ -138,12 +138,12 @@ export function renderBriefing(events: CanonicalEvent[], opts: { objective?: str
  * don't line up across vendors (shell/apply_patch vs Bash/Edit), and a mismatched pair is worse
  * than a sentence describing what happened.
  */
-export function toClaudeEntries(events: CanonicalEvent[], opts: { cwd: string; sessionId: string; briefing?: string }): Record<string, unknown>[] {
+export function toClaudeEntries(events: CanonicalEvent[], opts: { cwd: string; sessionId: string; briefing?: string; /** rows that go after an existing one */ parentUuid?: string }): Record<string, unknown>[] {
   const out: Record<string, unknown>[] = [];
-  let parentUuid: string | null = null;
+  let parentUuid: string | null = opts.parentUuid ?? null;
   const base = (extra: Record<string, unknown>) => {
     const uuid = randomUUID();
-    const row = { parentUuid, isSidechain: false, userType: 'external', cwd: opts.cwd, sessionId: opts.sessionId, version: '2.0.0', uuid, timestamp: new Date().toISOString(), ...extra };
+    const row = { parentUuid, isSidechain: false, userType: 'external', cwd: opts.cwd, sessionId: opts.sessionId, version: '2.0.0', uuid, timestamp: '', ...extra };
     parentUuid = uuid;
     out.push(row);
     return row;
@@ -151,10 +151,18 @@ export function toClaudeEntries(events: CanonicalEvent[], opts: { cwd: string; s
   const user = (text: string) => base({ type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } });
   const assistant = (text: string) => base({ type: 'assistant', message: { role: 'assistant', model: 'external', content: [{ type: 'text', text }] } });
 
+  // one millisecond apart, the last just before now: rows sharing a timestamp made the default engine (ccb) resume
+  // from an early row, the turns after it gone from what the model saw
+  const stamped = () => {
+    const now = Date.now();
+    out.forEach((r, i) => { r.timestamp = new Date(now - (out.length - i)).toISOString(); });
+    return out;
+  };
+
   if (opts.briefing) {
     user(opts.briefing);
     assistant(tr('已接手，我读到了上面的交接说明，会在这个基础上继续。'));
-    return out;
+    return stamped();
   }
 
   const pending: string[] = [];
@@ -173,5 +181,5 @@ export function toClaudeEntries(events: CanonicalEvent[], opts: { cwd: string; s
     } else if (e.kind === 'switch' && e.note) pending.push(`（${e.note}）`);
   }
   flush();
-  return out;
+  return stamped();
 }

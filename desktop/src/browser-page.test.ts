@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { cleanUserAgent } from './user-agent';
+import { isSignInPage, userAgentFor } from './sign-in-ua';
 import { jpegSize } from './jpeg-size';
 
 describe('the built-in browser as web sites see it', () => {
@@ -12,6 +13,28 @@ describe('the built-in browser as web sites see it', () => {
     expect(cleanUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) claude-web/0.2.0 Chrome/152.0.0.0 Electron/44.1.2 Safari/537.36')).toBe('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36');
     // something that is not Electron's shape is left as it is
     expect(cleanUserAgent('curl/8.0')).toBe('curl/8.0');
+  });
+
+  it("Google's sign-in gets Electron's own user agent (it rejects the cleaned one), every other page the cleaned one", () => {
+    const honest = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) claude-web/0.3.1 Chrome/152.0.7977.65 Electron/44.1.1 Safari/537.36';
+    const clean = cleanUserAgent(honest);
+    for (const u of [
+      'https://accounts.google.com/v3/signin/identifier?continue=https%3A%2F%2Fmyaccount.google.com%2F',
+      'https://accounts.google.com/o/oauth2/v2/auth?client_id=x&redirect_uri=https%3A%2F%2Fexample.com',
+      'https://ACCOUNTS.GOOGLE.COM/ServiceLogin',
+      'https://accounts.youtube.com/accounts/SetSID',
+    ]) expect(userAgentFor(u, honest, clean), u).toBe(honest);
+    for (const u of [
+      'https://www.google.com/search?q=x', // search keeps the cleaned one (user-agent.ts)
+      'https://gemini.google.com/app',
+      'https://myaccount.google.com/',
+      'https://example.com/?next=https://accounts.google.com/',
+      'https://accounts.google.com.example.com/',
+      'http://accounts.google.com/', // not the real one
+      'about:blank',
+      'not a url',
+    ]) expect(userAgentFor(u, honest, clean), u).toBe(clean);
+    expect(isSignInPage('https://accounts.google.com/v3/signin/rejected')).toBe(true);
   });
 });
 

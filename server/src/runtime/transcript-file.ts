@@ -1,4 +1,4 @@
-import { appendFileSync, closeSync, existsSync, fstatSync, openSync, readFileSync, readdirSync, readSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readdirSync, readSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -24,6 +24,28 @@ export function findClaudeTranscript(sessionId: string): string | null {
 /** Whether the CLI has a transcript for this id (`--resume` of one it lacks fails "No conversation found…"). */
 export function hasClaudeTranscript(sessionId: string): boolean {
   return findClaudeTranscript(sessionId) !== null;
+}
+
+/** The CLI's project folder for a cwd — its own rule: every non-alphanumeric char a `-`, past 200 chars a hash suffix. */
+export function claudeProjectDir(cwd: string): string {
+  const name = cwd.replace(/[^a-zA-Z0-9]/g, '-');
+  if (name.length <= 200) return path.join(projectsDir(), name);
+  let h = 0;
+  for (let i = 0; i < cwd.length; i++) h = ((h << 5) - h + cwd.charCodeAt(i)) | 0;
+  return path.join(projectsDir(), `${name.slice(0, 200)}-${Math.abs(h).toString(36)}`);
+}
+
+/**
+ * A new conversation's transcript, from entries in the CLI's line shape (`toClaudeEntries`; the SDK's SessionStore
+ * entries are the same lines). The SDK's own way in — resume from a store — needs the official binary's
+ * `--session-mirror`, which the default engine does not have; a `--resume` of this file works on both.
+ */
+export function writeClaudeTranscript(cwd: string, sessionId: string, entries: object[]): string {
+  const dir = claudeProjectDir(cwd);
+  mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, `${sessionId}.jsonl`);
+  writeFileSync(file, entries.map((e) => JSON.stringify(e)).join('\n') + '\n', { flag: 'wx' });
+  return file;
 }
 
 /** Lines of `file` from the end; `visit` returns true to stop. Reads 1 MiB at a time — a long conversation is 60 MB. */
@@ -105,6 +127,30 @@ export function lastHumanPrompt(file: string | null): string | null {
     return true;
   });
   return found;
+}
+
+/**
+ * Where the conversation goes on from (what `repairLeaf` points at): the newest entry of the main chain, unless a
+ * `last-prompt` written after all of them points elsewhere (a /rewind in the terminal).
+ */
+export function currentLeaf(file: string | null): string | null {
+  if (!file) return null;
+  let leaf: string | undefined;
+  let pointed: string | undefined;
+  scanBack(file, (line) => {
+    if (line.includes('"last-prompt"')) {
+      const e = parse(line);
+      if (e?.type !== 'last-prompt' || typeof e.leafUuid !== 'string') return false;
+      pointed = e.leafUuid;
+      return true;
+    }
+    if (!leaf && line.includes('"uuid"')) {
+      const e = parse(line);
+      if (e && typeof e.uuid === 'string' && 'parentUuid' in e && e.isSidechain !== true) leaf = e.uuid;
+    }
+    return false;
+  });
+  return leaf ?? pointed ?? null;
 }
 
 /**

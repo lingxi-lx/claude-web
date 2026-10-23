@@ -47,15 +47,19 @@ export function BrowserTile({ tile }: { tile: Extract<Tile, { kind: 'browser' }>
     };
     const onTitle = (e: any) => { if (ctx) dispatch({ t: 'tile.rename', paneId: ctx.paneId, tileId: tile.id, title: String(e.title).slice(0, 40) }); };
     const onFail = (e: any) => { setLoading(false); if (e.errorCode !== -3) setErr(`${e.errorDescription || tr('加载失败')} (${e.errorCode})`); };
+    // a page that arrives after all is no failure (a load the shell restarted, see BrowserPanel.tsx)
+    const onNavigate = () => setErr('');
     el.addEventListener('did-start-loading', onStart);
     el.addEventListener('did-stop-loading', onStop);
     el.addEventListener('page-title-updated', onTitle);
     el.addEventListener('did-fail-load', onFail);
+    el.addEventListener('did-navigate', onNavigate);
     return () => {
       el.removeEventListener('did-start-loading', onStart);
       el.removeEventListener('did-stop-loading', onStop);
       el.removeEventListener('page-title-updated', onTitle);
       el.removeEventListener('did-fail-load', onFail);
+      el.removeEventListener('did-navigate', onNavigate);
     };
   }, [ctx?.paneId, tile.id]);
 

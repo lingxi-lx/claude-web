@@ -139,19 +139,20 @@ describe('syncProfiles: every group is a provider profile', () => {
 describe('heavy prompt notice (a sidecar re-sends everything every turn)', () => {
   it('says it once per conversation, and re-arms after a compact brought it back down', async () => {
     const gw = await make([{ accountId: 'acct_1' }]);
-    const heard: { sessionId: string; bytes: number }[] = [];
-    gw.on('promptHeavy', (e: { sessionId: string; bytes: number }) => heard.push(e));
+    const heard: { sessionId: string; bytes: number; via: string }[] = [];
+    gw.on('promptHeavy', (e: { sessionId: string; bytes: number; via: string }) => heard.push(e));
     const ctx = (sid: string) => ({ req: { headers: { 'x-claude-code-session-id': sid } } });
-    const note = (gw as unknown as { noteHeavyPrompt(c: unknown, b: number): void }).noteHeavyPrompt.bind(gw);
-    note(ctx('s1'), 200_000);
-    note(ctx('s1'), 210_000); // same conversation: not again
+    const note = (gw as unknown as { noteHeavyPrompt(c: unknown, b: number, via: string): void }).noteHeavyPrompt.bind(gw);
+    note(ctx('s1'), 200_000, 'sidecar:gemini');
+    note(ctx('s1'), 210_000, 'sidecar:gemini'); // same conversation: not again
     expect(heard).toHaveLength(1);
-    expect(heard[0]).toEqual({ sessionId: 's1', bytes: 200_000 });
-    note(ctx('s2'), 190_000); // another conversation gets its own notice
+    expect(heard[0]).toEqual({ sessionId: 's1', bytes: 200_000, via: 'gemini' });
+    note(ctx('s2'), 190_000, 'sidecar:workbuddy'); // another conversation gets its own notice, naming its member
     expect(heard).toHaveLength(2);
+    expect(heard[1].via).toBe('workbuddy');
     // the caller clears the mark when a request comes back under the limit (the else branch in attempt)
     (gw as unknown as { heavyNotified: Set<string> }).heavyNotified.delete('s1');
-    note(ctx('s1'), 205_000);
+    note(ctx('s1'), 205_000, 'sidecar:gemini');
     expect(heard).toHaveLength(3);
   });
 });

@@ -1051,11 +1051,11 @@ export class GatewayService extends EventEmitter {
   }
 
   /** @see HEAVY_PROMPT_BYTES — one notice per conversation, re-armed after a compact brings it back down */
-  private noteHeavyPrompt(ctx: Ctx, bytes: number): void {
+  private noteHeavyPrompt(ctx: Ctx, bytes: number, memberId: string): void {
     const sessionId = String(ctx.req.headers['x-claude-code-session-id'] ?? '');
     if (!sessionId || this.heavyNotified.has(sessionId)) return;
     this.heavyNotified.add(sessionId);
-    this.emit('promptHeavy', { sessionId, bytes });
+    this.emit('promptHeavy', { sessionId, bytes, via: memberId.replace(/^sidecar:/, '') });
   }
 
   private async attempt(ctx: Ctx, r: ResolvedMember, outbound: Outbound, switches: number): Promise<Attempt> {
@@ -1113,7 +1113,7 @@ export class GatewayService extends EventEmitter {
         // A sidecar re-sends the whole prompt every turn and has no prompt cache: once it passes the inline
         // limit (Gemini web: 128 KB) it uploads an attachment, and past ~160 KB the upstream truncates the tail.
         // Tell the conversation once, so it can compact instead of quietly degrading.
-        if (p.id.startsWith('sidecar:') && body.length > HEAVY_PROMPT_BYTES) this.noteHeavyPrompt(ctx, body.length);
+        if (p.id.startsWith('sidecar:') && body.length > HEAVY_PROMPT_BYTES) this.noteHeavyPrompt(ctx, body.length, p.id);
         else if (p.id.startsWith('sidecar:')) this.heavyNotified.delete(String(ctx.req.headers['x-claude-code-session-id'] ?? ''));
       }
     } catch (e: any) {

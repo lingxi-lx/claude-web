@@ -78,6 +78,10 @@ function TabView({ tab, front }: { tab: BrowserTab; front: boolean }) {
       // the user's own browsing is what 最近打开 lists (not what an Agent looked up)
       try { if (!tab.agent) recordVisit(el.getURL(), el.getTitle()); } catch { /* not attached */ }
     };
+    // a page that arrives after all is no failure: the shell cancels a load and starts it again with another user
+    // agent (desktop/src/main.ts, Google's sign-in), and the cancelled one reports -2. A load that really fails
+    // never reaches did-navigate.
+    const onNavigate = () => { patchTab(id, { error: undefined }); sync(); };
     const onTitle = (e: Event) => patchTab(id, { title: String((e as unknown as { title?: string }).title ?? '').slice(0, 200) });
     const onFail = (e: Event) => {
       const f = e as unknown as { errorCode?: number; errorDescription?: string; isMainFrame?: boolean };
@@ -88,7 +92,7 @@ function TabView({ tab, front }: { tab: BrowserTab; front: boolean }) {
     el.addEventListener('dom-ready', onReady);
     el.addEventListener('did-start-loading', onStart);
     el.addEventListener('did-stop-loading', onStop);
-    el.addEventListener('did-navigate', sync);
+    el.addEventListener('did-navigate', onNavigate);
     el.addEventListener('did-navigate-in-page', sync);
     el.addEventListener('page-title-updated', onTitle);
     el.addEventListener('did-fail-load', onFail);
@@ -96,7 +100,7 @@ function TabView({ tab, front }: { tab: BrowserTab; front: boolean }) {
       el.removeEventListener('dom-ready', onReady);
       el.removeEventListener('did-start-loading', onStart);
       el.removeEventListener('did-stop-loading', onStop);
-      el.removeEventListener('did-navigate', sync);
+      el.removeEventListener('did-navigate', onNavigate);
       el.removeEventListener('did-navigate-in-page', sync);
       el.removeEventListener('page-title-updated', onTitle);
       el.removeEventListener('did-fail-load', onFail);

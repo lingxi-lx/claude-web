@@ -778,8 +778,11 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   // restart of session.setProvider, started directly on the picked model; another agent → the hand-over
   const [swapping, setSwapping] = useState(false);
   const liveAgent: AgentKind = info?.agent ?? 'claude';
-  // a conversation not running yet has no info: its agent comes from the list
-  const sessionAgent: AgentKind = info?.agent ?? sessions.find((s) => s.sessionId === active?.sessionId)?.agent ?? 'claude';
+  // a conversation not running yet has no info: its agent comes from the list — except one that goes on in Claude
+  // (DeepSeek Harness): its chips are Claude's, on what a new conversation would use until one is picked
+  const listed = sessions.find((s) => s.sessionId === active?.sessionId);
+  const inClaude = !info && !!listed?.caps?.continueInClaude;
+  const sessionAgent: AgentKind = info?.agent ?? (inClaude ? 'claude' : listed?.agent) ?? 'claude';
   const liveProvider = info?.providerId && info.providerId !== 'claude' ? info.providerId : 'claude';
   const liveAgentDefault = liveAgent !== 'claude' ? agents.find((a) => a.kind === liveAgent)?.model || undefined : undefined;
   // the account's default model by name for a chip with no model (final review §9 #2): this conversation's CLI says
@@ -980,7 +983,8 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   } else if (active && !disabled && active.state !== 'starting') {
     // not running (history, reaped, crashed — every conversation after a restart): the chips show what the next
     // send resumes it with, and a pick there changes that (final review §9 #1)
-    const v = resumeView(active, sessionMeta[active.sessionId], remote ? undefined : defaultMode);
+    const cont = inClaude ? sessionMeta[active.sessionId]?.continuedAs : undefined;
+    const v = resumeView(active, !inClaude ? sessionMeta[active.sessionId] : cont ? sessionMeta[cont] ?? {} : { providerId: (settings.defaultProviderId as string | undefined) || 'claude' }, remote ? undefined : defaultMode);
     const rAgent = sessionAgent;
     const rProvider = remote ? 'claude' : v.providerId;
     const rP = providers.find((p) => p.id === rProvider);

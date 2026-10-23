@@ -10,6 +10,7 @@ import { execFileSync } from 'node:child_process';
 import { captureGuest } from './browser-capture';
 import { geminiForget, geminiLogin, geminiRefresh } from './gemini-login';
 import { cleanUserAgent } from './user-agent';
+import { userAgentFor } from './sign-in-ua';
 import os from 'node:os';
 import { ZOOM_STEPS, cleanZoom, fitWindow, minWindow, nextZoom, scaleCaption, trafficLightY, zoomAsk, zoomLimit, type ZoomAsk } from './zoom';
 import { getLocale, initLanguage, tr } from './i18n.js';
@@ -88,6 +89,8 @@ const stateFile = () => path.join(app.getPath('userData'), 'window-state.json');
 
 // ---------- single instance ----------
 // every page this app loads (the built-in browser above all) says it is the Chrome it is built from: see user-agent.ts
+// — except Google's sign-in, which only lets Electron's own user agent in (sign-in-ua.ts)
+const HONEST_UA = app.userAgentFallback;
 app.userAgentFallback = cleanUserAgent(app.userAgentFallback);
 
 const gotLock = app.requestSingleInstanceLock();
@@ -251,17 +254,48 @@ function createWindow(url: string | null, winId = 'main', bounds?: Bounds, hidde
   // itself unless popups are allowed (its `allowpopups` attribute) — a link that opens a new window then does
   // nothing at all, and the handler below is never asked (found in the packaged app, 2026-10-10). So they are
   // allowed here for every guest, and the handler turns each one into a tab: no window is ever created.
-  win.webContents.on('will-attach-webview', (_e, prefs) => {
+  win.webContents.on('will-attach-webview', (_e, prefs, params) => {
     delete (prefs as { preload?: string }).preload;
     prefs.nodeIntegration = false;
     prefs.contextIsolation = true;
     (prefs as { disablePopups?: boolean }).disablePopups = false;
+    // a tab that opens straight onto Google's sign-in starts loading before did-attach-webview below: it is born
+    // with the user agent the sign-in takes (sign-in-ua.ts)
+    if (params.src && userAgentFor(params.src, HONEST_UA, app.userAgentFallback) === HONEST_UA) params.useragent = HONEST_UA;
   });
   win.webContents.on('did-attach-webview', (_e, guest) => {
     // a page's new window is a new tab of this window's built-in browser (features/browser/BrowserPanel.tsx)
     guest.setWindowOpenHandler(({ url: target }) => {
       if (/^https?:/.test(target) && !win.isDestroyed()) win.webContents.send('desktop:browserPopup', { url: target });
       return { action: 'deny' };
+    });
+    // Google's sign-in pages get Electron's own user agent, everything else the cleaned one (sign-in-ua.ts). Going
+    // in, the request and the page's `navigator.userAgent` must both say it, and Electron applies a new one
+    // differently by moment (measured, Electron 44):
+    //  - a redirect: setUserAgent makes Electron restart the load itself, from where it began, with it (-3, which the
+    //    tab does not show as a failure);
+    //  - a page's own navigation (a link, a script): setUserAgent in will-navigate reloads the page that is there and
+    //    drops the navigation, and in did-start-navigation leaves a -2 error card — so it is cancelled and loaded anew;
+    //  - any other load (the address bar on a tab that has a page): setUserAgent only reaches the page's script, the
+    //    request already went with the old one — so that load is restarted.
+    // Coming out is never a restart (that would repeat the sign-in's last step, maybe a POST, without it): the
+    // redirect back to the site keeps the honest one, and the next load anywhere else just goes back to the cleaned
+    // one — its first request still with the honest one, which no site minds.
+    guest.on('will-navigate', (e) => {
+      if (userAgentFor(e.url, HONEST_UA, app.userAgentFallback) !== HONEST_UA || guest.getUserAgent() === HONEST_UA) return;
+      e.preventDefault();
+      guest.setUserAgent(HONEST_UA);
+      void guest.loadURL(e.url).catch(() => { /* replaced, or the tab closed */ });
+    });
+    guest.on('did-start-navigation', (e) => {
+      if (!e.isMainFrame || e.isSameDocument) return;
+      const ua = userAgentFor(e.url, HONEST_UA, app.userAgentFallback);
+      if (guest.getUserAgent() === ua) return;
+      guest.setUserAgent(ua);
+      if (ua === HONEST_UA) void guest.loadURL(e.url).catch(() => { /* replaced, or the tab closed */ });
+    });
+    guest.on('will-redirect', (e) => {
+      if (e.isMainFrame && userAgentFor(e.url, HONEST_UA, app.userAgentFallback) === HONEST_UA && guest.getUserAgent() !== HONEST_UA) guest.setUserAgent(HONEST_UA);
     });
     attachContextMenu(guest, win);
   });
