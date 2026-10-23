@@ -4,6 +4,25 @@
 
 Every version's changes are recorded here; installers are on the [Releases](https://github.com/ypyik0669/claude-web/releases) page. Versions follow [semantic versioning](https://semver.org/).
 
+## [0.3.2] — 2026-10-23
+
+### Fixed
+
+**Relays and models**
+
+- **A relay's log is no longer full of "non-streaming" Claude calls, and the 403s and disconnects that came with them are gone.** At the end of every turn Claude Web asked how full the context was; the built-in core counts that part by part, and where a relay has no token-counting endpoint it sent one non-streaming, 1-token request per part (about 30 a turn, on the main model) with no Claude Code system prompt — a relay's log showed a row of "非流 1 t/s", relays that check for Claude Code refused them with 403, and the input was billed at the main model's price. The composer's context ring and the status strip now read the last answer's usage (as the official CLI's indicator does — no request); the info column's context breakdown is fetched once when you unfold it and again on 刷新; and the built-in core (2.8.4-cw.6) estimates locally when counting fails, like the official client, instead of sending those requests.
+- **Thinking strength works on the gpt-6 family (e.g. gpt-6-astra).** The rule stopped at gpt-5, so gpt-6 was treated as a model that does not reason: the strength went into the prompt only, with no `reasoning_effort` in the request (a relay's log showed an empty effort column). gpt-5 and every later gpt now get OpenAI's native parameter.
+- **DeepSeek through the WorkBuddy component shows its thinking.** The gateway dropped an OpenAI-format upstream's `reasoning_content` (DeepSeek, Qwen, Kimi, WorkBuddy) / `reasoning`; it now becomes a thinking block before the answer.
+- **A conversation on Gemini web / WorkBuddy no longer warns "over 170 KB" on its first message.** The lean tool set also lost tool search, so every MCP tool's schema was inlined and the request ended up larger than the full set; such conversations now run without MCP servers (about 62 KB). The cost: no web or shared-memory tools there. The "conversation too large" notice names the conversation and the member.
+
+**DeepSeek Harness**
+
+- **A dsh conversation in the library now goes on in Claude.** Sending used to show only your own message, answered by `no API key for provider route`. The whole history is now written into a new Claude conversation that carries on with the provider you pick (or the default), and later messages go to the same one; what you say in dsh afterwards is brought over automatically (when it opens, before you send, and as soon as dsh writes). Nothing is ever written to dsh's own log. Three reading bugs were fixed too: the newer (v4) log missing the latest turns after an upgrade, the two tool-result shapes, and tool calls shown twice.
+
+**Built-in browser**
+
+- **Google sign-in works.** It always ended in "Couldn't sign you in / This browser or app may not be secure": our cleaned-up user agent claims Chrome while the browser's other signals say otherwise, which Google treats as an impostor. Google's sign-in pages now get Electron's own user agent; every other site is unchanged.
+
 ## [0.3.1] — 2026-10-21
 
 ### Fixed

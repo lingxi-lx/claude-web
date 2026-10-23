@@ -4,6 +4,25 @@
 
 每个版本的变化都记在这里；安装包在 [Releases](https://github.com/ypyik0669/claude-web/releases) 下载。版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.3.2] — 2026-10-23
+
+### 修复
+
+**中转与模型**
+
+- **中转日志里不再满是「非流」的 Claude 请求，也不再因此 403、断连。** 每一轮结束时，Claude Web 都会问一次「上下文用了多少」；自带的内核按部分数 token，中转没有数 token 的接口时，就每部分发一个非流式、只要 1 个 token、不带 Claude Code 系统提示词的请求（一轮约 30 个，模型是主模型）——中转日志里就是一串「非流 1 t/s」，按 Claude Code 指纹查的中转直接拒成 403，还按主模型收了这些输入的钱。现在输入框的上下文小环和状态条按上一轮回答的用量算（和官方 CLI 的小指示一样，不发请求）；信息栏的上下文明细只在展开时取一次、点「刷新」再取；自带的内核（2.8.4-cw.6）数 token 失败时本地估，和官方客户端一样，不再发这种请求。
+- **gpt-6 系列（比如 gpt-6-astra）的思考强度生效了。** 以前只认到 gpt-5，gpt-6 被当成不会推理的模型：强度只写进提示词，请求里没有 `reasoning_effort`，中转日志的「推理强度」一栏是空的。现在 gpt-5 及以后的 gpt 都按 OpenAI 的推理模型发原生参数。
+- **经 WorkBuddy 组件的 DeepSeek 能看到思考过程了。** 网关把 OpenAI 格式上游的 `reasoning_content`（DeepSeek、Qwen、Kimi、WorkBuddy）/ `reasoning` 全丢了；现在转成思考块，显示在回答前面。
+- **只用 Gemini 网页 / WorkBuddy 的对话，第一句不再提示「超过 170 KB」。** 精简工具集时内核也没了工具搜索，所有 MCP 工具的说明全部内联，反而比全套还大；现在这类对话不带 MCP 服务器（62 KB 左右）。代价：这类对话没有联网、共享记忆这些工具。对话过大的提醒会写出是哪个对话、哪个成员。
+
+**DeepSeek Harness**
+
+- **对话库里的 dsh 对话改成「在 Claude 里接着聊」。** 以前发出去只有自己那句，回复是 `no API key for provider route`。现在把整段历史写成一个新的 Claude 对话，用你选的（或默认的）供应商接着聊，以后再发都进同一个；dsh 里后来又聊的会自动补进来（打开时、发送前、dsh 一写入时）。dsh 的日志一个字节都不写。也修了读取的三处错：升级后的新版日志（v4）没读到最新几轮、两种工具结果格式、重复的工具调用。
+
+**内置浏览器**
+
+- **能登录 Google 了。** 以前一律「Couldn't sign you in / This browser or app may not be secure」：我们改过的 UA 说自己是 Chrome，浏览器给出的特征却不是，Google 当成冒充。现在只在 Google 登录页上用 Electron 原样的 UA，别的网站照旧。
+
 ## [0.3.1] — 2026-10-21
 
 ### 修复
