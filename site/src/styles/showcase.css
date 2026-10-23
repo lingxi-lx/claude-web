@@ -34,8 +34,8 @@
 .sc-dots { display: inline-flex; gap: 6px; }
 .sc-dots i { width: 10px; height: 10px; border-radius: 50%; background: var(--sc-line-1); }
 .sc-title { flex: 1; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sc-compare { font: inherit; font-size: var(--fs-meta); padding: 3px 10px; border-radius: 999px; border: 1px solid var(--sc-line-1); background: transparent; color: var(--sc-fg-1); cursor: pointer; }
-.sc-compare[aria-pressed='true'] { background: var(--sc-accent); color: var(--sc-accent-fg); border-color: transparent; }
+.sc-compare, .sc-pause { font: inherit; font-size: var(--fs-meta); padding: 3px 10px; border-radius: 999px; border: 1px solid var(--sc-line-1); background: transparent; color: var(--sc-fg-1); cursor: pointer; }
+.sc-compare[aria-pressed='true'], .sc-pause[aria-pressed='true'] { background: var(--sc-accent); color: var(--sc-accent-fg); border-color: transparent; }
 
 .sc-stage { position: relative; aspect-ratio: 16 / 10; background: var(--sc-bg); cursor: grab; touch-action: pan-y; user-select: none; overflow: hidden; }
 .sc-stage:active { cursor: grabbing; }

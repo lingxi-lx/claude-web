@@ -62,6 +62,12 @@
   docs 去吃泡面靠种子（`DEMO_SEED`），改了 sim 的随机顺序要重找种子（`demo.test.ts` 会红）。
 - 三档（`hero/tier.ts`）：T0 桌面鼠标 + 多于 4 核 + 真 WebGL2 → 加后处理（`hero/post.ts`）；T1 其它和手机；T2（减少动画、无 Canvas、爬虫）只有海报。
   标签页隐藏或舞台滚出视口时 rAF 停。
+  T0 在真 Chrome 里验过（2026-10-23，Chrome 155 有界面 + 核显 D3D11，CDP 驱动 `npm run preview`）：后处理画面正、不黑不发白，逐章镜头和卡片都对、控制台无错。
+- 首屏镜头（`hero/chapters.ts`）：桌面 `HERO_LOOK` 拉远一点、往右推，让门口牌和前台网管的气泡在文案栏（`.hero-copy`，600 px，`HERO_COPY_PX`）右边，
+  1280 宽起都成立（`chapters.test.ts` 按 1280 / 1366 / 1440 / 1920 量）；手机（< 720）还用 `HERO_LOOK_PHONE` 看房间中间。保底：每帧把 `.hero-copy` 的框从标签层抹掉
+  （`Scene.ts` 的 `clearKeepout`，右边和上边 32 px 渐隐），海报模式也算。产品的 `bubble()` 超过 28 个字符就截断，网管喊话的英文要短于这个（2026-10-23 改短了四句）。
+- 章节卡片层 `.scene-overlays` 在 DOM 里排在 `#features` 后面（Tab 从章节进卡片按钮），不在 `#hero-scene` 里：它是贴底的 sticky
+  （`bottom: 0; height: 100svh; margin-top: -100svh`），和贴顶的场景在任何滚动位置都是同一个框；`overlays.ts` 从 `[data-overlays]` 找卡片。
 - 首屏海报：`npm run build --prefix site && npm run poster --prefix site`（Electron 打开 `?poster=1`，场景停在第 20 s），同时重做分享图。场景接管时显示器一台台亮，不淡入。
   界面、招牌或演示日改了就重拍。要先跑过一次 `npm run fonts --prefix site`（分享图的字用它的缓存）。
 - 像素标题字：Fusion Pixel Font 12px（OFL，许可在 `site/public/fonts/OFL.txt`），按标题用到的字子集化；改了大标题 / 章节标题 / 安装标题要 `npm run fonts --prefix site`（`fonts.test.ts` 会拦）。
@@ -75,7 +81,10 @@
 - 代码在 `site/src/showcase/`：`Showcase.astro`（构建时把配色、按钮的过程动画帧、文案写进页面）、`player.ts`（进视口前一屏才 `import()`）。主题数据直接读产品的 `web/src/themes/builtin/*/theme.json`，经别名 `@themes`（`server/src/themes/core`）/ `@web-themes`（`web/src/themes`），只用 `parsePack` / `paletteCss` / `animFor` / `frameHtml` / ticker 的 `play`。
 - 配色：按钮用自己主题的变量（产品名 `--bg --accent …`），整段用当前主题的 `--sc-*`（`site/src/styles/showcase.css` 里 `@property` 注册，切换 400 ms 过渡）。对比度：`showcase/themes.test.ts` 用产品的 `contrastProblems` 和这一段实际用到的几对颜色。
 - 同一秒切换：切换前先暂停旧录像，新录像 seek 到那一秒、`seeked` 后两个一起播；每次派发 `showcase:switched`（冒烟测试读它）。
-- 录像不进仓库：`site/media.json`（110 个文件的 sha256 / 字节数）+ pre-release `site-media`。构建时 `site/scripts/fetch-media.ts` 下载进 `dist/themes/`（缓存 `site/.media-cache/`）：哈希不对构建失败，下不到只警告（显示海报 / 占位）。`SITE_MEDIA=off` 跳过（PR 的 CI），`SITE_MEDIA_DIR=.media-local` 用本地的。HTML 里不能直接引 `/themes/…`（会算进首页 1.5 MB 预算）。
+  新录像加载失败：旧的也收起，露出新主题的海报；webm 失败先换 mp4 再试一次（冒烟里有一段让 garden 的录像 404）。
+- 暂停（WCAG 2.2.2）：标题栏的「暂停」开关（`aria-pressed`，Tab 能到），焦点在放映厅里按空格或 K 也行。悬停只预读录像的 metadata，选中才 `auto`；
+  手机和 Save-Data 不预取其它海报。
+- 录像不进仓库：`site/media.json`（110 个文件的 sha256 / 字节数）+ pre-release `site-media`。构建时 `site/scripts/fetch-media.ts` 下载进 `dist/themes/`（缓存 `site/.media-cache/`）：哈希不对构建失败，下不到只警告（显示海报 / 占位）。`SITE_MEDIA=off` 跳过（PR 的 CI），`SITE_MEDIA_DIR=.media-local` 用本地的。每个文件下不到会再试两次（2 s、4 s）；`SITE_MEDIA_STRICT=1`（只在 `site.yml` 的发布构建里设）下不到也构建失败。HTML 里不能直接引 `/themes/…`（会算进首页 1.5 MB 预算）。
 - 重录：`env -u ELECTRON_RUN_AS_NODE -u CLAUDE_WEB_DIST -u CLAUDE_CODE_ENTRYPOINT node scripts/record-themes.cjs [--lang] [--only]` → `node scripts/upload-site-media.cjs --dir site/.media-local`（改公开 release，先问用户）→ 提交 `site/media.json`。界面或主题改了就该重录。录制脚本**不碰 `web/dist`**：前端构建到临时目录、服务端从源码跑（开发中的 Claude Web 用着 `web/dist`，重建会把它弄坏）。一段先把原始像素写盘（约 6 GB，录完删），磁盘要留够；机器忙时帧率会掉到 24 以下，别同时跑别的重活。
 - 录制剧本在 `scripts/lib/demo.cjs` 的 `scriptFor`：带 `tools` 的请求才按剧本走（标题之类的旁路请求不算），第几步 = 那句话之后的 `tool_result` 数。「描述一个新的」那段默认用官方运行内核：ccb 把 MCP 工具包在 `ExecuteExtraTool` 里，界面不显示主题草稿卡片。
 - 录像要公开，右侧「连接器」只能有应用自己的（`web` / `sessions` / `preview`），不能有「连不上」（2026-10-23）。临时 HOME 下冒出来的三个都不是用户机器上的：我们引擎内置的 `weixin` 插件（没登录，连不上）、引擎写死的 `mcp-chrome`（已关）、记忆服务器（从源码跑时是 `node --import tsx …/mcp.ts`，在示例项目目录里找不到 tsx，连不上）。处理：临时 HOME 的 `~/.claude/settings.json` 写 `enabledPlugins: { "weixin@builtin": false }`，meta 设 `memory.mcp: false`；`mcp-chrome` 是在设置的 deny 列表之后才并进去的，关不掉，所以十段主题也改用官方运行内核（`--runtime`，默认 claude）。`demo.startServer` 还会去掉外壳带来的 `CLAUDE*` 等变量，并把 `APPDATA` / `LOCALAPPDATA` 指进临时 HOME。

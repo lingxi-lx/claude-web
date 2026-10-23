@@ -45,6 +45,7 @@ const first = clips[0];
     <div class="sc-titlebar">
       <span class="sc-dots" aria-hidden="true"><i></i><i></i><i></i></span>
       <span class="sc-title">{`Claude Web — ${first.title}`}</span>
+      <button type="button" class="sc-pause" aria-pressed="false" aria-keyshortcuts="K">{c.pause}</button>
       <button type="button" class="sc-compare" aria-pressed="false" hidden>{c.compare}</button>
     </div>
     <div class="sc-stage" role="group" aria-label={c.stage} data-unavailable={c.unavailable}>

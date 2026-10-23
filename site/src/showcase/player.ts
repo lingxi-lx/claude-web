@@ -1,8 +1,9 @@
 // The theme showcase in the browser (spec §5.1), imported when the section comes within a screen of the viewport.
 // Everything it needs is in #sc-data (Showcase.astro); the recordings are in <base>themes/ (site/scripts/fetch-media.ts).
 // The interactions, and only these: switch (a button, ← →, 1–9 / 0) at the same second with a circle reveal; drag the
-// picture or the timeline to scrub; markers jump; compare (previous theme left, current right, in step); click or
-// space pauses; ?theme=<id>#themes. A recording that fails leaves its poster; a poster that fails, a placeholder.
+// picture or the timeline to scrub; markers jump; compare (previous theme left, current right, in step); a click,
+// space, K or the Pause toggle pauses; ?theme=<id>#themes. A webm that fails is tried once as mp4; a recording that
+// fails leaves its poster; a poster that fails, a placeholder.
 import { play as playGlyph } from '@web-themes/ticker';
 import { posterFile, videoFile } from './clips';
 import type { ShowcaseData } from './data';
@@ -28,7 +29,8 @@ export function mountShowcase(root: HTMLElement): void {
   const note = root.querySelector<HTMLElement>('.sc-note') as HTMLElement;
   const compareBtn = root.querySelector<HTMLButtonElement>('.sc-compare') as HTMLButtonElement;
   const playBtn = root.querySelector<HTMLButtonElement>('.sc-play') as HTMLButtonElement;
-  if (root.dataset.mounted || !dataEl || !stage || !split || !title || !timeline || !markers || !note || !compareBtn || !playBtn) return;
+  const pauseBtn = root.querySelector<HTMLButtonElement>('.sc-pause') as HTMLButtonElement;
+  if (root.dataset.mounted || !dataEl || !stage || !split || !title || !timeline || !markers || !note || !compareBtn || !playBtn || !pauseBtn) return;
   root.dataset.mounted = '1';
   const D = JSON.parse(dataEl.textContent ?? '{}') as ShowcaseData;
   const clips = D.clips;
@@ -36,8 +38,9 @@ export function mountShowcase(root: HTMLElement): void {
   const themeCount = clips.filter((c) => !c.describe).length;
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const small = matchMedia('(max-width: 720px), (pointer: coarse)').matches;
+  const saveData = !!(navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData;
   const ext = document.createElement('video').canPlayType(`video/webm; codecs="${D.webmCodecs}"`) === 'probably' ? 'webm' : 'mp4';
-  const srcOf = (id: string) => D.base + videoFile(id, D.locale, ext, small);
+  const srcOf = (id: string, e: 'webm' | 'mp4' = ext) => D.base + videoFile(id, D.locale, e, small);
   const posterOf = (id: string) => D.base + posterFile(id, D.locale);
 
   let index = Math.max(0, clips.findIndex((c) => c.id === clipFromSearch(location.search)));
@@ -66,19 +69,30 @@ export function mountShowcase(root: HTMLElement): void {
   const put = (v: HTMLVideoElement, before: Element) => { if (v.parentElement === stage && v.nextSibling === before) return; stage.insertBefore(v, before); };
   const run = (v: HTMLVideoElement | null) => { if (v && playing && visible) void v.play().catch(() => {}); };
 
-  function videoFor(id: string): HTMLVideoElement | null {
+  /** The recording of a clip: 'metadata' for a hover (it only warms up), 'auto' once it is chosen. */
+  function videoFor(id: string, preload: 'auto' | 'metadata' = 'auto'): HTMLVideoElement | null {
     if (failed.has(id)) return null;
     const known = videos.get(id);
-    if (known) return known;
+    if (known) { if (preload === 'auto') known.preload = 'auto'; return known; }
     const v = document.createElement('video');
     v.className = 'sc-video';
     v.muted = true;
     v.loop = true;
     v.playsInline = true;
-    v.preload = 'auto';
+    v.preload = preload;
     v.setAttribute('aria-hidden', 'true');
     v.dataset.id = id;
+    let retried = ext === 'mp4';
     v.addEventListener('error', () => {
+      if (!retried) {
+        // a webm the browser said it could play but then could not: the same clip as mp4, once, from the same second
+        retried = true;
+        const at = v.currentTime;
+        if (at > 0) once(v, 'loadedmetadata', () => { v.currentTime = at; });
+        once(v, 'loadeddata', () => { if (v === front || v === back) run(v); });
+        v.src = srcOf(id, 'mp4');
+        return;
+      }
       failed.add(id);
       videos.delete(id);
       if (front === v) front = null;
@@ -133,6 +147,15 @@ export function mountShowcase(root: HTMLElement): void {
     history.replaceState(history.state, '', `${searchWithClip(location.search, b.id)}#themes`);
     const v = old || playing ? videoFor(b.id) : null; // reduced motion and never played: posters only
     if (!v) { park(old); front = null; syncCompare(); return; }
+    // the new recording never loads (missing, broken): the old one goes too, so the new theme's poster shows
+    const failedNew = () => {
+      if (my !== gen) return;
+      if (!failed.has(b.id)) { once(v, 'error', failedNew); return; } // retrying as mp4: wait for that one
+      if (old && old !== v) park(old);
+      front = null;
+      syncCompare();
+    };
+    once(v, 'error', failedNew);
     const seeked = () => {
       if (my !== gen) return;
       put(v, split);
@@ -191,6 +214,7 @@ export function mountShowcase(root: HTMLElement): void {
   function setPlaying(on: boolean): void {
     playing = on;
     root.classList.toggle('sc-paused', !on);
+    pauseBtn.setAttribute('aria-pressed', String(!on));
     if (on && !front) { start(); return; }
     for (const v of [front, back]) if (v) { if (on) run(v); else v.pause(); }
   }
@@ -241,11 +265,12 @@ export function mountShowcase(root: HTMLElement): void {
   const centre = () => { const r = stage.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
   picks.forEach((p, i) => {
     p.addEventListener('click', (e) => switchTo(i, e.detail > 0 ? { x: e.clientX, y: e.clientY } : centre()));
-    // hovering a theme loads its recording, so the switch is instant
-    p.addEventListener('pointerenter', () => { if (!small && (playing || front)) videoFor(clips[i].id); });
+    // hovering a theme warms up its recording (metadata only: sweeping the row must not pull every clip)
+    p.addEventListener('pointerenter', () => { if (!small && !saveData && (playing || front)) videoFor(clips[i].id, 'metadata'); });
   });
   compareBtn.addEventListener('click', () => setCompare(!compare));
   playBtn.addEventListener('click', () => setPlaying(true));
+  pauseBtn.addEventListener('click', () => setPlaying(!playing));
   root.addEventListener('keydown', (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
     const t = e.target as HTMLElement;
@@ -288,8 +313,9 @@ export function mountShowcase(root: HTMLElement): void {
     else { front?.pause(); back?.pause(); }
   }, { threshold: 0.05 }).observe(root);
 
-  // posters: the current one, then the other ten; then the current recording (unless motion is reduced)
+  // posters: the current one, then the other ten (not on phones or with Save-Data); then the current recording
+  // (unless motion is reduced)
   applyClip();
-  for (const c of clips) if (c.id !== cur().id) { const im = new Image(); im.decoding = 'async'; im.src = posterOf(c.id); }
+  if (!small && !saveData) for (const c of clips) if (c.id !== cur().id) { const im = new Image(); im.decoding = 'async'; im.src = posterOf(c.id); }
   setPlaying(playing);
 }

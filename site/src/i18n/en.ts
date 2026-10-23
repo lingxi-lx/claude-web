@@ -13,6 +13,7 @@ export const EN_SITE: Record<string, string> = {
   "这是 Claude Web 自己生成的；你也可以描述一个": "Claude Web made this one itself. You can describe your own.",
   "对比": "Compare",
   "播放": "Play",
+  "暂停": "Pause",
   "浅色": "Light",
   "深色": "Dark",
   "选一套主题": "Pick a theme",

@@ -13,11 +13,19 @@ const ROOT = path.resolve(__dirname, '..');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp', '.webm': 'video/webm', '.mp4': 'video/mp4', '.json': 'application/json', '.woff2': 'font/woff2', '.ico': 'image/x-icon' };
 
-// a static server with byte ranges (a <video> seeks with them)
+// a static server with byte ranges (a <video> seeks with them). For the broken-recording case the driver can make
+// files answer 404: GET /__smoke/block?f=<prefix> blocks every file under themes/ that starts with the prefix, and
+// /__smoke/hits?f=<prefix> lists the requests that hit a blocked file.
 function serve(dist) {
+  const blocked = [];
+  const hits = [];
   return new Promise((res) => {
     const s = http.createServer((q, r) => {
-      let p = decodeURIComponent(new URL(q.url, 'http://x').pathname);
+      const u = new URL(q.url, 'http://x');
+      if (u.pathname === '/__smoke/block') { blocked.push(`/themes/${u.searchParams.get('f')}`); r.writeHead(204).end(); return; }
+      if (u.pathname === '/__smoke/hits') { r.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(hits)); return; }
+      let p = decodeURIComponent(u.pathname);
+      if (blocked.some((b) => p.startsWith(b))) { hits.push(p); r.writeHead(404).end(); return; }
       if (p.endsWith('/')) p += 'index.html';
       const f = path.join(dist, p);
       if (!f.startsWith(dist) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { r.writeHead(404).end(); return; }
@@ -51,6 +59,7 @@ async function driver() {
     if (level === 'error' || Number(level) >= 3) errors.push(String(message).slice(0, 400));
   });
   const js = (code) => wc.executeJavaScript(code, true);
+  const get = (p) => new Promise((res, rej) => http.get(process.env.SMOKE_URL + p, (r) => { let b = ''; r.on('data', (d) => { b += d; }); r.on('end', () => res(b)); }).on('error', rej));
   const waitFor = async (code, ms = 15000) => { const end = Date.now() + ms; while (Date.now() < end) { try { if (await js(code)) return true; } catch { /* navigating */ } await sleep(100); } return false; };
   const current = () => js("document.querySelector('#themes').dataset.scCurrent");
   const press = (keyCode) => { wc.sendInputEvent({ type: 'keyDown', keyCode }); if (/^[0-9]$/.test(keyCode)) wc.sendInputEvent({ type: 'char', keyCode }); wc.sendInputEvent({ type: 'keyUp', keyCode }); };
@@ -102,6 +111,35 @@ async function driver() {
     await open('/zh/?theme=ink#themes');
     if ((await current()) !== 'ink') throw new Error('?theme=ink was not picked on /zh/');
     await sleep(1500);
+
+    // keyboard pause (WCAG 2.2.2): a Pause toggle in the tab order; K in the section and the toggle's own space flip it
+    await open('/?lang=en&theme=phosphor#themes');
+    const frontVideo = "document.querySelector('#themes .sc-stage video')";
+    if (!(await waitFor(`!!${frontVideo} && ${frontVideo}.currentTime > 0.3`, 20000))) throw new Error('phosphor does not play (pause case)');
+    const pauseOk = await js("(() => { const b = document.querySelector('#themes .sc-pause'); const r = b.getBoundingClientRect(); return b.tabIndex === 0 && r.width > 0 && b.getAttribute('aria-pressed') === 'false'; })()");
+    if (!pauseOk) throw new Error('the Pause toggle is not visible, tabbable and unpressed while playing');
+    await js("document.querySelector('#themes').focus(); true");
+    press('K');
+    if (!(await waitFor(`document.querySelector('#themes .sc-pause').getAttribute('aria-pressed') === 'true' && ${frontVideo}.paused`, 3000))) throw new Error('K did not pause');
+    await js("document.querySelector('#themes .sc-pause').focus(); true");
+    press('Space');
+    if (!(await waitFor(`document.querySelector('#themes .sc-pause').getAttribute('aria-pressed') === 'false' && !${frontVideo}.paused`, 3000))) throw new Error('space on the Pause toggle did not play again');
+    console.log('pause: K and the toggle ok');
+
+    // a recording that is missing (404 for webm and mp4): the new theme's poster shows, the old recording goes
+    const before = errors.length;
+    await get('/__smoke/block?f=garden.en.webm');
+    await get('/__smoke/block?f=garden.en.mp4');
+    await js("document.querySelector('#themes .sc-pick[data-id=\"garden\"]').click(); true");
+    const posterShown = "(() => { const s = document.querySelector('#themes .sc-stage'); const p = s.querySelector('.sc-poster'); return document.querySelector('#themes').dataset.scCurrent === 'garden' && !s.querySelector('video') && p.src.endsWith('/garden.en.webp') && p.complete && p.naturalWidth > 0 && !s.hasAttribute('data-missing'); })()";
+    if (!(await waitFor(posterShown, 10000))) throw new Error(`a missing recording: ${JSON.stringify(await js("[...document.querySelectorAll('#themes .sc-stage video')].map((v) => v.dataset.id)"))} still on screen, or garden's poster not shown`);
+    const hits = JSON.parse(await get('/__smoke/hits'));
+    // webm first (where the browser plays it), then the mp4 once
+    if (!hits.some((h) => h.endsWith('.mp4'))) throw new Error(`the mp4 was never tried: ${hits.join(', ')}`);
+    console.log(`missing recording: poster shown, old video gone (requests: ${[...new Set(hits)].join(', ')})`);
+    // the browser logs the 404s themselves; nothing else may be logged
+    errors.splice(before, errors.length - before, ...errors.slice(before).filter((e) => !/404|Failed to load resource/i.test(e)));
+
     if (errors.length) throw new Error(`console errors:\n${errors.join('\n')}`);
     console.log('showcase smoke: ok');
     app.exit(0);

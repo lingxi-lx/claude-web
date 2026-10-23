@@ -64,6 +64,7 @@ export function copy(locale: Locale) {
       describeNote: tr('这是 Claude Web 自己生成的；你也可以描述一个'),
       compare: tr('对比'),
       play: tr('播放'),
+      pause: tr('暂停'),
       light: tr('浅色'),
       dark: tr('深色'),
       pick: tr('选一套主题'),

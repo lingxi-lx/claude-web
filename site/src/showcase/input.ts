@@ -5,11 +5,11 @@ export const DRAG_SLOP = 4;
 
 export type KeyMove = { kind: 'go'; index: number } | { kind: 'toggle' } | null;
 
-/** With the section focused: ← → step through the clips (wrapping), 1–9 and 0 pick the first ten, space pauses. */
+/** With focus in the section: ← → step through the clips (wrapping), 1–9 and 0 pick the first ten, space and K pause. */
 export function showcaseKey(key: string, index: number, count: number): KeyMove {
   if (key === 'ArrowRight') return { kind: 'go', index: (index + 1) % count };
   if (key === 'ArrowLeft') return { kind: 'go', index: (index - 1 + count) % count };
-  if (key === ' ') return { kind: 'toggle' };
+  if (key === ' ' || key === 'k' || key === 'K') return { kind: 'toggle' };
   if (/^[0-9]$/.test(key)) {
     const i = key === '0' ? 9 : Number(key) - 1;
     return i < count ? { kind: 'go', index: i } : null;

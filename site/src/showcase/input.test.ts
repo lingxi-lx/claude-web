@@ -13,8 +13,10 @@ describe('keys', () => {
     expect(showcaseKey('0', 5, 11)).toEqual({ kind: 'go', index: 9 });
     expect(showcaseKey('0', 0, 5)).toBeNull();
   });
-  it('space pauses; other keys are not ours', () => {
+  it('space and K pause; other keys are not ours', () => {
     expect(showcaseKey(' ', 0, 11)).toEqual({ kind: 'toggle' });
+    expect(showcaseKey('k', 0, 11)).toEqual({ kind: 'toggle' });
+    expect(showcaseKey('K', 0, 11)).toEqual({ kind: 'toggle' });
     expect(showcaseKey('d', 0, 11)).toBeNull();
     expect(showcaseKey('Enter', 0, 11)).toBeNull();
   });

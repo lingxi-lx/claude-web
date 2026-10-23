@@ -68,7 +68,10 @@ jobs:
           path: site/.media-cache
           key: site-media-${{ hashFiles('site/media.json') }}
       - run: npm test --prefix site
+      # a recording that cannot be downloaded (after retries) fails the deploy instead of shipping a poster-only showcase
       - run: npm run build --prefix site
+        env:
+          SITE_MEDIA_STRICT: '1'
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site/dist
