@@ -139,7 +139,8 @@ export function renderResponse(r: IrResponse, model: string): any {
     type: 'message',
     role: 'assistant',
     model,
-    content: r.parts.filter((p) => p.type === 'text' || p.type === 'tool_call').map(renderPart),
+    // another format's reasoning has no signature (the runner's dropEmptyBlocks unsigned case before Claude sees it)
+    content: [...(r.thinking ? [{ type: 'thinking', thinking: r.thinking, signature: '' }] : []), ...r.parts.filter((p) => p.type === 'text' || p.type === 'tool_call').map(renderPart)],
     stop_reason: STOP_OUT[r.stop],
     stop_sequence: null,
     usage: usageOut(r.usage),
@@ -207,7 +208,7 @@ export class AnthropicStreamParser implements StreamParser {
 export class AnthropicStreamRenderer implements StreamRenderer {
   private started = false;
   private index = -1;
-  private open: 'text' | 'tool' | null = null;
+  private open: 'text' | 'thinking' | 'tool' | null = null;
   private usage: IrUsage = { input: 0, output: 0 };
   private finished = false;
   constructor(private model: string) {}
@@ -236,6 +237,18 @@ export class AnthropicStreamRenderer implements StreamRenderer {
           s += sse({ type: 'content_block_start', index: this.index, content_block: { type: 'text', text: '' } }, 'content_block_start');
         }
         if (e.text) s += sse({ type: 'content_block_delta', index: this.index, delta: { type: 'text_delta', text: e.text } }, 'content_block_delta');
+        return s;
+      }
+      case 'thinking': {
+        let s = this.start();
+        if (this.open !== 'thinking') {
+          s += this.close();
+          this.open = 'thinking';
+          this.index++;
+          // no signature_delta: the engine keeps signature '' (the same as DeepSeek's own Anthropic endpoint)
+          s += sse({ type: 'content_block_start', index: this.index, content_block: { type: 'thinking', thinking: '', signature: '' } }, 'content_block_start');
+        }
+        if (e.text) s += sse({ type: 'content_block_delta', index: this.index, delta: { type: 'thinking_delta', thinking: e.text } }, 'content_block_delta');
         return s;
       }
       case 'tool': {

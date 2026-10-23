@@ -347,7 +347,8 @@ function applyStream(c: Conversation, m: any) {
       if (!m.parent_tool_use_id) c.runningTool = { id: b.id, name: b.name, since: clock() };
     }
   } else if (ev.type === 'message_delta') {
-    if (ev.usage) cur.usage = toUsage(ev.usage);
+    // only the fields it carries: Anthropic's message_delta usage is often just output_tokens (the ring reads the rest)
+    if (ev.usage) cur.usage = cur.usage ? { ...cur.usage, ...presentUsage(ev.usage) } : toUsage(ev.usage);
   } else if (ev.type === 'message_stop') {
     cur.streaming = false;
     c.streaming.delete(k);
@@ -356,6 +357,15 @@ function applyStream(c: Conversation, m: any) {
 
 function toUsage(u: any) {
   return { input: u.input_tokens ?? 0, output: u.output_tokens ?? 0, cacheRead: u.cache_read_input_tokens ?? 0, cacheWrite: u.cache_creation_input_tokens ?? 0 };
+}
+
+function presentUsage(u: any): Partial<ReturnType<typeof toUsage>> {
+  const out: Partial<ReturnType<typeof toUsage>> = {};
+  if (typeof u.input_tokens === 'number') out.input = u.input_tokens;
+  if (typeof u.output_tokens === 'number') out.output = u.output_tokens;
+  if (typeof u.cache_read_input_tokens === 'number') out.cacheRead = u.cache_read_input_tokens;
+  if (typeof u.cache_creation_input_tokens === 'number') out.cacheWrite = u.cache_creation_input_tokens;
+  return out;
 }
 
 function evict(c: Conversation, uuids: string[] | undefined) {

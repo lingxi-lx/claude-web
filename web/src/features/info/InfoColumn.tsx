@@ -15,6 +15,7 @@ import { usePrs } from '@/features/vcs/PrBar';
 import { openReview } from '@/features/workbench/right-panel';
 import { useRepoContext } from '@/features/workbench/repo-context';
 import { openExtensions } from '@/features/extensions/state';
+import { useContextUsage } from '@/features/composer/ContextMeter';
 import './info.css';
 import { connectorSummary, contextBreakdown, fmtTokens, moveCard, normInfoLayout, nudgeCard, toggleCard, type CtxBreakdown, type InfoCard, type InfoLayout } from './info-model';
 
@@ -66,7 +67,7 @@ export function InfoColumn({ sessionId }: { sessionId: string }) {
 
 function CardSummary({ card, sessionId }: { card: InfoCard; sessionId: string }) {
   const o = useStore((s) => s.open[sessionId]);
-  const cu = o?.contextUsage ?? o?.conv.contextUsage;
+  const cu = useContextUsage(sessionId);
   const stat = useMemo(() => (o ? sessionDiffStat(o.conv.items) : null), [o?.version]);
   const conns = connectorSummary(o?.info?.mcpServers as any);
   const bg = useBackground((s) => s.sessions[sessionId]);
@@ -166,8 +167,8 @@ function ContextCard({ sessionId }: { sessionId: string }) {
       .then((u: any) => { const b = contextBreakdown(u); if (b) { setData({ b, at: Date.now() }); setErr(false); } else setErr(true); })
       .catch(() => setErr(true));
   };
-  // when opened, and every time a turn ends ("refreshes when this turn ends")
-  useEffect(() => { if (live && state !== 'running') load(); }, [sessionId, state === 'idle']);
+  // when unfolded and on 刷新 only: the engine counts it with the model's API, ~15–30 requests (useContextUsage)
+  useEffect(() => { if (live) load(); }, [sessionId, live]);
   const [, tick] = useState(0);
   useEffect(() => { const t = setInterval(() => tick((n) => n + 1), 30_000); return () => clearInterval(t); }, []);
   if (!data) return <div className="ic-dim">{!live ? tr('对话开着时才有明细') : err ? tr('这个对话的 agent 不提供明细') : tr('加载中…')}</div>;
@@ -187,7 +188,7 @@ function ContextCard({ sessionId }: { sessionId: string }) {
       <CtxList title={tr('MCP 工具')} rows={b.mcpTools.map((t) => [t.name.replace(/^mcp__/, ''), t.tokens])} />
       <CtxList title={tr('记忆文件')} rows={b.memoryFiles.map((m) => [basename(m.path), m.tokens])} />
       <CtxList title={tr('自定义子代理')} rows={b.agents.map((a) => [a.name, a.tokens])} />
-      <div className="ic-dim ctx-foot">{mins < 1 ? tr('刚刚更新，这一轮结束时刷新') : tr('{n} 分钟前更新，这一轮结束时刷新', { n: mins })}</div>
+      <div className="ic-dim ctx-foot">{mins < 1 ? tr('刚刚更新') : tr('{n} 分钟前更新', { n: mins })} <button className="link" data-act="ctx-refresh" onClick={load}>{tr('刷新')}</button></div>
     </div>
   );
 }

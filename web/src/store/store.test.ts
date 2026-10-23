@@ -94,6 +94,16 @@ describe('streamed deltas', () => {
   });
 });
 
+// 2026-10-23 user report: a relay's log full of 「非流」 Claude calls at 1 t/s and 403s. Each turn end asked the engine for
+// session.contextUsage, which it counts with the model's API part by part — where the relay has no count_tokens, as
+// many non-streaming max_tokens:1 generations with no system prompt.
+describe('turn end', () => {
+  it('does not ask the engine for the context usage', () => {
+    emit({ kind: 'session.event', sessionId: 's1', message: { type: 'result', subtype: 'success', is_error: false, result: 'ok', session_id: 's1', uuid: 'r1', duration_ms: 1, num_turns: 1, total_cost_usd: 0, usage: {} } });
+    expect(fake.sent.map((r) => r.kind)).not.toContain('session.contextUsage');
+  });
+});
+
 describe('send', () => {
   it('stamps turnStartedAt on the local echo (the SDK never echoes the user message)', async () => {
     await useStore.getState().send('s1', 'hi');

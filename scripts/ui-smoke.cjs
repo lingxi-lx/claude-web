@@ -1318,7 +1318,7 @@ function driver() {
         const sidJs = JSON.stringify(E.SMOKE_SID);
         // no ring without an occupancy; below 60 % a quiet ring without the number (2026-10-15: users asked why some
         // conversations had a ring and others none) — and the numbers of the old stats bar are one menu away: ··· 本对话用量
-        const setCu = (cu) => js(`(() => { const st = window.__store; const o = st.getState().open[${sidJs}]; st.setState({ open: { ...st.getState().open, [${sidJs}]: { ...o, contextUsage: ${JSON.stringify(cu)}, version: o.version + 1 } } }); })()`);
+        const setCu = (cu) => js(`(() => { const st = window.__store; const o = st.getState().open[${sidJs}]; st.setState({ open: { ...st.getState().open, [${sidJs}]: { ...o, conv: { ...o.conv, contextUsage: ${JSON.stringify(cu)} }, version: o.version + 1 } } }); })()`);
         await setCu({ percentage: 40, totalTokens: 80_000, maxTokens: 200_000 });
         await sleep(200);
         const quiet40 = await js(`(() => { const m = document.querySelector('.pane .composer .ctx-meter'); return m ? { cls: m.className, pct: !!m.querySelector('.pct') } : null; })()`);

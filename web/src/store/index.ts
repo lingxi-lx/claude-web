@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { AgentInfo, AgentKind, AttachmentRef, EffortLevel, EngineInfo, Limits, MessageFeedback, PermissionMode, Provider, SessionFeatures, PermissionRequestEvent, RunnerState, Schedule, ServerEvent, SessionInfoSnapshot, SessionMeta, SessionSummary, SourceStatus, Workspace } from '@shared';
 import { withDefaultMode } from './default-mode';
-import { decodeAttachments, findChainUuidBefore, type ContextUsage } from '@/model/conversation';
+import { decodeAttachments, findChainUuidBefore } from '@/model/conversation';
 import { activeGroup, chatTile, deriveActive, hasLegacyLayout, initialLayout, layoutReducer, migrateLegacy, migrateWorkbench, needsSimplifiedNotice, panelToggleEffect, sanitizeLayout, SIMPLIFIED_NOTICE_KEY, type LayoutAction, type LayoutState, type Tile } from '@/model/layout';
 import { PaneContext, winId } from './paneContext';
 import { useContext } from 'react';
@@ -13,7 +13,7 @@ export const THEMES = ['dark', 'light', 'dracula', 'nord', 'tokyo-night', 'paper
 export type Theme = (typeof THEMES)[number];
 import { ws } from '@/ws/client';
 import { desktop } from '@/desktop';
-import { contextUsageOf, applyMessage, applyTranscript, createConversation, prependTranscript, walkTools, type Conversation } from '@/model/conversation';
+import { applyMessage, applyTranscript, createConversation, prependTranscript, walkTools, type Conversation } from '@/model/conversation';
 import { staleStopResult, stopFoundNothing } from './stop';
 import { EXTERNAL_LIVE_MS, externalLive, nextReadAt, readsFromOutside, shownSessions } from './external';
 import { isImportedSessionId } from '@/util';
@@ -56,7 +56,6 @@ export interface OpenSession {
   queue: QueuedMessage[]; // messages typed while running
   draft: string;
   feedback: Record<string, MessageFeedback>; // messageId -> rating (meta.json)
-  contextUsage?: ContextUsage;
   lastSent?: QueuedMessage; // for retry / auto-continue
   /** library sessions: cursor for the next OLDER page (`library.read`); absent = nothing older */
   historyCursor?: string;
@@ -190,7 +189,6 @@ interface State {
   loadFeedback(sessionId: string): Promise<void>;
   saveDraft(key: string, text: string): void;
   loadDraft(key: string): Promise<string>;
-  refreshContextUsage(sessionId: string): Promise<void>;
   interrupt(sessionId: string): Promise<void>;
   respondPermission(requestId: string, response: any): Promise<void>;
   loadSubagent(sessionId: string, toolUseId: string): Promise<void>;
@@ -614,7 +612,11 @@ export const useStore = create<State>((set, get) => ({
         case 'gateway.promptHeavy':
           // Gemini web / WorkBuddy re-send the whole prompt every turn and have a byte ceiling: past it the model
           // gets an attachment (slow) and eventually a truncated tail. Said once per conversation, server-side.
-          get().toast(tr('这条对话已经超过 {kb} KB，Gemini 网页会先上传附件再回答，超过太多还会被截断。建议输入 /compact 或开一个新对话。', { kb: Math.round(e.bytes / 1024) }));
+          get().toast(tr('「{title}」已经超过 {kb} KB。{via} 每轮都要重发整段对话，太长会先上传附件再回答，再长还会被截断。建议输入 /compact 或开一个新对话。', {
+            title: get().sessions.find((x) => x.sessionId === e.sessionId)?.title ?? tr('这条对话'),
+            kb: Math.round(e.bytes / 1024),
+            via: e.via === 'workbuddy' ? 'WorkBuddy' : tr('Gemini 网页'),
+          }));
           break;
         case 'sessions.changed':
           void get().refreshSessions();
@@ -622,6 +624,12 @@ export const useStore = create<State>((set, get) => ({
         case 'transcripts.changed':
           get().externalChanged(e.sessionIds);
           break;
+        case 'session.caughtUp': {
+          // said in DeepSeek Harness since, now in this conversation: a view of it re-reads (not mid-turn: its events own it)
+          const o = get().open[e.sessionId];
+          if (o && !o.loading && o.state !== 'running' && o.state !== 'waiting') void get().loadHistory(e.sessionId, { focus: false }).catch(() => {});
+          break;
+        }
         case 'library.changed': {
           // an open session that was listed before and is gone afterwards was deleted (here or elsewhere)
           const before = new Set(get().sessions.map((s) => s.sessionId));
@@ -683,10 +691,15 @@ export const useStore = create<State>((set, get) => ({
     // caller chose one — resumes, forks and reopens keep their own (they carry a sessionId)
     const p = withDefaultMode(p0, get().settings);
     const sentAt = Date.now();
-    const r = await ws.request<{ sessionId: string; info: SessionInfoSnapshot; history: any[]; pending: PermissionRequestEvent[] }>({ kind: 'session.open', params: p });
+    const r = await ws.request<{ sessionId: string; info: SessionInfoSnapshot; history: any[]; pending: PermissionRequestEvent[]; caughtUp?: number }>({ kind: 'session.open', params: p });
     const existing = p.sessionId && !p.fork && !p.resumeAt ? get().open[p.sessionId] : undefined;
-    const conv = existing?.conv ?? createConversation();
-    if (existing) {
+    // it goes on under another id (a DeepSeek Harness conversation → the Claude conversation that replays it): its
+    // tabs follow, and it shows that conversation's own transcript — its ids are the rewind / fork anchors now.
+    // `caughtUp`: what was said in the harness since was added to its transcript — the history shown is old
+    const moved = !!existing && r.sessionId !== p.sessionId;
+    const reload = moved || (!!existing && !!r.caughtUp);
+    const conv = existing && !reload ? existing.conv : createConversation();
+    if (existing && !reload) {
       // history already loaded from transcript; only apply live messages we have not seen
       // (runner history is replayed from spawn — transcript already contains them, so skip when history was loaded)
       if (!existing.conv.items.length) for (const m of r.history) applyMessage(conv, m);
@@ -694,7 +707,7 @@ export const useStore = create<State>((set, get) => ({
       for (const m of r.history) applyMessage(conv, m);
     }
     const worktree = p.worktree ?? (existing ? existing.worktree : undefined);
-    const o: OpenSession = { sessionId: r.sessionId, cwd: p.cwd, ...(worktree ? { worktree } : {}), conv, version: (existing?.version ?? 0) + 1, state: r.info.state, info: r.info, pending: r.pending, loading: false, queue: existing?.queue ?? [], draft: existing?.draft ?? '', feedback: existing?.feedback ?? {}, contextUsage: existing?.contextUsage, lastSent: existing?.lastSent };
+    const o: OpenSession = { sessionId: r.sessionId, cwd: p.cwd, ...(worktree ? { worktree } : {}), conv, version: (existing?.version ?? 0) + 1, state: r.info.state, info: r.info, pending: r.pending, loading: false, queue: existing?.queue ?? [], draft: existing?.draft ?? '', feedback: existing?.feedback ?? {}, lastSent: existing?.lastSent };
     set((s) => {
       const open = { ...s.open };
       if (p.sessionId && p.sessionId !== r.sessionId && !p.fork && !p.resumeAt) delete open[p.sessionId];
@@ -708,6 +721,16 @@ export const useStore = create<State>((set, get) => ({
       else if (target !== 'none') get().openInPane(r.sessionId, p.fork || p.resumeAt ? 'tab' : 'replace');
     });
     if (!p.sessionId) void get().refreshSessions();
+    if (reload) {
+      if (moved) {
+        get().dispatchLayout({ t: 'session.rekey', from: p.sessionId!, to: r.sessionId });
+        // what the server recorded (sessionMeta is read once at start): send() catches the new one up from here on
+        set((s) => ({ sessionMeta: { ...s.sessionMeta, [p.sessionId!]: { ...s.sessionMeta[p.sessionId!], continuedAs: r.sessionId }, [r.sessionId]: { ...s.sessionMeta[r.sessionId], continuedFrom: p.sessionId! } } }));
+      }
+      // awaited: a send right after this must land after the history, not under it
+      await get().refreshSessions().catch(() => {});
+      await get().loadHistory(r.sessionId, { focus: false });
+    }
     // load transcript in the background for resumed / forked sessions with empty conv
     if (p.sessionId && !existing) void get().loadHistory(r.sessionId);
     if (p.fork || p.resumeAt) void get().refreshSessions();
@@ -718,26 +741,12 @@ export const useStore = create<State>((set, get) => ({
   onTurnEnd(sessionId: string) {
     const o = get().open[sessionId];
     if (!o) return;
-    void get().refreshContextUsage(sessionId);
     const res = o.conv.lastResult;
     // auto-continue when a quota / throttle error ends the turn and the user opted in
     if (res?.isError && (res.errorKind === 'quota' || res.errorKind === 'throttled') && get().settings.autoContinueOnReset && o.lastSent) {
       const resetsAt = o.conv.rateLimit?.resetsAt;
       const at = resetsAt ? resetsAt * (resetsAt < 1e12 ? 1000 : 1) + 5000 : Date.now() + (res.errorKind === 'throttled' ? 60_000 : 30 * 60_000);
       armAutoContinue(sessionId, at);
-    }
-  },
-
-  async refreshContextUsage(sessionId) {
-    const o = get().open[sessionId];
-    if (!o || o.state === 'history' || o.state === 'closed' || o.state === 'error') return;
-    try {
-      const u: any = await ws.request({ kind: 'session.contextUsage', sessionId, detail: 'summary' });
-      if (!u) return;
-      const cu = contextUsageOf(u);
-      set((s) => bump(s, sessionId, (x) => { x.contextUsage = cu; x.conv.contextUsage = cu; }));
-    } catch {
-      /* runtime without the control request */
     }
   },
 
@@ -972,14 +981,22 @@ export const useStore = create<State>((set, get) => ({
     return ws.request({ ...payload, kind: `library.${op}` } as any);
   },
 
-  async send(sessionId, text, images, steer = false, attachments) {
+  async send(sessionId0, text, images, steer = false, attachments) {
+    let sessionId = sessionId0;
     const o = get().open[sessionId];
     if (!o) return;
     if (o.state === 'history' || o.state === 'closed' || o.state === 'error') {
       // A reaped / crashed / history session reopens with what its chips show (final review §9 #1): the user's pick
       // there, else what it last had live (model, effort, permission mode, deep orchestration, features — without
       // them the resume silently fell back to the defaults), else its transcript's model and mode.
-      await get().openSession({ sessionId, cwd: o.cwd, ...resumeParams(o, get().sessionMeta[sessionId]) }, 'none');
+      // A DeepSeek Harness conversation answers with the Claude conversation it goes on in: the send goes there.
+      sessionId = await get().openSession({ sessionId, cwd: o.cwd, ...resumeParams(o, get().sessionMeta[sessionId]) }, 'none');
+      if (sessionId !== sessionId0) get().saveDraft(sessionId0, '');
+    } else if ((o.state === 'idle' || o.state === 'starting') && get().sessionMeta?.[sessionId]?.continuedFrom) {
+      // it went on from DeepSeek Harness, whose process is up (or coming up): what was said there since goes in first
+      // (the process restarts with it), and shows above this message
+      const n = await ws.request<number>({ kind: 'library.catchUp', sessionId }).catch(() => 0);
+      if (n) await get().loadHistory(sessionId, { focus: false });
     }
     const cur = get().open[sessionId];
     if ((cur.state === 'running' || cur.state === 'waiting') && !steer) {

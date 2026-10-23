@@ -1,7 +1,8 @@
 // Protocol-neutral intermediate representation for cross-protocol translation.
 // Inbound parsers produce IrRequest; outbound renderers consume it. Upstream responses come back as
 // IrResponse (non-stream) or a sequence of IrEvent (stream) and are rendered in the inbound shape.
-// Thinking / reasoning is dropped on purpose: signatures never survive a provider change.
+// Thinking / reasoning in requests is dropped on purpose: signatures never survive a provider change. Responses carry
+// it one way (an OpenAI-format upstream's reasoning_content → an Anthropic-format client's thinking block, unsigned).
 import crypto from 'node:crypto';
 
 export type IrPart =
@@ -49,17 +50,21 @@ export interface IrResponse {
   id: string;
   model: string;
   parts: IrPart[]; // text / tool_call only
+  /** The model's reasoning (non-blank), shown as a thinking block where the client's format has one. */
+  thinking?: string;
   stop: IrStop;
   usage: IrUsage;
 }
 
 /**
  * Streaming events. Blocks are sequential: `text` appends to the current text block (opening one when
- * the previous block was a tool call), `tool` opens a new tool-call block, `args` appends JSON to it.
+ * the previous block was a tool call), `tool` opens a new tool-call block, `args` appends JSON to it, `thinking`
+ * appends to the current thinking block (opening one). Parsers only emit `thinking` once the reasoning is non-blank.
  */
 export type IrEvent =
   | { t: 'start'; id: string; model: string }
   | { t: 'text'; text: string }
+  | { t: 'thinking'; text: string }
   | { t: 'tool'; id: string; name: string }
   | { t: 'args'; json: string }
   | { t: 'usage'; usage: Partial<IrUsage> }
@@ -119,6 +124,7 @@ export function collect(events: IrEvent[]): IrResponse {
       cur.text += e.text;
     } else if (e.t === 'tool') { closeTool(); cur = { type: 'tool_call', id: e.id, name: e.name, args: {} }; r.parts.push(cur); }
     else if (e.t === 'args') args += e.json;
+    else if (e.t === 'thinking') r.thinking = (r.thinking ?? '') + e.text;
     else if (e.t === 'usage') Object.assign(r.usage, e.usage);
     else if (e.t === 'end') r.stop = e.stop;
   }

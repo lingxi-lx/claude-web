@@ -8,12 +8,34 @@ import { estimateContext, meterMode, ringLevel, sessionTotals, usageLines } from
 import { resumeView } from '@/store/reopen';
 import { BAR_ID } from './ids';
 import { tr } from '@/i18n';
+import type { ContextUsage } from '@/model/conversation';
 
 /** The header ··· 「本对话用量」 asks the composer of its tile for the card (`showUsageCard`). */
 export const USAGE_CARD_EVENT = 'cw:usage-card';
 export interface UsageCardDetail { tileId: string }
 export function showUsageCard(tileId: string): void {
   window.dispatchEvent(new CustomEvent<UsageCardDetail>(USAGE_CARD_EVENT, { detail: { tileId } }));
+}
+
+/**
+ * How full a conversation's context is: what the process put on its messages, else read off the last answer's usage.
+ * Not asked of the engine: its getContextUsage counts tokens part by part with the model's API (~15–30 requests), and
+ * where a relay has no count_tokens the engine fell back to as many non-streaming generations with no system prompt —
+ * asked at every turn end, that was a relay's log full of 「非流」 Claude calls and its fingerprint check's 403s
+ * (2026-10-23 user report). The full breakdown is only fetched when the 信息栏's context card asks for it.
+ */
+export function useContextUsage(sessionId: string): ContextUsage | undefined {
+  const o = useStore((s) => s.open[sessionId]);
+  const providers = useStore((s) => s.providers);
+  const recorded = useStore((s) => s.sessionMeta[sessionId]);
+  return useMemo(() => {
+    if (!o) return undefined;
+    if (o.conv.contextUsage) return o.conv.contextUsage;
+    const v = resumeView(o, recorded);
+    // another Claude account is the account: its windows are the account's (200K, 1M for a [1m] pick)
+    const p = v.providerId !== 'claude' ? providers.find((x) => x.id === v.providerId) : undefined;
+    return estimateContext(o.conv.items, { provider: p?.type === 'claude-account' ? undefined : p, model: v.model });
+  }, [o?.version, providers, recorded]);
 }
 
 /**
@@ -55,18 +77,7 @@ export function ContextMeter({ sessionId }: { sessionId: string }) {
     return () => window.removeEventListener(USAGE_CARD_EVENT, on);
   }, [pane?.tileId]);
   const totals = useMemo(() => (o ? sessionTotals(o.conv.items) : null), [o?.version]);
-  const providers = useStore((s) => s.providers);
-  const recorded = useStore((s) => s.sessionMeta[sessionId]);
-  const notRunning = !o || o.state === 'history' || o.state === 'closed' || o.state === 'error';
-  // not running here: what the next send starts from, read off the last answer (the process reports it otherwise)
-  const estimate = useMemo(() => {
-    if (!o || !notRunning || o.contextUsage || o.conv.contextUsage) return undefined;
-    const v = resumeView(o, recorded);
-    // another Claude account is the account: its windows are the account's (200K, 1M for a [1m] pick)
-    const p = v.providerId !== 'claude' ? providers.find((x) => x.id === v.providerId) : undefined;
-    return estimateContext(o.conv.items, { provider: p?.type === 'claude-account' ? undefined : p, model: v.model });
-  }, [o?.version, notRunning, providers, recorded]);
-  const cu = o ? o.contextUsage ?? o.conv.contextUsage ?? estimate : undefined;
+  const cu = useContextUsage(sessionId);
   const pct = cu?.percentage;
   const level = ringLevel(pct);
   if (!o || !totals) return null;

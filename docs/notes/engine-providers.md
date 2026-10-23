@@ -25,3 +25,7 @@
   claude-web 给 ccb 设 `summarized`，官方二进制用 `--thinking-display summarized`。原因见 `recording-ux` 笔记「第三轮」。cw.5 已发（2026-10-17 预发布 Release `engine-v2.8.4-cw.5`，fork 提交 ad1fc7e9 + d0c44dec 已推；不登录下载的 sha512 和 lock 一致，`releases/latest` 仍是 v0.2.6）。
   真中转实测：两个中转都回思考文字（官方二进制 + super-nb.me、cw.5 + aizhongzhuan.cc）；aizhongzhuan.cc 用 cw.4 也回——那个中转自己就给摘要，
   空思考只出在直连 Anthropic 的路上（官方 Key 当时余额不足，没能拿真回答对照；请求里带上 display 是用假接口确认的）。super-nb.me 只收官方客户端（ccb 被它判成「请求被改写」）。
+- **cw.6**（2026-10-23 预发布 Release `engine-v2.8.4-cw.6`）：数 token 没有 `count_tokens` 时本地估、不再发非流式 `max_tokens: 1` 请求（中转日志里的「非流」和 403，
+  见「界面改版 阶段 3」的「上下文小环不问引擎」）；gpt-6 起算 OpenAI 的推理模型（见「思考强度」笔记）。查「中转上出现非流式请求」时，自己起一个假中转记每个请求
+  （path、`stream`、`max_tokens`、有没有 `system`），引擎经 SDK 跑一轮再调 `getContextUsage()`——引擎里真正非流式的只有 `executeNonStreamingRequest`
+  （流出错后的回退，`CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK` 关）、`sideQuery`、数 token 的回退、额度 / 模型检查；`queryModelWithoutStreaming` 其实是流式的。

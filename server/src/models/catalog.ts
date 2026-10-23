@@ -279,7 +279,9 @@ type CapsProvider = { type: ProviderType; modelEfforts?: Record<string, { levels
 export interface ModelCaps { levels: ClaudeEffort[]; default?: ClaudeEffort; reasoning: boolean; native: boolean }
 
 const baseName = (model: string) => { const m = model.toLowerCase(); return m.slice(m.lastIndexOf('/') + 1); };
-const openAIReasons = (model: string) => { const b = baseName(model); return /^(o[134]|gpt-5)/.test(b) || b.includes('deepseek') || b.includes('qwq') || b.includes('reasoner'); };
+/** OpenAI's own reasoning models: o1 / o3 / o4, gpt-5 and every later gpt (the engine's effortPlan.ts / requestBody.ts have the same rule). */
+export const OPENAI_REASONING = /^(o[134]|gpt-(?:[5-9]|[1-9]\d))/;
+const openAIReasons = (model: string) => { const b = baseName(model); return OPENAI_REASONING.test(b) || b.includes('deepseek') || b.includes('qwq') || b.includes('reasoner'); };
 
 /** What the table knows about a model by name (nothing = undefined). */
 function tableCaps(model: string): { levels: ClaudeEffort[]; default?: ClaudeEffort } | undefined {
@@ -287,7 +289,7 @@ function tableCaps(model: string): { levels: ClaudeEffort[]; default?: ClaudeEff
   const v = claudeVersion(model);
   if (v !== undefined) return { levels: claudeLevels(model, v) };
   if (m.includes('deepseek')) return { levels: ['low', 'high', 'max'], default: 'high' };
-  if (/^(o[134]|gpt-5)/.test(baseName(model))) return { levels: ['low', 'medium', 'high'] };
+  if (OPENAI_REASONING.test(baseName(model))) return { levels: ['low', 'medium', 'high'] };
   if (m.includes('qwq') || m.includes('reasoner')) return { levels: ['low', 'medium', 'high'] };
   if (m.includes('gemini-3')) return { levels: ['low', 'high'] };
   if (m.includes('gemini-2.5')) return { levels: CLAUDE_ORDER };

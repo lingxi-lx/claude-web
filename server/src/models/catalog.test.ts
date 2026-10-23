@@ -129,6 +129,10 @@ describe('what each model can do (same rules as the engine: claude-web-engine ef
     expect(modelCaps(undefined, 'claude-opus-5-5')).toMatchObject({ levels: ['low', 'medium', 'high', 'xhigh', 'max'], reasoning: true, native: true });
     expect(modelCaps({ type: 'anthropic' }, 'claude-3-7-sonnet')).toMatchObject({ reasoning: true, native: true });
     expect(modelCaps({ type: 'openai' }, 'o3-mini')).toMatchObject({ levels: ['low', 'medium', 'high'], native: true });
+    // 2026-10-23: a relay's log showed gpt-6-astra with no 推理强度 — the rule stopped at gpt-5
+    expect(modelCaps({ type: 'openai' }, 'gpt-6-astra')).toMatchObject({ levels: ['low', 'medium', 'high'], native: true, reasoning: true });
+    expect(modelCaps({ type: 'openai' }, 'gpt-10')).toMatchObject({ native: true });
+    expect(modelCaps({ type: 'openai' }, 'gpt-4o')).toMatchObject({ native: false, reasoning: false });
     expect(modelCaps({ type: 'openai' }, 'deepseek-v4-pro')).toMatchObject({ levels: ['low', 'high', 'max'], default: 'high', native: true });
     expect(modelCaps({ type: 'gemini' }, 'gemini-3-pro')).toMatchObject({ levels: ['low', 'high'], native: true });
     expect(modelCaps({ type: 'gemini' }, 'gemini-2.5-flash')).toMatchObject({ levels: ['low', 'medium', 'high', 'xhigh', 'max'], native: true });
@@ -170,6 +174,7 @@ describe('what each model can do (same rules as the engine: claude-web-engine ef
     expect(env['deepseek-flash']).toMatchObject({ reasoning: true });
     expect(env['gpt-4o']).toBeUndefined();
     expect(JSON.parse(webCapsEnv({ type: 'gateway' }, ['gpt-5']))['gpt-5']).toEqual({ native: false });
+    expect(JSON.parse(webCapsEnv(relay, ['gpt-6-astra']))['gpt-6-astra']).toEqual({ levels: ['low', 'medium', 'high'], reasoning: true });
     expect(JSON.parse(webCapsEnv({ type: 'anthropic' }, ['claude-sonnet-4-6']))['claude-sonnet-4-6']).toEqual({ levels: ['low', 'medium', 'high', 'max'], reasoning: true });
   });
 

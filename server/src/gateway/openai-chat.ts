@@ -63,7 +63,7 @@ export function parseRequest(body: any): IrRequest {
 const partOut = (p: IrPart): any => p.type === 'text' ? { type: 'text', text: p.text } : p.type === 'image' ? { type: 'image_url', image_url: { url: p.data ? `data:${p.mediaType};base64,${p.data}` : p.url } } : null;
 
 /** Reasoning-family models reject `max_tokens` and want `max_completion_tokens` (and no sampling knobs on Responses). */
-export const wantsCompletionTokens = (model: string) => /^(o\d|gpt-5)/i.test(model);
+export const wantsCompletionTokens = (model: string) => /^(o\d|gpt-(?:[5-9]|[1-9]\d))/i.test(model);
 
 export interface ChatRenderOpts {
   /** send `r.cacheKey` as `prompt_cache_key` (off once the member rejected the field) */
@@ -156,12 +156,16 @@ export const usageOut = (u: IrUsage) => {
   return { prompt_tokens: prompt, completion_tokens: u.output, total_tokens: prompt + u.output, prompt_tokens_details: { cached_tokens: u.cacheRead ?? 0, ...(u.cacheWrite ? { cache_write_tokens: u.cacheWrite } : {}) } };
 };
 
+/** A chat message's / delta's reasoning: `reasoning_content` (DeepSeek, Qwen, Kimi, WorkBuddy) or `reasoning` (OpenRouter, vLLM). */
+const reasoningOf = (m: any): string => (typeof m?.reasoning_content === 'string' ? m.reasoning_content : typeof m?.reasoning === 'string' ? m.reasoning : '');
+
 export function parseResponse(j: any): IrResponse {
   const ch = j?.choices?.[0] ?? {};
   const msg = ch.message ?? {};
   const parts: IrPart[] = contentParts(msg.content).filter((p) => p.type === 'text');
+  const thinking = reasoningOf(msg).trim() ? reasoningOf(msg) : undefined;
   for (const tc of msg.tool_calls ?? []) if (tc?.function) parts.push({ type: 'tool_call', id: tc.id ?? newId('call_'), name: tc.function.name, args: safeJson(tc.function.arguments) });
-  return { id: j?.id ?? newId('chatcmpl-'), model: j?.model ?? '', parts, stop: STOP_IN[ch.finish_reason] ?? (parts.some((p) => p.type === 'tool_call') ? 'tool_use' : 'end'), usage: { input: 0, output: 0, ...usageIn(j?.usage) } };
+  return { id: j?.id ?? newId('chatcmpl-'), model: j?.model ?? '', parts, ...(thinking ? { thinking } : {}), stop: STOP_IN[ch.finish_reason] ?? (parts.some((p) => p.type === 'tool_call') ? 'tool_use' : 'end'), usage: { input: 0, output: 0, ...usageIn(j?.usage) } };
 }
 
 export function renderResponse(r: IrResponse, model: string): any {
@@ -189,6 +193,7 @@ export class ChatStreamParser implements StreamParser {
   private stop: IrStop | null = null;
   private sawTool = false;
   private done = false;
+  private reasoned = false; // reasoning before its first non-blank chunk is left out (an all-blank thinking block is refused)
   feed(e: { event?: string; data: string }): IrEvent[] {
     if (this.done) return [];
     if (e.data.trim() === '[DONE]') return this.finish();
@@ -199,6 +204,8 @@ export class ChatStreamParser implements StreamParser {
     if (!this.started) { this.started = true; out.push({ t: 'start', id: j.id ?? newId('chatcmpl-'), model: j.model ?? '' }); }
     const ch = j.choices?.[0];
     const d = ch?.delta ?? {};
+    const r = reasoningOf(d);
+    if (r && (this.reasoned || r.trim())) { this.reasoned = true; out.push({ t: 'thinking', text: r }); }
     if (typeof d.content === 'string' && d.content) out.push({ t: 'text', text: d.content });
     for (const tc of d.tool_calls ?? []) {
       const idx = typeof tc.index === 'number' ? tc.index : tc.id ? this.toolIndex + 1 : this.toolIndex;

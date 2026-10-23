@@ -13,7 +13,7 @@
   （默认开，标题栏 ⓘ 和 设置 → 外观 都能关）；关掉后标题栏的「+N −M」回来（信息栏开着时它在「改动」卡里）。
 - 卡片顺序 / 折叠存 `ui.infoCards`（`info-model.ts` 的 `normInfoLayout`：未知的丢掉、新卡补在后面，上下文默认折叠）。拖抓手换位置，
   标题上 Alt+↑↓ 也能挪。
-- 上下文卡：`session.contextUsage` 的 `full`（SDK `getContextUsage`），这一轮结束时刷新；分类条颜色是 `.sw-0…7`，不用 SDK 给的颜色名。
+- 上下文卡：`session.contextUsage` 的 `full`（SDK `getContextUsage`），展开时取一次、「刷新」再取（2026-10-23 起不再每轮结束自动取，见「界面改版 阶段 3」的「上下文小环不问引擎」）；分类条颜色是 `.sw-0…7`，不用 SDK 给的颜色名。
 - 改动卡的「建 PR」是给 Claude 发一句话（提交、推送、`gh pr create`），只在空闲时能点；已有 PR 就是链接（`usePrs`）。
 - 后台任务卡：`useBackground` 里在跑的，秒数每秒走，停止走 `session.stopTask`。
 

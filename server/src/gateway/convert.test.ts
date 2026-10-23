@@ -62,6 +62,8 @@ describe('anthropic in → openai out', () => {
     expect(JSON.stringify(body)).not.toContain('thinking');
     // reasoning-family models take max_completion_tokens
     expect(buildOutbound('openai', { ...ir, model: 'gpt-5' }).body.max_completion_tokens).toBe(1024);
+    expect(buildOutbound('openai', { ...ir, model: 'gpt-6-astra' }).body.max_completion_tokens).toBe(1024);
+    expect(buildOutbound('openai', { ...ir, model: 'gpt-4.1' }).body.max_completion_tokens).toBeUndefined();
   });
   it('non-stream response', () => {
     const ir = parseOutboundResponse('openai', { id: 'chatcmpl-1', object: 'chat.completion', model: 'gpt-4.1', choices: [{ index: 0, message: { role: 'assistant', content: 'Hi', tool_calls: [{ id: 'call_9', type: 'function', function: { name: 'get_weather', arguments: '{"city":"Rome"}' } }] }, finish_reason: 'tool_calls' }], usage: { prompt_tokens: 100, completion_tokens: 7, total_tokens: 107, prompt_tokens_details: { cached_tokens: 40 } } }, 'gpt-4.1');
@@ -95,6 +97,37 @@ describe('anthropic in → openai out', () => {
     expect(json[9].delta.stop_reason).toBe('tool_use');
     expect(json[9].usage.output_tokens).toBe(5);
     expect(json[9].usage.input_tokens).toBe(12);
+  });
+  // 2026-10-23 user report: DeepSeek through the WorkBuddy component (OpenAI format) showed no thinking — its
+  // reasoning_content was dropped. It comes back as a thinking block (no signature: dropEmptyBlocks' unsigned case).
+  it('stream: reasoning_content (DeepSeek / Qwen) or reasoning (OpenRouter) → a thinking block before the text', () => {
+    for (const field of ['reasoning_content', 'reasoning']) {
+      const up = sse([
+        { id: 'c1', object: 'chat.completion.chunk', choices: [{ index: 0, delta: { role: 'assistant', content: '', [field]: '\n' }, finish_reason: null }] },
+        { id: 'c1', object: 'chat.completion.chunk', choices: [{ index: 0, delta: { [field]: 'Let me ' }, finish_reason: null }] },
+        { id: 'c1', object: 'chat.completion.chunk', choices: [{ index: 0, delta: { [field]: 'think.' }, finish_reason: null }] },
+        { id: 'c1', object: 'chat.completion.chunk', choices: [{ index: 0, delta: { content: 'Hi' }, finish_reason: null }] },
+        { id: 'c1', object: 'chat.completion.chunk', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] },
+        '[DONE]',
+      ]);
+      const ir = run('openai', up);
+      const r = inboundStreamRenderer('anthropic', 'deepseek-v4', { includeUsage: false, customTools: new Set() });
+      const evs = events(ir.map((e) => r.push(e)).join('') + r.end());
+      expect(evs.map((e) => e.event)).toEqual(['message_start', 'content_block_start', 'content_block_delta', 'content_block_delta', 'content_block_stop', 'content_block_start', 'content_block_delta', 'content_block_stop', 'message_delta', 'message_stop']);
+      const json = evs.map((e) => JSON.parse(e.data));
+      expect(json[1]).toMatchObject({ index: 0, content_block: { type: 'thinking', thinking: '', signature: '' } });
+      // the blank first chunk is not a block of its own (an all-blank thinking block is refused by Claude later)
+      expect([json[2].delta, json[3].delta]).toEqual([{ type: 'thinking_delta', thinking: 'Let me ' }, { type: 'thinking_delta', thinking: 'think.' }]);
+      expect(json[5]).toMatchObject({ index: 1, content_block: { type: 'text', text: '' } });
+      expect(json[6].delta).toEqual({ type: 'text_delta', text: 'Hi' });
+      expect(collect(ir).thinking).toBe('Let me think.');
+    }
+  });
+  it('non-stream: message.reasoning_content → a thinking block first', () => {
+    const ir = parseOutboundResponse('openai', { id: 'c2', object: 'chat.completion', model: 'deepseek-v4', choices: [{ index: 0, message: { role: 'assistant', content: 'Hi', reasoning_content: 'Because.' }, finish_reason: 'stop' }] }, 'deepseek-v4');
+    expect(renderInboundResponse('anthropic', ir, 'deepseek-v4', new Set()).content).toEqual([{ type: 'thinking', thinking: 'Because.', signature: '' }, { type: 'text', text: 'Hi' }]);
+    const blank = parseOutboundResponse('openai', { id: 'c3', object: 'chat.completion', model: 'm', choices: [{ index: 0, message: { role: 'assistant', content: 'Hi', reasoning_content: ' \n' }, finish_reason: 'stop' }] }, 'm');
+    expect(renderInboundResponse('anthropic', blank, 'm', new Set()).content).toEqual([{ type: 'text', text: 'Hi' }]);
   });
 });
 

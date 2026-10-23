@@ -18,5 +18,19 @@ spec §5.4、§5.5（定案 1：模型菜单保持平铺）、mock-composer.png�
 
 - **权限模式记在对话上**：「完全放开」几轮后变回「每步询问」——进程闲置回收、应用重启、手机上接着聊时，重开的窗口没有 live info，`resumeView()` 退回 `'default'`，服务端 runner 也是 `params.permissionMode ?? 'default'`。现在 `RunnerPool.open` 没给模式时用 `SessionMeta.permissionMode`（runner 每次 `info` 里模式变了就记，包括 CLI 自己退出 plan 模式），再没有就用 `ui.defaultMode`；fork 不继承记录。`resumeView(o, meta, defaultMode)` 同样的顺序，chip 显示的就是重开后真的模式。IM / 定时任务 / 目标都走 pool，一起修好。测试：`pool.test.ts`、`reopen.test.ts`、`server/ws-phase29.mjs` 第一段。
 - **上下文小环一直在**（朋友：只有一个对话有，其它没有——以前 < 60% 不显示）：`meterMode()` 只要知道占用就出环，< 60% 是淡的一圈、不带数字；没在运行的对话没有进程报占用，`stats.ts estimateContext()` 按最后一条顶层回答的 usage（input + 缓存读写 + output）对模型窗口估（供应商：`contextWindowFor`；账号 / 其它 Claude 账号：`[1m]` 才 1M，否则 200K，已经超过 200K 就算 1M），卡片里写「上下文（按上一轮估）」。欢迎页照旧没有环。
+- **上下文小环不问引擎**（2026-10-23 用户报告：中转日志里满篇「非流 1 t/s」的 Claude 请求、常 403、断连；只有 Claude 模型有，DeepSeek / Grok 没有）：
+  以前每轮结束 `store.refreshContextUsage` 发 `session.contextUsage`（SDK `getContextUsage`），引擎按部分数 token——系统提示、每个工具、
+  每个记忆文件、每个 agent、消息……一次约 15–30 个 `count_tokens`；中转没有 `count_tokens` 时 ccb 每个都退回一个**非流式、`max_tokens: 1`、
+  没有系统提示词**的 `/v1/messages`（模型是 haiku 的映射，中转上常常就是主模型）——没有 Claude Code 主系统提示的请求过不了中转的指纹
+  （「引擎与供应商档案」的中转指纹 ③），日志里就是「非流 1 t/s」和 403，还按 Opus 收了这些输入的钱。官方二进制只发 `count_tokens`、失败就本地估。
+  实测（`count_tokens` 回 404 的假中转，引擎经 SDK 跑一轮再 `getContextUsage`）：ccb cw.5 = 29 个 count_tokens + 29 个非流式；官方 = 15 个
+  count_tokens、0 个非流式；cw.6 = 29 个 count_tokens、0 个非流式。修法两头：引擎 cw.6 不再走那个回退（fork 的 `CLAUDE-WEB.md`）；
+  claude-web 的环 / 状态条 / 信息栏摘要统一用 `ContextMeter.tsx` 的 `useContextUsage()` = 进程放在消息上的占用，否则 `estimateContext()`
+  （在跑的对话也一样，就是官方 CLI 小指示的算法），`refreshContextUsage` 和 `OpenSession.contextUsage` 删了；信息栏的上下文卡只在展开时取一次
+  `full`、点「刷新」再取。`store.test.ts`「turn end」查一轮结束不发 `session.contextUsage`。ui-smoke 的环检查改设 `conv.contextUsage`。
+  model 切换前的 `fitBeforeSwitch`（服务端）还会问一次——只在换模型时。
+  **连带的坑**（独立审查抓到）：reducer 收到 `message_delta` 时以前用它的 usage **整个替换**这条回答的 usage，Anthropic 文档里的 `message_delta`
+  只带 `output_tokens`——输入和缓存就成了 0，在跑的对话环掉到 ~0%（以前被每轮的 `getContextUsage` 盖住了）。现在只覆盖它带了的字段
+  （`conversation.ts` 的 `presentUsage`），`conversation.test.ts`「usage on message_delta」。
 - **输入框里的图片**：以前点一下就删掉；现在点击打开全屏查看器（`store.viewer`，滚轮缩放、← →），悬停右上角出 ×（触屏一直显示）才是删除。
 - **模型菜单最后一行「子代理用的模型」**（用户在模型菜单里找子代理的设置）：`ModelMenu` 的 `subagentRow`，Composer 用 `cloneElement` 给模型 chip 加上它、给子代理 chip 加 `openSignal`；点它关掉模型菜单、打开子代理菜单。id 在 `SUBAGENT_MENU_ID.open`（放 `MODEL_MENU_ID` 会被可达性表要求列出来）。

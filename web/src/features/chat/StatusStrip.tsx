@@ -8,6 +8,7 @@ import { Icon } from '@/ui/icons';
 import { connectModel, loginInTerminal } from '@/features/providers/ConnectModel';
 import type { Provider } from '@shared';
 import { accountFailed } from './account-fail';
+import { useContextUsage } from '@/features/composer/ContextMeter';
 import { tr } from '@/i18n';
 
 function useTick(active: boolean, ms = 1000) {
@@ -42,11 +43,11 @@ export function StatusStrip({ sessionId }: { sessionId: string }) {
   const rl = o?.conv.rateLimit;
   const rlActive = rl?.status === 'rejected' && (!rl.resetsAt || rl.resetsAt * (rl.resetsAt < 1e12 ? 1000 : 1) > Date.now());
   useTick(running || !!armed || rlActive);
+  const cu = useContextUsage(sessionId);
   if (!o) return null;
   const stall = deriveStall({ state: o.state, now: Date.now(), lastEventAt: o.conv.lastEventAt, lastModelCallAt: o.conv.lastModelCallAt, turnStartedAt: o.conv.turnStartedAt, runningTool: o.conv.runningTool, compacting: o.conv.compacting });
   const res = o.conv.lastResult;
   const showErr = !running && res?.isError && res.errorKind && o.conv.items[o.conv.items.length - 1]?.kind === 'result';
-  const cu = o.contextUsage ?? o.conv.contextUsage;
   // the percentage itself is the composer ring's job; here only the action, and only when it is nearly full
   const cuWarn = cu && cu.percentage >= 95;
   // the ordinary running states (tool / quiet / compacting) are the run card's job now; what is left

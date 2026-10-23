@@ -429,6 +429,31 @@ describe('a turn synthesised from an ACP / Codex agent (server/src/agents/normal
   });
 });
 
+// 2026-10-23: the context ring reads the last answer's usage (no more getContextUsage per turn). Anthropic's documented
+// message_delta carries only output_tokens: replacing the usage with it read input / cache as 0 → a ring at ~0 %.
+describe('usage on message_delta', () => {
+  const se = (event: any) => ({ type: 'stream_event', uuid: `e${Math.random()}`, session_id: 's', parent_tool_use_id: null, event });
+  const run = (deltaUsage: any) => {
+    const c = createConversation();
+    for (const m of [
+      se({ type: 'message_start', message: { id: 'mU', role: 'assistant', content: [], usage: { input_tokens: 10, cache_read_input_tokens: 80_000, cache_creation_input_tokens: 3, output_tokens: 1 } } }),
+      se({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } }),
+      se({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'hi' } }),
+      se({ type: 'content_block_stop', index: 0 }),
+      { type: 'assistant', uuid: 'aU', session_id: 's', parent_tool_use_id: null, message: { id: 'mU', role: 'assistant', content: [{ type: 'text', text: 'hi' }], usage: { input_tokens: 10, cache_read_input_tokens: 80_000, cache_creation_input_tokens: 3, output_tokens: 1 } } },
+      se({ type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: deltaUsage }),
+      se({ type: 'message_stop' }),
+    ]) applyMessage(c, m);
+    return (c.items.find((i) => i.kind === 'assistant') as AssistantItem).usage;
+  };
+  it('one with only output_tokens keeps input and cache', () => {
+    expect(run({ output_tokens: 42 })).toEqual({ input: 10, output: 42, cacheRead: 80_000, cacheWrite: 3 });
+  });
+  it('a complete one still replaces every field', () => {
+    expect(run({ input_tokens: 11, output_tokens: 42, cache_read_input_tokens: 80_001, cache_creation_input_tokens: 0 })).toEqual({ input: 11, output: 42, cacheRead: 80_001, cacheWrite: 0 });
+  });
+});
+
 describe('thinking time (「思考了 12 秒」)', () => {
   const se = (event: any) => ({ type: 'stream_event', uuid: `e${Math.random()}`, session_id: 's', parent_tool_use_id: null, event });
 
