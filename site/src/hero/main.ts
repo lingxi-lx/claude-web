@@ -3,8 +3,8 @@
 import { BUILTIN, resolveCharacter, sceneSize, type Look, type View, type World } from './engine';
 import { Demo, POSTER_MS } from './demo';
 import { AGENT_NIGHT } from './palette';
-import { LayeredCanvas } from './Scene';
-import { anchorFor, cameraView, CAMERA_MS, easeView, HERO_LOOK, type ChapterLook } from './chapters';
+import { LayeredCanvas, type Keepout } from './Scene';
+import { anchorFor, cameraView, CAMERA_MS, easeView, HERO_LOOK, heroLookFor, type ChapterLook } from './chapters';
 import { pointerNorm } from './motion';
 import { installChapters } from './overlays';
 import { installInteract } from './interact';
@@ -72,6 +72,15 @@ export function startHero(root: HTMLElement, opts: HeroOptions): Hero {
     stop() { running = false; cancelAnimationFrame(raf); },
   };
 
+  // the hero's copy, in the canvases' device px, while it is over the stage: no scene label is drawn there
+  const copyEl = document.querySelector<HTMLElement>('.hero-copy');
+  function keepout(dpr: number): Keepout | null {
+    if (!copyEl) return null;
+    const r = copyEl.getBoundingClientRect(), s = root.getBoundingClientRect();
+    if (r.bottom <= s.top || r.top >= s.bottom || r.width === 0) return null;
+    return { x: (r.left - s.left) * dpr, y: (r.top - s.top) * dpr, w: r.width * dpr, h: r.height * dpr };
+  }
+
   function draw(t: number) {
     const dt = last ? Math.min(250, t - last) : 16;
     last = t;
@@ -79,14 +88,14 @@ export function startHero(root: HTMLElement, opts: HeroOptions): Hero {
     const { w: cw, h: ch, dpr } = renderer.size(root);
     hero.dpr = dpr;
     const sz = sceneSize(hero.demo.world.map);
-    const target = cameraView(camTo, sz, cw, ch, anchorFor(cw / dpr));
+    const target = cameraView(camTo === HERO_LOOK ? heroLookFor(cw / dpr) : camTo, sz, cw, ch, anchorFor(cw / dpr));
     hero.view = camFrom ? easeView(camFrom, target, (t - camAt) / CAMERA_MS) : target;
     if (camFrom && t - camAt >= CAMERA_MS) camFrom = null;
     let w = hero.demo.world;
     if (!bootAt) bootAt = t;
     if (!hero.still) w = booting(w, t - bootAt);
     for (const f of hero.tweaks) w = f(w, hero.demo.now());
-    renderer.frame({ world: w, view: hero.view, pointer: hero.pointer, look: hero.look(), dtMs: dt, cw, ch });
+    renderer.frame({ world: w, view: hero.view, pointer: hero.pointer, look: hero.look(), dtMs: dt, cw, ch, keepout: keepout(dpr) });
     for (const f of hero.onFrame) f(dt);
     root.dataset.live = '1';
   }

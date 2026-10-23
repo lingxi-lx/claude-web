@@ -5,7 +5,32 @@ import { darken, drawGlows, drawItems, drawRoom, labels, sceneSize, type Look, t
 import { isFront } from './layers';
 import { approach, LAYER_FACTORS, parallaxOffset } from './motion';
 
-export interface FrameInput { world: World; view: View; pointer: { x: number; y: number } | null; look: Look; dtMs: number; cw: number; ch: number }
+/** A box on the page canvas (device px) where no label may be drawn: the hero's copy. */
+export interface Keepout { x: number; y: number; w: number; h: number }
+export interface FrameInput { world: World; view: View; pointer: { x: number; y: number } | null; look: Look; dtMs: number; cw: number; ch: number; keepout?: Keepout | null }
+
+/** How far (device px) the labels fade back in past the keep-out box's right and top edges. */
+export const KEEPOUT_FADE = 32;
+
+/** Erase the labels over the copy: solid inside the box, fading out over KEEPOUT_FADE past its right and top edges. */
+export function clearKeepout(c: CanvasRenderingContext2D, k: Keepout): void {
+  if (k.w <= 0 || k.h <= 0) return;
+  c.save();
+  c.globalCompositeOperation = 'destination-out';
+  const right = c.createLinearGradient(k.x + k.w, 0, k.x + k.w + KEEPOUT_FADE, 0);
+  right.addColorStop(0, 'rgba(0,0,0,1)');
+  right.addColorStop(1, 'rgba(0,0,0,0)');
+  c.fillStyle = 'rgba(0,0,0,1)';
+  c.fillRect(k.x, k.y, k.w, k.h);
+  c.fillStyle = right;
+  c.fillRect(k.x + k.w, k.y, KEEPOUT_FADE, k.h);
+  const top = c.createLinearGradient(0, k.y, 0, k.y - KEEPOUT_FADE);
+  top.addColorStop(0, 'rgba(0,0,0,1)');
+  top.addColorStop(1, 'rgba(0,0,0,0)');
+  c.fillStyle = top;
+  c.fillRect(k.x, k.y - KEEPOUT_FADE, k.w, KEEPOUT_FADE);
+  c.restore();
+}
 
 /** The seam for another renderer (a real 3D one later, spec §7): tier.ts picks, main.ts drives. */
 export interface SceneRenderer {
@@ -105,5 +130,7 @@ export class LayeredCanvas implements SceneRenderer {
     ui.setTransform(1, 0, 0, 1, 0, 0);
     ui.clearRect(0, 0, f.cw, f.ch);
     labels(ui, w, view, sz, look);
+    // a safety net under the hero's camera: no door pill, bubble or seat tag over the title and its lines
+    if (f.keepout) clearKeepout(ui, f.keepout);
   }
 }

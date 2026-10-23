@@ -18,8 +18,16 @@ export interface ChapterSpec {
 }
 
 export const CAMERA_MS = 400;
-/** The whole room, a little right of centre (the hero's copy is on the left). */
-export const HERO_LOOK: ChapterLook = { u: 14, v: 8, zoom: 1 };
+/**
+ * The first screen. Desktops: the room pulled out a little and to the right, so the door (and its sign) and the
+ * counter (the admin's bubble) stand right of the copy column (`.hero-copy`, 600 CSS px) from 1280 px wide up; the
+ * far right of the room is cut off instead. Phones (copy below the scene): the middle of the room.
+ */
+export const HERO_LOOK: ChapterLook = { u: 6.5, v: 15.5, zoom: 0.8 };
+export const HERO_LOOK_PHONE: ChapterLook = { u: 14, v: 8, zoom: 1 };
+/** The copy column's width on desktops (site.css: .hero-copy max-width). */
+export const HERO_COPY_PX = 600;
+export const heroLookFor = (cssWidth: number): ChapterLook => (cssWidth < 720 ? HERO_LOOK_PHONE : HERO_LOOK);
 // seats of the demo's one row: api u 7, tests u 10, docs u 13, lint u 16 (v 3, chair v 4); counter u 1–2 v 12–14;
 // the big screen u 9–15 on the back wall (h 18–40); the door (2, 17)
 export const CHAPTERS: ChapterSpec[] = [

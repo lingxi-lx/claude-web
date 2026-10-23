@@ -39,7 +39,9 @@ img { max-width: 100%; }
 .stage-scene[data-live] > img { visibility: hidden; }
 .stage-scene::after { content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: linear-gradient(90deg, color-mix(in oklab, var(--bg-1) 88%, transparent) 0, color-mix(in oklab, var(--bg-1) 45%, transparent) 34%, transparent 62%), linear-gradient(0deg, var(--bg-1), transparent 22%); }
 .scene-a11y { position: absolute; inset: 0; pointer-events: none; }
-.scene-overlays { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+/* the chapter cards' layer comes after the chapters in the DOM (tab order) but covers the same box as the scene: sticky
+   to the bottom from the end of the stage, it sits wherever the top-sticky scene does */
+.scene-overlays { position: sticky; bottom: 0; height: 100svh; margin-top: -100svh; overflow: hidden; z-index: 2; pointer-events: none; }
 .ov { position: absolute; left: 0; top: 0; max-width: 340px; pointer-events: auto; padding: 12px 14px; border: 1px solid var(--line-1); border-radius: var(--r-md); background: color-mix(in oklab, var(--bg) 92%, transparent); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5); font-size: var(--fs-sm); will-change: transform; }
 .ov[hidden] { display: none; }
 .ov pre { margin: 8px 0; padding: 8px 10px; font-size: var(--fs-meta); }

@@ -83,8 +83,11 @@ export function installInteract(hero: Hero): void {
     const r = root.getBoundingClientRect();
     showTip(hit && hit.kind !== 'machine' ? hit.key : null, hero.client.x - r.left, hero.client.y - r.top);
   });
+  // the pointer type comes from the pointerdown: Safari before 17 fires click as a MouseEvent without pointerType
+  let lastPointer = '';
+  root.addEventListener('pointerdown', (e) => { lastPointer = e.pointerType; }, { passive: true });
   root.addEventListener('click', (e) => {
-    if ((e as PointerEvent).pointerType === 'mouse' || (e.target as HTMLElement).closest('button, a, input, .ov')) return;
+    if (lastPointer === 'mouse' || (e.target as HTMLElement).closest('button, a, input, .ov')) return;
     const f = floorAt(e.clientX, e.clientY);
     const hit = hitTest(hero.demo.world, midView(), f.px, f.py);
     const r = root.getBoundingClientRect();
@@ -96,7 +99,9 @@ export function installInteract(hero: Hero): void {
   const konami = konamiDetector();
   let cycle = -1;
   addEventListener('keydown', (e) => {
-    if (e.ctrlKey || e.metaKey || e.altKey || editable(e.target)) return;
+    if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented || editable(e.target)) return;
+    // the showcase has its own ← / → (and handles them first when it has focus)
+    if (e.target instanceof Element && e.target.closest('#themes')) return;
     if (konami(e.key)) { const d = root.querySelector<HTMLElement>('[data-debug]'); if (d) d.hidden = !d.hidden; return; }
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     const r = root.getBoundingClientRect();
@@ -110,7 +115,7 @@ export function installInteract(hero: Hero): void {
   });
 
   // "Allow" previews
-  const allow = root.querySelector<HTMLElement>('[data-decide="allow"]');
+  const allow = document.querySelector<HTMLElement>('[data-decide="allow"]');
   allow?.addEventListener('pointerenter', () => { preview = true; });
   allow?.addEventListener('pointerleave', () => { preview = false; });
   allow?.addEventListener('focus', () => { preview = true; });

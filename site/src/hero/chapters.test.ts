@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildMap, onPage, sceneSize } from './engine';
 import { EPOCH, snapshotAt } from './demo';
-import { anchorFor, cameraView, CHAPTERS, chapterById, easeView, HERO_LOOK } from './chapters';
+import { anchorFor, cameraView, CHAPTERS, chapterById, easeView, HERO_COPY_PX, HERO_LOOK, HERO_LOOK_PHONE, heroLookFor } from './chapters';
 
 const map = buildMap(snapshotAt(31_000), EPOCH + 31_000);
 const sz = sceneSize(map);
@@ -13,7 +13,7 @@ describe('chapters', () => {
     expect(chapterById('nope')).toBeUndefined();
   });
   it('look at points inside the room', () => {
-    for (const c of [...CHAPTERS.map((x) => x.look), HERO_LOOK]) {
+    for (const c of [...CHAPTERS.map((x) => x.look), HERO_LOOK, HERO_LOOK_PHONE]) {
       expect(c.u).toBeGreaterThanOrEqual(0);
       expect(c.u).toBeLessThanOrEqual(map.cols);
       expect(c.v).toBeGreaterThanOrEqual(0);
@@ -31,6 +31,19 @@ describe('chapters', () => {
       expect(Math.abs(p.y - a.y * 900)).toBeLessThan(0.5);
       expect(sz.w * v.scale).toBeGreaterThanOrEqual(1440);
     }
+  });
+  it('the first screen keeps the door sign and the counter right of the copy, the last seat on screen', () => {
+    for (const [cw, ch] of [[1280, 720], [1366, 768], [1440, 900], [1920, 1080]]) {
+      const v = cameraView(heroLookFor(cw), sz, cw, ch, anchorFor(cw));
+      const sign = onPage(v, sz, map.door.u + 2, map.door.v + 1, 0).x; // labels(): the door's pill, ~100 px wide
+      const admin = onPage(v, sz, map.admin.u + 0.5, map.admin.v + 0.5, 30).x; // its bubble, ~200 px wide
+      const lint = onPage(v, sz, 17, 3.3, 22).x; // the last seat's tag
+      expect(sign - 60, `${cw}: door sign`).toBeGreaterThanOrEqual(HERO_COPY_PX);
+      expect(admin - 110, `${cw}: admin`).toBeGreaterThanOrEqual(HERO_COPY_PX);
+      expect(lint + 30, `${cw}: last seat`).toBeLessThanOrEqual(cw);
+    }
+    expect(heroLookFor(390)).toBe(HERO_LOOK_PHONE);
+    expect(heroLookFor(1440)).toBe(HERO_LOOK);
   });
   it('phones look at the middle, desktops right of the copy', () => {
     expect(anchorFor(390).x).toBe(0.5);

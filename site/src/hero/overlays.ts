@@ -12,7 +12,9 @@ export function installChapters(hero: Hero): { active(): string | null } {
   const root = hero.root;
   const label = $<HTMLElement>(root, '[data-scene-label-el]');
   const heroAlt = label?.getAttribute('aria-label') ?? '';
-  const cards = new Map([...root.querySelectorAll<HTMLElement>('[data-overlay]')].map((el) => [el.dataset.overlay!, el]));
+  // the cards' layer follows the chapters in the DOM (tab order), outside the scene; it covers the same box
+  const layer = document.querySelector<HTMLElement>('[data-overlays]') ?? root;
+  const cards = new Map([...layer.querySelectorAll<HTMLElement>('[data-overlay]')].map((el) => [el.dataset.overlay!, el]));
   let active: ChapterSpec | null = null;
   let resultUntil = 0;
 
@@ -61,11 +63,11 @@ export function installChapters(hero: Hero): { active(): string | null } {
     btn.setAttribute('aria-expanded', String(open));
     if (panel) panel.hidden = !open;
   });
-  toggle($(root, '[data-turn]'), $(root, '[data-timeline]'));
-  toggle($(root, '[data-file]'), $(root, '[data-diff]'));
-  $<HTMLButtonElement>(root, '[data-run]')?.addEventListener('click', () => { const o = $<HTMLElement>(root, '[data-out]'); if (o) o.hidden = false; });
-  const result = $<HTMLElement>(root, '[data-result]');
-  for (const b of root.querySelectorAll<HTMLButtonElement>('[data-decide]')) {
+  toggle($(layer, '[data-turn]'), $(layer, '[data-timeline]'));
+  toggle($(layer, '[data-file]'), $(layer, '[data-diff]'));
+  $<HTMLButtonElement>(layer, '[data-run]')?.addEventListener('click', () => { const o = $<HTMLElement>(layer, '[data-out]'); if (o) o.hidden = false; });
+  const result = $<HTMLElement>(layer, '[data-result]');
+  for (const b of layer.querySelectorAll<HTMLButtonElement>('[data-decide]')) {
     b.addEventListener('click', () => {
       const allow = b.dataset.decide === 'allow';
       hero.demo.decide(allow);

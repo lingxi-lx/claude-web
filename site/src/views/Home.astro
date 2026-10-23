@@ -25,9 +25,8 @@ const stats = [
 <Base locale={locale} page="home">
   <div class="stage" id="stage">
     <div class="stage-scene" id="hero-scene">
-      <img class="scene-poster" src={`${base}poster/${locale}.webp`} width="1440" height="900" alt="" fetchpriority="high" decoding="async" />
+      <img class="scene-poster" src={`${base}poster/${locale}.webp`} width="1440" height="900" alt="" fetchpriority="high" />
       <div class="scene-a11y" role="img" aria-label={c.meta.sceneAlt} data-scene-label-el></div>
-      <SceneOverlays locale={locale} />
       <div class="scene-tip" role="status" data-doing={JSON.stringify(c.scene.doing)} hidden></div>
       <button class="scene-sound" type="button" data-key-action="sound" aria-keyshortcuts="S" aria-pressed="false" data-on={c.scene.sound.on} data-off={c.scene.sound.off}><span data-sound-label>{c.scene.sound.off}</span><kbd aria-hidden="true">S</kbd></button>
       <div class="scene-debug" data-debug hidden>
@@ -61,6 +60,8 @@ const stats = [
         </section>
       ))}
     </div>
+    {/* after the chapters, so Tab from a chapter reaches its card's buttons; sticky over the stage like the scene */}
+    <SceneOverlays locale={locale} />
   </div>
 
   <Showcase locale={locale} />
