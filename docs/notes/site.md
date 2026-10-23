@@ -69,3 +69,17 @@
 - 预算（`site/scripts/budget.ts`）：首页首屏 ≤ 1.5 MB，算 HTML 引用的、CSS `url()` 的字体、首屏脚本静态 import 的；场景（`import()` 进来的）另算，gzip 后 ≤ 400 KB。
 - 冒烟：`npm run build --prefix site && env -u ELECTRON_RUN_AS_NODE node site/scripts/smoke.cjs`，逐章滚动、控制台有 error 就失败，截图在临时目录。
 - 彩蛋：↑↑↓↓←→←→BA 打开调试面板（速度、种子、fps）；S 开关声音（WebAudio 合成，没有音频文件）。
+
+## 主题放映厅（2026-10-22）
+
+- 代码在 `site/src/showcase/`：`Showcase.astro`（构建时把配色、按钮的过程动画帧、文案写进页面）、`player.ts`（进视口前一屏才 `import()`）。主题数据直接读产品的 `web/src/themes/builtin/*/theme.json`，经别名 `@themes`（`server/src/themes/core`）/ `@web-themes`（`web/src/themes`），只用 `parsePack` / `paletteCss` / `animFor` / `frameHtml` / ticker 的 `play`。
+- 配色：按钮用自己主题的变量（产品名 `--bg --accent …`），整段用当前主题的 `--sc-*`（`site/src/styles/showcase.css` 里 `@property` 注册，切换 400 ms 过渡）。对比度：`showcase/themes.test.ts` 用产品的 `contrastProblems` 和这一段实际用到的几对颜色。
+- 同一秒切换：切换前先暂停旧录像，新录像 seek 到那一秒、`seeked` 后两个一起播；每次派发 `showcase:switched`（冒烟测试读它）。
+- 录像不进仓库：`site/media.json`（110 个文件的 sha256 / 字节数）+ pre-release `site-media`。构建时 `site/scripts/fetch-media.ts` 下载进 `dist/themes/`（缓存 `site/.media-cache/`）：哈希不对构建失败，下不到只警告（显示海报 / 占位）。`SITE_MEDIA=off` 跳过（PR 的 CI），`SITE_MEDIA_DIR=.media-local` 用本地的。HTML 里不能直接引 `/themes/…`（会算进首页 1.5 MB 预算）。
+- 重录：`env -u ELECTRON_RUN_AS_NODE -u CLAUDE_WEB_DIST -u CLAUDE_CODE_ENTRYPOINT node scripts/record-themes.cjs [--lang] [--only]` → `node scripts/upload-site-media.cjs --dir site/.media-local`（改公开 release，先问用户）→ 提交 `site/media.json`。界面或主题改了就该重录。录制脚本**不碰 `web/dist`**：前端构建到临时目录、服务端从源码跑（开发中的 Claude Web 用着 `web/dist`，重建会把它弄坏）。一段先把原始像素写盘（约 6 GB，录完删），磁盘要留够；机器忙时帧率会掉到 24 以下，别同时跑别的重活。
+- 录制剧本在 `scripts/lib/demo.cjs` 的 `scriptFor`：带 `tools` 的请求才按剧本走（标题之类的旁路请求不算），第几步 = 那句话之后的 `tool_result` 数。「描述一个新的」那段默认用官方运行内核：ccb 把 MCP 工具包在 `ExecuteExtraTool` 里，界面不显示主题草稿卡片。
+- 替身录像：`node scripts/make-standin-clips.cjs`（主题底色 + 测试图 + 文字），给还没真录像时构建和冒烟用。冒烟：`env -u ELECTRON_RUN_AS_NODE node scripts/site-showcase-smoke.cjs`（要先带录像构建）。
+- ffmpeg：本机 8.1 没有 `libsvtav1`，webm 用 VP9（`libvpx-vp9`；`libaom-av1` 太慢，22 段要 1.5–2 小时，没用）。`media.json` 的 `webmCodecs` 记实际编码，播放器拿它问 `canPlayType`，不行就放 mp4。
+  VP9 crf 46、x264 crf 30（38 / 26 时 12 s 的段 1.5–1.9 MB，大头是会动的背景和每 15 帧一个关键帧）。
+- 坑：录像的 master 是 JPEG 拼的，**全范围 BT.601**。只写 `format=yuv420p` 会把「全范围」标记带进 webm：ffmpeg 解得开，Chromium 的硬件解码器在第二个关键帧（0.5 s）报 `PIPELINE_ERROR_DECODE`，放映厅只剩海报（本机 RTX 3050 + 核显，`--disable-accelerated-video-decode` 下又正常）。`encodeClip` 现在 `scale=…:out_range=tv:out_color_matrix=bt709` 并打 bt709 / tv 标记；替身录像（lavfi 源本来就是 tv）测不出这个。
+- Electron 离屏窗口里视频放得很慢（14 s 才走 1.8 s），冒烟只要求过 1.5 s，别拿它量播放速度。

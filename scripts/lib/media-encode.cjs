@@ -22,10 +22,12 @@ function webmEncoder() {
 const WEBM = {
   libsvtav1: ['-c:v', 'libsvtav1', '-preset', '6', '-crf', '38', '-g', '15'],
   'libaom-av1': ['-c:v', 'libaom-av1', '-cpu-used', '5', '-row-mt', '1', '-crf', '36', '-b:v', '0', '-g', '15', '-keyint_min', '15'],
-  'libvpx-vp9': ['-c:v', 'libvpx-vp9', '-deadline', 'good', '-cpu-used', '2', '-row-mt', '1', '-crf', '38', '-b:v', '0', '-g', '15'],
+  // VP9 crf 38 / x264 crf 26 made the 12 s clips 1.5–1.9 MB (the moving backdrop and a keyframe every 15 frames cost
+  // most of it). 46 / 30 bring them under 1.5 MB; side by side at 8 s the text looks the same, the backdrop a bit softer.
+  'libvpx-vp9': ['-c:v', 'libvpx-vp9', '-deadline', 'good', '-cpu-used', '2', '-row-mt', '1', '-crf', '46', '-b:v', '0', '-g', '15'],
 };
 const WEBM_FAST = ['-c:v', 'libvpx-vp9', '-deadline', 'realtime', '-cpu-used', '8', '-row-mt', '1', '-crf', '40', '-b:v', '0', '-g', '15'];
-const MP4 = ['-c:v', 'libx264', '-preset', 'slow', '-crf', '26', '-pix_fmt', 'yuv420p', '-g', '15', '-movflags', '+faststart'];
+const MP4 = ['-c:v', 'libx264', '-preset', 'slow', '-crf', '30', '-pix_fmt', 'yuv420p', '-g', '15', '-movflags', '+faststart'];
 const MP4_FAST = ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '30', '-pix_fmt', 'yuv420p', '-g', '15', '-movflags', '+faststart'];
 const SIZES = [['', '1280:800'], ['-sm', '720:450']];
 
@@ -36,11 +38,15 @@ function encodeClip(master, outDir, id, lang, opts = {}) {
   const mp4Args = opts.fast ? MP4_FAST : MP4;
   const files = [];
   for (const [suffix, size] of SIZES) {
-    const vf = `scale=${size}:flags=lanczos,format=yuv420p`;
+    // limited range, BT.709, tagged. A recording's master is full-range BT.601 (it is made from JPEGs) and
+    // `format=yuv420p` alone keeps that: VP9 flagged full range plays in ffmpeg but fails in the GPU decoder at the
+    // second keyframe (PIPELINE_ERROR_DECODE at 0.5 s; Electron / Chromium, RTX 3050 + Intel UHD, 2026-10-23).
+    const vf = `scale=${size}:flags=lanczos:out_range=tv:out_color_matrix=bt709,format=yuv420p`;
+    const tags = ['-color_range', 'tv', '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709'];
     const webm = path.join(outDir, `${id}.${lang}${suffix}.webm`);
-    ff(['-i', master, '-an', '-vf', vf, ...webmArgs, webm]);
+    ff(['-i', master, '-an', '-vf', vf, ...webmArgs, ...tags, webm]);
     const mp4 = path.join(outDir, `${id}.${lang}${suffix}.mp4`);
-    ff(['-i', master, '-an', '-vf', vf, ...mp4Args, mp4]);
+    ff(['-i', master, '-an', '-vf', vf, ...mp4Args, ...tags, mp4]);
     files.push(webm, mp4);
   }
   const poster = path.join(outDir, `${id}.${lang}.webp`);
