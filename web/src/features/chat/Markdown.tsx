@@ -30,20 +30,22 @@ const CodeRunCtx = createContext<CodeRunContext | undefined>(undefined);
  */
 const urlTransform: UrlTransform = (url, key) => (key === 'href' && /^(file:|tel:|[a-zA-Z]:)/i.test(url) ? url : defaultUrlTransform(url));
 
-type LinkMouse = { button: number; preventDefault(): void };
+type LinkMouse = { button: number; ctrlKey?: boolean; metaKey?: boolean; preventDefault(): void };
 
 /**
  * A click — and a middle click, which the browser / Electron would otherwise open as a new window on the href
- * resolved against the app's own address (2026-10-24 review I2) — goes where routeLink says.
+ * resolved against the app's own address (2026-10-24 review I2) — goes where routeLink says. A page opens in the
+ * built-in browser; with Ctrl / Cmd held, in the system's. A plain click on an in-page `#anchor` is the page's own
+ * (it scrolls); a middle click on one would open the app page again in a second window (stage B): it does nothing.
  */
 export function linkHandlers(href: string | undefined, cwd: string | undefined, sid: string | null) {
-  const go = (e: LinkMouse) => {
+  const go = (e: LinkMouse, aux: boolean) => {
     const r = routeLink(href ?? '', cwd);
-    if (r.to === 'anchor') return;
+    if (r.to === 'anchor') { if (aux) e.preventDefault(); return; }
     e.preventDefault();
-    followLink(r, sid ?? useStore.getState().activeId);
+    followLink(r, sid ?? useStore.getState().activeId, { external: !!(e.ctrlKey || e.metaKey) });
   };
-  return { onClick: go, onAuxClick: (e: LinkMouse) => { if (e.button === 1) go(e); } };
+  return { onClick: (e: LinkMouse) => go(e, false), onAuxClick: (e: LinkMouse) => { if (e.button === 1) go(e, true); } };
 }
 
 const components: Components = {

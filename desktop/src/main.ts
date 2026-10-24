@@ -16,7 +16,7 @@ import { ZOOM_STEPS, cleanZoom, fitWindow, minWindow, nextZoom, scaleCaption, tr
 import { getLocale, initLanguage, tr } from './i18n.js';
 import { SCHEME, linkFromArgv, parseDeepLink, type DeepLink } from './deep-link';
 import { menuItems } from './context-menu';
-import { CrashGuard, allowNavigation, sameOrigin, windowOpenAction } from './nav-guard';
+import { CrashGuard, allowNavigation, externalAllowed, sameOrigin, windowOpenAction } from './nav-guard';
 
 const isMac = process.platform === 'darwin';
 
@@ -250,6 +250,7 @@ function createWindow(url: string | null, winId = 'main', bounds?: Bounds, hidde
   });
   win.on('closed', () => { if (wins.get(winId) === win) wins.delete(winId); });
   win.webContents.setWindowOpenHandler(({ url: target }) => {
+    // windowOpenAction: the app page with only a `#hash` added (a middle click on an in-page anchor) → deny, not a window
     const act = windowOpenAction(target, host.info?.url);
     if (act === 'app-window') {
       // window.open of the app page (browser-style "new window"): give it a real id and our preload
@@ -783,7 +784,11 @@ ipcMain.handle('desktop:deepLink:take', (e) => {
   return l;
 });
 ipcMain.handle('desktop:openPath', (_e, p: string) => shell.openPath(p));
-ipcMain.handle('desktop:openExternal', (_e, url: string) => shell.openExternal(url));
+// only a web page / mail / phone number reaches the OS (nav-guard.ts externalAllowed); anything else is logged, not opened
+ipcMain.handle('desktop:openExternal', async (_e, url: string) => {
+  if (externalAllowed(url)) return shell.openExternal(url);
+  mainLog(`openExternal refused: ${String(url).slice(0, 200)}`);
+});
 ipcMain.on('desktop:notify', (e, { title, body, sessionId }: { title: string; body: string; sessionId?: string }) => {
   const src = BrowserWindow.fromWebContents(e.sender);
   if (src?.isFocused()) return;

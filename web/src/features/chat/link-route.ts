@@ -1,6 +1,7 @@
 import { useStore } from '@/store';
 import { desktop } from '@/desktop';
 import { blockRemoteOpen } from '@/features/remote-guard';
+import { openInBrowser } from '@/features/workbench/right-panel';
 
 /**
  * Where a link in a reply goes (spec 2026-10-24 A1). Every link in a reply is decided here: a page → the browser,
@@ -96,9 +97,18 @@ export function openExternal(url: string): void {
   else window.open(url, '_blank', 'noopener,noreferrer');
 }
 
-/** Acts on a route. `sessionId`: the conversation the link is in (a remote one's files are on that machine). */
-export function followLink(r: LinkRoute, sessionId: string | null | undefined): void {
-  if (r.to === 'web' || r.to === 'external') return openExternal(r.url);
+/**
+ * Acts on a route. `sessionId`: the conversation the link is in (a remote one's files are on that machine).
+ * A web page opens in the built-in browser (stage B) — in the desktop app only, with `web.browser.openLinks` not off;
+ * the web version has no built-in browser that can show most sites (they refuse to be framed): a new tab there.
+ * `external` (Ctrl / Cmd held): the system browser.
+ */
+export function followLink(r: LinkRoute, sessionId: string | null | undefined, opts: { external?: boolean } = {}): void {
+  if (r.to === 'web') {
+    if (!opts.external && desktop && useStore.getState().settings?.['web.browser.openLinks'] !== false) return openInBrowser(r.url);
+    return openExternal(r.url);
+  }
+  if (r.to === 'external') return openExternal(r.url);
   if (r.to !== 'file') return;
   if (blockRemoteOpen(sessionId, r.path)) return;
   useStore.getState().openTile({ id: `d${Date.now().toString(36)}`, kind: 'doc', path: r.path, ...(r.line ? { line: r.line } : {}) }, 'tab');

@@ -28,11 +28,31 @@ function looksBinary(buf: Buffer): boolean {
   return false;
 }
 
+/**
+ * A network path: `\\host\share`, `//host/share`, and what Windows reads the same way — mixed separators (`/\host\s`,
+ * `\/host/s`, `\\\host`), the extended / device forms (`\\?\UNC\host\s`, `\\.\UNC\…`, `\\?\GLOBALROOT\Device\Mup\…`).
+ * Touching one makes Windows connect to that machine over SMB and hand it the user's NTLM credentials, from a path the
+ * page sent (a link the model wrote — prompt-injectable — or a file tab). Anything under `\\?\` / `\\.\` other than a
+ * local drive's `\\?\C:\…` counts too: a raw volume (`\\.\C:`) or a pipe is no file to open here either.
+ */
+export function isUncPath(p: string): boolean {
+  if (typeof p !== 'string') return false;
+  const s = p.replace(/\//g, '\\');
+  if (!s.startsWith('\\\\')) return false;
+  return !/^\\\\[?.]\\[A-Za-z]:\\/.test(s);
+}
+
+/** Every entry point that takes a path from the page calls this before it touches `fs` (there is no shared resolver). */
+function local(...paths: string[]): void {
+  for (const p of paths) if (isUncPath(p)) throw new Error(tr('不支持网络路径'));
+}
+
 export class FilesService extends EventEmitter {
   private watchers = new Map<string, { w: any; refs: number }>();
 
   // ---------- phase 3: editor & file operations ----------
   async stat(p: string): Promise<FsStat> {
+    local(p);
     const st = await fs.stat(p);
     let binary: boolean | undefined;
     if (st.isFile() && st.size < TEXT_MAX) {
@@ -47,6 +67,7 @@ export class FilesService extends EventEmitter {
   }
 
   async open(p: string): Promise<FsOpenResult> {
+    local(p);
     const st = await fs.stat(p);
     if (st.isDirectory()) throw new Error(tr('是目录'));
     const buf = await fs.readFile(p);
@@ -58,6 +79,7 @@ export class FilesService extends EventEmitter {
 
   /** Write text; refuses when the file changed on disk after `expectMtime` (the editor then offers reload / overwrite). */
   async write(p: string, text: string, expectMtime?: number): Promise<{ mtime: number }> {
+    local(p);
     if (expectMtime !== undefined) {
       const st = await fs.stat(p).catch(() => null);
       if (st && Math.abs(st.mtimeMs - expectMtime) > 1) {
@@ -73,20 +95,23 @@ export class FilesService extends EventEmitter {
     return { mtime: st.mtimeMs };
   }
 
-  async mkdir(p: string) { await fs.mkdir(p, { recursive: true }); }
+  async mkdir(p: string) { local(p); await fs.mkdir(p, { recursive: true }); }
 
   async create(p: string, text = '') {
+    local(p);
     if (await fs.stat(p).catch(() => null)) throw new Error(tr('已存在同名文件'));
     await fs.mkdir(path.dirname(p), { recursive: true });
     await fs.writeFile(p, text, 'utf8');
   }
 
   async rename(from: string, to: string) {
+    local(from, to);
     if (await fs.stat(to).catch(() => null)) throw new Error(tr('目标已存在'));
     await fs.rename(from, to);
   }
 
   async copy(from: string, to: string) {
+    local(from, to);
     if (await fs.stat(to).catch(() => null)) throw new Error(tr('目标已存在'));
     await fs.cp(from, to, { recursive: true });
   }
@@ -94,6 +119,7 @@ export class FilesService extends EventEmitter {
   /** Move to the OS recycle bin (Windows: PowerShell + VisualBasic FileIO; macOS: Finder; Linux: gio). Falls back to rm. */
   async trash(paths: string[]) {
     if (!paths.length) return;
+    local(...paths);
     if (process.platform === 'win32') {
       const script = [
         'Add-Type -AssemblyName Microsoft.VisualBasic',
@@ -119,6 +145,7 @@ export class FilesService extends EventEmitter {
 
   /** Watch a directory (depth 1) or file; ref-counted per path. Emits ('changed', {path, type}). */
   async watch(p: string) {
+    local(p);
     const cur = this.watchers.get(p);
     if (cur) { cur.refs++; return; }
     const st = await fs.stat(p);
@@ -169,6 +196,7 @@ export class FilesService extends EventEmitter {
 
   /** git diff for a file relative to HEAD; falls back to full content when not in a repo. */
   async diff(filePath: string) {
+    local(filePath);
     const dir = path.dirname(filePath);
     try {
       const { stdout: root } = await execFileAsync('git', ['rev-parse', '--show-toplevel'], { cwd: dir, windowsHide: true });
@@ -186,6 +214,7 @@ export class FilesService extends EventEmitter {
   }
 
   async list(dir: string): Promise<FsEntry[]> {
+    local(dir);
     const entries = await fs.readdir(dir, { withFileTypes: true });
     const out: FsEntry[] = [];
     for (const e of entries) {
@@ -204,6 +233,7 @@ export class FilesService extends EventEmitter {
   }
 
   async read(p: string) {
+    local(p);
     const st = await fs.stat(p);
     if (st.size > 2 * 1024 * 1024) throw new Error('file too large');
     return fs.readFile(p, 'utf8');

@@ -1,10 +1,65 @@
-import { describe, expect, it, vi } from 'vitest';
-import { routeLink } from './link-route';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { followLink, routeLink } from './link-route';
 
-// routeLink is pure; followLink's imports (the store touches browser globals at import time) are not needed here
-vi.mock('@/store', () => ({ useStore: { getState: () => ({}) } }));
-vi.mock('@/desktop', () => ({ desktop: null }));
+// the store touches browser globals at import time: followLink's imports are stubbed, `env` is what they see
+const env = vi.hoisted(() => ({
+  settings: {} as Record<string, unknown>,
+  desktop: null as null | { openExternal: (u: string) => Promise<void> },
+  openInBrowser: (_u: string) => {},
+}));
+vi.mock('@/store', () => ({ useStore: { getState: () => ({ settings: env.settings }) } }));
+vi.mock('@/desktop', () => ({ get desktop() { return env.desktop; } }));
 vi.mock('@/features/remote-guard', () => ({ blockRemoteOpen: () => false }));
+vi.mock('@/features/workbench/right-panel', () => ({ openInBrowser: (u: string) => env.openInBrowser(u) }));
+
+// stage B task 1: a page link in a reply opens in the built-in browser; Ctrl / Cmd, or the setting off → the system's
+describe('followLink: web pages', () => {
+  const URL_ = 'https://example.com/a';
+  let openInBrowser: ReturnType<typeof vi.fn>;
+  let openExternal: ReturnType<typeof vi.fn>;
+  let winOpen: ReturnType<typeof vi.fn>;
+  beforeEach(() => {
+    openInBrowser = vi.fn();
+    openExternal = vi.fn(async () => {});
+    winOpen = vi.fn();
+    env.openInBrowser = openInBrowser as never;
+    env.desktop = { openExternal: openExternal as never };
+    env.settings = {};
+    vi.stubGlobal('window', { open: winOpen });
+  });
+  afterEach(() => { vi.unstubAllGlobals(); env.desktop = null; env.settings = {}; });
+
+  it('desktop, setting absent or on → the built-in browser', () => {
+    followLink({ to: 'web', url: URL_ }, 's1');
+    env.settings = { 'web.browser.openLinks': true };
+    followLink({ to: 'web', url: URL_ }, 's1');
+    expect(openInBrowser).toHaveBeenCalledTimes(2);
+    expect(openInBrowser).toHaveBeenCalledWith(URL_);
+    expect(openExternal).not.toHaveBeenCalled();
+  });
+  it('external: true (Ctrl / Cmd) → the system browser', () => {
+    followLink({ to: 'web', url: URL_ }, 's1', { external: true });
+    expect(openExternal).toHaveBeenCalledWith(URL_);
+    expect(openInBrowser).not.toHaveBeenCalled();
+  });
+  it('the setting off → the system browser', () => {
+    env.settings = { 'web.browser.openLinks': false };
+    followLink({ to: 'web', url: URL_ }, 's1');
+    expect(openExternal).toHaveBeenCalledWith(URL_);
+    expect(openInBrowser).not.toHaveBeenCalled();
+  });
+  it('the web version (no desktop) → a new browser tab (many sites refuse to be framed)', () => {
+    env.desktop = null;
+    followLink({ to: 'web', url: URL_ }, 's1');
+    expect(winOpen).toHaveBeenCalledWith(URL_, '_blank', 'noopener,noreferrer');
+    expect(openInBrowser).not.toHaveBeenCalled();
+  });
+  it('mail / tel still go to the system', () => {
+    followLink({ to: 'external', url: 'mailto:a@b.c' }, 's1');
+    expect(openExternal).toHaveBeenCalledWith('mailto:a@b.c');
+    expect(openInBrowser).not.toHaveBeenCalled();
+  });
+});
 
 describe('routeLink', () => {
   it('web pages', () => {

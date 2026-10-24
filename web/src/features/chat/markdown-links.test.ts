@@ -8,14 +8,19 @@ import { routeLink } from './link-route';
 // that touches browser globals or the app is stubbed
 const openTile = vi.fn();
 vi.mock('@/store', () => {
-  const state = { open: {}, activeId: null, openTile: (...a: unknown[]) => openTile(...a) };
+  const state = { open: {}, activeId: null, settings: {}, openTile: (...a: unknown[]) => openTile(...a) };
   const useStore = Object.assign((sel: (s: unknown) => unknown) => sel(state), { getState: () => state });
   return { useStore };
 });
 vi.mock('@/store/paneContext', () => ({ usePaneCtx: () => null }));
-vi.mock('@/desktop', () => ({ desktop: null }));
+const links = vi.hoisted(() => ({
+  desktop: null as null | { openExternal: ReturnType<typeof vi.fn> },
+  openInBrowser: vi.fn(),
+}));
+vi.mock('@/desktop', () => ({ get desktop() { return links.desktop; } }));
 vi.mock('@/features/remote-guard', () => ({ blockRemoteOpen: () => false }));
 vi.mock('./CodeBlock', () => ({ CodeBlock: () => null }));
+vi.mock('@/features/workbench/right-panel', () => ({ openInBrowser: (u: string) => links.openInBrowser(u) }));
 
 const hrefs = (md: string) => [...renderToStaticMarkup(createElement(Markdown, { text: md })).matchAll(/<a href="([^"]*)"/g)].map((m) => m[1].replace(/&amp;/g, '&'));
 
@@ -59,6 +64,32 @@ describe('<Markdown> links keep their href and route', () => {
     linkHandlers('data:text/html,x', undefined, null).onAuxClick(none);
     linkHandlers('javascript:x', undefined, null).onAuxClick(none);
     expect(none.preventDefault).toHaveBeenCalledTimes(2);
+  });
+  // stage B task 1: a middle click on `#x` opened a second app window (the app page + the hash)
+  it('a middle click on an in-page anchor is prevented; a plain click on one is left to the page', () => {
+    const h = linkHandlers('#fn-1', undefined, 's1');
+    const middle = { button: 1, preventDefault: vi.fn() };
+    h.onAuxClick(middle);
+    expect(middle.preventDefault).toHaveBeenCalled();
+    const click = { button: 0, preventDefault: vi.fn() };
+    h.onClick(click);
+    expect(click.preventDefault).not.toHaveBeenCalled();
+  });
+  it('Ctrl / Cmd + click on a page link → the system browser; a plain click → the built-in one', () => {
+    links.desktop = { openExternal: vi.fn(async () => {}) };
+    links.openInBrowser.mockClear();
+    try {
+      const h = linkHandlers('https://e.com/a', undefined, 's1');
+      const plain = { button: 0, preventDefault: vi.fn() };
+      h.onClick(plain);
+      expect(plain.preventDefault).toHaveBeenCalled();
+      expect(links.openInBrowser).toHaveBeenCalledWith('https://e.com/a');
+      expect(links.desktop.openExternal).not.toHaveBeenCalled();
+      h.onClick({ button: 0, ctrlKey: true, preventDefault: vi.fn() });
+      h.onClick({ button: 0, metaKey: true, preventDefault: vi.fn() });
+      expect(links.desktop.openExternal).toHaveBeenCalledTimes(2);
+      expect(links.openInBrowser).toHaveBeenCalledTimes(1);
+    } finally { links.desktop = null; }
   });
   it('an image src keeps the default transform', () => {
     const html = renderToStaticMarkup(createElement(Markdown, { text: '![i](file:///C:/x.png)' }));

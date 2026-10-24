@@ -18,12 +18,24 @@ export function allowNavigation(target: string, appUrl: string | undefined): boo
  * What a `window.open` / middle click / target=_blank from the app page gets: the app page itself (a new app window
  * from the browser path of features/workbench/windows.ts) → a window; another web page → the system browser; anything
  * else, including other addresses on the app's own origin (`/C:/Users/a/x.html`: a path link resolved against the
- * app), → nothing (2026-10-24 review I2: same origin used to be enough and opened a stray blank window).
+ * app), → nothing (2026-10-24 review I2: same origin used to be enough and opened a stray blank window). The app page
+ * with a `#hash` is an in-page anchor (a middle click on `#fn-1` in a reply), not a new window — the app never opens
+ * its own windows with one (stage B: it opened a second app window).
  */
 export function windowOpenAction(target: string, appUrl: string | undefined): 'app-window' | 'external' | 'deny' {
-  if (allowNavigation(target, appUrl)) return 'app-window';
+  if (allowNavigation(target, appUrl)) return new URL(target).hash ? 'deny' : 'app-window';
   if (sameOrigin(target, appUrl)) return 'deny';
   return /^https?:/i.test(target) ? 'external' : 'deny';
+}
+
+/**
+ * What the page may hand the OS through `desktop:openExternal` (stage B): a web page, a mail address, a phone number.
+ * Anything else — `file:`, `smb:` (a network share: Windows hands it the user's credentials), `ms-settings:`, an app's
+ * own protocol — is the renderer (and what it shows: a reply, a web page) launching things on the computer.
+ */
+export function externalAllowed(url: string): boolean {
+  if (typeof url !== 'string') return false;
+  try { return ['http:', 'https:', 'mailto:', 'tel:'].includes(new URL(url).protocol); } catch { return false; }
 }
 
 /**

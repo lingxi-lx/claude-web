@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CrashGuard, allowNavigation, sameOrigin, windowOpenAction } from './nav-guard';
+import { CrashGuard, allowNavigation, externalAllowed, sameOrigin, windowOpenAction } from './nav-guard';
 
 const APP = 'http://127.0.0.1:3090/?token=abc&win=main';
 
@@ -44,6 +44,36 @@ describe('windowOpenAction', () => {
     expect(windowOpenAction('http://127.0.0.1:3091/', APP)).toBe('external');
     expect(windowOpenAction('file:///C:/x.html', APP)).toBe('deny');
     expect(windowOpenAction('javascript:alert(1)', APP)).toBe('deny');
+  });
+  // stage B task 1: a middle click on an in-page `#anchor` in a reply opened a second app window
+  it('the app page with only a #hash added (an in-page anchor) is refused', () => {
+    expect(windowOpenAction('http://127.0.0.1:3090/?token=a#x', APP)).toBe('deny');
+    expect(windowOpenAction('http://127.0.0.1:3090/?token=abc&win=main#fn-1', APP)).toBe('deny');
+    expect(windowOpenAction('http://127.0.0.1:3090/index.html?win=w1#top', APP)).toBe('deny');
+    // a bare `#` is no hash at all (URL.hash is '') — still the app page
+    expect(windowOpenAction('http://127.0.0.1:3090/?win=w2', APP)).toBe('app-window');
+  });
+});
+
+// stage B task 1: the renderer's desktop.openExternal used to hand any scheme to the OS (file:, smb:, ms-settings:…)
+describe('externalAllowed', () => {
+  it('web pages, mail and phone numbers', () => {
+    expect(externalAllowed('https://a.b')).toBe(true);
+    expect(externalAllowed('http://a.b/x?y=1')).toBe(true);
+    expect(externalAllowed('HTTPS://A.B')).toBe(true);
+    expect(externalAllowed('mailto:x@y')).toBe(true);
+    expect(externalAllowed('tel:1')).toBe(true);
+  });
+  it('anything else is refused', () => {
+    expect(externalAllowed('file:///C:/x')).toBe(false);
+    expect(externalAllowed('smb://h/s')).toBe(false);
+    expect(externalAllowed('javascript:1')).toBe(false);
+    expect(externalAllowed('ms-settings:')).toBe(false);
+    expect(externalAllowed('\\\\host\\share')).toBe(false);
+    expect(externalAllowed('C:\\Windows\\notepad.exe')).toBe(false);
+    expect(externalAllowed('not a url')).toBe(false);
+    expect(externalAllowed('')).toBe(false);
+    expect(externalAllowed(undefined as unknown as string)).toBe(false);
   });
 });
 
