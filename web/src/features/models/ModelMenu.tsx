@@ -7,6 +7,7 @@ import { AGENT_ICONS, Icon } from '@/ui/icons';
 import { TERMS } from '@/ui/terms';
 import { buildModelMenu, filterMenu, foldMenu, pushRecent, recentKey, type AgentSource, type ModelMenuItem, type ModelMenuSection } from './menu';
 import { refreshAllModels, useGatewayStatus, useRefreshRun } from './data';
+import { fmtWindow } from '@/features/info/info-model';
 import { placeMenu, samePlacement, withOrigin, type Placement } from './place';
 import { MODEL_MENU_ID, SUBAGENT_MENU_ID } from '@/features/composer/ids';
 import './models.css';
@@ -249,7 +250,7 @@ export function ModelMenu(p: ModelMenuProps) {
                 return (
                   <div key={`${s.id}:${it.key}:${it.isDefault ? 'd' : ''}`} role="option" aria-disabled className={clsx('mm-row', 'off', it.current && 'cur')} title={`${it.label} — ${it.unavailable}`}>
                     <span className="mm-check">{it.current && <Icon name="check" size={12} />}</span>
-                    <span className="mm-label">{!own && <span className="p">{it.providerName} / </span>}<span className="m">{it.display}</span></span>
+                    <span className="mm-label">{!own && <span className="p">{it.providerName} / </span>}<span className="m">{it.display}</span>{it.window && <span className="mm-win">{fmtWindow(it.window)}</span>}</span>
                   </div>
                 );
               }
@@ -261,6 +262,7 @@ export function ModelMenu(p: ModelMenuProps) {
                   <span className="mm-label">
                     {!own && <span className="p">{it.providerName} / </span>}
                     <span className="m">{it.display}</span>
+                    {it.window && <span className="mm-win">{fmtWindow(it.window)}</span>}
                   </span>
                   {it.profileDefault && !sub && <span className="badge">{tr('默认')}</span>}
                   {it.hint && <span className="mm-hint">{it.hint}</span>}

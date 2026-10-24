@@ -2978,6 +2978,8 @@ export const EN_WEB: Record<string, string> = {
   "空着按 Enter 允许一次": "Enter on an empty box allows once",
   "空闲": "Idle",
   "空闲时继续推进": "Keeps making progress when idle",
+  "窗口 {w}": "Window {w}",
+  "窗口 {w} · {c} 内压缩": "Window {w} · compacts at {c}",
   "立即发送": "Send now",
   "立即执行": "Run now",
   "立即插话": "Interject now",

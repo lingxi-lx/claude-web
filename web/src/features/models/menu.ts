@@ -1,5 +1,7 @@
 import type { AgentKind, GatewayGroup, Provider, ProviderType, RuntimeKind } from '@shared';
 import { isChatModel, modelsFor, preferredRuntime, profileFitError, providerTypesFor } from '@catalog';
+import { accountWindowOf, familyWindows } from '@account-window';
+import { contextWindowFor } from '../../../../server/src/models/context-window';
 import { tr } from '@/i18n';
 
 /**
@@ -40,6 +42,11 @@ export interface ModelMenuItem {
   unavailable?: string;
   /** set on another agent's own models (the `agent:<kind>` sections): picking it switches the agent */
   agent?: AgentKind;
+  /**
+   * The model's context window, marked after its name (A7): on the Claude account (the own login and a claude-account
+   * profile) the family's 1M / 200K pick (haiku 200K); on a provider its window when it has one. None on a default entry.
+   */
+  window?: number;
 }
 
 export interface ModelMenuSection {
@@ -220,6 +227,8 @@ export function gatewayModelHint(model: string): string | undefined {
   return undefined;
 }
 
+const windowMark = (w: number | undefined): Pick<ModelMenuItem, 'window'> => (w && w > 0 ? { window: w } : {});
+
 const strList = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
 
 function builtinList(i: BuildMenuInput) {
@@ -262,7 +271,10 @@ export function buildModelMenu(i: BuildMenuInput): ModelMenu {
   // the agent's own login
   const ownTitle = i.builtinTitle ?? (i.agent === 'claude' ? tr('Claude 账号') : i.agent);
   const own: ModelMenuItem[] = [make(OWN_PROVIDER, ownTitle, '', i.agentDefault ? tr('默认（{agentDefault}）', { agentDefault: i.agentDefault }) : tr('默认模型'), true, { isDefault: true })];
-  for (const m of builtinList(i)) if (m.value && m.value !== 'default') own.push(make(OWN_PROVIDER, ownTitle, m.value, m.displayName || m.value, true, { hint: m.description || undefined }));
+  // the Claude login's 200K / 1M per family (settings → the account; what the settings say — through a relay of the
+  // user's own the server leaves the picks out, which this cannot know cheaply)
+  const ownWindows = i.agent === 'claude' ? familyWindows(i.settings['claude.contextWindows']) : undefined;
+  for (const m of builtinList(i)) if (m.value && m.value !== 'default') own.push(make(OWN_PROVIDER, ownTitle, m.value, m.displayName || m.value, true, { hint: m.description || undefined, ...windowMark(ownWindows ? accountWindowOf(m.value, ownWindows) : undefined) }));
   items.push(...own);
   const ownShown = own.filter(visible);
   sections.push({ id: 'builtin', kind: 'builtin', title: ownTitle, providerId: OWN_PROVIDER, items: ownShown, count: ownShown.filter((x) => !x.isDefault).length });
@@ -271,11 +283,14 @@ export function buildModelMenu(i: BuildMenuInput): ModelMenu {
     const compatible = types.includes(p.type);
     const unavailable = compatible ? profileUnavailable(p, i) ?? undefined : undefined;
     const models = profileModels(p, i.gatewayGroups, i.providers, i.gatewayPoolModels);
+    // another Claude account keeps its family picks in contextWindows (opus / sonnet / fable), not per model id
+    const acctWindows = p.type === 'claude-account' ? familyWindows(p.contextWindows) : undefined;
     const list = models.length
       ? models.map((m) => {
         // a gateway model is a raw id from an account pool: say what it is good for (speed / coding / thinking)
         const hint = p.type === 'gateway' ? gatewayModelHint(m) : providerModelName(p, m) !== m ? m : undefined;
-        return make(p.id, p.name, m, providerModelName(p, m), compatible, { profileDefault: m === p.defaultModel, unavailable, ...(hint ? { hint } : {}) });
+        const window = acctWindows ? accountWindowOf(m, acctWindows) : contextWindowFor(p, m);
+        return make(p.id, p.name, m, providerModelName(p, m), compatible, { profileDefault: m === p.defaultModel, unavailable, ...(hint ? { hint } : {}), ...windowMark(window) });
       })
       : [make(p.id, p.name, '', tr('默认模型'), compatible, { isDefault: true, unavailable })];
     items.push(...list);

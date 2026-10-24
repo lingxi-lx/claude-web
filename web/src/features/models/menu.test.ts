@@ -312,6 +312,48 @@ describe('other agents as sources in the same flat list (the old agent picker, s
   });
 });
 
+// A7: the Claude account's 200K / 1M per family (claude.contextWindows / a claude-account profile's contextWindows),
+// a provider's window when it has one
+describe('the window mark on a model row', () => {
+  const win = (m: ReturnType<typeof menu>, providerId: string, model: string) => m.items.find((i) => i.providerId === providerId && i.model === model && !i.isDefault)?.window;
+  it('the own Claude login: the family pick (1M by default), haiku 200K, the default entry none', () => {
+    const m = menu();
+    expect(win(m, 'claude', 'claude-opus-5-5')).toBe(1_000_000);
+    expect(win(m, 'claude', 'claude-sonnet-5')).toBe(1_000_000);
+    expect(win(m, 'claude', 'claude-fable-5-1')).toBe(1_000_000);
+    expect(win(m, 'claude', 'claude-haiku-4-5')).toBe(200_000);
+    expect(m.items.find((i) => i.providerId === 'claude' && i.isDefault)!.window).toBeUndefined();
+    const picked = menu({ settings: { 'claude.contextWindows': { opus: 200_000, fable: 'x' } } });
+    expect(win(picked, 'claude', 'claude-opus-5-5')).toBe(200_000);
+    expect(win(picked, 'claude', 'claude-sonnet-5-5')).toBe(1_000_000);
+    expect(win(picked, 'claude', 'claude-fable-5-1')).toBe(1_000_000); // not a pick: the default
+    // the CLI's own list (aliases, a [1m] id): the same rule
+    const cli = menu({ builtin: [{ value: 'default', displayName: 'Default' }, { value: 'opus', displayName: 'Opus' }, { value: 'sonnet[1m]', displayName: 'Sonnet (1M)' }, { value: 'haiku', displayName: 'Haiku' }], settings: { 'claude.contextWindows': { sonnet: 200_000 } } });
+    expect([win(cli, 'claude', 'opus'), win(cli, 'claude', 'sonnet[1m]'), win(cli, 'claude', 'haiku')]).toEqual([1_000_000, 200_000, 200_000]);
+  });
+  it('a claude-account profile: its own picks, not the login\'s', () => {
+    const acct = prov('acct', { type: 'claude-account', models: ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-4-5'], contextWindows: { opus: 200_000 } });
+    const m = menu({ providers: [...PROVIDERS, acct], settings: { 'claude.contextWindows': { sonnet: 200_000 } } });
+    expect([win(m, 'acct', 'claude-opus-5-5'), win(m, 'acct', 'claude-sonnet-5-5'), win(m, 'acct', 'claude-haiku-4-5')]).toEqual([200_000, 1_000_000, 200_000]);
+    expect(win(m, 'claude', 'claude-sonnet-5-5')).toBe(200_000);
+  });
+  it('a provider: its window for the model when it has one (set, listed, known by name)', () => {
+    const set = prov('set', { type: 'openai', models: ['gpt-6-astra', 'mystery-1'], contextWindows: { 'gpt-6-astra': 400_000 } });
+    const m = menu({ providers: [...PROVIDERS, set] });
+    expect(win(m, 'gkey', 'gpt-6-astra')).toBe(272_000);
+    expect(win(m, 'snbchr', 'claude-opus-5')).toBe(1_000_000);
+    expect(win(m, 'set', 'gpt-6-astra')).toBe(400_000);
+    expect(win(m, 'set', 'mystery-1')).toBeUndefined();
+    expect(m.items.find((i) => i.providerId === 'empty')!.window).toBeUndefined();
+  });
+  it('another agent\'s own login: no mark', () => {
+    const m = menu({ agent: 'codex' });
+    expect(m.items.filter((i) => i.providerId === 'claude').every((i) => i.window === undefined)).toBe(true);
+    const withCodex = menu({ otherAgents: [{ kind: 'codex', name: 'Codex', installed: true, models: ['gpt-6-luna'] }] });
+    expect(withCodex.items.filter((i) => i.agent).every((i) => i.window === undefined)).toBe(true);
+  });
+});
+
 describe('provider models that are not for chatting, and the effort that never leaves', () => {
   it('an image-only key lists no chat models; image models drop out of a mixed list', async () => {
     const { profileModels } = await import('./menu');

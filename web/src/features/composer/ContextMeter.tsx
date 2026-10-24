@@ -35,9 +35,10 @@ export function useContextUsage(sessionId: string): ContextUsage | undefined {
     // another Claude account is the account: its windows are the account's (200K, 1M for a [1m] pick)
     const p = v.providerId !== 'claude' ? providers.find((x) => x.id === v.providerId) : undefined;
     // the engine's autocompact cap (the server reports it; review I3): the window this divides by is the one the card's
-    // body counts against
-    return estimateContext(o.conv.items, { provider: p?.type === 'claude-account' ? undefined : p, model: v.model, compactWindow: o.info?.compactWindow });
-  }, [o?.version, o?.info?.compactWindow, providers, recorded]);
+    // body counts against; and the model's window as the engine will use it (A7: the account's 200K / 1M pick, the
+    // provider's setting) — the server's word over any guess here
+    return estimateContext(o.conv.items, { provider: p?.type === 'claude-account' ? undefined : p, model: v.model, compactWindow: o.info?.compactWindow, contextWindow: o.info?.contextWindow });
+  }, [o?.version, o?.info?.compactWindow, o?.info?.contextWindow, providers, recorded]);
 }
 
 /**

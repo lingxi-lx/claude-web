@@ -1,5 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import { connectorSummary, contextBreakdown, ctxCanRefresh, ctxLive, fmtTokens, moveCard, normInfoLayout, nudgeCard, toggleCard, toneOf } from './info-model';
+import { connectorSummary, contextBreakdown, contextTitle, ctxCanRefresh, ctxLive, fmtTokens, fmtWindow, moveCard, normInfoLayout, nudgeCard, toggleCard, toneOf } from './info-model';
+
+describe('上下文 card title (A7)', () => {
+  it('a window: whole K, M from 1M (a decimal only when it is not whole)', () => {
+    expect(fmtWindow(1_000_000)).toBe('1M');
+    expect(fmtWindow(200_000)).toBe('200K');
+    expect(fmtWindow(272_000)).toBe('272K');
+    expect(fmtWindow(650_000)).toBe('650K');
+    expect(fmtWindow(128_000)).toBe('128K');
+    expect(fmtWindow(1_500_000)).toBe('1.5M');
+    expect(fmtWindow(2_000_000)).toBe('2M');
+    expect(fmtWindow(1_048_576)).toBe('1M');
+    expect(fmtWindow(999_800)).toBe('1M');
+  });
+  it('the window, and where it compacts when that is below it', () => {
+    expect(contextTitle(1_000_000, 700_000)).toBe('窗口 1M · 700K 内压缩');
+    expect(contextTitle(272_000, 200_000)).toBe('窗口 272K · 200K 内压缩');
+    expect(contextTitle(1_000_000)).toBe('窗口 1M');
+    expect(contextTitle(200_000, 200_000)).toBe('窗口 200K');
+    expect(contextTitle(200_000, 700_000)).toBe('窗口 200K');
+    expect(contextTitle()).toBe('');
+    expect(contextTitle(undefined, 700_000)).toBe('');
+    expect(contextTitle(0, 0)).toBe('');
+  });
+});
 
 describe('信息栏 layout', () => {
   it('a stored layout is repaired: unknown dropped, duplicates gone, new cards appended; context folded by default', () => {

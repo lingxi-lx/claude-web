@@ -1,5 +1,6 @@
 // 信息栏 (spec 2026-10-16 recording-ux §1; the official app's right column): what the cards are, in what order, which are
 // folded (meta.json `ui.infoCards`), and the context breakdown grouped for the 上下文 card. Pure.
+import { tr } from '@/i18n';
 
 export const INFO_CARDS = ['env', 'context', 'connectors', 'changes', 'background', 'pins'] as const;
 export type InfoCard = (typeof INFO_CARDS)[number];
@@ -114,6 +115,24 @@ export function fmtTokens(n: number): string {
   if (n >= 1e6) return `${(n / 1e6).toFixed(n >= 1e7 ? 0 : 1)}M`;
   if (n >= 1e3) return `${(n / 1e3).toFixed(n >= 1e5 ? 0 : 1)}k`;
   return String(Math.round(n));
+}
+
+/** A context window as the title and the model menu say it: whole K (272K, 650K), M from 1M (1M, 1.5M). */
+export function fmtWindow(n: number): string {
+  const k = Math.round(n / 1000);
+  if (k < 1000) return `${k}K`;
+  return `${Math.round(n / 1e5) / 10}M`;
+}
+
+/**
+ * The 上下文 card's title (A7): the window the model has in this conversation and, when the autocompact cap is below
+ * it, where it compacts — 「窗口 1M · 700K 内压缩」. Both from the server (`SessionInfoSnapshot.contextWindow` /
+ * `compactWindow`); nothing when the window is unknown.
+ */
+export function contextTitle(window?: number, cap?: number): string {
+  if (!window || window <= 0) return '';
+  const w = fmtWindow(window);
+  return cap && cap > 0 && cap < window ? tr('窗口 {w} · {c} 内压缩', { w, c: fmtWindow(cap) }) : tr('窗口 {w}', { w });
 }
 
 /** 连接器: how many need a hand (failed or waiting for a login) and the rows to list. */

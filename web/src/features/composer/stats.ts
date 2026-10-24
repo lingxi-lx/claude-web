@@ -55,8 +55,11 @@ export function meterMode(pct: number | undefined): 'ring' | null {
  * the name's), the account's 1M for a `[1m]` pick, else 200K — 1M when it already holds more. `compactWindow`: the
  * conversation's autocompact cap (`SessionInfoSnapshot.compactWindow`); the engine caps the window at it, so this does
  * too — the card's body (the engine's own count) and this agree (2026-10-24 review I3). Still not asked of the engine.
+ * `contextWindow`: the window the server says the engine will use (`SessionInfoSnapshot.contextWindow`, A7 — the
+ * account's 200K / 1M pick, the provider's setting): when it is there it is the window, guessed from nothing and never
+ * bumped (a window that just shrank under the conversation is full until it compacts).
  */
-export function estimateContext(items: readonly ConvItem[], o: { provider?: Pick<Provider, 'contextWindows' | 'modelContext'>; model?: string; compactWindow?: number }): ContextUsage | undefined {
+export function estimateContext(items: readonly ConvItem[], o: { provider?: Pick<Provider, 'contextWindows' | 'modelContext'>; model?: string; compactWindow?: number; contextWindow?: number }): ContextUsage | undefined {
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i];
     if (it.kind !== 'assistant' || it.parentToolUseId || !it.usage) continue;
@@ -64,9 +67,12 @@ export function estimateContext(items: readonly ConvItem[], o: { provider?: Pick
     const total = u.input + u.cacheRead + u.cacheWrite + u.output;
     if (!total) return undefined;
     const model = o.model || it.model || '';
-    let max = o.provider ? contextWindowFor(o.provider, model) : /\[1m\]$/i.test(model) ? ONE_M : undefined;
-    max ??= ENGINE_DEFAULT_WINDOW;
-    if (total > max && max < ONE_M) max = ONE_M;
+    let max: number;
+    if (o.contextWindow && o.contextWindow > 0) max = o.contextWindow;
+    else {
+      max = (o.provider ? contextWindowFor(o.provider, model) : /\[1m\]$/i.test(model) ? ONE_M : undefined) ?? ENGINE_DEFAULT_WINDOW;
+      if (total > max && max < ONE_M) max = ONE_M;
+    }
     if (o.compactWindow && o.compactWindow > 0) max = Math.min(max, o.compactWindow);
     return { percentage: Math.min(100, Math.round((total / max) * 100)), totalTokens: total, maxTokens: max, estimated: true };
   }

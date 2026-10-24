@@ -74,6 +74,24 @@ describe('the old stats bar, now behind the usage ring', () => {
     // past the cap (it compacts below it): full, not over 100
     expect(estimateContext([at577k], { model: 'x[1m]', compactWindow: 500_000 })).toMatchObject({ percentage: 100, maxTokens: 500_000 });
   });
+  // A7: the server's info.contextWindow (the account's 200K / 1M pick, the provider's setting) is the window as the
+  // engine will use it — it beats what the model name or the provider list would suggest
+  it('the window the server reports wins over the guess, then the autocompact cap lowers it', () => {
+    const answer = (usage: any, model = 'claude-opus-5-5') => ({ kind: 'assistant', id: Math.random().toString(), model, parentToolUseId: null, blocks: [], usage }) as any;
+    const tenth = answer({ input: 1, cacheRead: 99_999, cacheWrite: 0, output: 0 });
+    // a [1m] id on an account whose opus pick is 200K
+    expect(estimateContext([tenth], { model: 'claude-opus-5-5[1m]', contextWindow: 200_000 })).toMatchObject({ percentage: 50, maxTokens: 200_000 });
+    // a plain id on the account's 1M
+    expect(estimateContext([tenth], { model: 'claude-opus-5-5', contextWindow: 1_000_000 })).toMatchObject({ percentage: 10, maxTokens: 1_000_000 });
+    // over the provider's guess
+    expect(estimateContext([answer({ input: 1, cacheRead: 199_999, cacheWrite: 0, output: 0 }, 'gpt-6')], { provider: { contextWindows: { 'gpt-6': 272_000 } }, contextWindow: 400_000 })).toMatchObject({ percentage: 50, maxTokens: 400_000 });
+    // then min(window, cap)
+    const at577k = answer({ input: 1, cacheRead: 576_999, cacheWrite: 0, output: 0 });
+    expect(estimateContext([at577k], { contextWindow: 1_000_000, compactWindow: 700_000 })).toEqual({ percentage: 82, totalTokens: 577_000, maxTokens: 700_000, estimated: true });
+    expect(estimateContext([tenth], { contextWindow: 200_000, compactWindow: 700_000 })).toMatchObject({ percentage: 50, maxTokens: 200_000 });
+    // known, so not bumped to 1M by what it holds (the window just shrank under it): full
+    expect(estimateContext([at577k], { contextWindow: 200_000 })).toMatchObject({ percentage: 100, maxTokens: 200_000 });
+  });
   it('the lines the hover card shows (every field of the old bar)', () => {
     const lines = usageLines(sessionTotals(items), { lastMs: 4200, context: { percentage: 72, totalTokens: 145_000, maxTokens: 200_000 }, tasks: 2 });
     expect(lines.map((l) => l[0])).toEqual(['轮数', '输入 / 输出', '缓存命中', '费用', '上一轮用时', '上下文', '后台任务']);
