@@ -50,6 +50,7 @@ contextBridge.exposeInMainWorld('desktop', {
   // page drawn as a device; its downloads; a picture of it saved; a local HTML file picked
   onGuestKey: on('desktop:guestKey'),
   guestEmulate: (id: number, vp: unknown) => ipcRenderer.invoke('desktop:browser:emulate', id, vp),
+  guestDebug: (id: number, q: unknown) => ipcRenderer.invoke('desktop:browser:debug', id, q),
   onGuestDownload: on('desktop:guestDownload'),
   openDownload: (p: string) => ipcRenderer.invoke('desktop:download:open', p),
   showDownload: (p: string) => ipcRenderer.invoke('desktop:download:show', p),

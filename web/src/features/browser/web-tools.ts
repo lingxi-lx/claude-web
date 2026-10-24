@@ -2,8 +2,9 @@
 // and what a permission card asks. Pure.
 import type { IconName } from '@/ui/icons';
 import { tr } from '@/i18n';
+import { VIEWPORT_IDS, viewportLabel, type ViewportId } from './viewport';
 
-export const WEB_TOOLS = ['web_search', 'browser_open', 'browser_read', 'browser_find', 'browser_click', 'browser_type', 'browser_press_key', 'browser_scroll', 'browser_back', 'browser_screenshot', 'browser_computer', 'character_guide', 'character_draft', 'character_save', 'character_assign', 'character_list', 'theme_guide', 'theme_draft', 'theme_get', 'theme_save', 'theme_apply', 'theme_list', 'theme_delete'] as const;
+export const WEB_TOOLS = ['web_search', 'browser_open', 'browser_read', 'browser_find', 'browser_click', 'browser_type', 'browser_press_key', 'browser_scroll', 'browser_back', 'browser_screenshot', 'browser_computer', 'browser_console', 'browser_network', 'browser_snapshot', 'browser_wait', 'browser_tabs', 'browser_viewport', 'character_guide', 'character_draft', 'character_save', 'character_assign', 'character_list', 'theme_guide', 'theme_draft', 'theme_get', 'theme_save', 'theme_apply', 'theme_list', 'theme_delete'] as const;
 export type WebTool = (typeof WEB_TOOLS)[number];
 
 /** `mcp__web__browser_open` (Claude), `web__browser_open` / `web.browser_open` / the bare name (other agents) → the tool. */
@@ -39,6 +40,21 @@ export function webToolLabel(tool: WebTool, input: Record<string, unknown> | und
     case 'browser_back': return { icon: 'web', verb: tr('返回上一页'), arg: '' };
     case 'browser_screenshot': return { icon: 'image', verb: tr('给网页截图'), arg: '' };
     case 'browser_computer': return computerLabel(input);
+    case 'browser_console': return { icon: 'web', verb: tr('看网页的控制台'), arg: input?.errors_only === true ? tr('只看错误和警告') : '' };
+    case 'browser_network': return { icon: 'web', verb: tr('看网页的网络请求'), arg: input?.failed_only === true ? tr('只看失败的') : '' };
+    case 'browser_snapshot': return { icon: 'web', verb: tr('看网页的结构'), arg: '' };
+    case 'browser_wait': return { icon: 'web', verb: tr('等网页:'), arg: str(input, 'text').slice(0, 80) || refText(input?.ref) };
+    case 'browser_tabs': {
+      const action = str(input, 'action');
+      if (action === 'switch') return { icon: 'web', verb: tr('换到标签:'), arg: refText(input?.id) };
+      if (action === 'new') return { icon: 'web', verb: tr('新开标签:'), arg: shortAddress(str(input, 'url')) };
+      if (action === 'close') return { icon: 'web', verb: tr('关掉标签:'), arg: refText(input?.id) };
+      return { icon: 'web', verb: tr('看打开的标签'), arg: '' };
+    }
+    case 'browser_viewport': {
+      const preset = str(input, 'preset') as ViewportId;
+      return { icon: 'web', verb: tr('把网页显示成:'), arg: VIEWPORT_IDS.includes(preset) ? viewportLabel(preset) : preset };
+    }
     // 网吧's characters (server/src/characters/tool-defs.ts) ride on the same server
     case 'character_guide': return { icon: 'user', verb: tr('看捏角色的说明'), arg: '' };
     case 'character_draft': { const c = input?.character as Record<string, unknown> | undefined; return { icon: 'user', verb: tr('画角色草稿:'), arg: str(c, 'name') || str(c, 'id') }; }
@@ -109,6 +125,15 @@ export function webToolAsk(tool: WebTool, input: Record<string, unknown> | undef
       if (action === 'mouse_move') return tr('{agent} 想在网页上移动鼠标', { agent });
       return tr('{agent} 想用鼠标点网页上的一个位置', { agent });
     }
+    case 'browser_console': return tr('{agent} 想看网页的控制台', { agent });
+    case 'browser_network': return tr('{agent} 想看网页的网络请求', { agent });
+    case 'browser_snapshot': return tr('{agent} 想看网页的结构', { agent });
+    case 'browser_wait': return tr('{agent} 想等网页加载出来', { agent });
+    case 'browser_tabs': {
+      const h = str(input, 'action') === 'new' ? host(str(input, 'url')) : '';
+      return h ? tr('{agent} 想新开一个标签打开 {h}', { agent, h }) : tr('{agent} 想管理它打开的浏览器标签', { agent });
+    }
+    case 'browser_viewport': return tr('{agent} 想换网页的显示尺寸', { agent });
     case 'character_assign': return input?.id === null ? tr('{agent} 想把{targetText}换回默认形象', { agent, targetText: targetText(str(input, 'target')) }) : tr('{agent} 想把角色 {str} 给{targetText}', { agent, str: str(input, 'id'), targetText: targetText(str(input, 'target')) });
     case 'character_guide': case 'character_draft': case 'character_save': case 'character_list': return tr('{agent} 想改网吧的角色库', { agent });
     case 'theme_apply': return tr('{agent} 想把界面换成主题「{id}」', { agent, id: str(input, 'id') });

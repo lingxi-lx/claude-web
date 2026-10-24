@@ -91,7 +91,7 @@ npm run dev          # 开发：server tsx watch + vite :5173（代理 /ws 到 3
 | [import](docs/notes/import.md) | 从其它工具导入（2026-10-17，用户要求） | Hermes / CC Switch / Codex / OpenCode / Continue / IDE 的供应商和 MCP、只读、key 不上 wire、Mirasim 读不了 |
 | [zoom](docs/notes/zoom.md) | 界面缩放（2026-10-10 用户要求：台式机分辨率高，界面看着小） | 桌面版页面缩放 |
 | [rail-sections-web](docs/notes/rail-sections-web.md) | 图标栏 / 分区 / 联网（2026-10-10，界面第二轮） | 图标栏、分区页、扩展页、强度按钮、浏览器标签、web MCP |
-| [search-computer](docs/notes/search-computer.md) | 搜索在内置浏览器里 / 网页上的鼠标键盘 / 操控电脑（2026-10-10，用户要求） | 浏览器里搜索、browser_computer、操控电脑（computer MCP） |
+| [search-computer](docs/notes/search-computer.md) | 搜索在内置浏览器里 / 网页上的鼠标键盘 / 操控电脑（2026-10-10，用户要求） | 浏览器里搜索、browser_computer、操控电脑（computer MCP）、控制台 / 网络 / 页面结构 / 等待 / 标签 / 视口工具（共用调试器） |
 | [background](docs/notes/background.md) | 后台：在跑的子代理和工作流（2026-10-12） | 后台：子代理 / 工作流的数据来源、服务端、前端、调试 |
 | [cafe](docs/notes/cafe.md) | 后台 · 网吧（2026-10-13） | 等距像素网吧、角色格式、捏角色的 skill 和工具、模拟与渲染 |
 | [ascii-themes](docs/notes/ascii-themes.md) | 字符画主题与过程动画（2026-10-22，用户要求） | 主题包、data-ascii、16 个过程 / 帧表、ProcessGlyph、Worker 背景的沙箱和看门狗、安静区、十套内置、theme-check 脚本、ascii-theme skill 与试跑、设置页画廊、截图办法 |

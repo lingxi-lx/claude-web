@@ -41,3 +41,19 @@
   - 「`web` 的工具：`web_search` 和 `browser_open / read / find / click / type / press_key / scroll / back / screenshot`」→ 多了 `browser_computer`，共 11 个。
   - 「操控电脑现在用不了……`featureArgs()` 不再传它……`capabilities.ts` 的那一行带 `unavailable`」→ Windows 上能用了（见上）；`--computer-use-mcp` 仍然不传，`unavailable` 只在服务端不是 Windows 时出现。
   - 「设置 → 联网：搜索引擎和密钥」→ 「用什么搜索」下拉（自动 / DuckDuckGo / Bing / Google / Yahoo / 百度 / Brave Search），只有 Brave 要密钥。
+
+## 浏览器的调试工具：控制台 / 网络 / 页面结构 / 等待 / 标签 / 视口（2026-10-24，阶段 B 任务 6）
+
+- **工具**（`server/src/web/mcp.ts`，`web` 一共 17 个浏览器 / 搜索工具）：`browser_console {errors_only?}`、`browser_network {failed_only?}`、`browser_snapshot {}`、`browser_wait {text?, ref?, timeoutMs ≤ 20000}`、`browser_tabs {action: list|switch|new|close, id?, url?}`、`browser_viewport {preset: auto|phone|tablet|desktop}`。都要桌面版（没有窗口时 `NEEDS_DESKTOP`）；op 名 `console / network / snapshot / wait / tabs / viewport`（`protocol.ts` `BrowserOp`），答案多了 `console[] / network[] / tabs[]`。权限（只读的不问）是任务 7 的事，这里只给了诚实的 `readOnlyHint`。
+- **一页一个调试器，大家共用**（`desktop/src/guest-debug.ts`）：`acquire(guest, 'viewport' | 'capture' | 'snapshot')` / `release`，最后一个放手才 `detach`（而且只在是我们 attach 的时候）。视口回到自适应不会把控制台记录弄没，记录也不会把视口留住。`message` / `detach` 监听每次 attach 只装一次；页面销毁时 `forgetGuest` → `forgetDebug`。
+- **记录**：第一次读控制台 / 网络时才开（`Runtime.enable` 会把之前的 console 消息补发过来，`Log.enable` 补浏览器自己的行，比如 404 的 `Failed to load resource`）；之前的网络请求补不回来，开的时候用页面的 `performance` 资源计时补一份（方法不确定的写 `?`，状态来自 `responseStatus`），第一次读网络时附一句说明。各留最后 200 条，记到页面关掉。Electron 自己的安全警告（`node:electron/…`，没打包时）不记。
+- **页面结构**：`Accessibility.getFullAXTree` 压成每行一个元素（地标、标题、带名字的图 / 表单 / 区域、所有能操作的），其余（generic、静态文字）只把孩子往上交；一个父元素下的 option 最多 25 个再加一行「还有 N 个」；最多 400 行，web 侧再截到 12 000 字。能操作的那几行用 `DOM.resolveNode` + 一次 `Runtime.callFunctionOn` 问 page-agent 的 `refFor(el)` 拿编号——和 `find / click` 同一套编号，看到就能点。读不到树的时候退回 page-agent 自己的元素表并说明原因。page-agent 升到 `v: 4`（多了 `has` / `refFor`）。
+- **等待**：`peek` 不走 `askable()`（那个会在页面加载超过 3 秒时 `stop()`，而等待多半就是在等加载），一次只挂一个探测，超时算没等到。ref 不在页面上了立刻报错。
+- **标签**：`state.ts` 的 `agentTab` 先看这个对话 switch / new 过去的那个（`setAgentCurrent`，不存盘），再退回第一个；只列 / 只切 / 只关 `agent === sessionId` 的标签；`new` 只收 http(s)。别的工具在没有页面的新标签上直接说「先 browser_open」。
+- **视口**：和 ⋯ → 视口菜单同一条路——`patchTab({viewport})` + `applyViewport`（从 `BrowserPanel.tsx` 挪到 `guest.ts`，等壳子应用完才返回，壳子换 UA 时会自己重新载入），然后照常 glance。
+- **踩过的坑 / 和预想不一样的**：
+  - Electron 44 上开着 DevTools 时 `debugger.attach` **不会失败**（第二个客户端），控制台、结构、视口都照常；`NO_DEBUGGER` 那句错误只在 attach 真抛错时出现。
+  - 没有 `<meta name=viewport>` 的页面在手机视口下 `innerWidth` 是 980（移动端的默认布局宽度），不是 390——验视口要么加 meta，要么看 `screen.width`。
+  - 换成手机 UA 会重新载入页面：之前点出来的状态（标题改了之类）会没。
+  - 这台机器的 bash 工具里 heredoc 带 `\'` 或 `\\` 时整条命令会解析失败（不只是吃反斜杠）：脚本一律先用 Write 写成文件再跑。
+- **验证**：单测 `desktop/src/guest-debug.test.ts`（共用 / DevTools 抛错 / 记录 / 补资源计时 / 结构压缩 / 编号）、`web/src/features/browser/ops.test.ts`（截断、过滤、等待超时、标签只列自己的）、`server/src/web/{mcp,service}.test.ts`。真机：临时 HOME / `CLAUDE_WEB_DIR` / `--user-data-dir` 起桌面版，CDP 里调 `window.__cwBrowser.carryOut`，本机假页面（加载时 `console.error('boom')`、一张 404 的图、点了才 fetch 一个 500 并晚 0.8 s 出字、40 个 option 的 select），48 项全过；脚本没入库（scratchpad `t6check/check.cjs`）。

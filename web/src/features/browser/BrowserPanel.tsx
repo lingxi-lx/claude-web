@@ -5,7 +5,7 @@ import { clsx } from '@/util';
 import { Icon } from '@/ui/icons';
 import { imeComposing } from '@/ui/ime';
 import { Popover } from '@/features/composer/Popover';
-import { selectionOf } from './guest';
+import { applyViewport, forgetViewport, selectionOf } from './guest';
 import { COOKIES_KEY, COOKIE_MODES, browsingPartitions, closeTab, cookieModeText, cookiesMode, ensureTab, firstPage, frontTab, guestElOf, guestOf, guestReady, hasWebview, newTab, openUrl, patchTab, setGuest, tabOf, tabOfGuest, useBrowser, type BrowserTab, type WebviewEl } from './state';
 import { parseCookies } from './cookies';
 import { AllowedSites } from './AllowedSites';
@@ -57,16 +57,6 @@ function zoomTab(tabId: string, ask: 'in' | 'out' | 'reset') {
   const z = nextPageZoom(tabOf(tabId)?.zoom, ask);
   patchTab(tabId, { zoom: z });
   try { guestOf(tabId)?.setZoomFactor?.(z); } catch { /* not attached */ }
-}
-
-/** The device the shell draws each tab's page as, as last told (tab id → choice): told again only when it changes. */
-const emulated = new Map<string, ViewportId>();
-function applyViewport(tabId: string) {
-  const el = guestOf(tabId);
-  const want = tabOf(tabId)?.viewport ?? 'auto';
-  if (!el || !desktop?.guestEmulate || (emulated.get(tabId) ?? 'auto') === want) return;
-  emulated.set(tabId, want);
-  try { void desktop.guestEmulate(el.getWebContentsId(), viewportOf(want)).catch(() => emulated.delete(tabId)); } catch { emulated.delete(tabId); }
 }
 
 /** The size of an element's box, followed while `on` (a device's page is scaled to fit it). */
@@ -128,8 +118,8 @@ function TabView({ tab, front }: { tab: BrowserTab; front: boolean }) {
       // after a cross-site navigation starts without the device)
       const t = tabOf(id);
       try { if (t?.zoom && t.zoom !== 1) el.setZoomFactor?.(t.zoom); } catch { /* not attached */ }
-      if (t?.viewport && t.viewport !== 'auto') emulated.delete(id);
-      applyViewport(id);
+      if (t?.viewport && t.viewport !== 'auto') forgetViewport(id);
+      void applyViewport(id);
     };
     const onStart = () => { patchTab(id, { loading: true, error: undefined }); progress(id, 'start'); };
     const onStop = () => {
@@ -166,11 +156,11 @@ function TabView({ tab, front }: { tab: BrowserTab; front: boolean }) {
       el.removeEventListener('page-title-updated', onTitle);
       el.removeEventListener('did-fail-load', onFail);
       setGuest(id, null);
-      emulated.delete(id);
+      forgetViewport(id);
     };
   }, [tab.id, webview, !!tab.src]);
   // the menu's 视口 changed: the shell draws the page as that device (or as the panel again)
-  useEffect(() => { if (webview && tab.src) applyViewport(tab.id); }, [tab.viewport, tab.id, webview, !!tab.src]);
+  useEffect(() => { if (webview && tab.src) void applyViewport(tab.id); }, [tab.viewport, tab.id, webview, !!tab.src]);
 
   if (!tab.src) return <div className="bw-view" data-tab={tab.id} hidden={!front}><NewTabPage tab={tab} front={front} /></div>;
   // a device: the page at the device's size, centred, scaled down to fit the panel. Only the element's style

@@ -126,8 +126,19 @@ export function patchTab(id: string, patch: Partial<BrowserTab>): void {
 }
 
 export const tabOf = (id: string): BrowserTab | undefined => useBrowser.getState().tabs.find((t) => t.id === id);
-/** The tab an Agent of this conversation works in (one per conversation). */
-export const agentTab = (sessionId: string): BrowserTab | undefined => useBrowser.getState().tabs.find((t) => t.agent === sessionId);
+/** The tab each conversation's Agent switched to (browser_tabs): session id → tab id. Not kept: a tab list is not either. */
+const agentCurrent = new Map<string, string>();
+/** The tab an Agent of this conversation works in: the one it switched to, else its first. */
+export const agentTab = (sessionId: string): BrowserTab | undefined => {
+  const tabs = useBrowser.getState().tabs;
+  const cur = agentCurrent.get(sessionId);
+  return (cur ? tabs.find((t) => t.id === cur && t.agent === sessionId) : undefined) ?? tabs.find((t) => t.agent === sessionId);
+};
+export const agentCurrentOf = (sessionId: string): string | undefined => agentCurrent.get(sessionId);
+export function setAgentCurrent(sessionId: string, tabId: string | undefined): void {
+  if (tabId) agentCurrent.set(sessionId, tabId);
+  else agentCurrent.delete(sessionId);
+}
 
 /** The browser has at least one tab once it is on screen. */
 export function ensureTab(): void {

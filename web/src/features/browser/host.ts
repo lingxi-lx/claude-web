@@ -6,10 +6,11 @@ import type { BrowserAnswer, BrowserCommand, ServerEvent } from '@shared';
 import { ws } from '@/ws/client';
 import { useStore } from '@/store';
 import { showPanel } from '@/features/workbench/right-panel';
-import { runOp } from './ops';
+import { agentTabsOf, runOp } from './ops';
 import { pageOf } from './guest';
 import { searchPage } from './search-page';
-import { agentTab, cookiesMode, frontTab, guestElOf, hasWebview, newTab, partitionsFor, patchTab, setPartitionSource, tabOf, useBrowser } from './state';
+import { agentCurrentOf, agentTab, closeTab, cookiesMode, frontTab, guestElOf, hasWebview, newTab, partitionsFor, patchTab, setAgentCurrent, setPartitionSource, tabOf, useBrowser } from './state';
+import { loadable } from './url';
 import { tr } from '@/i18n';
 
 // the user's new pages are made in the profile 保留 Cookie gives them (state.ts cannot read the settings itself)
@@ -45,6 +46,7 @@ export async function carryOut(c: BrowserCommand): Promise<BrowserAnswer> {
   const agentPartition = partitionsFor(cookiesMode(useStore.getState().settings)).agent;
   // a search has a page of its own, off screen: it must not replace what the conversation has open
   if (c.op === 'search') return { search: await searchPage(String(c.args?.url ?? ''), agentPartition) };
+  if (c.op === 'tabs') return tabsOp(c, agentPartition);
   let tab = agentTab(c.sessionId);
   if (!tab) {
     if (c.op !== 'open') throw new Error(tr('这个对话还没有打开网页：先用 browser_open 打开一个网址。'));
@@ -53,15 +55,66 @@ export async function carryOut(c: BrowserCommand): Promise<BrowserAnswer> {
     showPanel('browser');
     tab = tabOf(id)!;
   }
-  const id = tab.id;
+  // a tab opened by browser_tabs "new" without an address has no page yet
+  if (!tab.src && c.op !== 'open') throw new Error(tr('这个标签还没有打开网页：先用 browser_open 打开一个网址。'));
+  return inTab(tab.id, c.op, c.args ?? {});
+}
+
+async function inTab(id: string, op: BrowserCommand['op'], args: Record<string, unknown>): Promise<BrowserAnswer> {
   await onScreen(id);
   // mouse and keyboard by position go by what is drawn, and answer with a picture of it
-  if (c.op === 'screenshot' || c.op === 'computer') await inFront(id);
+  if (op === 'screenshot' || op === 'computer') await inFront(id);
   patchTab(id, { busy: true });
   try {
-    return await runOp(pageOf(id), c.op, c.args ?? {});
+    return await runOp(pageOf(id), op, args);
   } finally {
     patchTab(id, { busy: false });
+  }
+}
+
+/**
+ * browser_tabs: the tabs this conversation's Agent opened — never the user's own, nor another conversation's. `list`,
+ * `switch` the one its tools work in, open a `new` one (http / https only), `close` one (default: the current one).
+ */
+async function tabsOp(c: BrowserCommand, partition: string): Promise<BrowserAnswer> {
+  const sid = c.sessionId;
+  const a = c.args ?? {};
+  const list = () => agentTabsOf(useBrowser.getState().tabs, sid, agentTab(sid)?.id);
+  const mine = (id: unknown) => {
+    const t = typeof id === 'string' ? tabOf(id) : undefined;
+    if (!t || t.agent !== sid) throw new Error(tr('没有这个标签：browser_tabs 只管这个对话里你打开的标签（用 {"action": "list"} 看有哪些）。'));
+    return t;
+  };
+  // the user is looking at this conversation's tabs: a switch is shown, else what they look at stays
+  const watching = () => { const on = useBrowser.getState().active; return !!on && tabOf(on)?.agent === sid; };
+  switch (a.action) {
+    case 'list':
+      return { tabs: list() };
+    case 'switch': {
+      const t = mine(a.id);
+      setAgentCurrent(sid, t.id);
+      if (watching()) frontTab(t.id);
+      return { tabs: list(), note: tr('现在用标签 [{id}]。', { id: t.id }) };
+    }
+    case 'new': {
+      const url = typeof a.url === 'string' ? a.url.trim() : '';
+      if (url && !(/^https?:\/\//i.test(url) && loadable(url))) throw new Error(tr('内置浏览器只打开 http / https 的地址：{url}', { url: url.slice(0, 200) }));
+      const id = newTab({ agent: sid, partition });
+      showPanel('browser');
+      setAgentCurrent(sid, id);
+      if (!url) return { tabs: list(), note: tr('新开了标签 [{id}]，之后的浏览器工具都在它里面；用 browser_open 打开网址。', { id }) };
+      const r = await inTab(id, 'open', { url });
+      return { ...r, tabs: list(), note: `${tr('新开了标签 [{id}]，之后的浏览器工具都在它里面。', { id })}${r.note ?? ''}` };
+    }
+    case 'close': {
+      const t = a.id === undefined ? agentTab(sid) : mine(a.id);
+      if (!t) throw new Error(tr('这个对话还没有打开标签。'));
+      closeTab(t.id);
+      if (agentCurrentOf(sid) === t.id) setAgentCurrent(sid, undefined);
+      return { tabs: list(), note: tr('已关掉标签 [{id}]。', { id: t.id }) };
+    }
+    default:
+      throw new Error(tr('browser_tabs 的 action 只能是：{v}', { v: 'list、switch、new、close' }));
   }
 }
 

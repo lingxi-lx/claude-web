@@ -8,6 +8,7 @@ import { CHECK_EVERY_MS, FIRST_CHECK_MS, firstLine, isRequired, macBundle, macSe
 import { MacSelfUpdate } from './mac-update';
 import { execFileSync } from 'node:child_process';
 import { captureGuest, drawGuest, hostedGuest } from './browser-capture';
+import { guestDebug } from './guest-debug';
 import { BROWSER_PARTITIONS, Downloads, browserPartition, cleanVp, clearBrowsingData, emulate, emulatedUa, forgetGuest, guestKeyOf, importCookies, safeName } from './guest-tools';
 import { geminiForget, geminiLogin, geminiRefresh } from './gemini-login';
 import { cleanUserAgent } from './user-agent';
@@ -856,6 +857,12 @@ ipcMain.handle('desktop:browser:emulate', async (e, id: unknown, vp: unknown) =>
   if (!guest || clean === undefined) return false;
   await emulate(guest, clean, { base: app.userAgentFallback, uaFor: guestUa });
   return true;
+});
+// Claude's browser_console / browser_network / browser_snapshot: the page's DevTools protocol (guest-debug.ts)
+ipcMain.handle('desktop:browser:debug', async (e, id: unknown, q: unknown) => {
+  const guest = hostedGuest(e.sender, id);
+  if (!guest) return { error: tr('这个页面不在这个窗口里') };
+  return guestDebug(guest, q);
 });
 // 保存截图: the page as it is drawn, full size, as a PNG where the user says. The path saved, null when the user
 // cancelled, false when nothing could be drawn or written.

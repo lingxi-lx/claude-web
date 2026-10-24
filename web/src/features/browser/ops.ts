@@ -1,8 +1,10 @@
 // One operation an Agent asked of the built-in browser (spec 2026-10-10-ui-structure §5.2), carried out on a page.
 // Pure over `PageHandle` — what a page of the browser can be asked — so the order of things (act, let the page
 // settle, read it back) is tested without a browser; guest.ts makes a PageHandle out of a <webview>.
-import type { BrowserAnswer, BrowserOp, BrowserPage } from '@shared';
+import type { BrowserAnswer, BrowserConsoleEntry, BrowserElement, BrowserNetworkEntry, BrowserOp, BrowserPage, BrowserTabInfo } from '@shared';
 import { tr } from '@/i18n';
+import { VIEWPORT_IDS, viewportLabel, type ViewportId } from './viewport';
+import type { BrowserTab } from './state';
 
 export interface PageHandle {
   /** Load an address and wait for it. Throws with the reason when it cannot be loaded; false = still loading after the wait. */
@@ -23,6 +25,12 @@ export interface PageHandle {
   mouse(e: MouseAct): Promise<void>;
   /** Type text into whatever has the focus, as the keyboard would. */
   insertText(text: string): Promise<void>;
+  /** What the page's DevTools protocol has (the shell: desktop/src/guest-debug.ts). Throws with the shell's reason (DevTools open). */
+  debug(op: 'console' | 'network' | 'snapshot'): Promise<unknown>;
+  /** Ask the page agent without stopping a page that is loading; undefined when it has not answered within `ms`. */
+  peek<T>(fn: 'has', arg: Record<string, unknown>, ms: number): Promise<T | undefined>;
+  /** Draw the page as a device, the way the panel's ⋯ → 视口 menu does. */
+  viewport(id: ViewportId): Promise<void>;
   url(): string;
   title(): string;
 }
@@ -52,7 +60,85 @@ const str = (v: unknown) => (typeof v === 'string' ? v : v == null ? '' : String
  *  untrusted-content markers, so it carries this side's own words only (no element names, no addresses). */
 const at = (ref: unknown) => `[${str(ref).trim().replace(/^\[|\]$/g, '').slice(0, 24)}]`;
 
-export interface OpTimes { pause?: number; settle?: number; computerSettle?: number }
+export interface OpTimes { pause?: number; settle?: number; computerSettle?: number; poll?: number }
+
+/** What browser_console / browser_network hand on at most (the newest; the server cuts the lines to its own budget). */
+export const CONSOLE_MAX = 100;
+export const NETWORK_MAX = 100;
+/** browser_snapshot's outline, in characters (models pay per token). */
+export const SNAPSHOT_CHARS = 12_000;
+/** browser_wait: how long by default, at most, and how often the page is asked. */
+export const WAIT_DEFAULT_MS = 5_000;
+export const WAIT_MAX_MS = 20_000;
+const WAIT_POLL_MS = 250;
+
+const cutTo = (s: string, max: number) => (s.length > max ? `${s.slice(0, max)}…` : s);
+const objects = (v: unknown): Record<string, unknown>[] => (Array.isArray(v) ? v.filter((e): e is Record<string, unknown> => !!e && typeof e === 'object') : []);
+const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : undefined);
+
+/** The shell's console log, checked: errors and warnings only when asked; the newest CONSOLE_MAX, each cut. */
+export function consoleEntries(raw: unknown, errorsOnly: boolean): BrowserConsoleEntry[] {
+  const out: BrowserConsoleEntry[] = [];
+  for (const e of objects(raw)) {
+    const level = str(e.level) || 'log';
+    if (errorsOnly && level !== 'error' && level !== 'warning') continue;
+    const url = str(e.url);
+    out.push({ level: level.slice(0, 20), text: cutTo(str(e.text), 1000), at: num(e.at) ?? 0, ...(url ? { url: cutTo(url, 500) } : {}) });
+  }
+  return out.slice(-CONSOLE_MAX);
+}
+
+/** The shell's requests, checked: only the failed ones (a failure, or a status of 400 and up) when asked; the newest NETWORK_MAX. */
+export function networkEntries(raw: unknown, failedOnly: boolean): BrowserNetworkEntry[] {
+  const out: BrowserNetworkEntry[] = [];
+  for (const e of objects(raw)) {
+    const status = num(e.status);
+    const failed = str(e.failed);
+    if (failedOnly && !failed && !(status !== undefined && status >= 400)) continue;
+    const ms = num(e.ms);
+    const type = str(e.type);
+    out.push({ method: (str(e.method) || 'GET').slice(0, 20), url: cutTo(str(e.url), 500), ...(status !== undefined ? { status } : {}), ...(ms !== undefined ? { ms } : {}), ...(type ? { type: type.slice(0, 40) } : {}), ...(failed ? { failed: cutTo(failed, 200) } : {}) });
+  }
+  return out.slice(-NETWORK_MAX);
+}
+
+/** One line of the shell's outline (desktop/src/guest-debug.ts `SnapNode`). */
+export interface SnapNode { depth: number; role: string; name: string; ref?: string; value?: string; level?: number; states?: string[]; more?: number }
+
+/**
+ * The outline as the model reads it: `role "name" [ref] = "value" states`, indented two spaces a level. A name from
+ * the page is one line with its quotes escaped (it cannot start a line of its own). Cut at a line to `max` characters.
+ */
+export function outlineText(nodes: SnapNode[], max = SNAPSHOT_CHARS): { text: string; lines: number; omitted: number } {
+  const q = (v: unknown, n: number) => `"${str(v).replace(/\s+/g, ' ').trim().slice(0, n).replace(/"/g, '\\"')}"`;
+  const out: string[] = [];
+  let size = 0;
+  for (const n of nodes) {
+    const pad = '  '.repeat(Math.min(12, Math.max(0, Math.floor(Number(n.depth) || 0))));
+    let line: string;
+    if (n.more) line = `${pad}… ${tr('还有 {n} 个选项', { n: n.more })}`;
+    else {
+      const role = str(n.role).replace(/\s+/g, '').slice(0, 40) || 'element';
+      const name = str(n.name).trim() ? ` ${q(n.name, 120)}` : '';
+      const level = typeof n.level === 'number' ? ` (level ${n.level})` : '';
+      const ref = n.ref ? ` [${str(n.ref).slice(0, 24)}]` : '';
+      const value = n.value ? ` = ${q(n.value, 80)}` : '';
+      const states = Array.isArray(n.states) && n.states.length ? ` ${n.states.map((x) => str(x).replace(/\s+/g, '')).join(' ')}` : '';
+      line = `${pad}${role}${name}${level}${ref}${value}${states}`;
+    }
+    if (size + line.length + (out.length ? 1 : 0) > max) break;
+    size += line.length + (out.length ? 1 : 0);
+    out.push(line);
+  }
+  return { text: out.join('\n'), lines: out.length, omitted: nodes.length - out.length };
+}
+
+/** The tabs of a conversation's Agent as browser_tabs lists them; `active`: the one its tools work in (state.ts agentTab). */
+export function agentTabsOf(tabs: BrowserTab[], sessionId: string, current: string | undefined): BrowserTabInfo[] {
+  const mine = tabs.filter((t) => t.agent === sessionId);
+  const active = mine.some((t) => t.id === current) ? current : mine[0]?.id;
+  return mine.map((t) => ({ id: t.id, url: t.src ? t.url : '', title: t.src ? t.title : '', active: t.id === active }));
+}
 
 /**
  * Carry out one operation. After anything that may change the page (click, type + submit, a key, back) the page is
@@ -117,9 +203,72 @@ export async function runOp(page: PageHandle, op: BrowserOp, args: Record<string
     }
     case 'computer':
       return computer(page, args, pause, t.computerSettle ?? COMPUTER_SETTLE_MS);
+    case 'console': {
+      const r = (await page.debug('console')) as { entries?: unknown } | undefined;
+      return { console: consoleEntries(r?.entries, args.errorsOnly === true), page: { url: page.url(), title: page.title(), text: '' } };
+    }
+    case 'network': {
+      const r = (await page.debug('network')) as { entries?: unknown; earlier?: unknown } | undefined;
+      const earlier = Number(r?.earlier) > 0;
+      return {
+        network: networkEntries(r?.entries, args.failedOnly === true),
+        page: { url: page.url(), title: page.title(), text: '' },
+        ...(earlier ? { note: tr('网络请求从现在起完整记录；这之前的请求来自页面的资源计时（方法写成「?」的不确定，失败的请求可能不在里面）。要看页面加载时的全部请求，用 browser_open 重新打开这一页再看。') } : {}),
+      };
+    }
+    case 'snapshot': {
+      // the page agent first: it gives out the refs the outline carries (and its own list is what is left without the tree)
+      const r = await page.call<Read>('read', { offset: 0, maxChars: 200 });
+      let nodes: SnapNode[];
+      let note = '';
+      try {
+        const d = (await page.debug('snapshot')) as { nodes?: unknown; truncated?: unknown } | undefined;
+        if (!d || !Array.isArray(d.nodes)) throw new Error(tr('内置浏览器没有返回页面结构'));
+        nodes = objects(d.nodes) as unknown as SnapNode[];
+        if (d.truncated === true) note = tr('页面很大，结构没有列完；要找某个元素用 browser_find。');
+      } catch (e) {
+        nodes = (r.page.elements ?? []).map((el: BrowserElement) => ({ depth: 0, role: el.role, name: el.name, ref: el.ref, ...(el.value ? { value: el.value } : {}) }));
+        note = tr('读不到页面的无障碍树（{why}），下面只列出了可以操作的元素。', { why: String((e as Error)?.message ?? e).slice(0, 200) });
+      }
+      const o = outlineText(nodes);
+      if (o.omitted && !note) note = tr('页面很大，结构没有列完；要找某个元素用 browser_find。');
+      return { page: { url: r.page.url, title: r.page.title, text: o.text }, ...(note ? { note } : {}) };
+    }
+    case 'wait':
+      return waitFor(page, args, t.poll ?? WAIT_POLL_MS);
+    case 'viewport': {
+      const preset = args.preset as ViewportId;
+      if (!VIEWPORT_IDS.includes(preset)) throw new Error(tr('browser_viewport 的 preset 只能是：{v}', { v: VIEWPORT_IDS.join('、') }));
+      await page.viewport(preset);
+      return glance(tr('视口：{label}。', { label: viewportLabel(preset) }));
+    }
+    case 'tabs':
+      // the conversation's tabs, not a page: host.ts
+      throw new Error('tabs is not an operation on a tab');
     case 'search':
       // a search has a page of its own (search-page.ts): it never comes here
       throw new Error('search is not an operation on a tab');
+  }
+}
+
+/**
+ * browser_wait: the page agent is asked until the text is on the page / the element is shown — never stopping a page
+ * that is loading (a wait is mostly for one). Throws when the time is up, or at once when the element is gone.
+ */
+async function waitFor(page: PageHandle, args: Record<string, unknown>, poll: number): Promise<BrowserAnswer> {
+  const text = str(args.text).trim();
+  const ref = str(args.ref).trim().replace(/^\[|\]$/g, '');
+  if (!text && !ref) throw new Error(tr('browser_wait 需要参数 text（要等的文字）或 ref（要等的元素）'));
+  const timeout = Math.min(WAIT_MAX_MS, Math.max(100, Number(args.timeoutMs) || WAIT_DEFAULT_MS));
+  const secs = (ms: number) => Math.round(ms / 100) / 10;
+  const start = Date.now();
+  const end = start + timeout;
+  for (;;) {
+    const r = await page.peek<{ found?: boolean; missing?: boolean }>('has', { ...(text ? { text } : {}), ...(ref ? { ref } : {}) }, Math.max(50, end - Date.now()));
+    if (r?.found) return { note: ref ? tr('等到了：{at} 出现了（{s} 秒）。', { at: at(ref), s: secs(Date.now() - start) }) : tr('等到了：页面上出现了要等的文字（{s} 秒）。', { s: secs(Date.now() - start) }) };
+    if (r?.missing) throw new Error(tr('页面上已经没有 {at} 这个元素了（页面变过）：用 browser_snapshot 或 browser_find 重新找。', { at: at(ref) }));
+    if (Date.now() >= end) throw new Error(ref && !text ? tr('等了 {s} 秒，{at} 还没有出现。', { s: secs(timeout), at: at(ref) }) : tr('等了 {s} 秒，页面上还没有出现要等的文字。', { s: secs(timeout) }));
+    await sleep(Math.min(poll, Math.max(0, end - Date.now())));
   }
 }
 

@@ -4,6 +4,7 @@
 import { desktop } from '@/desktop';
 import agentSrc from './page-agent.js?raw';
 import { parseKey, type MouseAct, type PageHandle, type Picture } from './ops';
+import { viewportOf, type ViewportId } from './viewport';
 import { guestOf, patchTab, tabOf, waitGuest, type WebviewEl } from './state';
 import { loadable } from './url';
 import type { PickedEl } from './annotate-model';
@@ -42,6 +43,23 @@ async function askable(el: WebviewEl): Promise<void> {
   try { el.stop(); } catch { /* being re-attached */ }
   await sleep(80);
 }
+
+/** The device the shell draws each tab's page as, as last told (tab id → choice): told again only when it changes. */
+const emulated = new Map<string, ViewportId>();
+
+/**
+ * The shell draws the tab's page as the device its 视口 says (BrowserPanel's ⋯ menu, an Agent's browser_viewport):
+ * resolves once the shell has (it reloads the page itself when the user agent changes with it).
+ */
+export async function applyViewport(tabId: string): Promise<void> {
+  const el = guestOf(tabId);
+  const want = tabOf(tabId)?.viewport ?? 'auto';
+  if (!el || !desktop?.guestEmulate || (emulated.get(tabId) ?? 'auto') === want) return;
+  emulated.set(tabId, want);
+  try { await desktop.guestEmulate(el.getWebContentsId(), viewportOf(want)); } catch { emulated.delete(tabId); }
+}
+/** The page is gone, or a new one needs the device said again. */
+export const forgetViewport = (tabId: string): void => { emulated.delete(tabId); };
 
 /** The size of the last picture taken of each tab's page: the frame an Agent's positions are given in. */
 const pictures = new Map<string, { width: number; height: number }>();
@@ -145,6 +163,29 @@ export function pageOf(tabId: string): PageHandle {
       const el = await need();
       if (!el.insertText) throw new Error(tr('这个页面现在不能输入文字。'));
       await el.insertText(text);
+    },
+    async debug(op) {
+      const el = await need();
+      if (!desktop?.guestDebug) throw new Error(tr('这个版本的桌面版读不了页面的调试信息：更新桌面版后再试。'));
+      const r = await desktop.guestDebug(el.getWebContentsId(), { op });
+      if (r && typeof r === 'object' && typeof (r as { error?: unknown }).error === 'string') throw new Error((r as { error: string }).error);
+      return r;
+    },
+    async peek<T>(fn: 'has', arg: Record<string, unknown>, ms: number): Promise<T | undefined> {
+      // no askable(): a wait must not stop a page that is loading — the answer just comes once it can (or not in time)
+      const el = await need();
+      const asked = el.executeJavaScript<{ ok: boolean; value?: T }>(
+        `${agentSrc}
+;(() => { try { return { ok: true, value: window.__cwAgent[${JSON.stringify(fn)}](${JSON.stringify(arg)}) }; } catch (e) { return { ok: false }; } })()`,
+      ).then((r) => (r?.ok ? r.value : undefined), () => undefined);
+      return Promise.race([asked, sleep(ms).then(() => undefined)]);
+    },
+    async viewport(id: ViewportId) {
+      await need();
+      if (!desktop?.guestEmulate) throw new Error(tr('这个版本的桌面版不能切换视口：更新桌面版后再试。'));
+      // what the panel's ⋯ → 视口 menu does: the tab remembers the choice, and the shell is told
+      patchTab(tabId, { viewport: id === 'auto' ? undefined : id });
+      await applyViewport(tabId);
     },
     url() {
       try { return guestOf(tabId)?.getURL() || tabOf(tabId)?.url || ''; } catch { return tabOf(tabId)?.url ?? ''; }

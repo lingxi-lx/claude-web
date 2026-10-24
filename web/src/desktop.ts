@@ -54,6 +54,8 @@ export interface DesktopBridge {
   onGuestKey?(cb: (e: { id: number; key: 'find' | 'zoomIn' | 'zoomOut' | 'zoomReset' }) => void): () => void;
   /** draw the page as this device (touch, a mobile user agent when `mobile`), or as the panel again (null). False: refused. */
   guestEmulate?(id: number, vp: { w: number; h: number; touch: boolean; mobile: boolean } | null): Promise<boolean>;
+  /** Claude's browser_console / browser_network / browser_snapshot: what the page's DevTools protocol has (desktop/src/guest-debug.ts); `{error}` when it cannot be read. */
+  guestDebug?(id: number, q: { op: 'console' | 'network' | 'snapshot' }): Promise<unknown>;
   /** a download of one of this window's pages, as it goes (features/browser/panel-logic.ts `DownloadRow`) */
   onGuestDownload?(cb: (e: import('@/features/browser/panel-logic').DownloadRow) => void): () => void;
   /** open / show a file one of those downloads saved (the shell refuses any other path). False: it did not. */

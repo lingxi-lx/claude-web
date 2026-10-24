@@ -4,6 +4,7 @@
 // Electron is only a type here: main.ts hands in what it has, the tests stand-ins.
 import type { DownloadItem, Session, WebContents } from 'electron';
 import path from 'node:path';
+import { acquire, forgetDebug, holds, release } from './guest-debug';
 
 // ---------- keys ----------
 
@@ -61,30 +62,32 @@ export function mobileUserAgent(base: string, vp: Vp): string | null {
 
 /** The mobile user agent a page being drawn as a phone / tablet goes by (main.ts's user-agent choice asks). */
 const mobileUa = new Map<number, string>();
-/** The pages whose debugger we attached for the device (and so detach again). */
-const attached = new Set<number>();
 export const emulatedUa = (guestId: number): string | undefined => mobileUa.get(guestId);
-export function forgetGuest(guestId: number): void { mobileUa.delete(guestId); attached.delete(guestId); }
+export function forgetGuest(guestId: number): void { mobileUa.delete(guestId); forgetDebug(guestId); }
 
 /**
  * The device's size and touch input (a mouse acts as a finger, `ontouchstart` exists, `(pointer: coarse)`), over the
- * page's DevTools protocol; null: back to the panel's size, the debugger detached again if we attached it.
+ * page's DevTools protocol — shared with Claude's console / network reading (guest-debug.ts); null: back to the
+ * panel's size, the protocol let go (detached when nothing else needs it).
  */
 async function setDevice(guest: WebContents, vp: Vp | null): Promise<void> {
   const d = guest.debugger;
   try {
     if (vp) {
-      if (!d.isAttached()) { d.attach('1.3'); attached.add(guest.id); }
+      if (acquire(guest, 'viewport')) return; // DevTools holds it: drawn at the size, without the device
       await d.sendCommand('Emulation.setDeviceMetricsOverride', metricsParams(vp));
       await d.sendCommand('Emulation.setTouchEmulationEnabled', vp.touch ? { enabled: true, maxTouchPoints: 5 } : { enabled: false });
       await d.sendCommand('Emulation.setEmitTouchEventsForMouse', vp.touch ? { enabled: true, configuration: 'mobile' } : { enabled: false });
-    } else if (d.isAttached()) {
-      await d.sendCommand('Emulation.clearDeviceMetricsOverride');
-      await d.sendCommand('Emulation.setTouchEmulationEnabled', { enabled: false });
-      await d.sendCommand('Emulation.setEmitTouchEventsForMouse', { enabled: false });
-      if (attached.delete(guest.id)) d.detach();
+    } else if (holds(guest.id, 'viewport')) {
+      try {
+        await d.sendCommand('Emulation.clearDeviceMetricsOverride');
+        await d.sendCommand('Emulation.setTouchEmulationEnabled', { enabled: false });
+        await d.sendCommand('Emulation.setEmitTouchEventsForMouse', { enabled: false });
+      } finally {
+        release(guest, 'viewport');
+      }
     }
-  } catch { /* the page went away, or another debugger holds it */ }
+  } catch { /* the page went away */ }
 }
 
 /**

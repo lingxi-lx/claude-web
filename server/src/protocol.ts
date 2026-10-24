@@ -268,7 +268,17 @@ export interface ProxyStatus {
 /** One operation on the built-in browser. Args: open `{url}`, read `{offset?, maxChars?}`, find `{query}`, click `{ref}`,
  *  type `{ref, text, submit?}`, key `{key}`, scroll `{direction: 'up' | 'down', amount?}`, back `{}`, screenshot `{}`. */
 /** `search`: load a search engine's result page (in a page of its own, not the conversation's tab) and list what it shows. `computer`: mouse and keyboard at coordinates of the last screenshot. */
-export type BrowserOp = 'open' | 'read' | 'find' | 'click' | 'type' | 'key' | 'scroll' | 'back' | 'screenshot' | 'search' | 'computer';
+/** `console` `{errorsOnly?}` / `network` `{failedOnly?}`: what the page's DevTools protocol recorded (the shell keeps
+ *  the last 200 of each). `snapshot` `{}`: the page's structure, one element a line, with the refs click / type take.
+ *  `wait` `{text? | ref?, timeoutMs}`. `tabs` `{action: 'list' | 'switch' | 'new' | 'close', id?, url?}`: the
+ *  conversation's own tabs only. `viewport` `{preset: 'auto' | 'phone' | 'tablet' | 'desktop'}`. */
+export type BrowserOp = 'open' | 'read' | 'find' | 'click' | 'type' | 'key' | 'scroll' | 'back' | 'screenshot' | 'search' | 'computer' | 'console' | 'network' | 'snapshot' | 'wait' | 'tabs' | 'viewport';
+/** One console message of a page (console.*, an uncaught error, the browser's own lines such as a failed load). `at`: ms since 1970. */
+export interface BrowserConsoleEntry { level: string; text: string; at: number; url?: string }
+/** One request of a page. No `status` and no `failed`: still on its way. `ms`: how long it took. */
+export interface BrowserNetworkEntry { method: string; url: string; status?: number; ms?: number; type?: string; failed?: string }
+/** A tab of the conversation's Agent; `active`: the one its browser tools work in. */
+export interface BrowserTabInfo { id: string; url: string; title: string; active: boolean }
 /** Something on the page the agent can act on (`ref` goes back in click / type). */
 export interface BrowserElement { ref: string; role: string; name: string; value?: string; href?: string }
 /** A page as text. `text` starts at the offset that was asked for (0 for open); `nextOffset` is where the rest begins. */
@@ -278,7 +288,7 @@ export interface BrowserCommand { id: string; sessionId: string; op: BrowserOp; 
 /** What a result page listed, as the page had it (the server knows each engine's link wrapping): `failed` = the page could not be loaded. */
 export interface BrowserSearchPage { url: string; title: string; text: string; candidates: { title: string; href: string; snippet?: string; alt?: string }[]; failed?: string }
 /** `image.width / height`: the picture's own size in pixels — the frame `computer` coordinates are given in. */
-export interface BrowserAnswer { page?: BrowserPage; elements?: BrowserElement[]; image?: { mime: 'image/jpeg' | 'image/png'; data: string; width?: number; height?: number }; note?: string; search?: BrowserSearchPage }
+export interface BrowserAnswer { page?: BrowserPage; elements?: BrowserElement[]; image?: { mime: 'image/jpeg' | 'image/png'; data: string; width?: number; height?: number }; note?: string; search?: BrowserSearchPage; console?: BrowserConsoleEntry[]; network?: BrowserNetworkEntry[]; tabs?: BrowserTabInfo[] }
 /** `web.status`: the switch (`web.mcp`), the search engine, whether a desktop window is hosting the browser. Keys never leave the server. */
 export interface WebStatus { enabled: boolean; engine: string; engines: { id: string; label: string; needsKey: boolean; hasKey?: boolean; browser?: boolean }[]; host: boolean; isolated: boolean }
 export interface WebSearchResult { title: string; url: string; snippet: string }

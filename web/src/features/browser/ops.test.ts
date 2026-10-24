@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BrowserPage } from '@shared';
-import { GLANCE_CHARS, OPEN_CHARS, WHEEL_NOTCH, parseKey, parseModifiers, runOp, toView, type MouseAct, type PageHandle } from './ops';
+import { CONSOLE_MAX, GLANCE_CHARS, NETWORK_MAX, OPEN_CHARS, SNAPSHOT_CHARS, WAIT_MAX_MS, WHEEL_NOTCH, agentTabsOf, outlineText, parseKey, parseModifiers, runOp, toView, type MouseAct, type PageHandle } from './ops';
 
 /** A page that records what it was asked, in order. */
 function fakePage(o: { text?: string; url?: string; idle?: boolean; canBack?: boolean; onClick?: (p: Fake) => void; typed?: { submitted?: boolean; enter?: boolean }; scroll?: { moved: number; top: number; max: number; length: number }; picture?: { width: number; height: number } | null; view?: { width: number; height: number } } = {}) {
@@ -276,5 +276,147 @@ describe('positions and modifiers', () => {
     expect(parseModifiers('shift+shift+hyper')).toEqual(['shift']);
     expect(parseModifiers(undefined)).toEqual([]);
     expect(parseModifiers(7)).toEqual([]);
+  });
+});
+
+describe('console / network / structure / wait / viewport (stage B task 6)', () => {
+  /** fakePage plus what the shell's DevTools protocol answers, a page agent that answers `has`, and the viewport. */
+  function devPage(o: { debug?: (op: string) => unknown; has?: (n: number) => { found: boolean; missing?: boolean } | undefined; elements?: { ref: string; role: string; name: string }[] } = {}) {
+    const p = fakePage();
+    let asked = 0;
+    const base = p.call;
+    return Object.assign(p, {
+      call: async (fn: string, arg: Record<string, unknown>) => {
+        const r = (await base(fn, arg)) as any;
+        return fn === 'read' && o.elements ? { ...r, page: { ...r.page, elements: o.elements } } : r;
+      },
+      debug: async (op: string) => { p.log.push(`debug ${op}`); const r = o.debug?.(op); if (r instanceof Error) throw r; return r; },
+      peek: async (fn: string, arg: Record<string, unknown>) => { p.log.push(`peek ${fn} ${JSON.stringify(arg)}`); return o.has?.(++asked); },
+      viewport: async (id: string) => { p.log.push(`viewport ${id}`); },
+    });
+  }
+  const go = (p: ReturnType<typeof devPage>, op: Parameters<typeof runOp>[1], args: Record<string, unknown> = {}) => runOp(p as unknown as PageHandle, op, args, { ...quick, poll: 1 });
+
+  it('console: what the shell kept, checked; errors only when asked; the newest 100', async () => {
+    const entries = [{ level: 'log', text: 'ready', at: 1 }, { level: 'error', text: 'boom', at: 2, url: 'https://a.test/app.js' }, { level: 'warning', text: 'careful', at: 3 }, null, { level: 7, text: { x: 1 } }];
+    const p = devPage({ debug: () => ({ entries, fresh: false }) });
+    const a = await go(p, 'console');
+    expect(p.log).toEqual(['debug console']);
+    expect(a.page).toEqual({ url: 'https://a.test/', title: 'T', text: '' });
+    expect(a.console).toEqual([{ level: 'log', text: 'ready', at: 1 }, { level: 'error', text: 'boom', at: 2, url: 'https://a.test/app.js' }, { level: 'warning', text: 'careful', at: 3 }, { level: '7', text: '[object Object]', at: 0 }]);
+    expect((await go(p, 'console', { errorsOnly: true })).console!.map((e) => e.text)).toEqual(['boom', 'careful']);
+    const many = devPage({ debug: () => ({ entries: Array.from({ length: 200 }, (_, i) => ({ level: 'log', text: `m${i} ${'x'.repeat(3000)}`, at: i })) }) });
+    const list = (await go(many, 'console')).console!;
+    expect(list).toHaveLength(CONSOLE_MAX);
+    expect(list[0].text.startsWith('m100 ')).toBe(true);
+    expect(list[0].text.length).toBeLessThanOrEqual(1001);
+  });
+
+  it('the shell cannot read the page (DevTools open): its reason is the error', async () => {
+    await expect(go(devPage({ debug: () => new Error('读不了这个页面的调试信息：它开着开发者工具（DevTools）') }), 'console')).rejects.toThrow(/DevTools/);
+  });
+
+  it('network: failed ones only when asked (a failure, or 400 and up); the earlier requests are said to be from resource timing', async () => {
+    const entries = [{ method: 'GET', url: 'https://a.test/', status: 200, ms: 30, type: 'navigation' }, { method: 'GET', url: 'https://a.test/missing.png', status: 404, ms: 3 }, { method: 'POST', url: 'https://a.test/api', failed: 'net::ERR_FAILED' }, { method: 'GET', url: 'https://a.test/slow' }];
+    const p = devPage({ debug: () => ({ entries, fresh: true, earlier: 2 }) });
+    const a = await go(p, 'network');
+    expect(a.network).toHaveLength(4);
+    expect(a.note).toMatch(/资源计时/);
+    const failed = await go(p, 'network', { failedOnly: true });
+    expect(failed.network!.map((e) => e.url)).toEqual(['https://a.test/missing.png', 'https://a.test/api']);
+    const quiet = devPage({ debug: () => ({ entries: [], fresh: false }) });
+    expect((await go(quiet, 'network')).note).toBeUndefined();
+    const many = devPage({ debug: () => ({ entries: Array.from({ length: 200 }, (_, i) => ({ method: 'GET', url: `https://a.test/${i}/${'p'.repeat(900)}` })) }) });
+    const list = (await go(many, 'network')).network!;
+    expect(list).toHaveLength(NETWORK_MAX);
+    expect(list[0].url.startsWith('https://a.test/100/')).toBe(true);
+    expect(list[0].url.length).toBeLessThanOrEqual(501);
+  });
+
+  it('snapshot: the outline of the shell as indented lines with the refs click takes, the page agent asked first', async () => {
+    const nodes = [{ depth: 0, role: 'banner', name: '' }, { depth: 1, role: 'heading', name: 'Shop', level: 1 }, { depth: 1, role: 'link', name: 'Cart', ref: 'kqz3' }, { depth: 0, role: 'main', name: '' }, { depth: 1, role: 'textbox', name: 'Search', ref: 'kqz4', value: 'shoes', states: ['focused'] }, { depth: 1, role: 'checkbox', name: 'Remember', ref: 'kqz5', states: ['checked'] }, { depth: 2, role: 'option', name: '', more: 12 }, { depth: 1, role: 'button', name: '', ref: 'kqz6' }];
+    const p = devPage({ debug: () => ({ nodes, truncated: false }) });
+    const a = await go(p, 'snapshot');
+    expect(p.log).toEqual(['read {"offset":0,"maxChars":200}', 'debug snapshot']);
+    expect(a.page!.text).toBe([
+      'banner',
+      '  heading "Shop" (level 1)',
+      '  link "Cart" [kqz3]',
+      'main',
+      '  textbox "Search" [kqz4] = "shoes" focused',
+      '  checkbox "Remember" [kqz5] checked',
+      '    … 还有 12 个选项',
+      '  button [kqz6]',
+    ].join('\n'));
+    expect(a.note).toBeUndefined();
+  });
+
+  it('snapshot without the accessibility tree: the elements of the page agent, and why', async () => {
+    const p = devPage({ debug: () => new Error('DevTools 开着'), elements: [{ ref: 'abc1', role: 'button', name: 'Go' }] });
+    const a = await go(p, 'snapshot');
+    expect(a.page!.text).toBe('button "Go" [abc1]');
+    expect(a.note).toMatch(/DevTools 开着/);
+  });
+
+  it('outlineText: cut at a line to its budget, saying how many lines are left out; a big tree says so', async () => {
+    const nodes = Array.from({ length: 1000 }, (_, i) => ({ depth: 0, role: 'button', name: `Button number ${i}`, ref: `r${i}` }));
+    const o = outlineText(nodes, 2000);
+    expect(o.text.length).toBeLessThanOrEqual(2000);
+    expect(o.text.endsWith('[r' + (o.lines - 1) + ']')).toBe(true);
+    expect(o.omitted).toBe(1000 - o.lines);
+    const a = await go(devPage({ debug: () => ({ nodes, truncated: true }) }), 'snapshot');
+    expect(a.page!.text.length).toBeLessThanOrEqual(SNAPSHOT_CHARS);
+    expect(a.note).toMatch(/browser_find/);
+    // a name from the page cannot start a line of its own, nor end its quotes early
+    expect(outlineText([{ depth: 0, role: 'link', name: 'a\nbutton "fake" [x1]' }]).text).toBe('link "a button \\"fake\\" [x1]"');
+  });
+
+  it('wait: asks the page agent until it says so — without stopping a page that is loading', async () => {
+    const p = devPage({ has: (n) => (n >= 3 ? { found: true } : { found: false }) });
+    const a = await go(p, 'wait', { text: 'Saved', timeoutMs: 2000 });
+    expect(p.log).toEqual(Array(3).fill('peek has {"text":"Saved"}'));
+    expect(a.note).toMatch(/^等到了/);
+    expect(a.note).not.toContain('Saved'); // the note is this side's words
+    const r = devPage({ has: () => ({ found: true }) });
+    expect((await go(r, 'wait', { ref: '[kqz9]' })).note).toContain('[kqz9]');
+    expect(r.log).toEqual(['peek has {"ref":"kqz9"}']);
+  });
+
+  it('wait: gives up after its time (never more than 20 s); an element no longer on the page fails at once', async () => {
+    const p = devPage({ has: () => ({ found: false }) });
+    const t0 = Date.now();
+    await expect(go(p, 'wait', { text: 'never', timeoutMs: 150 })).rejects.toThrow(/等了 0\.2 秒/);
+    expect(Date.now() - t0).toBeLessThan(1000);
+    const gone = devPage({ has: () => ({ found: false, missing: true }) });
+    await expect(go(gone, 'wait', { ref: 'kqz1', timeoutMs: 5000 })).rejects.toThrow(/\[kqz1\]/);
+    expect(gone.log).toHaveLength(1);
+    // a page that does not answer in time (still loading) is a wait that did not come true
+    await expect(go(devPage({ has: () => undefined }), 'wait', { text: 'x', timeoutMs: 100 })).rejects.toThrow(/等了/);
+    await expect(go(devPage(), 'wait', {})).rejects.toThrow(/text/);
+    expect(WAIT_MAX_MS).toBe(20_000);
+  });
+
+  it('viewport: set the way the menu sets it, then the page read back', async () => {
+    const p = devPage();
+    const a = await go(p, 'viewport', { preset: 'phone' });
+    expect(p.log).toEqual(['viewport phone', 'settle 5', `read {"offset":0,"maxChars":${GLANCE_CHARS}}`]);
+    expect(a.note).toBe('视口：手机 · 390×844。');
+    await expect(go(p, 'viewport', { preset: 'watch' })).rejects.toThrow(/preset/);
+  });
+});
+
+describe('browser_tabs: only the tabs of the conversation', () => {
+  it('lists the tabs of this conversation (its Agent), marking the one its tools work in', () => {
+    const tabs = [
+      { id: 'u1', url: 'https://mine.example/', title: 'Mine', src: 'https://mine.example/' },
+      { id: 'a1', url: 'https://a.example/', title: 'A', src: 'https://a.example/', agent: 's1' },
+      { id: 'b1', url: 'https://b.example/', title: 'B', src: 'https://b.example/', agent: 's2' },
+      { id: 'a2', url: '', title: '', agent: 's1' },
+    ] as any;
+    expect(agentTabsOf(tabs, 's1', 'a2')).toEqual([{ id: 'a1', url: 'https://a.example/', title: 'A', active: false }, { id: 'a2', url: '', title: '', active: true }]);
+    // no current one remembered: the first is the one the tools use (state.ts agentTab)
+    expect(agentTabsOf(tabs, 's1', undefined).map((t) => t.active)).toEqual([true, false]);
+    expect(agentTabsOf(tabs, 's1', 'b1').map((t) => t.active)).toEqual([true, false]);
+    expect(agentTabsOf(tabs, 'nobody', undefined)).toEqual([]);
   });
 });

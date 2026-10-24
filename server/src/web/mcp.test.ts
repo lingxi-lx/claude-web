@@ -84,7 +84,7 @@ function start(env: Record<string, string>) {
 }
 
 describe('the web MCP server over stdio', () => {
-  it('handshakes, lists the twenty-three tools (eleven of 联网, five of 网吧, seven of 字符画主题), and carries each call to the server with the secret and the conversation id', async () => {
+  it('handshakes, lists the twenty-nine tools (seventeen of 联网, five of 网吧, seven of 字符画主题), and carries each call to the server with the secret and the conversation id', async () => {
     const tokenFile = path.join(dir, 'secret.token');
     fs.writeFileSync(tokenFile, `${SECRET}\n`);
     hits.length = 0;
@@ -97,7 +97,7 @@ describe('the web MCP server over stdio', () => {
       m.notify('notifications/initialized');
       expect((await m.rpc('ping')).result).toEqual({});
       const tools = (await m.rpc('tools/list')).result.tools;
-      expect(tools.map((t: any) => t.name)).toEqual(['web_search', 'browser_open', 'browser_read', 'browser_find', 'browser_click', 'browser_type', 'browser_press_key', 'browser_scroll', 'browser_back', 'browser_screenshot', 'browser_computer', 'character_guide', 'character_draft', 'character_save', 'character_assign', 'character_list', 'theme_guide', 'theme_draft', 'theme_get', 'theme_save', 'theme_apply', 'theme_list', 'theme_delete']);
+      expect(tools.map((t: any) => t.name)).toEqual(['web_search', 'browser_open', 'browser_read', 'browser_find', 'browser_click', 'browser_type', 'browser_press_key', 'browser_scroll', 'browser_back', 'browser_screenshot', 'browser_computer', 'browser_console', 'browser_network', 'browser_snapshot', 'browser_wait', 'browser_tabs', 'browser_viewport', 'character_guide', 'character_draft', 'character_save', 'character_assign', 'character_list', 'theme_guide', 'theme_draft', 'theme_get', 'theme_save', 'theme_apply', 'theme_list', 'theme_delete']);
       expect(hits).toHaveLength(0); // nothing so far needed the server
 
       const search = (await m.rpc('tools/call', { name: 'web_search', arguments: { query: 'node streams', count: 3 } })).result;
@@ -148,7 +148,26 @@ describe('the tool list', () => {
     }
     const readOnly = TOOLS.filter((t) => t.annotations.readOnlyHint).map((t) => t.name);
     // reading what is already open, and searching; opening an address or acting on a page is not read-only
-    expect(readOnly).toEqual(['web_search', 'browser_read', 'browser_find', 'browser_screenshot', 'character_guide', 'character_list', 'theme_guide', 'theme_get', 'theme_list']);
+    expect(readOnly).toEqual(['web_search', 'browser_read', 'browser_find', 'browser_screenshot', 'browser_console', 'browser_network', 'browser_snapshot', 'browser_wait', 'character_guide', 'character_list', 'theme_guide', 'theme_get', 'theme_list']);
+  });
+
+  it('the console / network / structure / wait / tabs / viewport tools take what the contract says', () => {
+    const schema = (name: string) => TOOLS.find((t) => t.name === name)!.inputSchema as { properties: Record<string, any>; required?: string[] };
+    expect(Object.keys(schema('browser_console').properties)).toEqual(['errors_only']);
+    expect(Object.keys(schema('browser_network').properties)).toEqual(['failed_only']);
+    expect(schema('browser_snapshot').properties).toEqual({});
+    // browser_wait: text or a ref, at most 20 seconds
+    const wait = schema('browser_wait');
+    expect(Object.keys(wait.properties)).toEqual(['text', 'ref', 'timeoutMs']);
+    expect(wait.properties.timeoutMs).toMatchObject({ type: 'number', maximum: 20000 });
+    expect(wait.required ?? []).toEqual([]);
+    const tabs = schema('browser_tabs');
+    expect(tabs.properties.action.enum).toEqual(['list', 'switch', 'new', 'close']);
+    expect(Object.keys(tabs.properties)).toEqual(['action', 'id', 'url']);
+    expect(tabs.required).toEqual(['action']);
+    expect(schema('browser_viewport').properties.preset.enum).toEqual(['auto', 'phone', 'tablet', 'desktop']);
+    expect(schema('browser_viewport').required).toEqual(['preset']);
+    for (const n of ['browser_console', 'browser_network', 'browser_snapshot', 'browser_wait', 'browser_tabs', 'browser_viewport']) expect(TOOLS.find((t) => t.name === n)!.description, n).toMatch(/desktop app/);
   });
 });
 

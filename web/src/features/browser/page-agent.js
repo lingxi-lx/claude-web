@@ -5,7 +5,7 @@
 // What it gives back is the page's own content — the server marks it as untrusted before a model sees it. Everything
 // returned is plain JSON.
 (() => {
-  if (window.__cwAgent && window.__cwAgent.v === 3) return;
+  if (window.__cwAgent && window.__cwAgent.v === 4) return;
   // an older copy (a page that was open when the app updated): its pick layer goes with it
   if (window.__cwAgent && typeof window.__cwAgent.unpick === 'function') { try { window.__cwAgent.unpick(); } catch (e) { /* gone */ } }
 
@@ -313,7 +313,30 @@
   };
 
   window.__cwAgent = {
-    v: 3,
+    v: 4,
+
+    /**
+     * browser_wait: is the text on the page (case-insensitive), is the element shown — both, when both are asked.
+     * `missing`: the ref is not on this page (any more), so waiting for it is pointless.
+     */
+    has(o) {
+      const text = String((o && o.text) || '').trim().toLowerCase();
+      const key = String((o && o.ref) || '').trim().replace(/^\[|\]$/g, '');
+      let found = true;
+      if (key) {
+        const w = byRef.get(key) || byRef.get(TAG + key);
+        const el = w ? w.deref() : null;
+        if (!el || !el.isConnected) return { found: false, missing: true };
+        found = shown(el);
+      }
+      if (found && text) found = fullText().toLowerCase().indexOf(text) >= 0;
+      return { found };
+    },
+
+    /** browser_snapshot (the shell's accessibility outline asks for each element it lists): the element's ref, given one if it has none yet. */
+    refFor(el) {
+      return el && el.nodeType === 1 ? describe(el).ref : '';
+    },
 
     /**
      * 选元素: the element under the pointer is outlined; a click picks it (the page never sees that click) and it
