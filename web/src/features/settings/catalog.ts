@@ -66,10 +66,10 @@ export interface SectionMeta {
 
 /** Name + search words of every page part. */
 export const BODY_INFO: Record<BodyId, { l: string; keywords: string }> = {
-  account: { l: tr('登录状态'), keywords: tr('login 登录 claude.ai 账号 auth 订阅 api 提供方') },
+  account: { l: tr('登录状态'), keywords: tr('login 登录 claude.ai 账号 auth 订阅 api 提供方 上下文窗口 context window 1M 200K 自动压缩 auto-compact 压缩') },
   engine: { l: tr('运行内核'), keywords: tr('engine ccb claude-web-engine claude-code-best 官方 二进制 版本 更新 doctor 配置目录 引擎 插件数') },
   models: { l: tr('模型列表'), keywords: tr('model 模型 启用 隐藏 收藏 星标 opus sonnet haiku effort 智能程度 刷新 按档案') },
-  providers: { l: tr('供应商列表'), keywords: tr('provider api key base url 中转 openai gemini grok anthropic 缓存 cache 默认 档案 测试连接') },
+  providers: { l: tr('供应商列表'), keywords: tr('provider api key base url 中转 openai gemini grok anthropic 缓存 cache 默认 档案 测试连接 上下文窗口 context window 1M 200K 自动压缩 auto-compact 压缩') },
   proxy: { l: tr('网络代理'), keywords: tr('proxy 代理 梯子 vpn clash v2ray http_proxy https_proxy 系统代理 pac 地区 region 403 连不上 超时') },
   gateway: { l: tr('网关与分组'), keywords: tr('gateway 网关 故障转移 failover 转换 多账号 额度 轮询 round robin 成员') },
   mcp: { l: tr('已配置的 MCP'), keywords: tr('mcp server 当前会话 已配置 移除 连接状态') },

@@ -238,6 +238,16 @@ describe('searchSettings', () => {
     expect(searchSettings('   ')).toEqual([]);
   });
 
+  // final review M3: the Claude account's 200K / 1M and 自动压缩 (A7) sit in 登录状态's card and in each provider's edit page
+  it('the context window and 自动压缩 controls are found from 账号与登录 and 供应商', () => {
+    const where = (body: BodyId) => allBodies().find((b) => b.body === body)!.section.id;
+    for (const body of ['account', 'providers'] as const) {
+      for (const q of ['上下文窗口', '自动压缩', '压缩', '1M', '200K', 'context window', 'auto-compact']) {
+        expect(searchSettings(q).some((h) => h.section.id === where(body)), `${body}: ${q}`).toBe(true);
+      }
+    }
+  });
+
   it('a part that is in view once its page opens is not listed twice', () => {
     // 插件 matches the tab and the plugin list inside it: one hit for that tab, none for the MCP tab
     const hits = ids(searchSettings('插件'));
