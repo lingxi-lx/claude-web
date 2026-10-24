@@ -114,6 +114,11 @@ export function compactCap(ours: Record<string, string>, cwd: string | undefined
   if (K in ours) v = ours[K];
   for (const env of settingsEnvs(cwd)) if (K in env) v = env[K];
   if (oursWins && K in ours) v = ours[K];
+  return compactWindow(v);
+}
+
+/** A CLAUDE_CODE_AUTO_COMPACT_WINDOW value as the CLI reads it (parseInt): a positive number, or undefined for no cap. */
+function compactWindow(v: unknown): number | undefined {
   const n = parseInt(String(v ?? ''), 10);
   return Number.isFinite(n) && n > 0 ? n : undefined;
 }
@@ -121,15 +126,15 @@ export function compactCap(ours: Record<string, string>, cwd: string | undefined
 /**
  * Where the compaction point in effect for the user comes from, for the edit page (「现在：700K（来自你的 settings.json）」,
  * request `config.compactSource`): the user-level settings.json `env` (not a project's: the page is not tied to one),
- * else this server's environment, else none. A value that is not a positive number (blank, `0`, `abc`) counts as not
- * there. `home`: as for `settingsDocs`.
+ * else this server's environment, else none. As for the CLI (and `compactCap`), the settings file wins as soon as it has
+ * the key: a blank, `0` or `abc` there means no cap, even with a value in the environment. `home`: as for `settingsDocs`.
  */
 export function userCompactSource(home?: string): CompactSource {
   const K = 'CLAUDE_CODE_AUTO_COMPACT_WINDOW';
-  const positive = (v: unknown) => { const n = parseInt(String(v ?? ''), 10); return Number.isFinite(n) && n > 0 ? n : undefined; };
-  let value: number | undefined;
-  for (const env of settingsEnvs(undefined, home)) value = positive(env[K]) ?? value;
-  if (value) return { value, source: 'settings' };
-  value = positive(process.env[K]);
-  return value ? { value, source: 'env' } : { source: 'none' };
+  let inSettings = false;
+  let v: unknown;
+  for (const env of settingsEnvs(undefined, home)) if (K in env) { inSettings = true; v = env[K]; }
+  if (!inSettings) v = process.env[K];
+  const value = compactWindow(v);
+  return value ? { value, source: inSettings ? 'settings' : 'env' } : { source: 'none' };
 }

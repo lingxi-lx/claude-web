@@ -179,15 +179,17 @@ describe('userCompactSource (where the compaction point in effect comes from)', 
     write(user(), '{ not json');
     expect(userCompactSource()).toEqual({ source: 'none' });
   });
-  it('abc / 0 / blank count as not there', () => {
+  it('abc / 0 / blank: no cap — in settings.json it unsets the environment\'s, as for the CLI (compactCap)', () => {
     for (const bad of ['abc', '0', '', '-5']) {
       write(user(), { env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: bad } });
       delete process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW;
       expect(userCompactSource()).toEqual({ source: 'none' });
+      process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = '900000';
+      expect(userCompactSource()).toEqual({ source: 'none' });
+      expect(compactCap({}, undefined, false)).toBeUndefined(); // what the conversations really get
+      fs.rmSync(user());
       process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = bad;
       expect(userCompactSource()).toEqual({ source: 'none' });
-      process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = '900000';
-      expect(userCompactSource()).toEqual({ value: 900_000, source: 'env' });
     }
   });
   it('a home folder: its .claude/settings.json, when CLAUDE_CONFIG_DIR does not say elsewhere', () => {
