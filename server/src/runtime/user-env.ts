@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import type { CompactSource } from '../protocol.js';
 
 const KEYS = ['ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_API_KEY', 'ANTHROPIC_MODEL', 'ANTHROPIC_DEFAULT_OPUS_MODEL', 'ANTHROPIC_DEFAULT_SONNET_MODEL', 'ANTHROPIC_DEFAULT_HAIKU_MODEL'] as const;
 
@@ -29,9 +30,12 @@ export function userAnthropicEnv(): { env: Partial<Record<(typeof KEYS)[number],
 /** Variables that pick the endpoint, the credentials or the models — the ones a provider conversation must not inherit. */
 export const ROUTING_ENV = /^((ANTHROPIC|OPENAI|GEMINI|GROK|XAI)_|CLAUDE_CODE_USE_)/;
 
-/** Each settings file the CLI reads for a conversation in `cwd` (settingSources user, project, local), parsed. */
-export function settingsDocs(cwd?: string): Record<string, unknown>[] {
-  const files = [path.join(process.env.CLAUDE_CONFIG_DIR ?? path.join(os.homedir(), '.claude'), 'settings.json')];
+/**
+ * Each settings file the CLI reads for a conversation in `cwd` (settingSources user, project, local), parsed. `home`:
+ * the home folder whose `.claude` holds the user's (default: this user's); CLAUDE_CONFIG_DIR goes over it, as for the CLI.
+ */
+export function settingsDocs(cwd?: string, home?: string): Record<string, unknown>[] {
+  const files = [path.join(process.env.CLAUDE_CONFIG_DIR ?? path.join(home ?? os.homedir(), '.claude'), 'settings.json')];
   if (cwd) files.push(path.join(cwd, '.claude', 'settings.json'), path.join(cwd, '.claude', 'settings.local.json'));
   const out: Record<string, unknown>[] = [];
   for (const f of files) {
@@ -44,9 +48,9 @@ export function settingsDocs(cwd?: string): Record<string, unknown>[] {
 }
 
 /** The `env` of each of those files. */
-export function settingsEnvs(cwd?: string): Record<string, unknown>[] {
+export function settingsEnvs(cwd?: string, home?: string): Record<string, unknown>[] {
   const out: Record<string, unknown>[] = [];
-  for (const doc of settingsDocs(cwd)) {
+  for (const doc of settingsDocs(cwd, home)) {
     const env = doc.env;
     if (env && typeof env === 'object' && !Array.isArray(env)) out.push(env as Record<string, unknown>);
   }
@@ -112,4 +116,20 @@ export function compactCap(ours: Record<string, string>, cwd: string | undefined
   if (oursWins && K in ours) v = ours[K];
   const n = parseInt(String(v ?? ''), 10);
   return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+/**
+ * Where the compaction point in effect for the user comes from, for the edit page (「现在：700K（来自你的 settings.json）」,
+ * request `config.compactSource`): the user-level settings.json `env` (not a project's: the page is not tied to one),
+ * else this server's environment, else none. A value that is not a positive number (blank, `0`, `abc`) counts as not
+ * there. `home`: as for `settingsDocs`.
+ */
+export function userCompactSource(home?: string): CompactSource {
+  const K = 'CLAUDE_CODE_AUTO_COMPACT_WINDOW';
+  const positive = (v: unknown) => { const n = parseInt(String(v ?? ''), 10); return Number.isFinite(n) && n > 0 ? n : undefined; };
+  let value: number | undefined;
+  for (const env of settingsEnvs(undefined, home)) value = positive(env[K]) ?? value;
+  if (value) return { value, source: 'settings' };
+  value = positive(process.env[K]);
+  return value ? { value, source: 'env' } : { source: 'none' };
 }

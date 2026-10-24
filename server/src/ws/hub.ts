@@ -15,6 +15,7 @@ import { recentArtifacts } from '../library/artifacts.js';
 import type { LocalEnvStore } from '../runtime/local-env.js';
 import type { PreviewService } from '../preview/service.js';
 import { cacheParentFor } from '../runtime/cache-key.js';
+import { userCompactSource } from '../runtime/user-env.js';
 import { SessionService, claudeDir } from '../sessions/service.js';
 import { ConfigService } from '../config/service.js';
 import { UsageService } from '../usage/service.js';
@@ -897,6 +898,8 @@ export class Hub {
         return s.config.hooks();
       case 'config.doctor':
         return s.config.doctor();
+      case 'config.compactSource':
+        return userCompactSource();
 
       case 'usage.session': {
         const file = await s.sessions.locate(req.sessionId);

@@ -227,6 +227,11 @@ export interface Provider {
 export const CLAUDE_PROVIDER_ID = 'claude';
 /** One profile's result of `providers.refreshModels` (model list only — no chat request, no tokens). */
 export interface ModelRefreshResult { id: string; name: string; ok: boolean; count: number; error?: string; ms: number }
+/**
+ * `config.compactSource`: the compaction point (CLAUDE_CODE_AUTO_COMPACT_WINDOW) in effect for the user and where it
+ * comes from — the user-level ~/.claude/settings.json `env`, else the server's environment, else none (no `value`).
+ */
+export interface CompactSource { value?: number; source: 'settings' | 'env' | 'none' }
 
 /** Multi-agent (phase 5): built-in kinds plus user-defined ACP agents (`acp:<id>`). */
 export type AgentKind = 'claude' | 'codex' | 'opencode' | 'gemini' | 'qwen' | 'kimi' | 'cursor' | 'dsh' | `acp:${string}`;
@@ -577,6 +582,8 @@ export type ClientRequest =
   | { kind: 'config.agents' }
   | { kind: 'config.hooks' }
   | { kind: 'config.doctor' }
+  /** → CompactSource (user level, no sessionId: not routed to a peer) */
+  | { kind: 'config.compactSource' }
   | { kind: 'usage.session'; sessionId: string }
   | { kind: 'usage.global'; days?: number }
   | { kind: 'files.changed'; sessionId: string }

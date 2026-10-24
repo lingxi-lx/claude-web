@@ -390,3 +390,25 @@ describe('联网 through a running server', () => {
     expect(pageHits).toHaveLength(pages);
   });
 });
+
+// A7: the compaction point edit page asks where the point in effect comes from — a plain request through the hub
+describe('config.compactSource through a running server', () => {
+  it('the user settings.json, else the server environment, else none', async () => {
+    const saved = process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW;
+    const file = path.join(process.env.CLAUDE_CONFIG_DIR!, 'settings.json');
+    const before = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
+    const writeEnv = (env: Record<string, string>) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify({ env })); };
+    try {
+      delete process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW;
+      writeEnv({});
+      expect(await b.req('config.compactSource')).toEqual({ source: 'none' });
+      process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = '900000';
+      expect(await b.req('config.compactSource')).toEqual({ value: 900_000, source: 'env' });
+      writeEnv({ CLAUDE_CODE_AUTO_COMPACT_WINDOW: '700000' });
+      expect(await b.req('config.compactSource')).toEqual({ value: 700_000, source: 'settings' });
+    } finally {
+      if (saved === undefined) delete process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW; else process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = saved;
+      if (before === null) fs.rmSync(file, { force: true }); else fs.writeFileSync(file, before);
+    }
+  });
+});

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { compactCap, ownAnthropicBase, ownOverride, settingsOverride } from './user-env.js';
+import { compactCap, ownAnthropicBase, ownOverride, settingsOverride, userCompactSource } from './user-env.js';
 import { sweepFlagSettings, writeFlagSettings } from './flag-settings.js';
 
 let tmp: string;
@@ -149,5 +149,52 @@ describe('compactCap (the autocompact window a conversation really has)', () => 
     expect(compactCap({ CLAUDE_CODE_AUTO_COMPACT_WINDOW: '0' }, undefined, true)).toBeUndefined();
     write(user(), { env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '' } });
     expect(compactCap({}, undefined, true)).toBeUndefined();
+  });
+});
+
+// A7: the compaction point edit page shows what is in effect now — 「现在：700K（来自你的 settings.json）」. User level
+// only (the page is not tied to a project).
+describe('userCompactSource (where the compaction point in effect comes from)', () => {
+  let envCap: string | undefined;
+  beforeEach(() => { envCap = process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW; delete process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW; });
+  afterEach(() => { if (envCap === undefined) delete process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW; else process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = envCap; });
+  const user = () => path.join(process.env.CLAUDE_CONFIG_DIR!, 'settings.json');
+
+  it('the user settings.json env: settings, over the server environment', () => {
+    write(user(), { env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '700000' } });
+    expect(userCompactSource()).toEqual({ value: 700_000, source: 'settings' });
+    process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = '900000';
+    expect(userCompactSource()).toEqual({ value: 700_000, source: 'settings' });
+    write(user(), { env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: 600000 } });
+    expect(userCompactSource()).toEqual({ value: 600_000, source: 'settings' });
+  });
+  it('no file (or no such key in it), the server environment has it: env', () => {
+    process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = '900000';
+    expect(userCompactSource()).toEqual({ value: 900_000, source: 'env' });
+    write(user(), { env: { FOO: '1' } });
+    expect(userCompactSource()).toEqual({ value: 900_000, source: 'env' });
+  });
+  it('neither: none', () => {
+    expect(userCompactSource()).toEqual({ source: 'none' });
+    write(user(), '{ not json');
+    expect(userCompactSource()).toEqual({ source: 'none' });
+  });
+  it('abc / 0 / blank count as not there', () => {
+    for (const bad of ['abc', '0', '', '-5']) {
+      write(user(), { env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: bad } });
+      delete process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW;
+      expect(userCompactSource()).toEqual({ source: 'none' });
+      process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = bad;
+      expect(userCompactSource()).toEqual({ source: 'none' });
+      process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = '900000';
+      expect(userCompactSource()).toEqual({ value: 900_000, source: 'env' });
+    }
+  });
+  it('a home folder: its .claude/settings.json, when CLAUDE_CONFIG_DIR does not say elsewhere', () => {
+    const home = path.join(tmp, 'home');
+    write(path.join(home, '.claude', 'settings.json'), { env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '700000' } });
+    expect(userCompactSource(home)).toEqual({ source: 'none' }); // CLAUDE_CONFIG_DIR (the temp cfg) wins, as for the CLI
+    delete process.env.CLAUDE_CONFIG_DIR;
+    expect(userCompactSource(home)).toEqual({ value: 700_000, source: 'settings' });
   });
 });
