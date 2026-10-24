@@ -43,10 +43,11 @@ export function isUncPath(p: string): boolean {
 }
 
 /**
- * A UNC path as its segments (`host`, `share`, …), `.` / `..` resolved over the whole path — host included, so
- * `\\nas\proj\..\other` is `nas/other`, not `nas/proj/other` as Windows would read it (the stricter reading: a `..`
- * never keeps a path under a share it climbs out of). `\\?\UNC\h\s` and `\\.\UNC\h\s` are `\\h\s`. Any other
- * `\\?\…` / `\\.\…` (a device, a volume, a pipe) → null: never a trusted share.
+ * A UNC path as its segments (`host`, `share`, …), `.` / `..` resolved below the share. A `..` that would reach the
+ * share or the host → null (refused): Windows and Node treat `\\host\share` as a root a `..` cannot climb, so
+ * `\\evil\s\..\..\nas\proj\x` opens `\\evil\s\nas\proj\x` — on evil — and reading it as `nas/proj/x` let it past the
+ * trusted-root check (fix round 2). `\\nas\proj\..\other` is refused the same way. `\\?\UNC\h\s` and `\\.\UNC\h\s`
+ * are `\\h\s`. Any other `\\?\…` / `\\.\…` (a device, a volume, a pipe) → null: never a trusted share.
  */
 function uncSegments(p: string): string[] | null {
   if (!isUncPath(p)) return null;
@@ -57,8 +58,10 @@ function uncSegments(p: string): string[] | null {
   const out: string[] = [];
   for (const seg of s.split('\\')) {
     if (seg === '' || seg === '.') continue;
-    if (seg === '..') out.pop();
-    else out.push(seg);
+    if (seg === '..') {
+      if (out.length <= 2) return null; // into the share / host: not what fs would open
+      out.pop();
+    } else out.push(seg);
   }
   return out;
 }

@@ -95,6 +95,26 @@ describe('network paths', () => {
       expect(uncAllowed('\\\\nas\\proj\\x', ['C:\\proj', '/home/a'], true)).toBe(false);
     });
 
+    // fix round 2: `..` popped through the share and the host — `\\evil\s\..\..\nas\proj\x` read as `nas/proj/x`, but
+    // `\\host\share` is a root `..` cannot climb: fs opens `\\evil\s\nas\proj\x` (connects to evil)
+    it('uncAllowed: a `..` reaching the share or the host is refused', () => {
+      const roots = ['\\\\nas\\proj'];
+      expect(uncAllowed('\\\\evil\\s\\..\\..\\nas\\proj\\x', roots, true)).toBe(false);
+      expect(uncAllowed('//evil/s/../../nas/proj/x', roots, true)).toBe(false);
+      expect(uncAllowed('\\\\?\\UNC\\evil\\s\\..\\..\\nas\\proj\\x', roots, true)).toBe(false);
+      expect(uncAllowed('\\\\.\\UNC\\evil\\s\\..\\..\\nas\\proj\\x', roots, true)).toBe(false);
+      expect(uncAllowed('\\\\evil\\..\\nas\\proj\\x', roots, true)).toBe(false);
+      expect(uncAllowed('\\\\..\\nas\\proj\\x', roots, true)).toBe(false);
+      expect(uncAllowed('\\\\nas\\proj\\..\\proj\\x', roots, true)).toBe(false);
+      // a root with a `..` into its share trusts nothing either
+      expect(uncAllowed('\\\\nas\\proj\\x', ['\\\\evil\\s\\..\\..\\nas\\proj'], true)).toBe(false);
+      // what Node itself opens for the attack path: still on evil (the check must not disagree with fs)
+      expect(path.win32.toNamespacedPath(path.win32.resolve('\\\\evil\\s\\..\\..\\nas\\proj\\x')).toLowerCase()).toContain('\\evil\\s\\');
+      // `..` that stays inside the share is fine
+      expect(uncAllowed('\\\\nas\\proj\\sub\\..\\a.txt', roots, true)).toBe(true);
+      expect(uncAllowed('\\\\nas\\proj\\a\\b\\..\\..\\c', roots, true)).toBe(true);
+    });
+
     it('workspaceRoots: each path and its extra folders', () => {
       expect(workspaceRoots([
         { path: 'C:\\a' },
