@@ -20,9 +20,21 @@ function decode(s: string): string {
   try { return decodeURIComponent(s); } catch { return s; }
 }
 
-function withLine(path: string): { path: string; line?: number } {
-  const hash = /#L(\d+)$/.exec(path);
-  if (hash) return { path: path.slice(0, hash.index), line: Number(hash[1]) };
+/**
+ * `#L12` / `#L12-L20` → line 12; any other `#…` and a `?…` are a web page's, not part of a file's path (review M1: they
+ * stayed in it → a 「not found」 tab). Cut on the raw, still-encoded href: a `%23` is a `#` in a name.
+ */
+function cut(raw: string): { rest: string; line?: number } {
+  const at = raw.search(/[?#]/);
+  if (at < 0) return { rest: raw };
+  const hash = raw.indexOf('#');
+  const m = hash < 0 ? null : /^#L(\d+)(?:-L?\d+)?$/.exec(raw.slice(hash));
+  return m ? { rest: raw.slice(0, at), line: Number(m[1]) } : { rest: raw.slice(0, at) };
+}
+
+/** `path:12` → line 12 (unless `line` came from a `#L12`). */
+function withLine(path: string, line?: number): { path: string; line?: number } {
+  if (line !== undefined) return { path, line };
   const colon = /^(.*[^:\\/]):(\d+)$/.exec(path);
   if (colon && !DRIVE.test(path.slice(-3))) return { path: colon[1], line: Number(colon[2]) };
   return { path };
@@ -38,8 +50,8 @@ function join(base: string, rel: string): string {
   return parts.join('/');
 }
 
-function file(path: string): LinkRoute {
-  const { path: p, line } = withLine(path);
+function file(path: string, hashLine?: number): LinkRoute {
+  const { path: p, line } = withLine(path, hashLine);
   return line === undefined ? { to: 'file', path: p } : { to: 'file', path: p, line };
 }
 
@@ -50,9 +62,9 @@ function file(path: string): LinkRoute {
 const UNC = /^[\\/]{2}/;
 
 /** An absolute local path (already decoded); `/C:/x` → `C:/x`. */
-function local(p: string): LinkRoute {
+function local(p: string, line?: number): LinkRoute {
   if (UNC.test(p)) return { to: 'none' };
-  return file(/^\/[a-zA-Z]:[\\/]/.test(p) ? p.slice(1) : p);
+  return file(/^\/[a-zA-Z]:[\\/]/.test(p) ? p.slice(1) : p, line);
 }
 
 export function routeLink(href: string, cwd: string | undefined): LinkRoute {
@@ -68,13 +80,15 @@ export function routeLink(href: string, cwd: string | undefined): LinkRoute {
     // file://host/x names another machine; only file:///x and file://localhost/x are this one
     const m = /^file:(?:\/\/([^/\\]*))?(.*)$/is.exec(h)!;
     if (m[1] && m[1].toLowerCase() !== 'localhost') return { to: 'none' };
-    return local(decode(m[2]));
+    const c = cut(m[2]);
+    return local(decode(c.rest), c.line);
   }
-  if (DRIVE.test(d)) return file(d);
+  if (DRIVE.test(d)) { const c = cut(h); return file(decode(c.rest), c.line); }
   if (/^[a-z][a-z0-9+.-]*:/i.test(h)) return { to: 'none' };
-  if (h.startsWith('/')) return local(decode(h));
+  const c = cut(h);
+  if (h.startsWith('/')) return local(decode(c.rest), c.line);
   if (!cwd) return { to: 'none' };
-  return file(join(cwd, decode(h)));
+  return file(join(cwd, decode(c.rest)), c.line);
 }
 
 export function openExternal(url: string): void {

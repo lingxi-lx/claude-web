@@ -59,4 +59,23 @@ describe('routeLink', () => {
     expect(routeLink('src/a.ts:12', '/p')).toEqual({ to: 'file', path: '/p/src/a.ts', line: 12 });
     expect(routeLink('src/a.ts#L7', '/p')).toEqual({ to: 'file', path: '/p/src/a.ts', line: 7 });
   });
+  // 2026-10-24 review M1: a fragment / query stayed in the path → a 「not found」 tab
+  it('line ranges take the first line', () => {
+    expect(routeLink('src/a.ts#L12-L20', '/p')).toEqual({ to: 'file', path: '/p/src/a.ts', line: 12 });
+    expect(routeLink('src/a.ts#L12-20', '/p')).toEqual({ to: 'file', path: '/p/src/a.ts', line: 12 });
+    expect(routeLink('file:///C:/w/a.ts#L3-L4', undefined)).toEqual({ to: 'file', path: 'C:/w/a.ts', line: 3 });
+  });
+  it('other fragments and queries are not part of a local path', () => {
+    expect(routeLink('docs/x.md#section', '/p')).toEqual({ to: 'file', path: '/p/docs/x.md' });
+    expect(routeLink('out/page.html?v=1', '/p')).toEqual({ to: 'file', path: '/p/out/page.html' });
+    expect(routeLink('out/page.html?v=1#top', '/p')).toEqual({ to: 'file', path: '/p/out/page.html' });
+    expect(routeLink('file:///C:/w/x.html?v=2', undefined)).toEqual({ to: 'file', path: 'C:/w/x.html' });
+    expect(routeLink('C:/w/x.md#intro', undefined)).toEqual({ to: 'file', path: 'C:/w/x.md' });
+    expect(routeLink('/home/a/x.md#L9', undefined)).toEqual({ to: 'file', path: '/home/a/x.md', line: 9 });
+    // an encoded # is part of the name
+    expect(routeLink('file:///C:/w/a%23b.md', undefined)).toEqual({ to: 'file', path: 'C:/w/a#b.md' });
+  });
+  it('web addresses keep their fragment and query', () => {
+    expect(routeLink('https://e.com/a?v=1#L3', undefined)).toEqual({ to: 'web', url: 'https://e.com/a?v=1#L3' });
+  });
 });
