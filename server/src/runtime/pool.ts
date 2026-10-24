@@ -43,6 +43,9 @@ export function idleTtlFor(p: Pick<Provider, 'type' | 'cache1h' | 'cacheShim'> |
  */
 export const MAX_IDLE_CLAUDE = 12;
 
+/** meta.json saves this close together pass the account's picks on once (RunnerPool.accountPrefsSaved) */
+export const ACCOUNT_PREFS_DEBOUNCE_MS = 400;
+
 /** sessionId -> live runner. Emits everything runners emit, tagged with the session id. */
 export class RunnerPool extends EventEmitter {
   private runners = new Map<string, AgentDriver>();
@@ -53,7 +56,8 @@ export class RunnerPool extends EventEmitter {
     setInterval(() => this.reap(), 60_000).unref();
     // the own login's 200K / 1M picks and 自动压缩 point (A7) are settings: every save of meta.json says so
     const meta = providers.meta as (ProviderService['meta'] & Partial<Pick<EventEmitter, 'on'>>) | undefined;
-    if (typeof meta?.on === 'function') meta.on('changed', () => this.accountPrefsChanged());
+    if (meta) this.accountKey = JSON.stringify(this.accountPrefs());
+    if (typeof meta?.on === 'function') meta.on('changed', () => this.accountPrefsSaved());
   }
 
   /** What the own claude.ai login runs with (settings claude.contextWindows / claude.compactAt, A7). */
@@ -62,8 +66,24 @@ export class RunnerPool extends EventEmitter {
     const c = s['claude.compactAt'];
     return { windows: familyWindows(s['claude.contextWindows']), ...(typeof c === 'number' && Number.isFinite(c) ? { compactAt: c } : {}) };
   }
-  /** the account prefs last given to a conversation (opened with them, or passed on): a save of anything else passes nothing */
+  /**
+   * the account prefs last passed on to the running conversations (at start: what meta.json had): a save of anything
+   * else passes nothing. Not set by open() — a conversation opened between a save and its 'changed' read the new
+   * picks already, the ones running before it have not (final review M1)
+   */
   private accountKey?: string;
+  private accountTimer: NodeJS.Timeout | null = null;
+
+  /**
+   * meta.json was saved. The account dialog saves its two settings one after the other (claude.contextWindows, then
+   * claude.compactAt): two 'changed' a few ms apart, and each push may compact or restart a conversation on its own —
+   * twice, or two processes (final review I1). Saves that close together go out as one push.
+   */
+  private accountPrefsSaved() {
+    if (this.accountTimer) clearTimeout(this.accountTimer);
+    this.accountTimer = setTimeout(() => { this.accountTimer = null; this.accountPrefsChanged(); }, ACCOUNT_PREFS_DEBOUNCE_MS);
+    this.accountTimer.unref?.();
+  }
 
   /** Settings were saved: if the account's picks changed, each running own-login Claude conversation gets them. */
   private accountPrefsChanged() {
@@ -150,7 +170,7 @@ export class RunnerPool extends EventEmitter {
       const thinkingLanguage = params.sessionId ? m?.sessionMeta(params.sessionId).thinkingLanguage : undefined;
       // the own claude.ai login: its 200K / 1M picks and 自动压缩 point (A7); a provider / another account has its own
       let account: AccountPrefs | undefined;
-      if (!sp) { account = this.accountPrefs(); this.accountKey = JSON.stringify(account); }
+      if (!sp) account = this.accountPrefs();
       r = new SessionRunner(params, sp, { thinkingLanguage, ...(account ? { account } : {}) });
       // a pick is the conversation's from then on (a new one: under the id it was given; a fork gets its id at init)
       if (explicit !== undefined && m && !params.fork && !params.resumeAt) {

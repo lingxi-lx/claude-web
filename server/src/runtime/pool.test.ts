@@ -54,7 +54,7 @@ vi.mock('../agents/acp-driver.js', async () => {
   return { AcpDriver: FakeAcp };
 });
 
-const { RunnerPool, idleTtlFor, MAX_IDLE_CLAUDE } = await import('./pool.js');
+const { RunnerPool, idleTtlFor, MAX_IDLE_CLAUDE, ACCOUNT_PREFS_DEBOUNCE_MS } = await import('./pool.js');
 
 const pool = () => new RunnerPool({ forSession: () => undefined } as any);
 
@@ -233,22 +233,68 @@ describe('RunnerPool: the account’s window picks and compaction point', () => 
   });
 
   it('a settings change reaches the running own-login conversations (setAccountPrefs), not provider ones; an unrelated save pushes nothing', () => {
-    const { p, meta, settings } = setup({});
-    const own: any = p.open({ sessionId: 'own', cwd: 'C:/x' });
-    const relay: any = p.open({ sessionId: 'rel', cwd: 'C:/x', providerId: 'relay' });
-    const other: any = p.open({ sessionId: 'acc', cwd: 'C:/x', providerId: 'acc2' });
-    meta.emit('changed'); // something else saved (a draft, a provider…)
-    expect(own.prefs).toEqual([]);
-    settings['claude.compactAt'] = 600_000;
-    meta.emit('changed');
-    expect(own.prefs).toEqual([{ windows: {}, compactAt: 600_000 }]);
-    expect(relay.prefs).toEqual([]);
-    expect(other.prefs).toEqual([]);
-    meta.emit('changed'); // the same again
-    expect(own.prefs).toHaveLength(1);
-    settings['claude.contextWindows'] = { sonnet: 200_000 };
-    meta.emit('changed');
-    expect(own.prefs[1]).toEqual({ windows: { sonnet: 200_000 }, compactAt: 600_000 });
+    vi.useFakeTimers();
+    try {
+      const { p, meta, settings } = setup({});
+      const own: any = p.open({ sessionId: 'own', cwd: 'C:/x' });
+      const relay: any = p.open({ sessionId: 'rel', cwd: 'C:/x', providerId: 'relay' });
+      const other: any = p.open({ sessionId: 'acc', cwd: 'C:/x', providerId: 'acc2' });
+      meta.emit('changed'); // something else saved (a draft, a provider…)
+      vi.advanceTimersByTime(ACCOUNT_PREFS_DEBOUNCE_MS);
+      expect(own.prefs).toEqual([]);
+      settings['claude.compactAt'] = 600_000;
+      meta.emit('changed');
+      vi.advanceTimersByTime(ACCOUNT_PREFS_DEBOUNCE_MS);
+      expect(own.prefs).toEqual([{ windows: {}, compactAt: 600_000 }]);
+      expect(relay.prefs).toEqual([]);
+      expect(other.prefs).toEqual([]);
+      meta.emit('changed'); // the same again
+      vi.advanceTimersByTime(ACCOUNT_PREFS_DEBOUNCE_MS);
+      expect(own.prefs).toHaveLength(1);
+      settings['claude.contextWindows'] = { sonnet: 200_000 };
+      meta.emit('changed');
+      vi.advanceTimersByTime(ACCOUNT_PREFS_DEBOUNCE_MS);
+      expect(own.prefs[1]).toEqual({ windows: { sonnet: 200_000 }, compactAt: 600_000 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // final review I1: the account dialog saves claude.contextWindows then claude.compactAt — two meta saves, two
+  // 'changed' a few ms apart. Each push could compact / restart on its own: they go out as one
+  it('two quick saves (the dialog\'s windows, then its compaction point) reach a conversation as one push', () => {
+    vi.useFakeTimers();
+    try {
+      const { p, meta, settings } = setup({});
+      const own: any = p.open({ sessionId: 'own', cwd: 'C:/x' });
+      settings['claude.contextWindows'] = { opus: 200_000 };
+      meta.emit('changed');
+      vi.advanceTimersByTime(5);
+      settings['claude.compactAt'] = 150_000;
+      meta.emit('changed');
+      vi.advanceTimersByTime(ACCOUNT_PREFS_DEBOUNCE_MS);
+      expect(own.prefs).toEqual([{ windows: { opus: 200_000 }, compactAt: 150_000 }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // final review M1: a conversation opened between the settings write and its 'changed' read the new picks — the pool
+  // used to take that as already passed on, and the conversations running before never got them
+  it('a conversation opened while the save is still being written does not keep the older ones from getting the change', () => {
+    vi.useFakeTimers();
+    try {
+      const { p, meta, settings } = setup({});
+      const old: any = p.open({ sessionId: 'old', cwd: 'C:/x' });
+      settings['claude.compactAt'] = 600_000; // in memory; the file write (and 'changed') is still to come
+      const fresh: any = p.open({ sessionId: 'new', cwd: 'C:/x' });
+      expect(fresh.opts.account).toEqual({ windows: {}, compactAt: 600_000 });
+      meta.emit('changed');
+      vi.advanceTimersByTime(ACCOUNT_PREFS_DEBOUNCE_MS);
+      expect(old.prefs).toEqual([{ windows: {}, compactAt: 600_000 }]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
