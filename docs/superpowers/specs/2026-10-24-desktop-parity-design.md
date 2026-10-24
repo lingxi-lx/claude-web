@@ -390,3 +390,16 @@ B5 的浏览器操作可选「录下这次操作」，视频挂在这一轮结�
 - mac 白屏只在 Windows 上模拟验证（没有 Mac）。
 - GitLab 自建实例、外网常开机器如果没有可用的测试环境，只做假服务端 / 本机第二实例验证。
 - A5 的 buffer 数字以官方二进制同窗口实测为准；没跑通官方二进制就写明。
+
+---
+
+## 阶段 A 完成后留给后面的（2026-10-24）
+
+阶段 A 已完成（1aa7fec..542599e，引擎 engine-v2.8.4-cw.7）。总审查和修正轮里记下、留到后面阶段处理的：
+
+- `desktop/src/main.ts` 的 `desktop:openExternal` IPC 不限协议，直接交给 `shell.openExternal`；B 阶段改链接打开方式时在主进程加白名单（http / https / mailto / tel）。
+- `server/src/files/service.ts` 没有 UNC 路径防护；B1「自动打开 Claude 写的文件」上线前在服务端统一拦 `\host` / `//host`。
+- 鼠标中键点页内 `#锚点` 链接会再开一个应用窗口（阶段 A 之前就有）；B2 改标签栏时一并处理。
+- 没在本机跑的对话还没有 `compactWindow`，上下文小环按完整窗口算；A7（压缩点设置）接着用这个字段。
+- 上下文卡的 `--ctx-*` 颜色还没进对比度测试（`contrast.test.ts` 只读 tokens.css）。
+- 失败重试没有退避：服务端重启那一两秒里按 Ctrl+R 会落到「页面连续出错」页（点重新加载能回来）。
