@@ -59,7 +59,9 @@ export function routeLink(href: string, cwd: string | undefined): LinkRoute {
   const h = href.trim();
   if (!h) return { to: 'none' };
   if (h.startsWith('#')) return { to: 'anchor' };
-  if (UNC.test(h)) return { to: 'none' };
+  // the markdown pipeline percent-encodes what it hands over (`C:\x` → `C:%5Cx`, `\\h\s` → `%5C%5Ch%5Cs`)
+  const d = decode(h);
+  if (UNC.test(h) || UNC.test(d)) return { to: 'none' };
   if (/^https?:/i.test(h)) return { to: 'web', url: h };
   if (/^(mailto|tel):/i.test(h)) return { to: 'external', url: h };
   if (/^file:/i.test(h)) {
@@ -68,7 +70,7 @@ export function routeLink(href: string, cwd: string | undefined): LinkRoute {
     if (m[1] && m[1].toLowerCase() !== 'localhost') return { to: 'none' };
     return local(decode(m[2]));
   }
-  if (DRIVE.test(h)) return file(decode(h));
+  if (DRIVE.test(d)) return file(d);
   if (/^[a-z][a-z0-9+.-]*:/i.test(h)) return { to: 'none' };
   if (h.startsWith('/')) return local(decode(h));
   if (!cwd) return { to: 'none' };

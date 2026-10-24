@@ -1,5 +1,5 @@
 import { createContext, memo, useContext, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
-import ReactMarkdown, { type Components } from 'react-markdown';
+import ReactMarkdown, { defaultUrlTransform, type Components, type UrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CodeBlock, type CodeRunContext } from './CodeBlock';
 import { useStore } from '@/store';
@@ -22,6 +22,13 @@ function loadMath(): Promise<MathPlugins> {
 
 /** Only the conversation's own view provides this; a code block elsewhere gets no 运行 button. */
 const CodeRunCtx = createContext<CodeRunContext | undefined>(undefined);
+
+/**
+ * react-markdown's default blanks every href that is not http(s) / mailto / … — `file:///…`, `C:/…` (read as scheme
+ * `C`), `C:\…` (→ `C:%5C…`), `tel:` — and a blank link opens nothing (2026-10-24 review I1). Those hrefs pass through;
+ * routeLink is what decides (and refuses) where a link goes. `src` and everything else keep the default.
+ */
+const urlTransform: UrlTransform = (url, key) => (key === 'href' && /^(file:|tel:|[a-zA-Z]:)/i.test(url) ? url : defaultUrlTransform(url));
 
 const components: Components = {
   pre({ children }) {
@@ -94,7 +101,7 @@ const MarkdownBody = memo(function MarkdownBody({ text, streaming }: { text: str
   const remark = useMemo(() => (needMath && math ? [remarkGfm, [math.remark, { singleDollarTextMath: false }]] : [remarkGfm]), [needMath, math]);
   const rehype = useMemo(() => [...(needMath && math ? [[math.rehype, { throwOnError: false, strict: false }]] : []), ...(fades ? [[rehypeStreamFade, fade]] : [])], [needMath, math, fades]);
   return (
-    <ReactMarkdown remarkPlugins={remark as any} rehypePlugins={rehype as any} components={components}>
+    <ReactMarkdown remarkPlugins={remark as any} rehypePlugins={rehype as any} components={components} urlTransform={urlTransform}>
       {text}
     </ReactMarkdown>
   );

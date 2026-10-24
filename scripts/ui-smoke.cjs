@@ -124,7 +124,9 @@ function seedHome(home) {
     am([{ type: 'tool_use', id: 'toolu_t_bash', name: 'Bash', input: { command: 'git status --short' } }], 40, 'msg_t3'),
     tr('toolu_t_bash', ' M README.md', 41),
     // the inline code is for the double click (parity-a A4: it selects the whole span)
-    am([{ type: 'text', text: 'smoke: the readme is tidy now, see `activation_status` there.\n\n```\nline one\nline two\n```' }], 45, 'msg_t4'),
+    // the two links are for parity-a A1 (review I1): a file:/// link and a drive path in a reply keep their href
+    am([{ type: 'text', text: 'smoke: the readme is tidy now, see `activation_status` there.\n\n```\nline one\nline two\n```\n\n'
+      + `Links: [smoke-file-url](${require('node:url').pathToFileURL(readme).href}) and [smoke-drive-path](<${process.platform === 'win32' ? readme.replace(/\//g, '\\') : 'C:\\smoke\\README.md'}>)` }], 45, 'msg_t4'),
   ].map((x) => JSON.stringify(x)).join('\n') + '\n');
   // a third: /code-review's findings, reported through ReportFindings (spec 2026-10-16 review-pr §2)
   const reviewSid = '5a0e0e0e-0000-4000-8000-00000000c0e1';
@@ -3131,6 +3133,24 @@ function driver() {
             await js('getSelection().removeAllRanges()');
             await waitFor(`!document.querySelector('.menu.sel-menu')`, 2000);
           } else check('A4: the seeded reply has inline code', false, 'no inline code in the seed');
+        }
+        // A1 (review I1): a file:/// link and a C:\ path in a reply keep a non-empty href (react-markdown's default
+        // blanked them); a click on the file one opens the file in a tab and the window stays on the app page
+        {
+          const links = await js(`[...document.querySelectorAll('.pane.focused .msg.assistant .md a')].filter((a) => /^smoke-(file-url|drive-path)$/.test(a.textContent)).map((a) => ({ text: a.textContent, href: a.getAttribute('href') ?? '' }))`);
+          const fileUrl = links.find((l) => l.text === 'smoke-file-url');
+          const drive = links.find((l) => l.text === 'smoke-drive-path');
+          check('A1: a reply\'s file:/// link and C:\\ link render with their href', !!fileUrl && /^file:\/\/\//.test(fileUrl.href) && !!drive && /^[A-Za-z]:/.test(drive.href), JSON.stringify(links));
+          const docTiles = `window.__store.getState().layout.groups.flatMap((g) => Object.entries(g.panes).flatMap(([paneId, p]) => p.tiles.filter((t) => t.kind === 'doc' && /README\\.md$/i.test(t.path ?? '')).map((t) => ({ paneId, id: t.id, path: t.path }))))`;
+          const before = await js('location.href');
+          await js(`[...document.querySelectorAll('.pane.focused .msg.assistant .md a')].find((a) => a.textContent === 'smoke-file-url')?.click()`);
+          const opened = await waitFor(`${docTiles}.length > 0`, 3000);
+          await sleep(300);
+          const after = await js('location.href');
+          const tiles = await js(docTiles);
+          check('A1: clicking the file:/// link opens the file in a tab; the window does not navigate', opened && after === before, JSON.stringify({ tiles, before, after }));
+          for (const t of tiles ?? []) await js(`window.__store.getState().dispatchLayout({ t: 'tile.close', paneId: ${JSON.stringify(t.paneId)}, tileId: ${JSON.stringify(t.id)} })`);
+          await sleep(300);
         }
         // A5: context colours are fixed per category — the card's rows (when it has a count; no engine runs here, so
         // usually none) never use the old rotating sw-0…7, those rules are gone, and the five tones are five colours

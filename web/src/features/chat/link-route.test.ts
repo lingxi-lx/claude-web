@@ -31,6 +31,13 @@ describe('routeLink', () => {
     expect(routeLink('/%2F%2Fhost/share', undefined)).toEqual({ to: 'none' });
     expect(routeLink('file:///%5C%5Chost/share', undefined)).toEqual({ to: 'none' });
     expect(routeLink('file://localhost/home/a/x.md', undefined)).toEqual({ to: 'file', path: '/home/a/x.md' });
+    // as the markdown pipeline hands them over (percent-encoded)
+    expect(routeLink('%5C%5Chost%5Cshare%5Cx', '/p')).toEqual({ to: 'none' });
+    expect(routeLink('%2F%2Fhost/share', '/p')).toEqual({ to: 'none' });
+  });
+  it('a drive path the markdown pipeline percent-encoded is still a file', () => {
+    expect(routeLink('C:%5Cwork%5Cx.html', undefined)).toEqual({ to: 'file', path: 'C:\\work\\x.html' });
+    expect(routeLink('C:/work/my%20x.html', undefined)).toEqual({ to: 'file', path: 'C:/work/my x.html' });
   });
   it('in-page anchors are left to the page', () => {
     expect(routeLink('#fn-1', '/p')).toEqual({ to: 'anchor' });
