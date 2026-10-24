@@ -101,7 +101,10 @@
   另外用户 `~/.claude/settings.json` 的 env 有 `CLAUDE_CODE_AUTO_COMPACT_WINDOW=700000`，界面上看不出来压缩点是哪来的。
 - **做了什么**：① 「自动压缩」：每个供应商 `Provider.compactAt`、自己的登录设置键 `claude.compactAt`、「其它 Claude 账号」档案自己的 `compactAt`；
   设了就写 `CLAUDE_CODE_AUTO_COMPACT_WINDOW`（和官方二进制自己算的提前压缩点取小：`effectiveCompact`），压过 settings.json（见 `engine-providers`
-  笔记「A7」那条）；不设 settings.json 照旧。输入 50K 起、不超过该模型窗口（`compactAtOk`，不合格的值 runner 直接不用）。
+  笔记「A7」那条）；不设 settings.json 照旧。输入 50K 起、不超过该模型窗口（`compactAtOk`）。runner 里 50K 以下不用；**超过当前模型窗口的封顶到窗口**
+  （`userCompact` = `min(值, 窗口)`，窗口不知道就照用）——账号的值是按最大的那一族检查的，700K 碰到 200K 的 Sonnet 以前被直接丢掉，settings.json
+  又赢了，和编辑框说的「设了就以这里为准」相反（最终审查 M4）。官方二进制把这个变量的下限定在 100K，所以官方二进制上 `info.compactWindow` 报
+  `max(值, 100K)`，ccb 照实（M6）。编辑框里点「在这个大小时压缩」时，settings.json / 环境里的值只有在这个窗口下合格才预填，否则留空（M2）。
   ② 账号的窗口：自己的登录设置键 `claude.contextWindows`（`opus` / `sonnet` / `fable` → `200000 | 1000000`，没写 = 1M），档案用自己的
   `contextWindows`（同样的族键）；选 1M 的族在账号上一律带 `[1m]`（`accountModel`，子代理模型也一样），haiku 固定 200K，`default` 不动。
   帮手在 `server/src/models/account-window.ts`（web 别名 `@account-window`）。③ 看得到：`info.contextWindow`（+ 原有的 `info.compactWindow`），
@@ -110,7 +113,14 @@
   ④ 编辑：设置 → 账号与登录 → Claude 账号「编辑」（`AccountWindows.tsx`，档案行也有「编辑」），供应商编辑页的「自动压缩」（`CompactAt.tsx`）；
   「现在：…」那一行来自 `config.compactSource`（settings.json / 环境 / 没有）。
 - **改了对在跑的对话**：自己登录的设置走 meta 的 `'changed'` → `pool.accountPrefsChanged` → `runner.setAccountPrefs`（等空闲重开进程；
-  窗口变小且用量超过新窗口 80% 先 `/compact`，同 `fitBeforeSwitch`）；档案 / 供应商走原来的 `providerSaved → reprovide`。
+  窗口变小且用量超过新窗口 80% 先 `/compact`，同 `fitBeforeSwitch`）；档案 / 供应商走原来的 `providerSaved → reprovide`——「其它 Claude 账号」
+  的档案窗口变小也先压缩（`fitForShrink`，两条路共用；正在跑一轮就等结束，`deferredChange`，最终审查 I2）。
+- **两次保存只算一次**（最终审查 I1）：编辑框先存 `claude.contextWindows` 再存 `claude.compactAt`，两个 `'changed'` 只差几毫秒；以前两次
+  `setAccountPrefs` 都过了忙闲检查、各发一次 `/compact`，或者一个在进程里 `setModel`、一个重启，`setModel` 失败又重启一次，留下两个引擎进程。
+  现在三层都挡：pool 把 400 ms 内的保存合成一次推送（`ACCOUNT_PREFS_DEBOUNCE_MS`）；`fitBeforeSwitch` 同时只跑一个（后来的等它，问完用量再查一次
+  忙闲 / 进程有没有换）；`setAccountPrefs` 的 `setModel` 失败时只有自己还是最新一次才重启；`respawn()` 正在跑时再调用就并进去。
+  pool 的 `accountKey` 只在推送时（和启动时）更新，`open()` 不再改它：保存写盘期间新开的对话读到了新值，以前就把这次变更当成推过了，旧对话收不到（M1）。
+- **「默认 1M」只在 Max 账号上实测过**：套餐没有长上下文的账号发 `[1m]` 会被拒，让用户在「编辑」里把对应的族改成 200K。
 - **坑**：
   - 账号的 plain id 就是 200K——以前只有带 `[1m]` 的选项才是 1M，现在默认 1M 是我们加的后缀，不是 CLI 的。
   - 自己的登录走用户自己的中转（settings.json / 环境里有 `ANTHROPIC_BASE_URL` / token）时**不改模型名**（那个中转可能不认 1M beta），
