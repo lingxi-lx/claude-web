@@ -13,6 +13,8 @@ export interface PageHandle {
   call<T>(fn: 'read' | 'find' | 'click' | 'type' | 'scroll' | 'view' | 'point' | 'select', arg: Record<string, unknown>): Promise<T>;
   /** browser_eval: run a script in the page; its result as JSON (cut to EVAL_MAX_CHARS). Throws with the script's error. */
   evaluate(script: string): Promise<string>;
+  /** Reload the page and wait for it (at most `ms`): auto-verify.ts. Optional: a page in a test has none. */
+  reload?(ms: number): Promise<boolean>;
   /** Where the Agent's mouse is, for the cursor drawn over the page (AgentCursor.tsx). Optional: a page in a test has none. */
   show?(m: CursorMark): void;
   /** Wait while the page is loading (a click may have started a navigation). False: still loading after `ms`. */

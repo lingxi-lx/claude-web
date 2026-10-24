@@ -8,6 +8,7 @@ import { useStore } from '@/store';
 import { showPanel } from '@/features/workbench/right-panel';
 import { agentTabsOf, refusal, runOp } from './ops';
 import { pageOf } from './guest';
+import { checkPage } from './auto-verify';
 import { searchPage } from './search-page';
 import { agentCurrentOf, agentTab, closeTab, cookiesMode, frontTab, guestElOf, hasWebview, newTab, partitionsFor, patchTab, setAgentCurrent, setPartitionSource, tabOf, takenOverBy, useBrowser } from './state';
 import { loadable } from './url';
@@ -157,4 +158,4 @@ export function installBrowserHost(): () => void {
 }
 
 // for scripts/browser-smoke.cjs: drive an operation without a server in between, and look at the tabs
-(window as unknown as { __cwBrowser?: unknown }).__cwBrowser = { carryOut, state: useBrowser, canHost: hasWebview };
+(window as unknown as { __cwBrowser?: unknown }).__cwBrowser = { carryOut, state: useBrowser, canHost: hasWebview, checkPage: (tabId: string) => checkPage(pageOf(tabId)) };

@@ -162,3 +162,17 @@
 .bw-agent.taken { background: color-mix(in oklab, var(--warn) 12%, transparent); }
 .bw-agent.taken > svg { color: var(--warn); }
 .bw-agent .btn.sm { flex: none; }
+
+/* 「预览有 N 个报错」 under a turn (VerifyChip.tsx, stage B task 8) */
+.verify-chip { margin: 8px 0 0; padding: 6px 8px 6px 10px; border: 1px solid var(--edge); border-radius: var(--r-md, 8px); font-size: 13px; }
+.verify-chip .row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.verify-chip .row > svg { color: var(--danger, #c33); flex: none; }
+.verify-chip .t { color: var(--ink-1); }
+.verify-chip .grow { flex: 1; }
+.verify-chip.checking { display: flex; align-items: center; gap: 8px; color: var(--ink-3); border-style: dashed; }
+.verify-chip.checking .spin { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--edge-strong); border-top-color: var(--ink-2); animation: step-spin 0.7s linear infinite; }
+.verify-chip .errs { margin: 6px 0 2px; padding-left: 22px; max-height: 220px; overflow: auto; }
+.verify-chip .errs li { margin: 2px 0; }
+.verify-chip .errs code { white-space: pre-wrap; word-break: break-word; font-size: 12px; }
+.verify-chip .errs .src { display: block; color: var(--ink-3); font-size: 11px; word-break: break-all; }
+@media (prefers-reduced-motion: reduce) { .verify-chip.checking .spin { animation: none; } }

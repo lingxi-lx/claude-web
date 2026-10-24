@@ -146,6 +146,13 @@ export function pageOf(tabId: string): PageHandle {
     async settle(ms) {
       return idle(await need(), ms);
     },
+    async reload(ms) {
+      const el = await need();
+      patchTab(tabId, { error: undefined });
+      el.reload();
+      await sleep(150);
+      return idle(el, ms);
+    },
     async back() {
       const el = await need();
       if (!el.canGoBack()) return false;

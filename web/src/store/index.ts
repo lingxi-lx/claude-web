@@ -26,6 +26,8 @@ import { MOBILE_QUERY } from '@/ui/viewport';
 import type { SheetDetent } from '@/ui/sheet-snap';
 import { haptic } from '@/ui/haptics';
 import { onTurnEndAutoOpen } from '@/features/browser/auto-open';
+import { onTurnEndAutoVerify } from '@/features/browser/auto-verify';
+import { pageOf } from '@/features/browser/guest';
 import type { PendingBundle } from '@/model/attachments';
 import { LANGUAGE_KEY, reconcileLanguage, tr } from '@/i18n';
 
@@ -760,6 +762,17 @@ export const useStore = create<State>((set, get) => ({
     }
     // the last page / document / picture this turn wrote opens, when the conversation is on screen here
     try { onTurnEndAutoOpen(sessionId, get(), desktop); } catch { /* opening a preview never breaks the turn's end */ }
+    // a turn that changed front-end files: the open preview reloads and its errors show under the turn (never sent)
+    try {
+      void onTurnEndAutoVerify(sessionId, get(), {
+        canDebug: !!desktop?.guestDebug,
+        pageOf,
+        launchUrls: async (cwd) => {
+          const r = await ws.request<{ configs: { url?: string }[] } | null>({ kind: 'preview.list', cwd });
+          return (r?.configs ?? []).map((c) => c.url ?? '').filter(Boolean);
+        },
+      }).catch(() => {});
+    } catch { /* checking a preview never breaks the turn's end */ }
   },
 
   recall(sessionId, id) {

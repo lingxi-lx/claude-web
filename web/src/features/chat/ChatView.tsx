@@ -28,6 +28,7 @@ import { getToolDef, isStandalone } from './tools/registry';
 import { Icon } from '@/ui/icons';
 import { blockRemoteOpen } from '@/features/remote-guard';
 import { openChangedFile } from '@/features/workbench/right-panel';
+import { VerifyChip } from '@/features/browser/VerifyChip';
 import { waitingToolIds } from './permission-dock';
 import { ArrivalCtx, LiveCtx, StepStartCtx, TurnTouchCtx, WaitingCtx } from './turn-context';
 import { externalLive, readsFromOutside } from '@/store/external';
@@ -593,6 +594,7 @@ const TurnView = memo(function TurnView({ turn, last, live, version, sessionId, 
             </div>
           ))}
           {changes.length > 0 && <ChangesCard rows={changes} sessionId={sessionId} cwd={cwd} />}
+          {changes.length > 0 && <VerifyChip sessionId={sessionId} turnId={turn.id} />}
           {answerActions && <AssistantActions it={lastFinal} sessionId={sessionId} />}
         </div>
       )}
