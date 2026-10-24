@@ -3,7 +3,8 @@ import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CodeBlock, type CodeRunContext } from './CodeBlock';
 import { useStore } from '@/store';
-import { desktop } from '@/desktop';
+import { usePaneCtx } from '@/store/paneContext';
+import { followLink, routeLink } from './link-route';
 import { arrive, rehypeStreamFade, settledCuts, type FadeState } from './stream-fade';
 import { reducedMotion } from './Fold';
 
@@ -17,11 +18,6 @@ function loadMath(): Promise<MathPlugins> {
   if (mathCache) return Promise.resolve(mathCache);
   mathPromise ??= Promise.all([import('remark-math'), import('rehype-katex'), import('katex/dist/katex.min.css' as any)]).then(([rm, rk]) => (mathCache = { remark: rm.default, rehype: rk.default }));
   return mathPromise;
-}
-
-function openLink(href: string) {
-  if (desktop) void desktop.openExternal(href);
-  else window.open(href, '_blank', 'noopener,noreferrer');
 }
 
 /** Only the conversation's own view provides this; a code block elsewhere gets no 运行 button. */
@@ -41,8 +37,20 @@ const components: Components = {
     return <code className={className} {...rest}>{children}</code>;
   },
   a({ href, children }) {
+    const ctx = usePaneCtx();
+    const sid = ctx?.sessionId ?? null;
+    const cwd = useStore((s) => (sid ? s.open[sid]?.cwd : undefined));
     return (
-      <a href={href} onClick={(e) => { if (href && /^https?:/i.test(href)) { e.preventDefault(); openLink(href); } }} title={href}>
+      <a
+        href={href}
+        title={href}
+        onClick={(e) => {
+          const r = routeLink(href ?? '', cwd);
+          if (r.to === 'anchor') return;
+          e.preventDefault();
+          followLink(r, sid ?? useStore.getState().activeId);
+        }}
+      >
         {children}
       </a>
     );

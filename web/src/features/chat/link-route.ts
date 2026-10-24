@@ -1,0 +1,74 @@
+import { useStore } from '@/store';
+import { desktop } from '@/desktop';
+import { blockRemoteOpen } from '@/features/remote-guard';
+
+/**
+ * Where a link in a reply goes (spec 2026-10-24 A1). Every link in a reply is decided here: a page → the browser,
+ * a file Claude made → the in-app preview, mail / tel → the system, anything else → nothing. Left to Electron, a
+ * relative link resolved against the app's own address and took the whole window off the app (the mac white screen).
+ */
+export type LinkRoute =
+  | { to: 'web'; url: string }
+  | { to: 'file'; path: string; line?: number }
+  | { to: 'external'; url: string }
+  | { to: 'anchor' }
+  | { to: 'none' };
+
+const DRIVE = /^[a-zA-Z]:[\\/]/;
+
+function decode(s: string): string {
+  try { return decodeURIComponent(s); } catch { return s; }
+}
+
+function withLine(path: string): { path: string; line?: number } {
+  const hash = /#L(\d+)$/.exec(path);
+  if (hash) return { path: path.slice(0, hash.index), line: Number(hash[1]) };
+  const colon = /^(.*[^:\\/]):(\d+)$/.exec(path);
+  if (colon && !DRIVE.test(path.slice(-3))) return { path: colon[1], line: Number(colon[2]) };
+  return { path };
+}
+
+function join(base: string, rel: string): string {
+  const parts = base.replace(/\\/g, '/').replace(/\/+$/, '').split('/');
+  for (const seg of rel.replace(/\\/g, '/').split('/')) {
+    if (seg === '' || seg === '.') continue;
+    if (seg === '..') { if (parts.length > 1) parts.pop(); continue; }
+    parts.push(seg);
+  }
+  return parts.join('/');
+}
+
+function file(path: string): LinkRoute {
+  const { path: p, line } = withLine(path);
+  return line === undefined ? { to: 'file', path: p } : { to: 'file', path: p, line };
+}
+
+export function routeLink(href: string, cwd: string | undefined): LinkRoute {
+  const h = href.trim();
+  if (!h) return { to: 'none' };
+  if (h.startsWith('#')) return { to: 'anchor' };
+  if (/^https?:/i.test(h)) return { to: 'web', url: h };
+  if (/^(mailto|tel):/i.test(h)) return { to: 'external', url: h };
+  if (/^file:/i.test(h)) {
+    const p = decode(h.replace(/^file:\/\/(localhost)?/i, ''));
+    return file(/^\/[a-zA-Z]:[\\/]/.test(p) ? p.slice(1) : p);
+  }
+  if (DRIVE.test(h)) return file(decode(h));
+  if (/^[a-z][a-z0-9+.-]*:/i.test(h)) return { to: 'none' };
+  if (h.startsWith('/')) { const p = decode(h); return file(/^\/[a-zA-Z]:[\\/]/.test(p) ? p.slice(1) : p); }
+  if (!cwd) return { to: 'none' };
+  return file(join(cwd, decode(h)));
+}
+
+export function openExternal(url: string): void {
+  if (desktop) void desktop.openExternal(url);
+  else window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+/** Acts on a route. `sessionId`: the conversation the link is in (a remote one's files are on that machine). */
+export function followLink(r: LinkRoute, sessionId: string | null | undefined): void {
+  if (r.to === 'web' || r.to === 'external') return openExternal(r.url);
+  if (r.to !== 'file') return;
+  if (blockRemoteOpen(sessionId, r.path)) return;
+  useStore.getState().openTile({ id: `d${Date.now().toString(36)}`, kind: 'doc', path: r.path, ...(r.line ? { line: r.line } : {}) }, 'tab');
+}
