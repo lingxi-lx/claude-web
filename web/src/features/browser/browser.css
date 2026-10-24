@@ -44,6 +44,22 @@
 .bw-view.page.vp { align-items: center; justify-content: center; overflow: hidden; background: var(--surface-1); }
 .bw-view.page.vp webview { transform-origin: center center; box-shadow: var(--elev-1); background: #fff; }
 
+/* 标注 (Annotate.tsx): a canvas laid over the page as drawn, the toolbar centred at the page's foot. Only a drawing
+   tool makes the canvas take the pointer (and the wheel: the page does not scroll under a drawing) */
+.bw-ann { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+.bw-ann[hidden] { display: none; }
+.bw-ann canvas { position: absolute; pointer-events: none; touch-action: none; outline: none; }
+.bw-ann.drawing canvas { pointer-events: auto; cursor: crosshair; }
+.bw-ann.drawing[data-tool='text'] canvas { cursor: text; }
+.bw-ann-bar { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); max-width: calc(100% - 16px); display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: var(--r-pill); background: var(--surface-elev); box-shadow: var(--elev-composer); pointer-events: auto; }
+.bw-ann-bar .icon-btn.on { background: var(--layer-selected); color: var(--ink-1); }
+.bw-ann-bar .sep { flex: none; width: 1px; height: 18px; margin: 0 4px; background: var(--fill-subtle); }
+.bw-ann-bar .cnt { flex: none; padding: 0 6px; color: var(--ink-3); font-size: var(--fs-meta); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bw-ann-bar .btn { flex: none; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.bw-ann-bar .btn .spinner { width: 12px; height: 12px; }
+/* the words being written on the page: in the marks' own red, on white like the page under them */
+.bw-ann-text { position: absolute; min-width: 140px; height: 26px; padding: 0 6px; border: 1px solid #e5484d; border-radius: var(--r-xs); background: #fff; color: #e5484d; font: 600 14px system-ui, sans-serif; outline: none; pointer-events: auto; }
+
 /* the downloads bar at the panel's foot */
 .bw-dl { flex: none; display: flex; flex-direction: column; gap: 2px; padding: 4px 8px 6px; border-top: 1px solid var(--fill-subtle); background: var(--surface-0); max-height: 40%; overflow: auto; }
 .bw-dl-row { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 2px 4px 2px 8px; border-radius: var(--r-md); }

@@ -594,6 +594,11 @@ input.field:focus-visible, select.field:focus-visible, textarea.field:focus-visi
 .att-chip button:hover { color: var(--err); }
 .attach { flex-wrap: wrap; align-items: center; }
 .attach .att-chip { height: 28px; }
+/* a picture with its words (the browser's 页面标注): the picture small at the chip's start */
+.att-chip.att-bundle { padding-left: 3px; }
+.att-chip .att-bundle-img { padding: 0; display: inline-flex; border-radius: var(--r-xs); overflow: hidden; }
+.att-chip .att-bundle-img img { width: 30px; height: 22px; object-fit: cover; display: block; }
+.att-chip .att-bundle-img:hover { color: inherit; box-shadow: 0 0 0 2px var(--focus-ring); }
 
 /* status strip (between transcript and composer) */
 /* pinned "it is working" card — the ordinary running state; StatusStrip keeps the exceptions */

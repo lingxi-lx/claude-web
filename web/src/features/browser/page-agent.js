@@ -5,7 +5,9 @@
 // What it gives back is the page's own content — the server marks it as untrusted before a model sees it. Everything
 // returned is plain JSON.
 (() => {
-  if (window.__cwAgent && window.__cwAgent.v === 2) return;
+  if (window.__cwAgent && window.__cwAgent.v === 3) return;
+  // an older copy (a page that was open when the app updated): its pick layer goes with it
+  if (window.__cwAgent && typeof window.__cwAgent.unpick === 'function') { try { window.__cwAgent.unpick(); } catch (e) { /* gone */ } }
 
   /** ref → element (weakly: a removed element's ref just stops resolving), element → ref (stable while it lives). */
   const byRef = new Map();
@@ -208,8 +210,154 @@
     return out;
   }
 
+  // ---- 标注 · 选元素 (Annotate.tsx): the user points at an element and clicks it ----
+  // One layer of our own over the page, in a closed shadow root (the page's styles cannot reach it, its scripts cannot
+  // read it): the box that follows the pointer, and a numbered box on each element picked so far — those are drawn by
+  // the page, so the screenshot sent with them has them where the elements are.
+  const ACCENT = '#d97757';
+  const MAX_HTML_BYTES = 2048;
+  let layer = null;
+  let picking = null;
+
+  function pickLayer() {
+    if (layer && layer.host.isConnected) return layer;
+    const host = document.createElement('cw-annotate');
+    host.style.cssText = 'all:initial;position:absolute;left:0;top:0;width:0;height:0;overflow:visible;z-index:2147483647;pointer-events:none;';
+    const root = host.attachShadow({ mode: 'closed' });
+    const hover = document.createElement('div');
+    hover.style.cssText = 'position:fixed;display:none;box-sizing:border-box;pointer-events:none;border:2px solid ' + ACCENT + ';background:rgba(217,119,87,0.14);border-radius:2px;';
+    root.appendChild(hover);
+    document.documentElement.appendChild(host);
+    layer = { host, root, hover };
+    return layer;
+  }
+
+  function cssPath(el) {
+    const parts = [];
+    const esc = (s) => (window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/[^\w-]/g, '\\$&'));
+    for (let n = el; n && n.nodeType === 1 && parts.length < 6; n = n.parentElement) {
+      const tag = n.tagName.toLowerCase();
+      if (n.id) {
+        const id = '#' + esc(n.id);
+        let unique = false;
+        try { unique = document.querySelectorAll(id).length === 1; } catch (e) { /* odd id */ }
+        if (unique) { parts.unshift(id); break; }
+      }
+      if (tag === 'html' || tag === 'body') { parts.unshift(tag); break; }
+      let part = tag;
+      const cls = Array.from(n.classList || []).filter((c) => c.length <= 40).slice(0, 2);
+      if (cls.length) part += '.' + cls.map(esc).join('.');
+      const p = n.parentElement;
+      if (p) {
+        const same = Array.from(p.children).filter((c) => c.tagName === n.tagName);
+        if (same.length > 1) part += ':nth-of-type(' + (same.indexOf(n) + 1) + ')';
+      }
+      parts.unshift(part);
+    }
+    return parts.join(' > ');
+  }
+
+  function clipBytes(s, max) {
+    const enc = new TextEncoder();
+    if (enc.encode(s).length <= max) return s;
+    let used = 0;
+    let out = '';
+    for (const ch of s) {
+      const b = enc.encode(ch).length;
+      if (used + b > max - 3) break;
+      used += b;
+      out += ch;
+    }
+    return out + '…';
+  }
+
+  function pickedInfo(el) {
+    const r = el.getBoundingClientRect();
+    const cs = getComputedStyle(el);
+    const font = cs.font || [cs.fontStyle, cs.fontWeight, cs.fontSize, cs.fontFamily].filter(Boolean).join(' ');
+    return {
+      selector: cssPath(el),
+      html: clipBytes(el.outerHTML || '', MAX_HTML_BYTES),
+      rect: { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) },
+      styles: { width: Math.round(r.width) + 'px', height: Math.round(r.height) + 'px', color: cs.color, background: cs.backgroundImage && cs.backgroundImage !== 'none' ? cs.backgroundColor + ' ' + cs.backgroundImage.slice(0, 200) : cs.backgroundColor, font: font.slice(0, 200) },
+    };
+  }
+
+  /** A numbered box on a picked element, in page coordinates (it scrolls with the page). */
+  function markPicked(rect, n) {
+    const L = pickLayer();
+    const box = document.createElement('div');
+    const x = rect.x + window.scrollX, y = rect.y + window.scrollY;
+    box.style.cssText = 'position:absolute;box-sizing:border-box;pointer-events:none;border:2px solid ' + ACCENT + ';border-radius:2px;left:' + x + 'px;top:' + y + 'px;width:' + Math.max(rect.w, 4) + 'px;height:' + Math.max(rect.h, 4) + 'px;';
+    const tag = document.createElement('span');
+    tag.textContent = String(n);
+    tag.style.cssText = 'position:absolute;left:-2px;top:-20px;min-width:18px;height:18px;padding:0 4px;box-sizing:border-box;border-radius:9px;background:' + ACCENT + ';color:#fff;font:600 11px/18px system-ui,sans-serif;text-align:center;';
+    if (y < 20) tag.style.top = '0px';
+    box.appendChild(tag);
+    L.root.appendChild(box);
+  }
+
+  function endPick(value) {
+    const p = picking;
+    if (!p) return;
+    picking = null;
+    for (const [type, fn] of p.listeners) window.removeEventListener(type, fn, true);
+    if (layer) layer.hover.style.display = 'none';
+    p.resolve(value);
+  }
+
+  /** The element under the pointer that is the page's (never our own layer). */
+  const pageTarget = (e) => {
+    const t = e.target;
+    return t && t.nodeType === 1 && t !== document.documentElement && (!layer || t !== layer.host) ? t : null;
+  };
+
   window.__cwAgent = {
-    v: 2,
+    v: 3,
+
+    /**
+     * 选元素: the element under the pointer is outlined; a click picks it (the page never sees that click) and it
+     * keeps a box numbered `n`. Resolves with the element's description, `{ cancel: 'esc' }` on Esc, or null when
+     * `pickStop` ends it first.
+     */
+    pick(o) {
+      endPick(null);
+      const n = Math.max(1, Math.floor((o && o.n) || 1));
+      const L = pickLayer();
+      return new Promise((resolve) => {
+        const swallow = (e) => { e.preventDefault(); e.stopImmediatePropagation(); };
+        const move = (e) => {
+          const t = pageTarget(e);
+          if (!t) { L.hover.style.display = 'none'; return; }
+          const r = t.getBoundingClientRect();
+          Object.assign(L.hover.style, { display: 'block', left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
+        };
+        const click = (e) => {
+          swallow(e);
+          if (e.button !== 0) return;
+          const t = pageTarget(e);
+          if (!t) return;
+          const info = pickedInfo(t);
+          markPicked(info.rect, n);
+          endPick(info);
+        };
+        const key = (e) => { if (e.key === 'Escape' && !e.isComposing) { swallow(e); endPick({ cancel: 'esc' }); } };
+        const listeners = [['pointermove', move], ['mouseover', move], ['click', click], ['keydown', key]];
+        for (const t of ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'dblclick', 'auxclick', 'contextmenu', 'touchstart']) listeners.push([t, swallow]);
+        for (const [type, fn] of listeners) window.addEventListener(type, fn, { capture: true, passive: false });
+        picking = { resolve, listeners };
+      });
+    },
+
+    /** Stop picking (the picked boxes stay). */
+    pickStop() { endPick(null); return true; },
+
+    /** Stop picking and take every box of ours off the page. */
+    unpick() {
+      endPick(null);
+      if (layer) { layer.host.remove(); layer = null; }
+      return true;
+    },
 
     /** A search engine's result page: where it is, how it starts, and the links it lists. */
     results() {

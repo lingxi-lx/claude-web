@@ -26,6 +26,7 @@ import { MOBILE_QUERY } from '@/ui/viewport';
 import type { SheetDetent } from '@/ui/sheet-snap';
 import { haptic } from '@/ui/haptics';
 import { onTurnEndAutoOpen } from '@/features/browser/auto-open';
+import type { PendingBundle } from '@/model/attachments';
 import { LANGUAGE_KEY, reconcileLanguage, tr } from '@/i18n';
 
 /** 后台 fills this in (features/background/state.ts — it imports the store, not the other way round): what kept running after the turn's Stop. */
@@ -197,6 +198,14 @@ interface State {
   togglePanel(p: PanelId): void;
   setTab(t: 'chat' | 'trajectory'): void;
   setDraft(sessionId: string, d: string): void;
+  /**
+   * Attachments handed to a conversation's composer from elsewhere (the browser's 页面标注), waiting until a composer
+   * of that conversation is on screen and takes them (`takeComposerAttachments`). Not persisted.
+   */
+  composerInbox: Record<string, PendingBundle[]>;
+  addComposerAttachment(sessionId: string, b: PendingBundle): void;
+  /** what waits for `sessionId`, now taken out of the inbox (the composer keeps it from here on) */
+  takeComposerAttachments(sessionId: string): PendingBundle[];
   /** a conversation that is not running: remember a pick on its chips for the send that resumes it */
   setResume(sessionId: string, patch: ResumeChoice): void;
   /** 子代理: the model the conversation's subagents run on ('' = the main model), picked for `providerId` */
@@ -1124,6 +1133,19 @@ export const useStore = create<State>((set, get) => ({
   setDraft(sessionId, draft) {
     // never create a half-formed entry (no conv / state) for a session that is not open
     set((s) => (s.open[sessionId] ? { open: { ...s.open, [sessionId]: { ...s.open[sessionId], draft } } } : {}));
+  },
+  composerInbox: {},
+  addComposerAttachment(sessionId, b) {
+    set((s) => ({ composerInbox: { ...s.composerInbox, [sessionId]: [...(s.composerInbox[sessionId] ?? []), b] } }));
+  },
+  takeComposerAttachments(sessionId) {
+    const got = get().composerInbox[sessionId];
+    if (!got?.length) return [];
+    set((s) => {
+      const { [sessionId]: _taken, ...rest } = s.composerInbox;
+      return { composerInbox: rest };
+    });
+    return got;
   },
   async closeSession(sessionId) {
     await ws.request({ kind: 'session.close', sessionId }).catch(() => {});

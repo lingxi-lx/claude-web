@@ -6,7 +6,7 @@ import { desktop } from '@/desktop';
 import { clsx, shortModel } from '@/util';
 import { parsePeerId, type AgentKind, type AttachmentRef, type EffortLevel, type PeerInfo, type PermissionMode, type SessionFeatures } from '@shared';
 import { MachineChip } from './MachineChip';
-import { compressImage, expandDataTransfer, fmtSize, isLongPaste, pasteAsAttachment, uploadAttachment, type DroppedFile, type PendingImage } from '@/model/attachments';
+import { bundleParts, compressImage, expandDataTransfer, fmtSize, isLongPaste, pasteAsAttachment, uploadAttachment, type DroppedFile, type PendingBundle, type PendingImage } from '@/model/attachments';
 import { pickFolderFiles } from '@/model/attachment-filter';
 import { StatusStrip } from '@/features/chat/StatusStrip';
 import { QueueCards } from '@/features/chat/QueueCards';
@@ -134,6 +134,8 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   const [subOpen, setSubOpen] = useState(0);
   const [effortOpen, setEffortOpen] = useState(0);
   const [atts, setAtts] = useState<AttachmentRef[]>([]); // inline text attachments
+  // a picture with its words, one chip (the browser's 页面标注): handed over through the store's inbox
+  const [bundles, setBundles] = useState<PendingBundle[]>([]);
   const [files, setFiles] = useState<DroppedFile[]>([]); // uploaded on send
   const [refs, setRefs] = useState<{ id: string; title: string }[]>([]); // referenced sessions → <session-ref /> markers on send
   const pane = usePaneCtx();
@@ -311,6 +313,16 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [welcome, active?.sessionId, active?.cwd, disabled]);
 
+  // 页面标注 and the like: attachments handed to this conversation through the store wait there until a composer of
+  // it is on screen; the first one that is takes them
+  const inbox = useStore((s) => (welcome || !active ? undefined : s.composerInbox[active.sessionId]));
+  useEffect(() => {
+    if (!inbox?.length || !active || disabled || !visible) return;
+    const got = useStore.getState().takeComposerAttachments(active.sessionId);
+    if (got.length) setBundles((cur) => [...cur, ...got]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inbox, active?.sessionId, disabled, visible]);
+
   const autosize = () => {
     const el = ta.current;
     if (!el || !el.clientWidth) return; // hidden / not laid out yet: a bogus scrollHeight would stick
@@ -371,7 +383,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   };
 
   const busy = !welcome && !!active && (active.state === 'running' || active.state === 'waiting' || active.state === 'starting');
-  const canSend = (text.trim().length > 0 || imgs.length > 0 || atts.length > 0 || files.length > 0 || refs.length > 0) && !starting && !upload && !disabled;
+  const canSend = (text.trim().length > 0 || imgs.length > 0 || atts.length > 0 || bundles.length > 0 || files.length > 0 || refs.length > 0) && !starting && !upload && !disabled;
   // a permission / question / plan card docked above the box (redesign phase 5): words typed here are its 拒绝理由 /
   // 修改意见 — sending them denies with them (the old card's reason field, same response); an empty Enter presses the
   // card's main button (允许一次 ↵). What exactly Enter does is `dockAction` (review I3: not in a card's first 600 ms,
@@ -379,7 +391,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   // Ctrl+Enter). Attachments without words are still an ordinary message (queued, never an approval).
   const docked = !welcome && !disabled && active ? active.pending[0] : undefined;
   const dockAgent = agentWord(active?.info);
-  const hasAttachments = imgs.length > 0 || atts.length > 0 || files.length > 0 || refs.length > 0;
+  const hasAttachments = imgs.length > 0 || atts.length > 0 || bundles.length > 0 || files.length > 0 || refs.length > 0;
   // 插话 takes words only (what the button always sent); attachments and slash commands wait their turn in the queue
   const canSteer = busy && !docked && !!active && canSend && !!text.trim() && !hasAttachments && !isSlashCommand(text);
   const steerNow = () => {
@@ -610,10 +622,13 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     if (docked && seenRef.current) setSeen({ carried: false, shownAt: Date.now() });
     setImgs([]);
     setAtts([]);
+    setBundles([]);
     setRefs([]);
     setDraft(active.sessionId, '');
-    const sentImgs = imgs, sentAtts = atts, sentRefs = refs;
+    const sentImgs = imgs, sentAtts = atts, sentBundles = bundles, sentRefs = refs;
     const full = withRefs(t);
+    // a 页面标注 goes as its picture (after the pasted ones) and its words as a text attachment
+    const parts = bundles.map(bundleParts);
     let uploaded: AttachmentRef[];
     try {
       uploaded = files.length ? await uploadAll(active.sessionId) : [];
@@ -625,6 +640,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
       if (t) setDraft(active.sessionId, t);
       setImgs((cur) => (cur.length ? cur : sentImgs));
       setAtts((cur) => (cur.length ? cur : sentAtts));
+      setBundles((cur) => (cur.length ? cur : sentBundles));
       setRefs((cur) => (cur.length ? cur : sentRefs));
       return;
     }
@@ -632,7 +648,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
       setFiles([]);
       const sid = active.sessionId;
       const before = useStore.getState().open[sid]?.queue.length ?? 0;
-      await send(sid, full, im, false, [...atts, ...uploaded]);
+      await send(sid, full, [...im, ...parts.map((p) => p.image)], false, [...atts, ...parts.map((p) => p.text), ...uploaded]);
       if (requeue && seenRef.current?.requestId === docked?.requestId) {
         const q = useStore.getState().open[sid]?.queue ?? [];
         const mine = q.length > before ? q[q.length - 1] : undefined;
@@ -879,7 +895,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   const claudeHere = welcome ? !foreign : sessionAgent === 'claude';
   const sessionFeatures = info?.features ?? NO_FEATURES;
   const tags = welcome ? (claudeHere && !wChatOnly ? capabilityTags(featDefaults, capEnv) : []) : capabilityTags(sessionFeatures, capEnv);
-  const hasChips = imgs.length > 0 || atts.length > 0 || files.length > 0 || refs.length > 0 || !!upload || tags.length > 0 || (welcome && (!!wWorktree || wChatOnly)) || (!welcome && liveChatOnly);
+  const hasChips = imgs.length > 0 || atts.length > 0 || bundles.length > 0 || files.length > 0 || refs.length > 0 || !!upload || tags.length > 0 || (welcome && (!!wWorktree || wChatOnly)) || (!welcome && liveChatOnly);
   const insertSlash = () => { const v = text.startsWith('/') ? text : `/${text}`; onChange(v); requestAnimationFrame(() => { const el = ta.current; if (el) { el.focus(); el.setSelectionRange(1, 1); } }); };
   const insertGoal = () => { const v = text.trim() ? `/goal ${text.trim()}` : '/goal '; onChange(v); requestAnimationFrame(() => { const el = ta.current; if (el) { el.focus(); el.setSelectionRange(v.length, v.length); } }); };
 
@@ -1138,6 +1154,14 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
                     <img src={im.url} alt="" />
                   </button>
                   <button type="button" className="att-img-x" onClick={() => setImgs((s) => s.filter((_, j) => j !== i))} title={tr('移除')} aria-label={tr('移除 {name}', { name: im.name ?? tr('图片') })}><Icon name="close" size={10} /></button>
+                </span>
+              ))}
+              {/* 页面标注: its picture and its words are one chip (the picture opens big; the words show on hover) */}
+              {bundles.map((b) => (
+                <span key={b.id} className="att-chip att-bundle" data-att="bundle" title={b.text.slice(0, 600)}>
+                  <button type="button" className="att-bundle-img" onClick={() => useStore.setState({ viewer: { images: [b.image.url], index: 0 } })} aria-label={tr('放大 {name}', { name: b.name })}><img src={b.image.url} alt="" /></button>
+                  {b.name}
+                  <button aria-label={tr('移除 {name}', { name: b.name })} onClick={() => setBundles((s) => s.filter((x) => x.id !== b.id))}><Icon name="close" size={10} /></button>
                 </span>
               ))}
               {atts.map((a, i) => (

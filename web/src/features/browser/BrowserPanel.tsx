@@ -16,6 +16,7 @@ import { nextPageZoom, progressOn, screenshotName, type LoadEvent } from './pane
 import { fileUrl } from './auto-open';
 import { FindBar } from './FindBar';
 import { DownloadsBar, useDownloadEvents } from './Downloads';
+import { Annotate, type AnnotateTool } from './Annotate';
 import './browser.css';
 import { tr } from '@/i18n';
 import { ws } from '@/ws/client';
@@ -293,7 +294,7 @@ function LaunchList({ tab, front }: { tab: BrowserTab; front: boolean }) {
   );
 }
 
-function AddressBar({ tab }: { tab: BrowserTab }) {
+function AddressBar({ tab, onAnnotate }: { tab: BrowserTab; onAnnotate: () => void }) {
   const active = useScopedSession();
   const toast = useStore((s) => s.toast);
   const [addr, setAddr] = useState(tab.url);
@@ -349,6 +350,7 @@ function AddressBar({ tab }: { tab: BrowserTab }) {
           <button className="bw-zoom" data-id="zoom" title={tr('这个标签页的缩放：点一下还原到 100%')} onClick={() => zoomTab(tab.id, 'reset')}>{Math.round(tab.zoom * 100)}%</button>
         )}
       </div>
+      <button className="icon-btn xs" disabled={!hasPage} title={hasWebview() ? tr('选元素、画标注，然后发给 Claude') : tr('在页面上画标注')} aria-label={tr('标注这个页面')} data-id="annotate-btn" onClick={onAnnotate}><Icon name="pick" size={14} /></button>
       <button className="icon-btn xs" disabled={!hasPage} title={tr('把这个页面的地址（和选中的文字）放进对话的输入框')} aria-label={tr('发给对话')} data-id="to-chat" onClick={() => void toChat()}><Icon name="quote" size={14} /></button>
       <button className="icon-btn xs" title={tr('新标签页')} aria-label={tr('新标签页')} data-id="new-tab" onClick={() => newTab()}><Icon name="plus" size={15} /></button>
       <button ref={more} className={clsx('icon-btn xs', menu && 'active')} title={tr('更多')} aria-label={tr('更多')} aria-haspopup="menu" aria-expanded={menu} data-id="more" onClick={() => setMenu(!menu)}><Icon name="more" size={15} /></button>
@@ -585,7 +587,21 @@ export function BrowserPanel({ visible }: { visible: boolean }) {
     if (e.key === 'find') openFind(tabId);
     else zoomTab(tabId, e.key === 'zoomIn' ? 'in' : e.key === 'zoomOut' ? 'out' : 'reset');
   }), [openFind]);
+  // 标注: which tab's page it is on (one at a time; it stays while another tab is in front), and the tool the address
+  // bar's button asked for — `n` changes on each press
+  const [ann, setAnn] = useState<{ tabId: string; start: AnnotateTool; n: number } | null>(null);
+  const annCount = useRef(0);
   const tab = tabs.find((t) => t.id === activeId) ?? tabs[0];
+  const annTab = ann ? tabs.find((t) => t.id === ann.tabId && t.src) : undefined;
+  const annotate = useCallback(async (tabId: string) => {
+    const start: AnnotateTool = hasWebview() ? 'pick' : 'pen';
+    if (ann && ann.tabId !== tabId && annCount.current > 0 && tabs.some((t) => t.id === ann.tabId)) {
+      // the marks on the other tab's page go first (asked about like closing them)
+      const ok = await dlg.confirm(tr('丢掉标注？'), { message: tr('另一个标签页上还有标注，开始新的会清掉它们。'), okLabel: tr('丢掉'), danger: true, focusCancel: true });
+      if (!ok) return;
+    }
+    setAnn((a) => ({ tabId, start, n: a && a.tabId === tabId ? a.n + 1 : 0 }));
+  }, [ann, tabs]);
   if (!tab) return <div className="bw" />;
   const findOn = find && find.tabId === tab.id && !!tab.src ? find : null;
   return (
@@ -612,11 +628,15 @@ export function BrowserPanel({ visible }: { visible: boolean }) {
           ))}
         </div>
       )}
-      <AddressBar tab={tab} />
+      <AddressBar tab={tab} onAnnotate={() => void annotate(tab.id)} />
       {findOn && <FindBar key={findOn.tabId} tabId={findOn.tabId} focusKey={findOn.n} onClose={() => { setFind(null); guestElOf(findOn.tabId)?.focus(); }} />}
       {tab.agent && <AgentStrip tab={tab} />}
       <div className="bw-body">
         {tabs.map((t) => <TabView key={t.id} tab={t} front={t.id === tab.id} />)}
+        {annTab && ann && (
+          <Annotate key={annTab.id} tab={annTab} front={annTab.id === tab.id} start={ann.start} startKey={ann.n}
+            onCount={(n) => { annCount.current = n; }} onClose={() => { annCount.current = 0; setAnn(null); }} />
+        )}
       </div>
       <DownloadsBar />
     </div>

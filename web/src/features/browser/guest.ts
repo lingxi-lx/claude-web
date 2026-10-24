@@ -6,6 +6,7 @@ import agentSrc from './page-agent.js?raw';
 import { parseKey, type MouseAct, type PageHandle, type Picture } from './ops';
 import { guestOf, patchTab, tabOf, waitGuest, type WebviewEl } from './state';
 import { loadable } from './url';
+import type { PickedEl } from './annotate-model';
 import { tr } from '@/i18n';
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -152,6 +153,31 @@ export function pageOf(tabId: string): PageHandle {
       try { return guestOf(tabId)?.getTitle() || tabOf(tabId)?.title || ''; } catch { return tabOf(tabId)?.title ?? ''; }
     },
   };
+}
+
+/** What 选元素 in a page comes back with: the element, Esc pressed in the page, or nothing (stopped, page gone). */
+export type PickAnswer = PickedEl | { cancel: 'esc' } | null;
+
+/**
+ * 标注 · 选元素: the user points at an element in the tab's page and clicks it (page-agent.js `pick`), which keeps a
+ * box numbered `n` on it. Waits for as long as the user takes; null when picking was stopped or the page went away.
+ */
+export async function pickIn(tabId: string, n: number): Promise<PickAnswer> {
+  const el = guestOf(tabId);
+  if (!el) return null;
+  try {
+    const r = await el.executeJavaScript<PickAnswer>(`${agentSrc}\n;window.__cwAgent.pick(${JSON.stringify({ n })})`);
+    if (!r || typeof r !== 'object') return null;
+    if ('cancel' in r) return { cancel: 'esc' };
+    return typeof r.selector === 'string' && typeof r.html === 'string' && r.rect && r.styles ? r : null;
+  } catch { return null; }
+}
+
+/** Stop picking in the tab's page; `clear`: also take the numbered boxes off it. */
+export function stopPicking(tabId: string, clear: boolean): Promise<void> {
+  const el = guestOf(tabId);
+  if (!el) return Promise.resolve();
+  return el.executeJavaScript(`${agentSrc}\n;window.__cwAgent.${clear ? 'unpick' : 'pickStop'}()`).then(() => {}, () => {});
 }
 
 /** Selected text of a tab's page (for 「发给对话」); '' when there is none or the page cannot be asked. */

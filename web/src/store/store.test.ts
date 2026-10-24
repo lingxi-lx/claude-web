@@ -153,6 +153,24 @@ describe('setDraft', () => {
   });
 });
 
+describe('composer inbox (页面标注 → a conversation\'s composer)', () => {
+  const b = (id: string) => ({ id, name: `页面标注 · ${id} 处`, image: { mediaType: 'image/png', data: 'AA', url: 'data:image/png;base64,AA' }, text: 'note' });
+  it('keeps what is handed to a conversation until its composer takes it, once', () => {
+    const st = useStore.getState();
+    st.addComposerAttachment('s1', b('1'));
+    st.addComposerAttachment('s1', b('2'));
+    st.addComposerAttachment('s2', b('3'));
+    const inbox = useStore.getState().composerInbox.s1;
+    // the same array while nothing changes for it (a stable selector result)
+    useStore.setState({ toasts: [] });
+    expect(useStore.getState().composerInbox.s1).toBe(inbox);
+    expect(useStore.getState().takeComposerAttachments('s1').map((x) => x.id)).toEqual(['1', '2']);
+    expect(useStore.getState().composerInbox.s1).toBeUndefined();
+    expect(useStore.getState().takeComposerAttachments('s1')).toEqual([]);
+    expect(useStore.getState().composerInbox.s2).toHaveLength(1);
+  });
+});
+
 describe('reconnect', () => {
   it('re-syncs state from the runner and flushes the queue when the turn ended during the outage', async () => {
     useStore.setState((s) => ({ open: { ...s.open, s1: { ...s.open.s1, state: 'running', queue: [{ id: 'q', text: 'next' }] } } }));

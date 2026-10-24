@@ -12,6 +12,18 @@ export const IMAGE_KEEP_PNG_BYTES = 300 * 1024;
 
 export interface PendingImage { mediaType: string; data: string; url: string; name?: string }
 
+/**
+ * One attachment made of a picture and the words that go with it (the browser's 页面标注): one chip in the box; sent
+ * as the image plus a text attachment named after it. Handed to a conversation's composer through the store
+ * (`addComposerAttachment`), so it arrives even when that composer is not on screen yet.
+ */
+export interface PendingBundle { id: string; name: string; image: PendingImage; text: string }
+
+/** What a bundle is sent as: its picture, and its words as an inline text attachment `<name>.md`. */
+export function bundleParts(b: PendingBundle): { image: { mediaType: string; data: string }; text: AttachmentRef } {
+  return { image: { mediaType: b.image.mediaType, data: b.image.data }, text: { kind: 'text', name: `${b.name}.md`, size: b.text.length, text: b.text } };
+}
+
 /** Downscale to the model's max edge and re-encode unless it is already a small PNG. Returns base64 without the prefix. */
 export async function compressImage(file: File | Blob, name?: string): Promise<PendingImage> {
   const type = file.type || 'image/png';
