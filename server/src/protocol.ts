@@ -196,6 +196,8 @@ export interface Provider {
   modelContext?: Record<string, number>;
   /** context window (tokens) the user set per model in the provider's settings; wins over everything else */
   contextWindows?: Record<string, number>;
+  /** 自动压缩 (A7): compact at this many tokens on this provider's conversations (CLAUDE_CODE_AUTO_COMPACT_WINDOW, over the user's settings.json); unset = follow the window. For a claude-account profile, contextWindows holds the family picks (opus / sonnet / fable → 200000 | 1000000). */
+  compactAt?: number;
   /** when `models` was last pulled from the endpoint's model list (providers.refreshModels / probe) */
   modelsAt?: number;
   /** the last model-list pull failed (the previous `models` are kept) */
@@ -452,6 +454,8 @@ export interface SessionInfoSnapshot {
    * feed this same field.
    */
   compactWindow?: number;
+  /** the model's context window in this conversation as the engine will use it (A7): the provider's setting, or on the account 1M / 200K per the family pick */
+  contextWindow?: number;
   providerId?: string;
   providerName?: string;
   features?: SessionFeatures;

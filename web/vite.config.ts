@@ -20,6 +20,8 @@ export default defineConfig({
     alias: {
       '@shared': path.resolve(__dirname, '../server/src/protocol.ts'),
       '@catalog': path.resolve(__dirname, '../server/src/models/catalog.ts'),
+      // the account's 200K / 1M picks and the compaction point (A7), shared with the session runner
+      '@account-window': path.resolve(__dirname, '../server/src/models/account-window.ts'),
       '@i18n': path.resolve(__dirname, '../server/src/i18n/core.ts'),
       // the server's English catalog: a dynamic import (i18n/index.ts `loadEnglish`), hence a name of its own
       '@i18n-en': path.resolve(__dirname, '../server/src/i18n/en.ts'),
