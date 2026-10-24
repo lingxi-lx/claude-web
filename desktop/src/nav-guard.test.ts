@@ -40,4 +40,18 @@ describe('CrashGuard', () => {
     g.hit(0); g.hit(1000);
     expect(g.hit(70_000)).toBe('reload');
   });
+  it('after stopping, later crashes are ignored (no page is loaded again) until reset', () => {
+    const g = new CrashGuard(3, 60_000);
+    g.hit(0); g.hit(1000);
+    expect(g.stopped).toBe(false);
+    expect(g.hit(2000)).toBe('stop');
+    expect(g.stopped).toBe(true);
+    expect(g.hit(3000)).toBe('ignore');
+    expect(g.hit(200_000)).toBe('ignore'); // the window passing does not resume it either
+    g.reset();
+    expect(g.stopped).toBe(false);
+    expect(g.hit(201_000)).toBe('reload');
+    expect(g.hit(202_000)).toBe('reload');
+    expect(g.hit(203_000)).toBe('stop');
+  });
 });

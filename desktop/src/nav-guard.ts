@@ -14,13 +14,26 @@ export function allowNavigation(target: string, appUrl: string | undefined): boo
   return p === '/' || p === '/index.html';
 }
 
-/** A renderer that keeps dying is not reloaded for ever: `limit` crashes inside `windowMs` → stop on a notice page. */
+/**
+ * A renderer that keeps dying is not reloaded for ever: `limit` crashes inside `windowMs` → stop on a notice page.
+ * Stopping is final: the notice page needs a renderer too, and one that dies on every start would otherwise load it
+ * again and again — so every later crash is 'ignore' until `reset()` (the app page loaded again).
+ */
 export class CrashGuard {
   private hits: number[] = [];
+  private done = false;
   constructor(private limit = 3, private windowMs = 60_000) {}
-  hit(now = Date.now()): 'reload' | 'stop' {
+  get stopped(): boolean { return this.done; }
+  hit(now = Date.now()): 'reload' | 'stop' | 'ignore' {
+    if (this.done) return 'ignore';
     this.hits = this.hits.filter((t) => now - t < this.windowMs);
     this.hits.push(now);
-    return this.hits.length >= this.limit ? 'stop' : 'reload';
+    if (this.hits.length < this.limit) return 'reload';
+    this.done = true;
+    return 'stop';
+  }
+  reset(): void {
+    this.done = false;
+    this.hits = [];
   }
 }

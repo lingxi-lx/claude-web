@@ -271,7 +271,9 @@ function createWindow(url: string | null, winId = 'main', bounds?: Bounds, hidde
   const recover = () => {
     const base = host.info?.url;
     if (!base || win.isDestroyed()) return;
-    if (crashes.hit() === 'stop') { void win.loadURL(crashUrl(nativeTheme.shouldUseDarkColors, windowUrl(base, winId))); return; }
+    const next = crashes.hit();
+    if (next === 'ignore') return; // stopped on the notice page: a renderer that dies on every start is not loaded again
+    if (next === 'stop') { void win.loadURL(crashUrl(nativeTheme.shouldUseDarkColors, windowUrl(base, winId))); return; }
     const u = new URL(windowUrl(base, winId));
     u.searchParams.set('recovered', '1');
     void win.loadURL(u.toString());
@@ -280,6 +282,11 @@ function createWindow(url: string | null, winId = 'main', bounds?: Bounds, hidde
   win.webContents.on('did-fail-load', (_e, code, _desc, url, isMainFrame) => {
     // -3 = ABORTED (a navigation we cancelled ourselves); only the app page's own load counts
     if (isMainFrame && code !== -3 && sameOrigin(url, host.info?.url)) recover();
+  });
+  // the app page is in again after the stop (重新加载 on the notice page, or the server's restart reloaded it): recovery
+  // starts over. Not on the reloads recovery makes itself — that would clear the count and let it loop
+  win.webContents.on('did-finish-load', () => {
+    if (crashes.stopped && allowNavigation(win.webContents.getURL(), host.info?.url)) crashes.reset();
   });
   // the built-in browser's pages: strip our preload off the guest page. A <webview> blocks window.open in the page
   // itself unless popups are allowed (its `allowpopups` attribute) — a link that opens a new window then does
