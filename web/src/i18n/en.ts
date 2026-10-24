@@ -3650,6 +3650,7 @@ export const EN_WEB: Record<string, string> = {
   "面板": "Panel",
   "面板 · {panel}": "Panel · {panel}",
   "页面 / 数据库": "Pages / databases",
+  "页面出错，已恢复": "The page crashed and was restored",
   "页面地址和选中的内容已放进输入框": "Page address and selection added to the input box",
   "页面地址已放进输入框": "Page address added to the input box",
   "页面多出了内容：用 browser_read {\"offset\": {sCount}} 读新出现的部分。": "The page has new content: read the new part with browser_read {\"offset\": {sCount}}.",

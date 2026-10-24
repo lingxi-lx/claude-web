@@ -42,6 +42,7 @@ export const EN_DESKTOP: Record<string, string> = {
   "审阅（改动）": "Review (changes)",
   "对话": "Conversation",
   "对话 / 步骤视图": "Conversation / Steps view",
+  "对话还在后台运行，不受影响。": "Your conversations keep running in the background.",
   "工作台": "Workbench",
   "帮助": "Help",
   "开发模式不检查更新": "Updates aren't checked in development mode",
@@ -85,5 +86,7 @@ export const EN_DESKTOP: Record<string, string> = {
   "选择工作目录": "Choose working folder",
   "配置中心（右侧面板）": "Config center (side panel)",
   "重命名分组": "Rename group",
+  "重新加载": "Reload",
   "键盘快捷键": "Keyboard shortcuts",
+  "页面连续出错": "The page keeps crashing",
 };

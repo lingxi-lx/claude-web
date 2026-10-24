@@ -16,6 +16,7 @@ import { ZOOM_STEPS, cleanZoom, fitWindow, minWindow, nextZoom, scaleCaption, tr
 import { getLocale, initLanguage, tr } from './i18n.js';
 import { SCHEME, linkFromArgv, parseDeepLink, type DeepLink } from './deep-link';
 import { menuItems } from './context-menu';
+import { CrashGuard, allowNavigation, sameOrigin } from './nav-guard';
 
 const isMac = process.platform === 'darwin';
 
@@ -185,6 +186,18 @@ function splashUrl(dark: boolean): string {
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
 }
 
+/** What a window shows after its page crashed three times in a minute: no reload loop; the conversations run on in the server. */
+function crashUrl(dark: boolean, appUrl: string): string {
+  const [bg, fg, mut] = dark ? ['#12110f', '#c4c2be', '#868480'] : ['#f7f6f2', '#47433f', '#7f7b77'];
+  const html = `<!doctype html><html lang="${getLocale() === 'zh' ? 'zh-CN' : 'en'}"><head><meta charset="utf-8"><title>${APP_NAME}</title><style>`
+    + `html,body{height:100%;margin:0;background:${bg};color:${fg};font:14px "Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI",system-ui,sans-serif}`
+    + `body{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;-webkit-app-region:drag}`
+    + `.s{color:${mut};max-width:420px;text-align:center;line-height:1.6}a{-webkit-app-region:no-drag;color:inherit;border:1px solid ${mut};border-radius:8px;padding:6px 14px;text-decoration:none}`
+    + `</style></head><body><div>${tr('页面连续出错')}</div><div class="s">${tr('对话还在后台运行，不受影响。')}</div>`
+    + `<a href="${appUrl.replace(/"/g, '&quot;')}">${tr('重新加载')}</a></body></html>`;
+  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+}
+
 /**
  * `url` null: the window opens at once on the splash; the caller loads the app into it once the server is up.
  * `hidden`: not shown when ready (the startup windows of a --hidden launch — the login item; tray / a second launch shows them).
@@ -248,7 +261,25 @@ function createWindow(url: string | null, winId = 'main', bounds?: Bounds, hidde
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (e, target) => {
-    if (!target.startsWith(`http://${host.info?.host}:${host.info?.port}`)) { e.preventDefault(); void shell.openExternal(target); }
+    if (allowNavigation(target, host.info?.url)) return;
+    e.preventDefault();
+    // a page link that got past the page's own handler still opens outside; anything else (a file, a path on the
+    // app's own address) is not a page to show here
+    if (/^https?:/i.test(target) && !sameOrigin(target, host.info?.url)) void shell.openExternal(target);
+  });
+  const crashes = new CrashGuard();
+  const recover = () => {
+    const base = host.info?.url;
+    if (!base || win.isDestroyed()) return;
+    if (crashes.hit() === 'stop') { void win.loadURL(crashUrl(nativeTheme.shouldUseDarkColors, windowUrl(base, winId))); return; }
+    const u = new URL(windowUrl(base, winId));
+    u.searchParams.set('recovered', '1');
+    void win.loadURL(u.toString());
+  };
+  win.webContents.on('render-process-gone', (_e, d) => { if (d.reason !== 'clean-exit') recover(); });
+  win.webContents.on('did-fail-load', (_e, code, _desc, url, isMainFrame) => {
+    // -3 = ABORTED (a navigation we cancelled ourselves); only the app page's own load counts
+    if (isMainFrame && code !== -3 && sameOrigin(url, host.info?.url)) recover();
   });
   // the built-in browser's pages: strip our preload off the guest page. A <webview> blocks window.open in the page
   // itself unless popups are allowed (its `allowpopups` attribute) — a link that opens a new window then does

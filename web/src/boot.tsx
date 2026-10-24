@@ -12,6 +12,15 @@ import { startGeminiKeepalive } from '@/features/gateway/gemini-login';
 
 export function boot(): void {
   useStore.getState().init();
+  // the desktop shell reloaded this window after its page crashed or failed to load (desktop/src/main.ts `recover`)
+  {
+    const q = new URLSearchParams(location.search);
+    if (q.has('recovered')) {
+      q.delete('recovered');
+      history.replaceState(history.state, '', `${location.pathname}${q.size ? `?${q}` : ''}${location.hash}`);
+      setTimeout(() => useStore.getState().toast(tr('页面出错，已恢复'), true), 1200);
+    }
+  }
   // Gemini web sessions die if the sidecar cannot renew its cookie: keep them alive while the app runs
   startGeminiKeepalive();
   (window as any).__store = useStore; // debugging aid
