@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AccountFamily, AccountWindows as Windows } from '@account-window';
 import { Segmented } from '@/ui/Segmented';
 import { imeComposing } from '@/ui/ime';
@@ -51,6 +51,14 @@ export function AccountWindowsDialog({ name, windows, compactAt, onSave, onClose
   const [err, setErr] = useState('');
   // the refusal shown by 保存 goes once the point holds
   useEffect(() => { if (!draft.error) setErr(''); }, [draft.error]);
+  // the focus comes into the dialog (its first control), and goes back to what opened it (编辑) when it closes. It used
+  // to stay on 编辑: Esc reached the settings window and closed all of it (final review M5)
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    box.current?.querySelector<HTMLElement>('button:not([disabled]):not([tabindex="-1"]), input:not([disabled])')?.focus();
+    return () => { if (opener?.isConnected) opener.focus(); };
+  }, []);
   const save = async () => {
     if (busy) return;
     if (draft.error) { setErr(draft.error); return; }
@@ -66,8 +74,8 @@ export function AccountWindowsDialog({ name, windows, compactAt, onSave, onClose
     }
   };
   return (
-    <div className="modal-bg dialog-bg" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()} onKeyDown={(e) => { if (e.key === 'Escape' && !imeComposing(e.nativeEvent) && !busy) { e.stopPropagation(); onClose(); } }}>
-      <div className="modal account-windows-dlg" role="dialog" aria-modal="true" aria-label={tr('Claude 账号的上下文窗口')} data-act="account-windows-dialog">
+    <div className="modal-bg dialog-bg" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()} onKeyDown={(e) => { if (e.key === 'Escape' && !imeComposing(e.nativeEvent)) { e.stopPropagation(); if (!busy) onClose(); } }}>
+      <div ref={box} className="modal account-windows-dlg" role="dialog" aria-modal="true" aria-label={tr('Claude 账号的上下文窗口')} data-act="account-windows-dialog">
         <h3>{tr('Claude 账号的上下文窗口')}</h3>
         {name && <div className="sub aw-who">{name}</div>}
         <AccountWindows windows={draft.windows} compactAt={draft.compactAt} onChange={setDraft} onEnter={() => void save()} />

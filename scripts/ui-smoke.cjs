@@ -905,6 +905,16 @@ function driver() {
           const kept = await js(`(() => { const s = window.__store.getState().settings; return s['claude.compactAt'] === undefined && s['claude.contextWindows'] === undefined; })()`);
           check('A7 · … 在这个大小时压缩 + 「30」 says 最少 50K; 取消 closes it and saves nothing', !!box && !!err && closed && kept, JSON.stringify({ box, err: await js(`document.querySelector('.compact-at-err')?.textContent ?? null`), closed, kept }));
           if (!closed) await js(`document.querySelector('${dlgSel}')?.closest('.modal-bg')?.remove()`);
+          // final review M5: the dialog takes the focus; Esc closes the dialog only (it used to close the whole settings
+          // window: the focus stayed on 编辑), and the focus goes back to 编辑
+          await click('.modal.settings [data-act="account-windows-edit"]');
+          const focusIn = await waitFor(`!!document.activeElement?.closest('${dlgSel}')`, 2000);
+          await key('Escape');
+          const escClosed = await waitFor(`!document.querySelector('${dlgSel}')`, 2000);
+          const escState = await js(`({ settings: !!document.querySelector('.modal.settings'), back: document.activeElement?.dataset?.act ?? document.activeElement?.tagName ?? null })`);
+          check('A7 · … the dialog takes the focus; Esc closes only it and the focus is back on 编辑', !!focusIn && escClosed && escState.settings && escState.back === 'account-windows-edit', JSON.stringify({ focusIn, escClosed, ...escState }));
+          if (!escClosed) await js(`document.querySelector('${dlgSel}')?.closest('.modal-bg')?.remove()`);
+          if (!escState.settings) await js(`window.__store.getState().openSettings({ section: 'account' })`);
           // a provider's edit page
           const a7Prov = await srvReq({ kind: 'providers.upsert', provider: { name: 'Smoke A7 中转', type: 'anthropic', baseUrl: 'http://127.0.0.1:9', apiKey: 'smoke-placeholder-not-a-key', models: ['claude-sonnet-4-6'], defaultModel: 'claude-sonnet-4-6' } }).catch(() => null);
           await js('window.__store.getState().loadProviders()');
