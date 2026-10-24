@@ -183,17 +183,9 @@ function ContextCard({ sessionId }: { sessionId: string }) {
       .catch(() => { if (shown.current === sid) setErr(true); })
       .finally(() => { if (shown.current === sid) setBusy(false); });
   };
-  // the card only lives while unfolded (InfoColumn unmounts a folded body), so all of this runs only then: the engine
-  // counts it with the model's API, ~15–30 requests (useContextUsage) — on opening, on 刷新, and when a turn ends
+  // on opening and on 刷新 only — never when a turn ends (2026-10-23, 「上下文小环不问引擎」): the engine counts it with
+  // the model's API, ~15–30 requests (useContextUsage). The card only lives while unfolded (InfoColumn unmounts a folded body).
   useEffect(() => { setData(ctxCache.get(sessionId) ?? null); setErr(false); setBusy(false); if (live) load(); }, [sessionId, live]);
-  // a turn ended (running → idle) in the same conversation: count again (running → idle keeps `live`, so the effect
-  // above does not fire too; a switch to another conversation is that effect's job)
-  const prev = useRef({ sessionId, state });
-  useEffect(() => {
-    const p = prev.current;
-    if (p.sessionId === sessionId && p.state === 'running' && state === 'idle') load();
-    prev.current = { sessionId, state };
-  }, [sessionId, state]);
   const [, tick] = useState(0);
   useEffect(() => { const t = setInterval(() => tick((n) => n + 1), 30_000); return () => clearInterval(t); }, []);
   if (!data) return <div className="ic-dim">{!live ? tr('对话开着时才有明细') : err ? tr('这个对话的 agent 不提供明细') : tr('加载中…')}</div>;
