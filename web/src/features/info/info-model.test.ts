@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { connectorSummary, contextBreakdown, fmtTokens, moveCard, normInfoLayout, nudgeCard, toggleCard, toneOf } from './info-model';
+import { connectorSummary, contextBreakdown, ctxCanRefresh, ctxLive, fmtTokens, moveCard, normInfoLayout, nudgeCard, toggleCard, toneOf } from './info-model';
 
 describe('信息栏 layout', () => {
   it('a stored layout is repaired: unknown dropped, duplicates gone, new cards appended; context folded by default', () => {
@@ -96,5 +96,20 @@ describe('context colours (A5)', () => {
     expect(b.free.map((c) => c.name)).toEqual(['Free space']);
     expect(b.buffer.map((c) => c.name)).toEqual(['Autocompact buffer']);
     expect(b.deferred.map((c) => c.name)).toEqual(['MCP tools (deferred)']);
+  });
+});
+
+// 2026-10-24 review M3: 刷新 on a closed conversation's last count asked the engine, failed and said nothing
+describe('context card: when it can count', () => {
+  it('only a conversation running here (idle / running / waiting) is counted or offers 刷新', () => {
+    for (const s of ['idle', 'running', 'waiting']) expect(ctxLive(s)).toBe(true);
+    for (const s of ['history', 'closed', 'error', 'starting', undefined]) expect(ctxLive(s)).toBe(false);
+  });
+  it('刷新 shows only when live and not already counting', () => {
+    expect(ctxCanRefresh('idle', false)).toBe(true);
+    expect(ctxCanRefresh('idle', true)).toBe(false);
+    expect(ctxCanRefresh('history', false)).toBe(false);
+    expect(ctxCanRefresh('closed', false)).toBe(false);
+    expect(ctxCanRefresh(undefined, false)).toBe(false);
   });
 });

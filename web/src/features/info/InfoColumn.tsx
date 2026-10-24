@@ -17,7 +17,7 @@ import { useRepoContext } from '@/features/workbench/repo-context';
 import { openExtensions } from '@/features/extensions/state';
 import { useContextUsage } from '@/features/composer/ContextMeter';
 import './info.css';
-import { connectorSummary, contextBreakdown, fmtTokens, moveCard, normInfoLayout, nudgeCard, toggleCard, type CtxBreakdown, type InfoCard, type InfoLayout } from './info-model';
+import { connectorSummary, contextBreakdown, ctxCanRefresh, ctxLive, fmtTokens, moveCard, normInfoLayout, nudgeCard, toggleCard, type CtxBreakdown, type InfoCard, type InfoLayout } from './info-model';
 
 const SETTING = 'ui.infoCards';
 
@@ -163,7 +163,7 @@ const ctxCache = new Map<string, { b: CtxBreakdown; at: number }>();
 
 function ContextCard({ sessionId }: { sessionId: string }) {
   const state = useStore((s) => s.open[sessionId]?.state);
-  const live = state === 'idle' || state === 'running' || state === 'waiting';
+  const live = ctxLive(state);
   const [data, setData] = useState(() => ctxCache.get(sessionId) ?? null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(false);
@@ -205,7 +205,7 @@ function ContextCard({ sessionId }: { sessionId: string }) {
       <CtxList title={tr('MCP 工具')} rows={b.mcpTools.map((t) => [t.name.replace(/^mcp__/, ''), t.tokens])} />
       <CtxList title={tr('记忆文件')} rows={b.memoryFiles.map((m) => [basename(m.path), m.tokens])} />
       <CtxList title={tr('自定义子代理')} rows={b.agents.map((a) => [a.name, a.tokens])} />
-      <div className="ic-dim ctx-foot">{busy ? tr('更新中…') : mins < 1 ? tr('刚刚更新') : tr('{n} 分钟前更新', { n: mins })} {!busy && <button className="link" data-act="ctx-refresh" onClick={load}>{tr('刷新')}</button>}</div>
+      <div className="ic-dim ctx-foot">{busy ? tr('更新中…') : mins < 1 ? tr('刚刚更新') : tr('{n} 分钟前更新', { n: mins })} {ctxCanRefresh(state, busy) && <button className="link" data-act="ctx-refresh" onClick={load}>{tr('刷新')}</button>}</div>
     </div>
   );
 }

@@ -22,7 +22,7 @@
     五个 `.ctx-t-*` 算出来是五种不透明的颜色；真机（`scripts/demo-up.cjs` 的假上游）浅色 / 深色 / 字符画主题都看过。
     **坑：spec 里写的「`model` vs `runtimeModel` 两个窗口不同」不是 333k 的原因**——真正的原因是用户 `~/.claude/settings.json` 的 env `CLAUDE_CODE_AUTO_COMPACT_WINDOW=700000`：
     卡的窗口按 1M 算（不看这个上限），阈值却按它算（700k − 20k − 13k = 667k），buffer = 1M − 667k = 333k（两个名字解析出来都是 1M，和 model / runtimeModel 无关）；真的自动压缩在 650k 触发。查这类数字先看 settings.json 的 env。
-    另外 `--ctx-*` 不在对比度测试里（`contrast.test.ts` 只读 tokens.css / styles.css 的主题块）；已关的对话卡上还显示缓存和「刷新」，点了静默失败。
+    另外 `--ctx-*` 不在对比度测试里（`contrast.test.ts` 只读 tokens.css / styles.css 的主题块）；~~已关的对话卡上还显示缓存和「刷新」，点了静默失败~~——总审查 M3 修了：「刷新」只在对话开着（`info-model` 的 `ctxLive` / `ctxCanRefresh`：idle / running / waiting）且不在数时出现，已关的只显示上次的结果和「N 分钟前更新」。
 - 改动卡的「建 PR」是给 Claude 发一句话（提交、推送、`gh pr create`），只在空闲时能点；已有 PR 就是链接（`usePrs`）。
 - 后台任务卡：`useBackground` 里在跑的，秒数每秒走，停止走 `session.stopTask`。
 

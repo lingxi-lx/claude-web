@@ -99,6 +99,16 @@ export function contextBreakdown(u: any): CtxBreakdown | null {
   };
 }
 
+/** The context card counts only a conversation running here: the engine does the counting. */
+export function ctxLive(state: string | undefined): boolean {
+  return state === 'idle' || state === 'running' || state === 'waiting';
+}
+
+/** 刷新 under a count: not for a closed conversation's last count (it asked the engine, failed, said nothing — review M3). */
+export function ctxCanRefresh(state: string | undefined, busy: boolean): boolean {
+  return ctxLive(state) && !busy;
+}
+
 /** 19.6k / 1.2M / 300 */
 export function fmtTokens(n: number): string {
   if (n >= 1e6) return `${(n / 1e6).toFixed(n >= 1e7 ? 0 : 1)}M`;
