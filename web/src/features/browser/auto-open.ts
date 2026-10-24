@@ -101,24 +101,33 @@ export interface AutoOpenStore {
   dispatchLayout(a: { t: 'dock.show'; panel: 'browser' }): void;
 }
 
+/** What of the desktop shell this needs (`desktop` of '@/desktop'; undefined in the web version). */
+export interface AutoOpenShell { allowFileOnce?(url: string): Promise<boolean> }
+
 /**
  * The store's `onTurnEnd`: open what this turn wrote, if anything. A page: the right panel's 浏览器 (what
- * right-panel.ts `openInBrowser` does — it imports the store, so it is not imported here); anything else: a doc tab
- * in the pane the conversation is in.
+ * right-panel.ts `openInBrowser` does — it imports the store, so it is not imported here), once the shell has let
+ * that one tab load that one file (desktop/src/file-guard.ts refuses every other file: load in the built-in browser —
+ * a file:// page could otherwise read any file on the machine). A shell without the guard, or one that says no: the
+ * doc preview, like anything else — a doc tab in the pane the conversation is in.
  */
-export function onTurnEndAutoOpen(sessionId: string, st: AutoOpenStore, desktop: boolean): AutoOpen | null {
+export function onTurnEndAutoOpen(sessionId: string, st: AutoOpenStore, shell: AutoOpenShell | undefined): AutoOpen | null {
   const o = st.open[sessionId];
   if (!o) return null;
   const paneId = paneShowing(st.layout, sessionId);
   const plan = planAutoOpen({
     sessionId, items: o.conv.items, isError: !!o.conv.lastResult?.isError, setting: st.settings?.['web.browser.openFiles'],
-    shown: !!paneId, desktop, mobile: st.mobile, cwd: o.cwd, opened,
+    shown: !!paneId, desktop: !!shell?.allowFileOnce, mobile: st.mobile, cwd: o.cwd, opened,
   });
   if (!plan) return null;
   opened.add(keyOf(plan.path));
-  if (plan.to === 'browser') {
-    openUrl(plan.url);
-    st.dispatchLayout({ t: 'dock.show', panel: 'browser' });
-  } else st.openTile({ id: `d${Date.now().toString(36)}`, kind: 'doc', path: plan.path }, 'tab', paneId);
+  const doc = () => st.openTile({ id: `d${Date.now().toString(36)}`, kind: 'doc', path: plan.path }, 'tab', paneId);
+  if (plan.to === 'browser' && shell?.allowFileOnce) {
+    void shell.allowFileOnce(plan.url).then((ok) => {
+      if (!ok) return doc();
+      openUrl(plan.url);
+      st.dispatchLayout({ t: 'dock.show', panel: 'browser' });
+    }, doc);
+  } else doc();
   return plan;
 }

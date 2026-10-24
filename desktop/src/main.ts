@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, Tray, clipboard, Notification, dialog, shell, ipcMain, nativeImage, nativeTheme, powerSaveBlocker, screen } from 'electron';
+import { app, BrowserWindow, Menu, Tray, clipboard, Notification, dialog, shell, ipcMain, nativeImage, nativeTheme, powerSaveBlocker, screen, session } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { ServerHost } from './server-host';
@@ -17,6 +17,7 @@ import { getLocale, initLanguage, tr } from './i18n.js';
 import { SCHEME, linkFromArgv, parseDeepLink, type DeepLink } from './deep-link';
 import { menuItems } from './context-menu';
 import { CrashGuard, allowNavigation, externalAllowed, sameOrigin, windowOpenAction } from './nav-guard';
+import { FileGuard, guardSession } from './file-guard';
 
 const isMac = process.platform === 'darwin';
 
@@ -86,6 +87,8 @@ function canWrite(bundle: string | null): boolean {
 let updateState: UpdateState = { status: 'idle', mode: updateMode(process.platform, process.env, isMac && !macBlock) };
 let macUpdate: MacSelfUpdate | null = null;
 const host = new ServerHost();
+/** What a file:// page may load in the built-in browser (file-guard.ts): only the tab the app opened on it, nothing it asks for. */
+const fileGuard = new FileGuard();
 const stateFile = () => path.join(app.getPath('userData'), 'window-state.json');
 
 // ---------- single instance ----------
@@ -296,11 +299,16 @@ function createWindow(url: string | null, winId = 'main', bounds?: Bounds, hidde
     prefs.nodeIntegration = false;
     prefs.contextIsolation = true;
     (prefs as { disablePopups?: boolean }).disablePopups = false;
+    // the guest's profile gets the file: guard before its first request (whatever partition it names)
+    guardSession(session.fromPartition(params.partition || (prefs as { partition?: string }).partition || ''), fileGuard);
     // a tab that opens straight onto Google's sign-in starts loading before did-attach-webview below: it is born
     // with the user agent the sign-in takes (sign-in-ua.ts)
     if (params.src && userAgentFor(params.src, HONEST_UA, app.userAgentFallback) === HONEST_UA) params.useragent = HONEST_UA;
   });
   win.webContents.on('did-attach-webview', (_e, guest) => {
+    guardSession(guest.session, fileGuard);
+    const guestId = guest.id;
+    guest.once('destroyed', () => fileGuard.forget(guestId));
     // a page's new window is a new tab of this window's built-in browser (features/browser/BrowserPanel.tsx)
     guest.setWindowOpenHandler(({ url: target }) => {
       if (/^https?:/.test(target) && !win.isDestroyed()) win.webContents.send('desktop:browserPopup', { url: target });
@@ -816,6 +824,9 @@ ipcMain.handle('desktop:zoom:set', (e, v: unknown) => {
 });
 // a picture of a page of the built-in browser, for an Agent's browser_screenshot (browser-capture.ts)
 ipcMain.handle('desktop:browser:capture', (e, id: unknown) => captureGuest(e.sender, id));
+// the app is about to open a page on this machine in its built-in browser (a page Claude wrote: auto-open.ts); only
+// our own windows can say so (a guest page has no preload)
+ipcMain.handle('desktop:browser:allowFile', (e, url: unknown) => !!BrowserWindow.fromWebContents(e.sender) && fileGuard.allowOnce(url));
 // 网关 → 添加 Gemini 账号: sign in to Google in this computer's Chrome and hand back its cookies (gemini-login.ts)
 ipcMain.handle('desktop:gemini:login', (_e, partition: unknown, proxyServer: unknown) =>
   geminiLogin(partition, typeof proxyServer === 'string' ? proxyServer : undefined));
@@ -863,6 +874,9 @@ host.on('keepAwake', (on: boolean) => { mainLog(`[keep-awake] ${on ? 'on' : 'off
 
 if (gotLock) app.whenReady().then(async () => {
   initLanguage(app.getLocale()); // before any window, menu or dialog is worded
+  // the built-in browser's profiles (web features/browser/state.ts) are guarded before any page; any other profile a
+  // <webview> names gets it as it attaches (createWindow)
+  for (const p of ['persist:cw-browser', 'persist:cw-agent']) guardSession(session.fromPartition(p), fileGuard);
   // the window first (on the splash), then the server: see splashUrl
   const hidden = process.argv.includes('--hidden');
   const main = createWindow(null, 'main', undefined, hidden);

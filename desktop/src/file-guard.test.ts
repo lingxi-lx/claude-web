@@ -1,0 +1,76 @@
+import { describe, expect, it } from 'vitest';
+import { ALLOW_TTL_MS, FileGuard, fileKey, fileRequestAllowed } from './file-guard';
+
+const PAGE = 'file:///C:/w/my%20page.html';
+
+describe('fileRequestAllowed', () => {
+  const allow = new Set([PAGE]);
+  it('a tab\'s top frame on an address the app opened loads', () => {
+    expect(fileRequestAllowed({ url: PAGE, resourceType: 'mainFrame' }, allow)).toBe(true);
+    expect(fileRequestAllowed({ url: `${PAGE}#part`, resourceType: 'mainFrame' }, allow)).toBe(true);
+  });
+  it('a top frame on any other file does not', () => {
+    expect(fileRequestAllowed({ url: 'file:///C:/w/other.html', resourceType: 'mainFrame' }, allow)).toBe(false);
+    expect(fileRequestAllowed({ url: 'file://host/share/x.html', resourceType: 'mainFrame' }, new Set(['file://host/share/x.html']))).toBe(false);
+  });
+  it('nothing a page asks for from file: loads — not even the page itself as a frame', () => {
+    for (const resourceType of ['xhr', 'subFrame', 'script', 'image', 'stylesheet', 'media', 'font', 'object', 'other']) {
+      expect(fileRequestAllowed({ url: 'file:///C:/Users/me/.ssh/id_ed25519', resourceType }, allow), resourceType).toBe(false);
+      expect(fileRequestAllowed({ url: PAGE, resourceType }, allow), resourceType).toBe(false);
+    }
+  });
+  it('http(s) is not this guard\'s business', () => {
+    for (const resourceType of ['mainFrame', 'xhr', 'subFrame', 'script', 'image']) {
+      expect(fileRequestAllowed({ url: 'https://example.com/a.js', resourceType }, new Set())).toBe(true);
+      expect(fileRequestAllowed({ url: 'http://localhost:5173/', resourceType }, new Set())).toBe(true);
+    }
+  });
+});
+
+describe('fileKey', () => {
+  it('one key however the address is spelled; only file:///', () => {
+    expect(fileKey('file:///C:/w/my%20page.html#x')).toBe(PAGE);
+    expect(fileKey('file:///C:/w/my page.html')).toBe(PAGE);
+    expect(fileKey('file:///home/me/a.html')).toBe('file:///home/me/a.html');
+    expect(fileKey('file://host/share/a.html')).toBeNull();
+    expect(fileKey('https://a.b/')).toBeNull();
+    expect(fileKey('not a url')).toBeNull();
+  });
+});
+
+describe('FileGuard', () => {
+  it('an address the app said it opens is taken by the first tab; that tab may reload it, nothing else', () => {
+    const g = new FileGuard();
+    const now = 1000;
+    expect(g.allowed({ url: PAGE, resourceType: 'mainFrame', webContentsId: 1 }, now)).toBe(false);
+    expect(g.allowOnce(PAGE, now)).toBe(true);
+    expect(g.allowed({ url: PAGE, resourceType: 'mainFrame', webContentsId: 1 }, now + 10)).toBe(true);
+    // taken: another tab cannot load it on the strength of the same allowance
+    expect(g.allowed({ url: PAGE, resourceType: 'mainFrame', webContentsId: 2 }, now + 20)).toBe(false);
+    // the same tab again (reload, back / forward)
+    expect(g.allowed({ url: PAGE, resourceType: 'mainFrame', webContentsId: 1 }, now + 30)).toBe(true);
+    // the page sends its own tab to another file, or fetches one
+    expect(g.allowed({ url: 'file:///C:/w/other.html', resourceType: 'mainFrame', webContentsId: 1 }, now + 40)).toBe(false);
+    expect(g.allowed({ url: 'file:///C:/secret.txt', resourceType: 'xhr', webContentsId: 1 }, now + 50)).toBe(false);
+    g.forget(1);
+    expect(g.allowed({ url: PAGE, resourceType: 'mainFrame', webContentsId: 1 }, now + 60)).toBe(false);
+  });
+
+  it('an allowance runs out; only file:/// addresses can be allowed', () => {
+    const g = new FileGuard();
+    expect(g.allowOnce(PAGE, 0)).toBe(true);
+    expect(g.allowed({ url: PAGE, resourceType: 'mainFrame', webContentsId: 1 }, ALLOW_TTL_MS + 1)).toBe(false);
+    expect(g.allowOnce('https://a.b/', 0)).toBe(false);
+    expect(g.allowOnce('file://host/x.html', 0)).toBe(false);
+    expect(g.allowOnce(42, 0)).toBe(false);
+  });
+
+  it('a tab moved on to a newly allowed file may load that one (and no longer the old)', () => {
+    const g = new FileGuard();
+    g.allowOnce(PAGE, 0);
+    expect(g.allowed({ url: PAGE, resourceType: 'mainFrame', webContentsId: 1 }, 1)).toBe(true);
+    g.allowOnce('file:///C:/w/b.html', 2);
+    expect(g.allowed({ url: 'file:///C:/w/b.html', resourceType: 'mainFrame', webContentsId: 1 }, 3)).toBe(true);
+    expect(g.allowed({ url: PAGE, resourceType: 'mainFrame', webContentsId: 1 }, 4)).toBe(false);
+  });
+});

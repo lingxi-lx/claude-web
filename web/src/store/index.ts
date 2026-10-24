@@ -750,7 +750,7 @@ export const useStore = create<State>((set, get) => ({
       armAutoContinue(sessionId, at);
     }
     // the last page / document / picture this turn wrote opens, when the conversation is on screen here
-    try { onTurnEndAutoOpen(sessionId, get(), !!desktop); } catch { /* opening a preview never breaks the turn's end */ }
+    try { onTurnEndAutoOpen(sessionId, get(), desktop); } catch { /* opening a preview never breaks the turn's end */ }
   },
 
   recall(sessionId, id) {

@@ -124,7 +124,7 @@ describe('what opens when the turn ends', () => {
     expect(planAutoOpen(input(turn('C:\\w\\r.md'), { opened: new Set(['c:/w/r.md']) }))).toBeNull();
   });
 
-  it('the store\'s turn end: a doc tab in the conversation\'s pane, a page in the browser — each file once', () => {
+  const harness = () => {
     let layout = initialLayout();
     const paneId = layout.groups[0].focusedPaneId;
     layout = layoutReducer(layout, { t: 'tile.open', paneId, tile: chatTile('s1') as Tile, mode: 'replace' } as any);
@@ -134,18 +134,42 @@ describe('what opens when the turn ends', () => {
       open: { s1: { cwd: '/w', conv: c } }, settings: {}, layout, mobile: false,
       openTile: (...a: any[]) => void tiles.push(a), dispatchLayout: (a: any) => void docks.push(a),
     });
+    return { paneId, tiles, docks, st };
+  };
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+
+  it('the store\'s turn end: a doc tab in the conversation\'s pane, a page in the browser once the shell allowed it — each file once', async () => {
+    const { paneId, tiles, docks, st } = harness();
+    const allowed: string[] = [];
+    const shell = { allowFileOnce: async (u: string) => { allowed.push(u); return true; } };
     const md = turn('/w/auto-1.md');
-    expect(onTurnEndAutoOpen('s1', st(md), true)).toEqual({ to: 'doc', path: '/w/auto-1.md' });
+    expect(onTurnEndAutoOpen('s1', st(md), shell)).toEqual({ to: 'doc', path: '/w/auto-1.md' });
     expect(tiles).toHaveLength(1);
     expect(tiles[0][0]).toMatchObject({ kind: 'doc', path: '/w/auto-1.md' });
     expect(tiles[0].slice(1)).toEqual(['tab', paneId]);
-    expect(onTurnEndAutoOpen('s1', st(md), true)).toBeNull();
-    expect(onTurnEndAutoOpen('s1', st(turn('/w/AUTO-1.md')), true)).toBeNull();
+    expect(onTurnEndAutoOpen('s1', st(md), shell)).toBeNull();
+    expect(onTurnEndAutoOpen('s1', st(turn('/w/AUTO-1.md')), shell)).toBeNull();
     expect(tiles).toHaveLength(1);
-    expect(onTurnEndAutoOpen('s1', st(turn('/w/auto-2.html')), true)).toEqual({ to: 'browser', path: '/w/auto-2.html', url: 'file:///w/auto-2.html' });
+    expect(allowed).toEqual([]);
+    expect(onTurnEndAutoOpen('s1', st(turn('/w/auto-2.html')), shell)).toEqual({ to: 'browser', path: '/w/auto-2.html', url: 'file:///w/auto-2.html' });
+    // nothing opens before the shell has let the tab load that file
+    expect(docks).toEqual([]);
+    await tick();
+    expect(allowed).toEqual(['file:///w/auto-2.html']);
     expect(docks).toEqual([{ t: 'dock.show', panel: 'browser' }]);
     expect(useBrowser.getState().tabs.at(-1)).toMatchObject({ src: 'file:///w/auto-2.html' });
-    expect(onTurnEndAutoOpen('other', st(md), true)).toBeNull();
+    expect(onTurnEndAutoOpen('other', st(md), shell)).toBeNull();
+  });
+
+  it('a page goes to the doc preview when the shell has no file guard, says no, or fails; the web version too', async () => {
+    const { tiles, docks, st } = harness();
+    expect(onTurnEndAutoOpen('s1', st(turn('/w/g-1.html')), {})).toEqual({ to: 'doc', path: '/w/g-1.html' });
+    expect(onTurnEndAutoOpen('s1', st(turn('/w/g-2.html')), undefined)).toEqual({ to: 'doc', path: '/w/g-2.html' });
+    expect(onTurnEndAutoOpen('s1', st(turn('/w/g-3.html')), { allowFileOnce: async () => false })?.to).toBe('browser');
+    expect(onTurnEndAutoOpen('s1', st(turn('/w/g-4.html')), { allowFileOnce: () => Promise.reject(new Error('gone')) })?.to).toBe('browser');
+    await tick();
+    expect(tiles.map((t) => t[0].path)).toEqual(['/w/g-1.html', '/w/g-2.html', '/w/g-3.html', '/w/g-4.html']);
+    expect(docks).toEqual([]);
   });
 
   it('a network path is never opened; a relative one is taken from the conversation\'s folder', () => {

@@ -46,6 +46,9 @@ export interface DesktopBridge {
   onBrowserPopup?(cb: (p: { url: string }) => void): () => void;
   /** `id`: the <webview>'s `getWebContentsId()`. Null: nothing could be drawn. */
   captureGuest?(id: number): Promise<{ mime: 'image/jpeg' | 'image/png'; data: string; width?: number; height?: number } | null>;
+  /** the app opens this `file:///…` page in the built-in browser next: the shell lets that one tab load it, and refuses
+   *  every other file: load there (desktop/src/file-guard.ts). False: not a file address it takes. */
+  allowFileOnce?(url: string): Promise<boolean>;
   /** 右键菜单 → 引用到输入框 (desktop/src/context-menu.ts): the text that was selected where the menu was opened */
   onQuoteSelection?(cb: (text: string) => void): () => void;
   /** 网关 → Gemini 账号: sign in to Google in a window of its own (`partition`: one from an earlier login, to sign in

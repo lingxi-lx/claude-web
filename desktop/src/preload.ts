@@ -44,6 +44,8 @@ contextBridge.exposeInMainWorld('desktop', {
   // the built-in browser: a page's new window arrives as a new tab; a picture of one of its pages
   onBrowserPopup: on('desktop:browserPopup'),
   captureGuest: (id: number) => ipcRenderer.invoke('desktop:browser:capture', id),
+  // a file:/// page the app opens in it next (file-guard.ts: any other file: load there is refused)
+  allowFileOnce: (url: string) => ipcRenderer.invoke('desktop:browser:allowFile', url),
   geminiLogin: (partition?: string, proxyServer?: string) => ipcRenderer.invoke('desktop:gemini:login', partition, proxyServer),
   geminiForget: (partition: string) => ipcRenderer.invoke('desktop:gemini:forget', partition),
   geminiRefresh: (partition: string) => ipcRenderer.invoke('desktop:gemini:refresh', partition),
