@@ -14,8 +14,8 @@
 .info-card .ic-title svg { color: var(--fg-3); }
 .info-card .ic-title:hover svg { color: var(--fg-2); }
 .info-card .ic-sum { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--fg-2); font-variant-numeric: tabular-nums; }
-/* the context card's window and compaction point (A7), folded or not */
-.info-card .ic-sum .ic-window { font-size: var(--fs-meta); color: var(--fg-3); white-space: nowrap; }
+/* the context card's window and compaction point (A7), folded or not: its own line under the title row */
+.info-card .ic-window { margin-top: 2px; font-size: var(--fs-meta); color: var(--fg-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .info-card .ic-grip { color: var(--fg-3); cursor: grab; opacity: 0; transition: opacity var(--dur-fast) var(--ease-out); display: inline-flex; }
 .info-card:hover .ic-grip, .info-card:focus-within .ic-grip { opacity: 1; }
 .info-card .ic-body { margin-top: 8px; display: flex; flex-direction: column; gap: 2px; }

@@ -53,9 +53,10 @@ export function InfoColumn({ sessionId }: { sessionId: string }) {
             >
               {titles[card]}<Icon name={layout.collapsed.includes(card) ? 'chevronRight' : 'chevronDown'} size={12} />
             </button>
-            <span className="ic-sum">{(layout.collapsed.includes(card) || card === 'context') && <CardSummary card={card} sessionId={sessionId} folded={layout.collapsed.includes(card)} />}</span>
+            <span className="ic-sum">{layout.collapsed.includes(card) && <CardSummary card={card} sessionId={sessionId} />}</span>
             <span className="ic-grip" draggable onDragStart={(e) => { setDrag(card); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', card); }} onDragEnd={() => setDrag(null)} title={tr('拖动调整顺序')} aria-hidden><Icon name="grip" size={12} /></span>
           </div>
+          {card === 'context' && <ContextWindowLine sessionId={sessionId} />}
           {!layout.collapsed.includes(card) && <div className="ic-body"><CardBody card={card} sessionId={sessionId} /></div>}
         </section>
       ))}
@@ -65,23 +66,26 @@ export function InfoColumn({ sessionId }: { sessionId: string }) {
 
 // ---------- the value on a card's title row (what a folded card still says) ----------
 
-/** `folded`: the card's body is not showing. The context card's window (A7) shows either way; its percentage only folded. */
-function CardSummary({ card, sessionId, folded }: { card: InfoCard; sessionId: string; folded: boolean }) {
+/**
+ * The context card's window and compaction point (A7), folded or not: a line of its own under the title row — on that
+ * row next to the percentage it squeezed 「上下文」 to one character per line, and the English text pushed the meter out
+ * of the 288px column (ui-smoke `a7`, 2026-10-24).
+ */
+function ContextWindowLine({ sessionId }: { sessionId: string }) {
+  const w = useStore((s) => s.open[sessionId]?.info?.contextWindow);
+  const c = useStore((s) => s.open[sessionId]?.info?.compactWindow);
+  const title = contextTitle(w, c);
+  return title ? <div className="ic-window" title={title}>{title}</div> : null;
+}
+
+function CardSummary({ card, sessionId }: { card: InfoCard; sessionId: string }) {
   const o = useStore((s) => s.open[sessionId]);
   const cu = useContextUsage(sessionId);
   const stat = useMemo(() => (o ? sessionDiffStat(o.conv.items) : null), [o?.version]);
   const conns = connectorSummary(o?.info?.mcpServers as any);
   const bg = useBackground((s) => s.sessions[sessionId]);
   const running = bg?.tasks.filter((t) => t.status === 'running').length ?? 0;
-  if (card === 'context') {
-    const title = contextTitle(o?.info?.contextWindow, o?.info?.compactWindow);
-    return (
-      <>
-        {title && <span className="ic-window">{title}</span>}
-        {folded && cu && <><span>{cu.percentage}%</span><span className="ic-meter"><i style={{ width: `${Math.min(100, cu.percentage)}%` }} /></span></>}
-      </>
-    );
-  }
+  if (card === 'context') return cu ? <><span>{cu.percentage}%</span><span className="ic-meter"><i style={{ width: `${Math.min(100, cu.percentage)}%` }} /></span></> : null;
   if (card === 'connectors') return conns.broken ? <span className="warn">{tr('{n} 个要重连', { n: conns.broken })}</span> : conns.rows.length ? <span>{conns.rows.length}</span> : null;
   if (card === 'changes') return stat && stat.files ? <><span className="add">+{stat.added}</span> <span className="del">−{stat.removed}</span></> : null;
   if (card === 'background') return running ? <span>{running}</span> : null;
