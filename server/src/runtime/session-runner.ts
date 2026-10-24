@@ -26,6 +26,7 @@ import type { AttachmentRef, EffortLevel, ModelInfo, OpenSessionParams, Permissi
 import { getLocale, tr } from '../i18n/index.js';
 import { thinkingLanguageFor, thinkingLanguagePrompt } from './thinking-language.js';
 import { subagentPolicyPrompt } from './subagent-policy.js';
+import { accountModel, accountWindowOf, compactAtOk, effectiveCompact, familyWindows, type AccountWindows } from '../models/account-window.js';
 import { localEnv } from './local-env.js';
 import { SESSIONS_ALLOWED, SESSIONS_SERVER, sessionsMcpEnabled, sessionsMcpServer } from '../sessions-mcp/tools.js';
 import { PREVIEW_ALLOWED, PREVIEW_SERVER, previewEnabled, previewMcpServer, verifyInstructions } from '../preview/tools.js';
@@ -119,6 +120,9 @@ let thinkingLanguageSetting: unknown = '';
 /** Settings → 思考用的语言 (`ai.thinkingLanguage`); conversations pick it up through refreshThinkingLanguage(). */
 export function setThinkingLanguageSetting(v: unknown) { thinkingLanguageSetting = v; }
 
+/** The own Claude login's 200K / 1M picks per family and its 自动压缩 point (A7; settings claude.contextWindows / claude.compactAt). */
+export interface AccountPrefs { windows: AccountWindows; compactAt?: number }
+
 export interface RunnerEvents {
   message: (m: SDKMessage) => void;
   state: (s: RunnerState, error?: string) => void;
@@ -200,10 +204,16 @@ export class SessionRunner extends EventEmitter {
   private ownThinkingLanguage = '';
   /** the thinking-language section the running process was started with ('' = none) */
   private thinkingSection = '';
+  /**
+   * The own claude.ai login's picks (settings claude.contextWindows / claude.compactAt, given by the pool): which
+   * families run at 1M (`[1m]`) and where to compact. Another Claude account reads its own profile's instead.
+   */
+  private accountPrefs: AccountPrefs = { windows: {} };
 
-  constructor(params: OpenSessionParams, provider?: SessionProvider, opts: { thinkingLanguage?: string } = {}) {
+  constructor(params: OpenSessionParams, provider?: SessionProvider, opts: { thinkingLanguage?: string; account?: AccountPrefs } = {}) {
     super();
     this.ownThinkingLanguage = opts.thinkingLanguage ?? '';
+    if (opts.account) this.accountPrefs = { windows: familyWindows(opts.account.windows), ...(opts.account.compactAt !== undefined ? { compactAt: opts.account.compactAt } : {}) };
     this.cwd = params.cwd;
     if (provider?.type === 'claude-account') this.account = provider;
     else this.provider = provider;
@@ -356,8 +366,9 @@ export class SessionRunner extends EventEmitter {
     const anthropicWire = relay?.type === 'anthropic' || relay?.type === 'gateway';
     const noThinking = engine.kind === 'ccb' && anthropicWire && ccbMisthinks(providerModelId(relay!, model ?? ''));
     // the official binary's earlier compaction is an environment variable, read once at start: a model that needs
-    // another one (a window set smaller than the binary assumes) is another process (2026-10-14)
-    const compact = engine.kind === 'claude' ? this.officialCompactWindow(model) : undefined;
+    // another one (a window set smaller than the binary assumes) is another process (2026-10-14) — and so is a
+    // 自动压缩 point the user set for the provider / the account (A7), on either engine
+    const compact = this.compactPoint(engine.kind, model);
     return { engine, noThinking, key: `${engine.kind}${noThinking ? ':no-thinking' : ''}${compact ? `:compact-${compact}` : ''}${this.subagent ? `:sub-${this.subagent}` : ''}` };
   }
 
@@ -420,14 +431,22 @@ export class SessionRunner extends EventEmitter {
     if (this.provider) {
       const windows = engine.kind === 'ccb' ? contextWindowsEnv(this.provider, [...(this.provider.models ?? []), ...Object.values(this.provider.modelMap ?? {}), this.provider.defaultModel, providerModelId(this.provider, this.model), ...(sameSub ? [providerModelId(this.provider, sameSub)] : [])]) : undefined;
       if (windows && !('CLAUDE_WEB_CONTEXT_WINDOWS' in fenv)) fenv.CLAUDE_WEB_CONTEXT_WINDOWS = windows;
-      const compact = engine.kind === 'claude' ? this.officialCompactWindow(this.model) : undefined;
-      if (compact && !('CLAUDE_CODE_AUTO_COMPACT_WINDOW' in fenv)) fenv.CLAUDE_CODE_AUTO_COMPACT_WINDOW = String(compact);
     }
+    // where to compact: the official binary's earlier point for a window smaller than it assumes (a provider's), and a
+    // 自动压缩 point the user set for the provider / the account (A7) — the smaller one. The user's own value is theirs
+    // to decide, over 本机环境变量 / the session's env; the binary's computed one, as before, gives way to those
+    const compact = this.compactPoint(engine.kind, this.model);
+    const userCompact = this.userCompact(this.model) !== undefined;
+    if (compact && (userCompact || !('CLAUDE_CODE_AUTO_COMPACT_WINDOW' in fenv))) fenv.CLAUDE_CODE_AUTO_COMPACT_WINDOW = String(compact);
     // the cap the engine will put on the window (both engines take it): the composer's ring and the folded context card
     // divide by min(window, this) as the card's body (the engine's count) does (2026-10-24 review I3: 58 % against 82 %)
-    const cap = compactCap(fenv, this.cwd, !!(this.provider || this.account));
+    // — a point the user set on the own login goes over settings.json through --settings too (`ownOverride` below)
+    const cap = compactCap(fenv, this.cwd, !!(this.provider || this.account) || userCompact);
+    const before = `${this.info.compactWindow}/${this.info.contextWindow}`;
     if (cap) this.info.compactWindow = cap;
     else delete this.info.compactWindow;
+    this.noteWindow(false);
+    if (`${this.info.compactWindow}/${this.info.contextWindow}` !== before) this.emit('info', this.info);
     // the subagents' model (the composer's 子代理 chip), over an agent's own `model:` and the tool's haiku / sonnet /
     // opus: ccb always; the official binary only with `_FORCE` — without it the agent's own model came first, and
     // Explore (inherit) ran on the main model (2026-10-19, real: Opus 5.5 + a DeepSeek pick, the Explore subagent on
@@ -488,8 +507,9 @@ export class SessionRunner extends EventEmitter {
     this.nextFlag?.dispose();
     this.nextFlag = null;
     // The account: only what we set goes over the same keys there — the subagents' model, and the split route's base
-    // URL over the user's own relay (both engines lay the settings files' env over the one they start with)
-    const ours: Record<string, string> = { ...(sub ? { CLAUDE_CODE_SUBAGENT_MODEL: sub, CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '1' } : {}), ...(splitAlias && fenv.ANTHROPIC_BASE_URL ? { ANTHROPIC_BASE_URL: fenv.ANTHROPIC_BASE_URL } : {}) };
+    // URL over the user's own relay (both engines lay the settings files' env over the one they start with), and the
+    // 自动压缩 point the user set for the account over a CLAUDE_CODE_AUTO_COMPACT_WINDOW in their settings.json (A7)
+    const ours: Record<string, string> = { ...(sub ? { CLAUDE_CODE_SUBAGENT_MODEL: sub, CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '1' } : {}), ...(splitAlias && fenv.ANTHROPIC_BASE_URL ? { ANTHROPIC_BASE_URL: fenv.ANTHROPIC_BASE_URL } : {}), ...(userCompact && fenv.CLAUDE_CODE_AUTO_COMPACT_WINDOW ? { CLAUDE_CODE_AUTO_COMPACT_WINDOW: fenv.CLAUDE_CODE_AUTO_COMPACT_WINDOW } : {}) };
     const override = this.provider || this.account ? settingsOverride(fenv, this.cwd) : ownOverride(ours, this.cwd);
     if (override) {
       try {
@@ -1004,11 +1024,28 @@ export class SessionRunner extends EventEmitter {
    * Claude model whose window is over 200K (with no model picked, the provider's default one, so it gets the suffix too).
    */
   private engineModel(kind: string | undefined, model: string | undefined): string | undefined {
+    // the account (claude.ai: the own login, another Claude account): the family's 200K / 1M pick decides `[1m]`
+    // whatever the menu's id said (A7: new conversations sometimes started on Opus 5.5 at 200K) — before ccb's spelling,
+    // which keeps the suffix
+    const w = this.accountWindows();
+    if (w) model = accountModel(model, w);
     if (kind === 'ccb') return ccbModel(model);
     if (kind !== 'claude' || !this.provider) return model;
     const id = providerModelId(this.provider, model);
     if (!id || !officialWindow(contextWindowFor(this.provider, id), id).suffix) return model;
     return `${model && model !== 'default' ? model.replace(/\[1m\]$/i, '') : id}[1m]`;
+  }
+
+  /**
+   * The family picks this conversation's model names and windows follow: on claude.ai itself only — the own login
+   * (the pool's settings) or another Claude account (its profile). Undefined for a provider, and for the own login
+   * through a relay the user set up in settings.json / the environment: its models and windows are its own, and a
+   * `[1m]` it was never sent before could be refused there.
+   */
+  private accountWindows(): AccountWindows | undefined {
+    if (this.provider) return undefined;
+    if (this.account) return familyWindows(this.account.contextWindows);
+    return userAnthropicEnv().relay ? undefined : this.accountPrefs.windows;
   }
 
   /** The official binary's `CLAUDE_CODE_AUTO_COMPACT_WINDOW` for `model` on this provider (none: it assumes right). */
@@ -1019,16 +1056,43 @@ export class SessionRunner extends EventEmitter {
   }
 
   /**
+   * The 自动压缩 point the user set for this conversation's provider / account (A7) that holds for `model`: 50K or more
+   * and within its window (compactAtOk) — another value is left out. Undefined: none set (or none that holds).
+   */
+  private userCompact(model: string | undefined): number | undefined {
+    const window = this.windowOf(model);
+    const set = this.provider ? this.provider.compactAt : this.account ? this.account.compactAt : this.accountPrefs.compactAt;
+    return compactAtOk(set, window) ? set : undefined;
+  }
+
+  /** Where `model` compacts on `kind`: the official binary's earlier point and the user's, the smaller one (none: the engine's own). */
+  private compactPoint(kind: string, model: string | undefined): number | undefined {
+    return effectiveCompact(kind === 'claude' ? this.officialCompactWindow(model) : undefined, this.userCompact(model));
+  }
+
+  /**
    * The context window `model` will have here, when it is known: the provider's settings (engine default otherwise);
-   * on the account, `[1m]` is 1M and a plain id the 200K both engines give it ("default" is whatever the plan says).
+   * on the account, the family's 200K / 1M pick (A7; haiku 200K, "default" is whatever the plan says); the own login
+   * through a relay of the user's: `[1m]` is 1M and a plain id the 200K both engines give it.
    */
   private windowOf(model: string | undefined): number | undefined {
     if (this.provider) {
       const id = providerModelId(this.provider, model);
       return id ? contextWindowFor(this.provider, id) ?? ENGINE_DEFAULT_WINDOW : undefined;
     }
+    const w = this.accountWindows();
+    if (w) return accountWindowOf(model, w);
     if (!model || model === 'default') return undefined;
     return /\[1m\]$/i.test(model) ? ONE_M : ENGINE_DEFAULT_WINDOW;
+  }
+
+  /** `info.contextWindow` = the current model's window (absent when unknown); emitted when it changed (`emit`). */
+  private noteWindow(emit = true) {
+    const w = this.windowOf(this.model);
+    if (w === this.info.contextWindow) return;
+    if (w) this.info.contextWindow = w;
+    else delete this.info.contextWindow;
+    if (emit) this.emit('info', this.info);
   }
 
   /**
@@ -1081,6 +1145,7 @@ export class SessionRunner extends EventEmitter {
     if (this.plan(model).key !== this.planKey || (this.toClaude(model) && !this.toClaude(this.model ?? ''))) {
       this.model = model;
       this.info.model = model;
+      this.noteWindow(false);
       this.emit('info', this.info);
       this.repairEmptyBlocks = true;
       await this.respawnWhenIdle();
@@ -1090,11 +1155,13 @@ export class SessionRunner extends EventEmitter {
       await this.q?.setModel(this.engineModel(this.info.runtime, model));
       this.model = model;
       this.info.model = model;
+      this.noteWindow(false);
       this.emit('info', this.info);
     } catch (e) {
       // fall back to respawn with resume
       this.model = model;
       this.info.model = model;
+      this.noteWindow(false);
       this.emit('info', this.info);
       this.repairEmptyBlocks = true;
       await this.respawnWhenIdle();
@@ -1174,10 +1241,43 @@ export class SessionRunner extends EventEmitter {
    * already compacting every two minutes on the old one.
    */
   async reprovide(p: SessionProvider | undefined) {
-    if (!p || !this.provider || p.id !== this.provider.id) return;
-    const changed = JSON.stringify({ ...this.provider, modelsAt: 0 }) !== JSON.stringify({ ...p, modelsAt: 0 });
-    this.provider = p;
+    // another Claude account is a profile too (its token, its 200K / 1M picks and 自动压缩 point: A7)
+    const cur = this.provider ?? this.account;
+    if (!p || !cur || p.id !== cur.id || (p.type === 'claude-account') !== !!this.account) return;
+    const changed = JSON.stringify({ ...cur, modelsAt: 0 }) !== JSON.stringify({ ...p, modelsAt: 0 });
+    if (this.account) this.account = p;
+    else this.provider = p;
+    this.noteWindow();
     if (changed) await this.respawnWhenIdle();
+  }
+
+  /** The subagents' model as the engine is given it, when it is one of this conversation's own provider / account. */
+  private subEngineModel(kind: string | undefined): string | undefined {
+    const t = subagentTarget(this.subagent, this.provider?.id ?? this.account?.id);
+    return t?.kind === 'same' ? this.engineModel(kind, t.model) : undefined;
+  }
+
+  /**
+   * The own login's 200K / 1M picks or 自动压缩 point changed in settings (the pool passes them on, A7). The compaction
+   * point is an environment variable and in the plan key: another process once idle. Only the main model's name
+   * changing (`[1m]` on or off): switched in the process like a model pick, another process if the engine cannot.
+   */
+  async setAccountPrefs(p: AccountPrefs) {
+    if (this.provider || this.account || this.closed) return;
+    const next: AccountPrefs = { windows: familyWindows(p.windows), ...(typeof p.compactAt === 'number' ? { compactAt: p.compactAt } : {}) };
+    if (JSON.stringify(next) === JSON.stringify(this.accountPrefs)) return;
+    const kind = this.info.runtime;
+    const before = { main: this.engineModel(kind, this.model), sub: this.subEngineModel(kind) };
+    this.accountPrefs = next;
+    this.noteWindow();
+    if (this.plan().key !== this.planKey || this.subEngineModel(kind) !== before.sub) { await this.respawnWhenIdle(); return; }
+    const main = this.engineModel(kind, this.model);
+    if (main === before.main) return;
+    try {
+      await this.q?.setModel(main);
+    } catch {
+      await this.respawnWhenIdle();
+    }
   }
 
   /** Set by the pool: a model of this conversation's provider refused its native thinking-strength parameter. */

@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
-import { SessionRunner } from './session-runner.js';
+import { SessionRunner, type AccountPrefs } from './session-runner.js';
+import { familyWindows } from '../models/account-window.js';
 import type { AgentKind, OpenSessionParams, PermissionMode, Provider, ReportedModel, RunnerState } from '../protocol.js';
 import { loopbackNoProxy, type ProviderService } from '../providers/service.js';
 import type { AgentRegistry, AgentDriver } from '../agents/types.js';
@@ -50,6 +51,29 @@ export class RunnerPool extends EventEmitter {
   constructor(private providers: ProviderService, private agents?: AgentRegistry, private transcripts?: AgentTranscripts) {
     super();
     setInterval(() => this.reap(), 60_000).unref();
+    // the own login's 200K / 1M picks and 自动压缩 point (A7) are settings: every save of meta.json says so
+    const meta = providers.meta as (ProviderService['meta'] & Partial<Pick<EventEmitter, 'on'>>) | undefined;
+    if (typeof meta?.on === 'function') meta.on('changed', () => this.accountPrefsChanged());
+  }
+
+  /** What the own claude.ai login runs with (settings claude.contextWindows / claude.compactAt, A7). */
+  private accountPrefs(): AccountPrefs {
+    const s = this.providers.meta?.settings() ?? {};
+    const c = s['claude.compactAt'];
+    return { windows: familyWindows(s['claude.contextWindows']), ...(typeof c === 'number' && Number.isFinite(c) ? { compactAt: c } : {}) };
+  }
+  /** the account prefs last given to a conversation (opened with them, or passed on): a save of anything else passes nothing */
+  private accountKey?: string;
+
+  /** Settings were saved: if the account's picks changed, each running own-login Claude conversation gets them. */
+  private accountPrefsChanged() {
+    const prefs = this.accountPrefs();
+    const key = JSON.stringify(prefs);
+    if (key === this.accountKey) return;
+    this.accountKey = key;
+    for (const r of this.runners.values()) {
+      if (r instanceof SessionRunner && (!r.info.providerId || r.info.providerId === 'claude')) void r.setAccountPrefs(prefs).catch(() => { /* the old process keeps going */ });
+    }
   }
 
   get(sessionId: string) {
@@ -124,7 +148,10 @@ export class RunnerPool extends EventEmitter {
       const sp = this.providers.forSession(params.providerId);
       // 思考用的语言 picked for this conversation (a fork thinks in its parent's)
       const thinkingLanguage = params.sessionId ? m?.sessionMeta(params.sessionId).thinkingLanguage : undefined;
-      r = new SessionRunner(params, sp, { thinkingLanguage });
+      // the own claude.ai login: its 200K / 1M picks and 自动压缩 point (A7); a provider / another account has its own
+      let account: AccountPrefs | undefined;
+      if (!sp) { account = this.accountPrefs(); this.accountKey = JSON.stringify(account); }
+      r = new SessionRunner(params, sp, { thinkingLanguage, ...(account ? { account } : {}) });
       // a pick is the conversation's from then on (a new one: under the id it was given; a fork gets its id at init)
       if (explicit !== undefined && m && !params.fork && !params.resumeAt) {
         void m.setSessionMeta(r.sessionId, { subagent: { providerId: providerKey(params.providerId), model: explicit } }).catch(() => { /* in memory; the next save persists it */ });

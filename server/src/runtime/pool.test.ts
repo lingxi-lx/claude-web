@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
 
 // A stand-in runner: no child process, state driven by the test.
@@ -12,13 +13,17 @@ vi.mock('./session-runner.js', async () => {
     lastActivity = Date.now();
     closeCalls = 0;
     params: any;
-    constructor(params: any) {
+    opts: any;
+    prefs: any[] = [];
+    constructor(params: any, provider?: any, opts?: any) {
       super();
       this.id = this.sessionId = params.sessionId ?? `new-${Math.random()}`;
       this.cwd = params.cwd;
       this.params = params;
-      this.info = { sessionId: this.sessionId };
+      this.opts = opts;
+      this.info = { sessionId: this.sessionId, providerId: provider?.id };
     }
+    async setAccountPrefs(p: any) { this.prefs.push(p); }
     setState(s: string) {
       this.state = s;
       this.emit('state', s);
@@ -202,6 +207,48 @@ describe('RunnerPool: the subagents model', () => {
     expect(writes).toEqual([[r.sessionId, { subagent: { providerId: 'relay', model: crossValue('relay', 'mini') } }]]);
     p.open({ sessionId: 'src', cwd: 'C:/x', fork: true, subagentModel: '' });
     expect(writes).toHaveLength(1);
+  });
+});
+
+// A7: the account's 200K / 1M picks and 自动压缩 point (settings claude.contextWindows / claude.compactAt)
+describe('RunnerPool: the account’s window picks and compaction point', () => {
+  const setup = (settings: Record<string, unknown>) => {
+    const meta = Object.assign(new EventEmitter(),{ sessionMeta: () => ({}), settings: () => settings, setSessionMeta: async () => {} });
+    const providers: Record<string, any> = { relay: { id: 'relay', type: 'anthropic' }, acc2: { id: 'acc2', type: 'claude-account' } };
+    const p = new RunnerPool({ forSession: (id?: string) => (id && id !== 'claude' ? providers[id] : undefined), meta } as any);
+    return { p, meta, settings };
+  };
+
+  it('the own login gets the settings, read through familyWindows (junk left out); a provider / another account gets none', () => {
+    const { p } = setup({ 'claude.contextWindows': { opus: 200_000, sonnet: 123, haiku: 1_000_000 }, 'claude.compactAt': 500_000 });
+    expect((p.open({ cwd: 'C:/x' }) as any).opts.account).toEqual({ windows: { opus: 200_000 }, compactAt: 500_000 });
+    expect((p.open({ cwd: 'C:/x', providerId: 'claude' }) as any).opts.account).toEqual({ windows: { opus: 200_000 }, compactAt: 500_000 });
+    expect((p.open({ cwd: 'C:/x', providerId: 'relay' }) as any).opts.account).toBeUndefined();
+    expect((p.open({ cwd: 'C:/x', providerId: 'acc2' }) as any).opts.account).toBeUndefined();
+  });
+
+  it('compactAt only when it is a number; nothing set → no windows picked', () => {
+    const { p } = setup({ 'claude.compactAt': '500k' });
+    expect((p.open({ cwd: 'C:/x' }) as any).opts.account).toEqual({ windows: {} });
+  });
+
+  it('a settings change reaches the running own-login conversations (setAccountPrefs), not provider ones; an unrelated save pushes nothing', () => {
+    const { p, meta, settings } = setup({});
+    const own: any = p.open({ sessionId: 'own', cwd: 'C:/x' });
+    const relay: any = p.open({ sessionId: 'rel', cwd: 'C:/x', providerId: 'relay' });
+    const other: any = p.open({ sessionId: 'acc', cwd: 'C:/x', providerId: 'acc2' });
+    meta.emit('changed'); // something else saved (a draft, a provider…)
+    expect(own.prefs).toEqual([]);
+    settings['claude.compactAt'] = 600_000;
+    meta.emit('changed');
+    expect(own.prefs).toEqual([{ windows: {}, compactAt: 600_000 }]);
+    expect(relay.prefs).toEqual([]);
+    expect(other.prefs).toEqual([]);
+    meta.emit('changed'); // the same again
+    expect(own.prefs).toHaveLength(1);
+    settings['claude.contextWindows'] = { sonnet: 200_000 };
+    meta.emit('changed');
+    expect(own.prefs[1]).toEqual({ windows: { sonnet: 200_000 }, compactAt: 600_000 });
   });
 });
 

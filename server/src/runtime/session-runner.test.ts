@@ -54,7 +54,8 @@ describe('SessionRunner', () => {
       queries.length = 0;
       const a = new SessionRunner({ sessionId: 'm1', cwd: '/x', model: 'fable' } as any);
       await tick();
-      expect(queries[0].options.model).toBe('claude-fable-5-1'); // ccb has no fable alias
+      // ccb has no fable alias; the account's family default (1M, A7) keeps its [1m]
+      expect(queries[0].options.model).toBe('claude-fable-5-1[1m]');
       expect(queries[0].options.env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe('claude-opus-5-5');
       expect(queries[0].options.env.ANTHROPIC_DEFAULT_SONNET_MODEL).toBe('claude-sonnet-5');
       expect(queries[0].options.env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe('claude-haiku-4-5-20251001');
@@ -72,7 +73,7 @@ describe('SessionRunner', () => {
         const c = new SessionRunner({ sessionId: 'm3', cwd: '/x', model: 'opus' } as any);
         await tick();
         expect(queries[2].options.env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe('claude-opus-4-8');
-        expect(queries[2].options.model).toBe('opus');
+        expect(queries[2].options.model).toBe('opus[1m]');
         await c.close();
       } finally {
         delete process.env.ANTHROPIC_DEFAULT_OPUS_MODEL;
@@ -86,7 +87,7 @@ describe('SessionRunner', () => {
       eng.kind = 'claude';
       const e = new SessionRunner({ sessionId: 'm5', cwd: '/x', model: 'fable' } as any);
       await tick();
-      expect(queries[4].options.model).toBe('fable');
+      expect(queries[4].options.model).toBe('fable[1m]');
       expect(queries[4].options.env?.ANTHROPIC_DEFAULT_OPUS_MODEL).toBeUndefined();
       await e.close();
     } finally {
@@ -109,7 +110,7 @@ describe('SessionRunner', () => {
       expect(env.ANTHROPIC_BASE_URL).toBe('');
       // the account's own alias table on ccb, as for the ~/.claude login
       expect(env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe('claude-opus-5-5');
-      expect(queries[0].options.model).toBe('claude-fable-5-1');
+      expect(queries[0].options.model).toBe('claude-fable-5-1[1m]'); // its family picks: none, so 1M (A7)
       // the chip names the account it runs on
       expect(r.info).toMatchObject({ providerId: 'acc2', providerName: '工作号' });
       // no relay windows / caps tables for it: the account's are the CLI's own
@@ -1136,6 +1137,270 @@ describe('SessionRunner: the autocompact cap goes on the session info', () => {
       if (was.cap !== undefined) process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = was.cap;
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+// A7 (2026-10-24 user: 「有时候新对话还是 Opus 5.5 200k」; settings.json had CLAUDE_CODE_AUTO_COMPACT_WINDOW=700000)
+describe('SessionRunner: the account’s 200K / 1M picks and the 自动压缩 point', () => {
+  /** A config folder (the "HOME" the engine reads settings.json from) and a data folder of our own. */
+  const withHome = async (settingsEnv: Record<string, string> | null, fn: (dir: string) => Promise<void>) => {
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-a7-'));
+    const keys = ['CLAUDE_CONFIG_DIR', 'CLAUDE_WEB_DIR', 'CLAUDE_CODE_AUTO_COMPACT_WINDOW', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_API_KEY'] as const;
+    const was = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+    for (const k of keys) delete process.env[k];
+    process.env.CLAUDE_CONFIG_DIR = path.join(dir, 'cfg');
+    process.env.CLAUDE_WEB_DIR = path.join(dir, 'data');
+    fs.mkdirSync(process.env.CLAUDE_CONFIG_DIR, { recursive: true });
+    if (settingsEnv) fs.writeFileSync(path.join(process.env.CLAUDE_CONFIG_DIR, 'settings.json'), JSON.stringify({ env: settingsEnv }));
+    const kind = eng.kind;
+    try {
+      queries.length = 0;
+      await fn(dir);
+    } finally {
+      eng.kind = kind;
+      for (const k of keys) if (was[k] === undefined) delete process.env[k]; else process.env[k] = was[k];
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  };
+  const flagEnv = async (file: string | undefined) => {
+    if (!file) return undefined;
+    const fs = await import('node:fs');
+    return JSON.parse(fs.readFileSync(file, 'utf8')).env;
+  };
+  const acct = (extra: Record<string, unknown> = {}) => ({ id: 'acc2', name: '工作号', type: 'claude-account', baseUrl: '', apiKey: 'sk-ant-oat01-' + 'x'.repeat(60), models: [], ...extra }) as any;
+
+  it('the own login, nothing picked: a 1M family gets [1m] on both engines (ccb keeps it), the window is 1M', async () => {
+    await withHome(null, async (dir) => {
+      for (const kind of ['claude', 'ccb'] as const) {
+        eng.kind = kind;
+        queries.length = 0;
+        const r = new SessionRunner({ sessionId: `a7-1-${kind}`, cwd: dir, model: 'claude-opus-5-5' } as any, undefined, { account: { windows: {} } });
+        await tick();
+        expect(queries[0].options.model).toBe('claude-opus-5-5[1m]');
+        expect(r.info.contextWindow).toBe(1_000_000);
+        await r.close();
+      }
+    });
+  });
+
+  it('the own login, Opus picked at 200K: `opus[1m]` goes out as `opus`, the window is 200K', async () => {
+    await withHome(null, async (dir) => {
+      const r = new SessionRunner({ sessionId: 'a7-2', cwd: dir, model: 'opus[1m]' } as any, undefined, { account: { windows: { opus: 200_000 } } });
+      await tick();
+      expect(queries[0].options.model).toBe('opus');
+      expect(r.info.contextWindow).toBe(200_000);
+      await r.close();
+    });
+  });
+
+  it('haiku and `default` stay as they are (haiku is 200K; default is whatever the plan says: no window)', async () => {
+    await withHome(null, async (dir) => {
+      const h = new SessionRunner({ sessionId: 'a7-3', cwd: dir, model: 'claude-haiku-4-5' } as any, undefined, { account: { windows: {} } });
+      await tick();
+      expect(queries[0].options.model).toBe('claude-haiku-4-5');
+      expect(h.info.contextWindow).toBe(200_000);
+      await h.close();
+      const d = new SessionRunner({ sessionId: 'a7-4', cwd: dir, model: 'default' } as any, undefined, { account: { windows: {} } });
+      await tick();
+      expect(queries[1].options.model).toBe('default');
+      expect(d.info.contextWindow).toBeUndefined();
+      await d.close();
+    });
+  });
+
+  it('a claude-account profile reads its own family picks: Sonnet at 200K has no [1m]; Opus (not picked) does', async () => {
+    await withHome(null, async (dir) => {
+      const p = acct({ contextWindows: { sonnet: 200_000 } });
+      const s = new SessionRunner({ sessionId: 'a7-5', cwd: dir, model: 'claude-sonnet-5' } as any, p);
+      await tick();
+      expect(queries[0].options.model).toBe('claude-sonnet-5');
+      expect(s.info.contextWindow).toBe(200_000);
+      await s.close();
+      const o = new SessionRunner({ sessionId: 'a7-6', cwd: dir, model: 'claude-opus-5-5' } as any, p);
+      await tick();
+      expect(queries[1].options.model).toBe('claude-opus-5-5[1m]');
+      expect(o.info.contextWindow).toBe(1_000_000);
+      await o.close();
+    });
+  });
+
+  it('the subagents’ model on the account gets the same treatment', async () => {
+    await withHome(null, async (dir) => {
+      const r = new SessionRunner({ sessionId: 'a7-7', cwd: dir, model: 'claude-opus-5-5', subagentModel: 'claude-sonnet-5' } as any, undefined, { account: { windows: { opus: 200_000 } } });
+      await tick();
+      expect(queries[0].options.model).toBe('claude-opus-5-5');
+      expect(queries[0].options.env.CLAUDE_CODE_SUBAGENT_MODEL).toBe('claude-sonnet-5[1m]');
+      await r.close();
+    });
+  });
+
+  it('the own login through a relay of the user’s (settings.json env): its model names stay as they were (no [1m] it never got before)', async () => {
+    await withHome({ ANTHROPIC_BASE_URL: 'https://relay.invalid', ANTHROPIC_AUTH_TOKEN: 'x' }, async (dir) => {
+      const r = new SessionRunner({ sessionId: 'a7-relay', cwd: dir, model: 'claude-opus-5-5' } as any, undefined, { account: { windows: {} } });
+      await tick();
+      expect(queries[0].options.model).toBe('claude-opus-5-5');
+      expect(r.info.contextWindow).toBe(200_000);
+      await r.close();
+    });
+  });
+
+  it('an API provider is never touched by the account picks', async () => {
+    await withHome(null, async (dir) => {
+      // the provider says 200K, the account picks would say 1M: the provider's window, no [1m]
+      const p = { id: 'p1', name: 'relay', type: 'anthropic', baseUrl: 'https://relay.invalid', apiKey: 'k', models: ['claude-opus-5-5'], contextWindows: { 'claude-opus-5-5': 200_000 } } as any;
+      const r = new SessionRunner({ sessionId: 'a7-8', cwd: dir, model: 'claude-opus-5-5' } as any, p, { account: { windows: { opus: 1_000_000 } } });
+      await tick();
+      expect(queries[0].options.model).toBe('claude-opus-5-5');
+      expect(r.info.contextWindow).toBe(200_000);
+      await r.close();
+      // …and the other way round: the provider's 1M Claude gets its [1m] whatever the account picked
+      queries.length = 0;
+      const big = new SessionRunner({ sessionId: 'a7-8b', cwd: dir, model: 'claude-opus-5-5' } as any, { ...p, contextWindows: {} }, { account: { windows: { opus: 200_000 } } });
+      await tick();
+      expect(queries[0].options.model).toBe('claude-opus-5-5[1m]');
+      expect(big.info.contextWindow).toBe(1_000_000);
+      await big.close();
+    });
+  });
+
+  it('the account’s 自动压缩 point beats settings.json (700000) through --settings; unset, settings.json stays', async () => {
+    await withHome({ CLAUDE_CODE_AUTO_COMPACT_WINDOW: '700000' }, async (dir) => {
+      for (const kind of ['claude', 'ccb'] as const) {
+        eng.kind = kind;
+        queries.length = 0;
+        const r = new SessionRunner({ sessionId: `a7-9-${kind}`, cwd: dir, model: 'claude-opus-5-5' } as any, undefined, { account: { windows: {}, compactAt: 500_000 } });
+        await tick();
+        const o = queries[0].options;
+        expect(o.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe('500000');
+        expect((await flagEnv(o.settings))?.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe('500000');
+        expect(r.info.compactWindow).toBe(500_000);
+        await r.close();
+      }
+      // nothing set: the key is not written, the user's 700000 is what the engine gets
+      queries.length = 0;
+      const n = new SessionRunner({ sessionId: 'a7-10', cwd: dir, model: 'claude-opus-5-5' } as any, undefined, { account: { windows: {} } });
+      await tick();
+      expect(queries[0].options.env?.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBeUndefined();
+      expect(queries[0].options.settings).toBeUndefined();
+      expect(n.info.compactWindow).toBe(700_000);
+      await n.close();
+      // another Claude account's own compactAt: the provider path (settingsOverride) carries it the same way
+      queries.length = 0;
+      const a = new SessionRunner({ sessionId: 'a7-11', cwd: dir, model: 'claude-opus-5-5' } as any, acct({ compactAt: 450_000 }));
+      await tick();
+      expect(queries[0].options.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe('450000');
+      expect((await flagEnv(queries[0].options.settings))?.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe('450000');
+      expect(a.info.compactWindow).toBe(450_000);
+      await a.close();
+    });
+  });
+
+  it('a value past the window or under 50K is ignored (Opus at 200K and 500000 → nothing of ours)', async () => {
+    await withHome(null, async (dir) => {
+      const r = new SessionRunner({ sessionId: 'a7-12', cwd: dir, model: 'claude-opus-5-5' } as any, undefined, { account: { windows: { opus: 200_000 }, compactAt: 500_000 } });
+      await tick();
+      expect(queries[0].options.env?.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBeUndefined();
+      expect(r.info.compactWindow).toBeUndefined();
+      await r.close();
+    });
+  });
+
+  it('a provider’s compactAt: written on both engines; too small → not written; with the official binary’s own earlier point the smaller one wins', async () => {
+    await withHome(null, async (dir) => {
+      const base = { id: 'p1', name: 'relay', type: 'anthropic', baseUrl: 'https://relay.invalid', apiKey: 'k', models: ['claude-opus-5-5'] };
+      const run = async (p: any, kind: 'claude' | 'ccb') => {
+        eng.kind = kind;
+        queries.length = 0;
+        const r = new SessionRunner({ sessionId: `a7-p-${Math.random()}`, cwd: dir, model: 'claude-opus-5-5' } as any, p);
+        await tick();
+        const env = queries[0].options.env;
+        const info = { ...r.info };
+        await r.close();
+        return { env, info };
+      };
+      for (const kind of ['claude', 'ccb'] as const) {
+        const ok = await run({ ...base, compactAt: 400_000 }, kind);
+        expect(ok.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe('400000');
+        expect(ok.info.compactWindow).toBe(400_000);
+        expect(ok.info.contextWindow).toBe(1_000_000);
+        const small = await run({ ...base, compactAt: 30_000 }, kind);
+        expect(small.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBeUndefined();
+      }
+      // official binary, window set to 400K (it compacts there on its own): 300K is earlier → 300K; 600K is past the window → 400K
+      const w = { ...base, runtime: 'claude', contextWindows: { 'claude-opus-5-5': 400_000 } };
+      expect((await run({ ...w, compactAt: 300_000 }, 'claude')).env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe('300000');
+      expect((await run({ ...w, compactAt: 600_000 }, 'claude')).env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe('400000');
+    });
+  });
+
+  it('setAccountPrefs on a live conversation: a new compaction point changes the plan key → it restarts once idle; the same again restarts nothing', async () => {
+    await withHome(null, async (dir) => {
+      const r = new SessionRunner({ sessionId: 'a7-13', cwd: dir, model: 'claude-opus-5-5' } as any, undefined, { account: { windows: {} } });
+      await tick();
+      await r.setAccountPrefs({ windows: {}, compactAt: 600_000 });
+      await tick();
+      expect(queries).toHaveLength(2);
+      expect(queries[1].options.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe('600000');
+      await r.setAccountPrefs({ windows: {}, compactAt: 600_000 });
+      await tick();
+      expect(queries).toHaveLength(2);
+      // mid-turn: not now — once the turn is over
+      r.send('go');
+      await r.setAccountPrefs({ windows: {}, compactAt: 300_000 });
+      await tick();
+      expect(queries).toHaveLength(2);
+      queries[1].push({ type: 'result', subtype: 'success', session_id: 'a7-13', uuid: 'r1', is_error: false, result: 'done' });
+      await tick();
+      await tick();
+      expect(queries).toHaveLength(3);
+      expect(queries[2].options.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe('300000');
+      await r.close();
+    });
+  });
+
+  it('setAccountPrefs: Opus moved to 200K → the model goes out without [1m] and the window on the info follows (emitted)', async () => {
+    await withHome(null, async (dir) => {
+      const r = new SessionRunner({ sessionId: 'a7-14', cwd: dir, model: 'claude-opus-5-5' } as any, undefined, { account: { windows: {} } });
+      await tick();
+      const infos: any[] = [];
+      r.on('info', (i) => infos.push({ ...i }));
+      await r.setAccountPrefs({ windows: { opus: 200_000 } });
+      await tick();
+      expect(r.info.contextWindow).toBe(200_000);
+      expect(infos.some((i) => i.contextWindow === 200_000)).toBe(true);
+      // the fake engine has no in-process setModel: another process, on the plain id
+      expect(queries).toHaveLength(2);
+      expect(queries[1].options.model).toBe('claude-opus-5-5');
+      await r.close();
+    });
+  });
+
+  it('setModel: the window on the info follows the model', async () => {
+    await withHome(null, async (dir) => {
+      const r = new SessionRunner({ sessionId: 'a7-15', cwd: dir, model: 'claude-opus-5-5' } as any, undefined, { account: { windows: {} } });
+      await tick();
+      expect(r.info.contextWindow).toBe(1_000_000);
+      await r.setModel('claude-haiku-4-5');
+      await tick();
+      expect(r.info.contextWindow).toBe(200_000);
+      await r.close();
+    });
+  });
+
+  it('a claude-account profile saved with a new compactAt reaches its running conversation (reprovide)', async () => {
+    await withHome(null, async (dir) => {
+      const p = acct();
+      const r = new SessionRunner({ sessionId: 'a7-16', cwd: dir, model: 'claude-opus-5-5' } as any, p);
+      await tick();
+      await r.reprovide({ ...p, compactAt: 500_000 });
+      await tick();
+      expect(queries).toHaveLength(2);
+      expect(queries[1].options.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe('500000');
+      await r.close();
+    });
   });
 });
 
