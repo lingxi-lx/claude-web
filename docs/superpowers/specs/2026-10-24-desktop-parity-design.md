@@ -123,6 +123,30 @@ wording / i18n 覆盖测试、`catalog.test.ts` 的「added」列表跟着改。
 
 ---
 
+## A7. 自动压缩点和 Claude 账号的上下文窗口（2026-10-24 用户追加，已确认）
+
+用户原话：「除了中转可以设置上下文以外，还可以选择上下文压缩……自己 Claude 账号也可以设置和查看上下文窗口，因为有时候新对话还是 Opus 5.5 200k，很怪。」
+阶段 A 查到：用户 `~/.claude/settings.json` 写了 `CLAUDE_CODE_AUTO_COMPACT_WINDOW=700000`；账号上普通的 `claude-opus-5-5` 是 200K，`[1m]` 才是 1M（`session-runner.ts` 的 `windowOf`）。
+
+1. **「自动压缩」**：每个供应商（`Provider.compactAt?: number`）和自己的 Claude 账号（设置键 `claude.compactAt`）各一项：
+   「跟着上下文窗口」（不设，默认）/「在 ___K 时压缩」（50K 起，不超过该模型窗口；可写 700、700k、700000）。
+   设了就给这个供应商 / 账号的对话写 `CLAUDE_CODE_AUTO_COMPACT_WINDOW`，和官方二进制自己算的提前压缩点取小的；
+   经现有 `settingsOverride` / `ownOverride` 压过用户 settings.json 里的同名变量（不改用户文件）。没设时 settings.json 的照旧生效。
+   编辑处显示现在实际生效的值和来源：「现在：700K（来自你的 settings.json）」/「现在：跟着窗口」。
+   新对话立刻用；空闲的对话下一轮用（plan key 带上它，`respawnWhenIdle`）。
+2. **Claude 账号的窗口**：设置 → 账号与登录 的 Claude 账号那一行加「编辑」，打开的框里：
+   每个支持 1M 的 Claude 模型（Opus、Sonnet、Fable）一行「200K / 1M」（设置键 `claude.contextWindows: Record<模型, 200000|1000000>`，
+   默认 1M），Haiku 只有 200K 不给选；下面是 1 里的「自动压缩」。选了 1M 的模型在账号上一律带 `[1m]` 发给引擎
+   （两种引擎都认），于是新对话不会再落到 200K。「其它 Claude 账号」档案（`claude-account`）用同一个框，存在它自己的
+   `Provider.contextWindows` / `compactAt` 里。`default`（按套餐）不改。
+3. **看得到**：runner 把这个对话实际的窗口写进 `SessionInfoSnapshot.contextWindow`（和 A 阶段加的 `compactWindow` 一起）；
+   上下文卡标题和输入框小环按 `min(contextWindow, compactWindow)` 算；卡片标题行写「窗口 1M · 700K 内压缩」
+   （没有压缩上限就只写「窗口 1M」）；模型菜单里 Claude 模型名后面标 1M / 200K。
+4. 测试：单测（账号模型加 `[1m]` 的规则、压缩点输入校验、和官方提前压缩点取小、settings.json 被压过、plan key 变化）；
+   e2e 假上游核对引擎启动参数里的模型名和环境变量；ui-smoke 查编辑框、卡片标题、模型菜单标记。
+
+---
+
 ## B. 内置浏览器（用户第 7b、7c、8 条）
 
 现状（`web/src/features/browser/`）：`BrowserPanel.tsx` 标签 + 地址栏，桌面版 `<webview>`、纯网页版 `<iframe>`；
