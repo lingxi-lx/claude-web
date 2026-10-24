@@ -882,6 +882,45 @@ function driver() {
         if (tmpProv) await srvReq({ kind: 'providers.remove', id: tmpProv.id }).catch(() => {});
         await js('window.__store.getState().loadProviders()');
 
+        // A7 (2026-10-24): 账号与登录 → Claude 账号「编辑」 — Opus / Sonnet / Fable at 200K or 1M (1M unless picked), Haiku
+        // fixed, 自动压缩 that refuses under 50K; nothing is saved on 取消. A provider's edit page has 自动压缩 too
+        phase = 'a7';
+        {
+          await js(`window.__store.getState().openSettings({ section: 'account' })`);
+          const edit = await waitFor(`!!document.querySelector('.modal.settings [data-act="account-windows-edit"]')`, 8000);
+          if (edit) await click('.modal.settings [data-act="account-windows-edit"]');
+          const dlgSel = '[data-act="account-windows-dialog"]';
+          const opened = await waitFor(`!!document.querySelector('${dlgSel} [data-act="compact-at"]')`, 3000);
+          const aw = await js(`(() => { const d = document.querySelector('${dlgSel}'); if (!d) return null; return { title: d.querySelector('h3')?.textContent ?? null, rows: [...d.querySelectorAll('.aw-row')].map((r) => ({ f: r.dataset.family, sizes: [...r.querySelectorAll('[data-size]')].map((b) => b.textContent).join('/'), on: r.querySelector('[data-size][aria-checked="true"]')?.dataset.size ?? null })), compact: d.querySelector('[data-act="compact-at"] .compact-at-h')?.textContent ?? null, mode: d.querySelector('[data-act="compact-at"]')?.dataset.mode ?? null }; })()`);
+          const picks = aw ? aw.rows.filter((r) => r.sizes) : [];
+          check('A7 · 账号与登录 → Claude 账号「编辑」: Opus / Sonnet / Fable at 200K · 1M (1M picked), Haiku fixed, 自动压缩 following the window', edit && opened && !!aw && aw.title === 'Claude 账号的上下文窗口' && picks.map((r) => r.f).join(',') === 'opus,sonnet,fable' && picks.every((r) => r.sizes === '200K/1M' && r.on === '1000000') && aw.rows.some((r) => r.f === 'haiku' && !r.sizes) && aw.compact === '自动压缩' && aw.mode === 'follow', JSON.stringify(aw));
+          await click(`${dlgSel} [data-act="compact-at"] [data-mode="at"]`);
+          const box = await waitFor(`!!document.querySelector('${dlgSel} [data-act="compact-at-input"]')`, 2000);
+          if (box) { await click(`${dlgSel} [data-act="compact-at-input"]`); wc.selectAll(); wc.insertText('30'); }
+          const err = box && await waitFor(`/50K/.test(document.querySelector('${dlgSel} .compact-at-err')?.textContent ?? '')`, 2000);
+          await shot('a7-account-windows');
+          await js(`(() => { const b = [...document.querySelectorAll('${dlgSel} .row-btns button')].find((x) => x.textContent === '取消'); if (b) b.dataset.smokePick = 'a7cancel'; })()`);
+          await click(`${dlgSel} [data-smoke-pick="a7cancel"]`);
+          const closed = await waitFor(`!document.querySelector('${dlgSel}')`, 2000);
+          const kept = await js(`(() => { const s = window.__store.getState().settings; return s['claude.compactAt'] === undefined && s['claude.contextWindows'] === undefined; })()`);
+          check('A7 · … 在这个大小时压缩 + 「30」 says 最少 50K; 取消 closes it and saves nothing', !!box && !!err && closed && kept, JSON.stringify({ box, err: await js(`document.querySelector('.compact-at-err')?.textContent ?? null`), closed, kept }));
+          if (!closed) await js(`document.querySelector('${dlgSel}')?.closest('.modal-bg')?.remove()`);
+          // a provider's edit page
+          const a7Prov = await srvReq({ kind: 'providers.upsert', provider: { name: 'Smoke A7 中转', type: 'anthropic', baseUrl: 'http://127.0.0.1:9', apiKey: 'smoke-placeholder-not-a-key', models: ['claude-sonnet-4-6'], defaultModel: 'claude-sonnet-4-6' } }).catch(() => null);
+          await js('window.__store.getState().loadProviders()');
+          await js(`window.__store.getState().openSettings({ section: 'providers' })`);
+          const row = await waitFor(`(() => { const r = [...document.querySelectorAll('.modal.settings .row')].find((x) => x.textContent.includes('Smoke A7 中转')); const b = r && [...r.querySelectorAll('button')].find((x) => x.textContent === '编辑'); if (b) b.dataset.smokePick = 'a7edit'; return !!b; })()`, 8000);
+          if (row) await click('.modal.settings [data-smoke-pick="a7edit"]');
+          const provCompact = await waitFor(`document.querySelector('.modal.settings [data-act="compact-at"] .compact-at-h')?.textContent === '自动压缩'`, 3000);
+          const provMode = await js(`document.querySelector('.modal.settings [data-act="compact-at"]')?.dataset.mode ?? null`);
+          check('A7 · a provider’s edit page has 自动压缩 (跟着上下文窗口 when unset)', !!a7Prov && row && provCompact && provMode === 'follow', JSON.stringify({ prov: !!a7Prov, row, provCompact, provMode }));
+          await shot('a7-provider-compact');
+          await js(`(() => { const b = [...document.querySelectorAll('.modal.settings .section button')].find((x) => x.textContent === '取消' && x.closest('.section')?.querySelector('[data-act="compact-at"]')); b?.click(); })()`);
+          if (a7Prov) await srvReq({ kind: 'providers.remove', id: a7Prov.id }).catch(() => {});
+          await js('window.__store.getState().loadProviders()');
+        }
+        phase = 'settings';
+
         // 在外面也能用 (remote-anywhere task 13): the switch (disabled until remote access is on) and its status line, the
         // QR for anywhere with the LAN switch and 「复制配对链接」, keep-awake (the browser build: only the sentence), a
         // phone paired from this machine shows no 127.0.0.1, no MQTT / WebRTC / STUN / ICE in what the page shows by
@@ -1380,6 +1419,52 @@ function driver() {
           const unfolded = await js(`(() => { const c = document.querySelector('.pane.focused .info-card[data-card="context"]'); return { open: c?.querySelector('.ic-title')?.getAttribute('aria-expanded'), body: !!c?.querySelector('.ic-body'), stored: JSON.stringify(window.__store.getState().settings['ui.infoCards'] ?? null) }; })()`);
           await click('.pane.focused .info-card[data-card="context"] .ic-title');
           check('上下文 card unfolds on click (stored in ui.infoCards) and folds back', unfolded.open === 'true' && unfolded.body && !/"context"/.test(JSON.parse(unfolded.stored)?.collapsed ?? '[]'), JSON.stringify(unfolded));
+          // A7 (2026-10-24): the window and the compaction point the server reports (info.contextWindow / compactWindow)
+          // on the 上下文 card, a line under its title row (the folded card's percentage stays on the row); it fits the
+          // 288px column in English too (the English text is put in the same elements and measured: the smoke's
+          // interface is pinned to Chinese). Next to the percentage it squeezed 「上下文」 to a character per line.
+          phase = 'a7';
+          {
+            const setA7 = (on) => js(`(() => { const st = window.__store; const o = st.getState().open[${sidJs}]; if (!o) return false; if (${on}) window.__a7Saved = { info: o.info, cu: o.conv.contextUsage }; const sv = window.__a7Saved ?? {}; const info = ${on} ? { ...(o.info ?? {}), contextWindow: 1000000, compactWindow: 700000 } : sv.info; const cu = ${on} ? { percentage: 42, totalTokens: 294000, maxTokens: 700000 } : sv.cu; st.setState({ open: { ...st.getState().open, [${sidJs}]: { ...o, info, conv: { ...o.conv, contextUsage: cu }, version: o.version + 1 } } }); return true; })()`);
+            const winSel = '.pane.focused .info-card[data-card="context"] > .ic-window';
+            await setA7(true);
+            const shown = await waitFor(`document.querySelector(${JSON.stringify(winSel)})?.textContent === '窗口 1M · 700K 内压缩'`, 3000);
+            const enCat = fs.readFileSync(path.join(ROOT, 'web/src/i18n/en.ts'), 'utf8');
+            const en = (k) => { const pre = `${JSON.stringify(k)}: `; const line = enCat.split('\n').find((l) => l.trimStart().startsWith(pre)); return line ? JSON.parse(line.trim().slice(pre.length).replace(/,$/, '')) : null; };
+            const enTitle = en('窗口 {w} · {c} 内压缩')?.replace('{w}', '1M').replace('{c}', '700K');
+            const enCard = en('上下文');
+            // the title row: nothing overflows, the card's name on one line; the window text not cut, inside the card
+            const fit = (texts) => js(`(() => {
+              const w = document.querySelector(${JSON.stringify(winSel)});
+              if (!w) return null;
+              const card = w.closest('.info-card'), head = card.querySelector('.ic-head'), t = head.querySelector('.ic-title'), tn = t.firstChild;
+              const lines = (n) => { if (!n) return 0; const rg = document.createRange(); rg.selectNodeContents(n); return new Set([...rg.getClientRects()].map((x) => Math.round(x.top))).size; };
+              const was = [w.textContent, tn?.nodeType === 3 ? tn.textContent : null];
+              const texts = ${JSON.stringify(texts)};
+              if (texts) { w.textContent = texts[0]; if (was[1] !== null && texts[1]) tn.textContent = texts[1]; }
+              const cs = getComputedStyle(card), inner = card.getBoundingClientRect().right - parseFloat(cs.paddingRight) - parseFloat(cs.borderRightWidth);
+              const r = { text: w.textContent, card: t.textContent, pct: !!head.querySelector('.ic-sum .ic-meter'), head: head.scrollWidth - head.clientWidth, title: t.scrollWidth - t.clientWidth, titleLines: lines(tn), win: w.scrollWidth - w.clientWidth, winLines: lines(w.firstChild), over: Math.round(w.getBoundingClientRect().right - inner), col: Math.round(head.closest('.info-col').getBoundingClientRect().width) };
+              if (texts) { w.textContent = was[0]; if (was[1] !== null && texts[1]) tn.textContent = was[1]; }
+              return r;
+            })()`);
+            const zh = await fit(null);
+            const enFit = enTitle ? await fit([enTitle, enCard]) : null;
+            const fits = (r) => !!r && r.pct && r.head <= 1 && r.title <= 1 && r.titleLines === 1 && r.win <= 1 && r.winLines === 1 && r.over <= 1;
+            check('A7 · 上下文 card: 「窗口 1M · 700K 内压缩」 from the server’s info under the title row (percentage on the row), fits the column', shown && fits(zh), JSON.stringify({ shown, zh }));
+            check('A7 · … the English title (「Window 1M · compacts at 700K」) fits the 288px column too', !!enTitle && fits(enFit) && enFit.text === enTitle, JSON.stringify({ enTitle, enFit }));
+            await shot('a7-context-title');
+            await setA7(false);
+            // the model menu marks the own login's Claude models with their window (1M by default)
+            await click('.pane.focused .composer .mm-anchor > button.chip');
+            await waitFor(`document.querySelectorAll('.menu.mm [data-sec="builtin"] .mm-row').length > 1`, 5000);
+            const marks = await js(`[...document.querySelectorAll('.menu.mm [data-sec="builtin"] .mm-row')].map((r) => ({ m: r.querySelector('.mm-label .m')?.textContent ?? r.textContent.trim().slice(0, 30), w: r.querySelector('.mm-label .mm-win')?.textContent ?? null }))`);
+            await shot('a7-model-menu');
+            await key('Escape');
+            if (!(await waitFor(`!document.querySelector('.menu.mm')`, 1500))) await click('.pane.focused .chat');
+            const opus = marks.find((x) => /Opus/.test(x.m));
+            check('A7 · model menu: the Claude rows say 1M (Opus among them), the default entry no mark', !!opus && opus.w === '1M' && marks.filter((x) => x.w === '1M').length >= 2 && marks.every((x) => !/默认/.test(x.m) || x.w === null), JSON.stringify(marks));
+          }
+          phase = 'recording-ux';
           await shot('info-column');
           await click('.pane.focused .sess-head button[aria-label="对话信息"]');
           const off = await waitFor(`!document.querySelector('.pane.focused .info-col') && window.__store.getState().settings['ui.infoPanel'] === false`, 3000);
