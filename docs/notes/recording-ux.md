@@ -14,6 +14,15 @@
 - 卡片顺序 / 折叠存 `ui.infoCards`（`info-model.ts` 的 `normInfoLayout`：未知的丢掉、新卡补在后面，上下文默认折叠）。拖抓手换位置，
   标题上 Alt+↑↓ 也能挪。
 - 上下文卡：`session.contextUsage` 的 `full`（SDK `getContextUsage`），**只在展开时取一次、点「刷新」再取**，一轮结束不取（2026-10-23 起环 / 状态条 / 这张卡都不在每轮结束问引擎，见「界面改版 阶段 3」的「上下文小环不问引擎」；A5 曾加过「卡开着时每轮结束再取」，已撤回，spec 9416dfe）。2026-10-24（A5）：每个对话上一次的结果放在模块内存 `ctxCache`（本次运行，不进 meta.json / localStorage），展开时立刻显示、脚注「更新中…」再取。颜色按分类固定（`info-model` 的 `toneOf`：Messages 蓝、System tools 橙、MCP tools 青、Skills 黄、其余灰；`.ctx-t-*` / `--ctx-*` 由主题的蓝红黄绿混出来），已用的按大小排。**ccb fork 的回答没有 `kind`**（SDK 类型写着有），以前 Free space / Autocompact buffer 都被当成已用；`kindOf` 在没有 `kind` 时看 `isDeferred` 和这两行固定的名字。
+  - **2026-10-24 上下文卡（stage A 的 A5）**。现象（用户截图）：卡慢；同一类在不同对话里颜色不一样；1M 窗口时 Autocompact buffer 显示 333k / 33.3%（官方桌面版 33k / 4.7%）。
+    根因：慢 = 每次展开都 `full` 数一遍（引擎要发约 29 个 `count_tokens`，几秒到十几秒）；颜色 = 按出现顺序给调色板序号 `sw-0…7`；333k 见下。
+    做法：前端见上一条（`ctxCache` 先显示、`toneOf` 固定颜色、已用按大小排、buffer / free / deferred 在最后，条和行同一套颜色；**不**每轮结束自动再取）。
+    buffer 的数字在引擎里改（cw.7，见「引擎（单运行时）与供应商档案」的 cw.7 一条），前端不自己改数字。
+    验证：`info-model.test.ts`（固定颜色、排序、未知类名灰、没有 `kind` 的回答）；ui-smoke `parity-a` 段：卡里的行（有的话——ui-smoke 不起引擎，通常没有明细）不出现 `sw-0…7`，样式表里也没有这些规则，
+    五个 `.ctx-t-*` 算出来是五种不透明的颜色；真机（`scripts/demo-up.cjs` 的假上游）浅色 / 深色 / 字符画主题都看过。
+    **坑：spec 里写的「`model` vs `runtimeModel` 两个窗口不同」不是 333k 的原因**——真正的原因是用户 `~/.claude/settings.json` 的 env `CLAUDE_CODE_AUTO_COMPACT_WINDOW=700000`：
+    卡的窗口按 1M 算（不看这个上限），阈值却按它算（700k − 20k − 13k = 667k），buffer = 1M − 667k = 333k（两个名字解析出来都是 1M，和 model / runtimeModel 无关）；真的自动压缩在 650k 触发。查这类数字先看 settings.json 的 env。
+    另外 `--ctx-*` 不在对比度测试里（`contrast.test.ts` 只读 tokens.css / styles.css 的主题块）；已关的对话卡上还显示缓存和「刷新」，点了静默失败。
 - 改动卡的「建 PR」是给 Claude 发一句话（提交、推送、`gh pr create`），只在空闲时能点；已有 PR 就是链接（`usePrs`）。
 - 后台任务卡：`useBackground` 里在跑的，秒数每秒走，停止走 `session.stopTask`。
 

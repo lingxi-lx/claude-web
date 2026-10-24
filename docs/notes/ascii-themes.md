@@ -34,6 +34,11 @@
 - 看门狗：报错、连续两秒每帧 > 50 ms、或 2 秒没有 stats（死循环；宿主每 0.5 秒查一次，卡死约 2.5 秒内被换下）→ terminate，欢迎页换回「字流」，对话页不画，toast 一句。离屏 / 窗口隐藏时暂停不算沉默。 宿主自己的检查晚了一秒以上 = 页面主线程卡住了（Worker 的消息排在后面），这时重新计时，不算 Worker 沉默（验收时主线程卡 2.6 秒把健康的背景误杀过）。
 - 减少动态效果：Worker 画完那一帧静止画面发 `still`，宿主这时才停看门狗；每次 resize 重画前再打开，重画完再 `still`。以前一开「减少动态效果」看门狗就永久暂停，卡死的背景永远不被关、一直占一个核。
 - 对话页的背景垫在 `.chat-main` 里（`isolation: isolate` + canvas `z-index: -1`），透明度 `chatDim.opacity`；设置「对话里的淡背景」（`ui.backdropInChat`，默认开）。
+- **外观 → 背景动画（2026-10-24，stage A 的 A6）**。现象：「新对话页的动态背景」三选一（字流 / 字场 / 关）放在别处，用户原话「就做动画或者无在外观里面设置就好」。
+  做法：旧键 `ui.welcomeBackdrop` 从设置表删掉，外观里加两档开关「背景动画」`ui.backdropMotion`（紧跟 `ui.theme`；`.sp [data-entry="ui.backdropMotion"]`）：开 = 新对话页动——字符画主题放它自己的 `<Backdrop scene="welcome">`，经典主题放字流（`LetterFlow`）；关 = 静止纯底。「字场」去掉（`features/home/AsciiField.tsx` 删了；`ascii-noise.ts` 留着，字流用它的 `makeNoise`，只给字场用的 `rippleLevel` / `bandLevel` 删了）。
+  不写迁移：`letter-flow.ts` 的 `backdropOn(settings)`——新键设过就听它，没设过看旧键（`'off'` / `false` = 关，其余 = 开）。`Toggle`（`settings/controls.tsx`）加了可选的 `read`：开关显示 `backdropOn` 的结果——不然旧设置是「关」的人看到开关是开的、页面却是静的，第一次点下去什么都不变。系统 / 应用里的「减少动态效果」照旧只画一帧（`LetterFlow` 和 `Backdrop` 自己查）。
+  验证：`letter-flow.test.ts`（`背景动画 (A6)`）、`catalog.test.ts`（新键在 appearance、旧键不在）；ui-smoke `parity-a` 段：外观页有 `ui.backdropMotion`（标签「背景动画」）、没有 `ui.welcomeBackdrop`；ui-smoke 原有的「默认设置下 `.welcome-tile > canvas.ascii-field`」照样成立（字流和 Backdrop 都还用 `ascii-field` 这个类）。
+  坑：提示文字只提了系统的「减少动态效果」，没提外观里的「减少动画」（它也让背景静止）。
 
 ## 写一个 backdrop.js 要注意
 

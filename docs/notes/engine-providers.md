@@ -29,3 +29,11 @@
   见「界面改版 阶段 3」的「上下文小环不问引擎」）；gpt-6 起算 OpenAI 的推理模型（见「思考强度」笔记）。查「中转上出现非流式请求」时，自己起一个假中转记每个请求
   （path、`stream`、`max_tokens`、有没有 `system`），引擎经 SDK 跑一轮再调 `getContextUsage()`——引擎里真正非流式的只有 `executeNonStreamingRequest`
   （流出错后的回退，`CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK` 关）、`sideQuery`、数 token 的回退、额度 / 模型检查；`queryModelWithoutStreaming` 其实是流式的。
+- **cw.7**（2026-10-24 预发布 Release `engine-v2.8.4-cw.7`，fork 提交 220f40f6 已推（aaa504ae..220f40f6）；不登录下载的 sha512 和 lock 一致，`releases/latest` 仍是 v0.3.2；claude-web fc9bfbf 换依赖）：
+  上下文卡（`getContextUsage`）的窗口和 Autocompact buffer = 自动压缩真正用的。**用户看到的 333k 的原因**：用户 `~/.claude/settings.json` 的 env 设了
+  `CLAUDE_CODE_AUTO_COMPACT_WINDOW=700000`，cw.6 的卡窗口按 1M 算（不看这个上限）、阈值却按它算（700k − 20k − 13k = 667k）→ buffer 1M − 667k = 333k（spec 里猜的「`model` vs `runtimeModel` 窗口不同」不是原因，两个都解析成 1M）。
+  现在 `analyzeContext` 的窗口和 `getEffectiveContextWindowSize` 一样取 `min(窗口, CLAUDE_CODE_AUTO_COMPACT_WINDOW)`，buffer = 窗口 − `getAutoCompactThreshold(model)`
+  （ccb 的余量按有效窗口（窗口 − 20k）分档：≥ 800k 50k、≥ 400k 30k、其它 13k，另加 20k 摘要预留）。实测（经 SDK 起引擎调 `getContextUsage()`）：
+  1M + 上限 700k → 窗口 700k、阈值 650k、buffer **50k（7.1%）**（上限来自 settings.json 的 env 时也一样）；1M 无上限 → 1M / 930k / 70k；200K（haiku）→ 200k / 167k / 33k；cw.6 同条件 1M / 667k / 333k。
+  **官方二进制同样的上限显示 33k（4.7%）**（`claude-opus-5-5[1m]` + 700000 → 700k / 667k，和用户截图一致）：官方按固定 13k 留、在 667k 压缩，ccb 在 650k 压缩——两边各自说的都是自己引擎真会在哪里压缩，所以数字不同是对的；没有上限时官方不显示 buffer 行。
+  另：每一行带 SDK 的 `kind`（`used` / `free` / `buffer` / `deferred`；cw.6 没有，前端 `kindOf` 按名字兜底）。没做完的：`controlSchemas.ts` 的 `ContextCategorySchema` 还没有 `kind`，`analyzeContext.ts` 里「33k buffer」的旧注释没改——下次改引擎时顺手。

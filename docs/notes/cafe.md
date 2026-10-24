@@ -42,3 +42,11 @@ spec：`docs/superpowers/specs/2026-10-13-cafe-design.md`，计划 `docs/superpo
   `node server/ws-phase26.mjs`（e2e 默认列表）；ui-smoke 的 background 段数客人按钮、量画布亮的像素、点客人开抽屉、角色库、右侧面板。
 - **踩过的坑**：Electron / 浏览器面板在后台时 rAF 不跑，画布停在 300×150 的初始尺寸——截图前先让页面可见；bash heredoc 喂 Python 吃反斜杠
   （`\'` 变 `'`，phase 23 的一条断言因此是语法错误）——这类改动用 Edit。
+
+## 2026-10-24：滚轮只缩放网吧，页面不跟着滚（stage A 的 A3）
+
+- **现象**：鼠标在网吧上滚轮，画面缩放的同时整页也在滚（用户录屏）。
+- **根因**：`Cafe.tsx` 用 React `onWheel`——**React 的 wheel 监听是被动的**（`passive: true`），里面的 `preventDefault()` 没用（Chromium 最多在控制台的详细级别提一句「Unable to preventDefault inside passive event listener」），页面照滚。
+- **做法**：规则是共用纯函数 `web/src/ui/wheel-zoom.ts` 的 `wheelZoom(scale, e, { min, max, step })`：返回新的缩放，或 `null` = 这一下交给页面（按住 Shift、只有横向的滚动、已经到上限 / 下限还往那边滚——不会卡在网吧里出不来）。`Cafe.tsx` 在画布上挂原生 `addEventListener('wheel', fn, { passive: false })`（经 ref 拿最新的闭包，只挂一次），非 `null` 才 `preventDefault` 并改视图；范围 0.25–8、每格 1.25 倍，和以前一样。右侧面板的小网吧是同一个组件。阶段 D 的节点图用同一个函数。
+- **验证**：`wheel-zoom.test.ts`；ui-smoke `parity-a` 段（在 background 段打开后台页时）：窗口 700 高、页面先滚下去 40px，在画布本身（不是客人按钮）上一进一出滚四下，断言 `.over-body.bg-body` 的 `scrollTop` 不变、每一下都被网吧拿走（`defaultPrevented`，等价于缩放变了——`wheelZoom` 非 `null` 才 prevent）；Shift + 滚轮不被拿走；对照：同样的滚轮落在页面别处会滚动页面（证明输入确实到了）。
+- **坑**：**Windows 上 Chromium 把 Shift + 滚轮变成横向滚动**，`.bg-body` 没有横向空间，所以 Shift 时页面也不竖着动——这是平台，不是我们的代码；测试只断言「没被拿走、没缩放」，不断言页面滚了。真正离开网吧的办法是缩到头再滚。一格一步、不看 `deltaY` 大小：mac 触控板的捏合会一下冲到头（留到阶段 D 的节点图前再定）。
