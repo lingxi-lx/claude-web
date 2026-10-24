@@ -34,7 +34,7 @@ export function AccountWindows({ windows, compactAt, onChange, onEnter }: { wind
           <span className="sub">{tr('200K（只有这一档）')}</span>
         </div>
       </div>
-      <div className="sub aw-hint">{tr('选 1M 的模型发给 Claude 时带 [1m]。新对话立刻用，正在跑的对话重新打开后用。')}</div>
+      <div className="sub aw-hint">{tr('选 1M 的模型发给 Claude 时带 [1m]。新对话立刻用；正在跑的对话在这一轮结束后换过去，窗口变小时会先压缩。')}</div>
       <CompactAt value={compactAt} window={accountCompactWindow(windows)} onEnter={onEnter}
         onChange={(v, e) => onChange((p) => ({ ...p, compactAt: v, error: e }))} />
     </div>

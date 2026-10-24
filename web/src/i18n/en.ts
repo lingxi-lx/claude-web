@@ -3652,7 +3652,7 @@ export const EN_WEB: Record<string, string> = {
   "退出软件": "Quit app",
   "适配": "Fit",
   "适配窗口 (0)": "Fit to window (0)",
-  "选 1M 的模型发给 Claude 时带 [1m]。新对话立刻用，正在跑的对话重新打开后用。": "Models set to 1M are sent to Claude with [1m]. New conversations use it right away; running ones after they are reopened.",
+  "选 1M 的模型发给 Claude 时带 [1m]。新对话立刻用；正在跑的对话在这一轮结束后换过去，窗口变小时会先压缩。": "Models set to 1M are sent to Claude with [1m]. New conversations use it right away; running ones switch once the current turn ends, and are compacted first if the window gets smaller.",
   "选 {agentLabel} 的实现？": "Pick the implementation by {agentLabel}?",
   "选「当前目录」则直接在当前目录切换分支。": "Choose “Current folder” to switch branches right in the current folder.",
   "选一个工作流，点": "Pick a workflow and click",
