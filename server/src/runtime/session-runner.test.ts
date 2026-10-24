@@ -1479,6 +1479,57 @@ describe('SessionRunner: the account’s 200K / 1M picks and the 自动压缩 po
     });
   });
 
+  // final review I1: the account dialog's two saves used to arrive ms apart — both passed the busy check while
+  // asking for the context usage, and both sent /compact
+  it('two setAccountPrefs in a row that shrink the window: one /compact, then one restart on the latest picks', async () => {
+    await withHome(null, async () => {
+      const { r, sent } = await ranTurn('a7-i1-1', 500_000);
+      const a = r.setAccountPrefs({ windows: { opus: 200_000 } });
+      const b = r.setAccountPrefs({ windows: { opus: 200_000 }, compactAt: 150_000 });
+      await tick();
+      expect(sent).toEqual(['hi', '/compact']);
+      expect(queries).toHaveLength(1);
+      queries[0].push({ type: 'result', subtype: 'success', session_id: 'a7-i1-1', uuid: 'r1', is_error: false, result: 'compacted' });
+      await Promise.all([a, b]);
+      await tick();
+      expect(sent).toEqual(['hi', '/compact']);
+      expect(r.info.contextWindow).toBe(200_000);
+      expect(queries).toHaveLength(2);
+      expect(queries[1].options.model).toBe('claude-opus-5-5');
+      expect(queries[1].options.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe('150000');
+      await r.close();
+    });
+  });
+
+  // …and without a shrink: the first switched the model in the process (setModel), the second restarted for its plan
+  // key; the first's setModel failing then restarted again while that restart ran — two engine processes
+  it('two setAccountPrefs in a row without a shrink: at most one restart', async () => {
+    await withHome(null, async (dir) => {
+      const r = new SessionRunner({ sessionId: 'a7-i1-2', cwd: dir, model: 'claude-opus-5-5' } as any, undefined, { account: { windows: { opus: 200_000 } } });
+      await tick();
+      const a = r.setAccountPrefs({ windows: {} });
+      const b = r.setAccountPrefs({ windows: {}, compactAt: 600_000 });
+      await Promise.all([a, b]);
+      await tick();
+      await tick();
+      expect(queries).toHaveLength(2);
+      expect(queries[1].options.model).toBe('claude-opus-5-5[1m]');
+      expect(queries[1].options.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe('600000');
+      await r.close();
+    });
+  });
+
+  it('respawn() while another is under way joins it: one new process', async () => {
+    await withHome(null, async (dir) => {
+      const r = new SessionRunner({ sessionId: 'a7-i1-3', cwd: dir, model: 'claude-opus-5-5' } as any, undefined, { account: { windows: {} } });
+      await tick();
+      await Promise.all([r.respawn(), r.respawn()]);
+      await tick();
+      expect(queries).toHaveLength(2);
+      await r.close();
+    });
+  });
+
   it('setModel to a smaller window still compacts first (fitBeforeSwitch unchanged)', async () => {
     await withHome(null, async () => {
       const { r, sent } = await ranTurn('a7-fit-6', 500_000);

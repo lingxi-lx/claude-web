@@ -1116,11 +1116,26 @@ export class SessionRunner extends EventEmitter {
    * (`/compact`), then the switch goes ahead. Nothing happens while a turn runs, or when it fits (FIT_SHARE).
    * `window`: the window `model` will have after the change (the account's 200K / 1M pick moving: setAccountPrefs).
    */
-  private async fitBeforeSwitch(model: string, window = this.windowOf(model)): Promise<boolean> {
+  private fitBeforeSwitch(model: string, window = this.windowOf(model)): Promise<boolean> {
+    // one at a time (final review I1: two account saves ms apart both passed the busy check below and both sent
+    // /compact): a second caller waits for the one under way — it compacted (the context is small now), or it did not
+    // (it fit its window, or gave way), and the second looks again with its own window
+    if (this.fitting) return this.fitting.then((did) => did || this.fitBeforeSwitch(model, window));
+    const run = this.fitNow(model, window).finally(() => { if (this.fitting === run) this.fitting = null; });
+    this.fitting = run;
+    return run;
+  }
+  /** the compaction fitBeforeSwitch has under way */
+  private fitting: Promise<boolean> | null = null;
+
+  private async fitNow(model: string, window: number | undefined): Promise<boolean> {
     if (!this.q || this.busy() || !this.hasTranscript || this.closed) return false;
     if (!window) return false;
+    const q = this.q;
     let used = 0;
     try { const u = await this.contextUsage('summary'); used = Number(u?.totalTokens ?? u?.total_tokens ?? 0); } catch { return false; }
+    // the answer takes a moment: a turn may have started, or the process been replaced / closed meanwhile
+    if (this.closed || this.q !== q || this.busy()) return false;
     if (!(used > window * FIT_SHARE)) return false;
     const k = (n: number) => `${Math.round(n / 1000)}K`;
     this.notice(used >= window ? tr('对话已经用了 {k}，{model} 最多只能装 {k2}：先用现在的模型把对话压缩一下，再换过去', { k: k(used), model, k2: k(window) }) : tr('对话已经用了 {k}，快到 {model} 的上限 {k2} 了：先用现在的模型把对话压缩一下，再换过去', { k: k(used), model, k2: k(window) }));
@@ -1304,7 +1319,9 @@ export class SessionRunner extends EventEmitter {
     try {
       await this.q?.setModel(main);
     } catch {
-      await this.respawnWhenIdle();
+      // a later call took over while this one waited (it restarted, or will): a restart from here would be a second
+      // process next to that one's (final review I1)
+      if (seq === this.prefsSeq && !this.closed) await this.respawnWhenIdle();
     }
   }
 
@@ -1365,8 +1382,21 @@ export class SessionRunner extends EventEmitter {
     return (this.q as any)?.getContextUsage?.({ detail });
   }
 
-  /** Kill the process and start a new one resuming the same session. */
-  async respawn() {
+  /**
+   * Kill the process and start a new one resuming the same session. One at a time: a call while one is under way
+   * joins it — that one starts its process last, with whatever this conversation is set to by then (final review I1:
+   * two restarts at once left two engine processes).
+   */
+  respawn(): Promise<void> {
+    if (this.respawnRun) return this.respawnRun;
+    const run = this.respawnNow();
+    this.respawnRun = run;
+    return run;
+  }
+  /** the respawn() under way (cleared as its new process starts) */
+  private respawnRun: Promise<void> | null = null;
+
+  private async respawnNow() {
     this.respawning = true;
     try {
       const old = this.q;
@@ -1391,6 +1421,7 @@ export class SessionRunner extends EventEmitter {
       this.start(this.hasTranscript ? { resume: this.sessionId, extraArgs: { ...this.extraArgs } } : { sessionId: this.sessionId, extraArgs: { ...this.extraArgs } });
     } finally {
       this.respawning = false;
+      this.respawnRun = null;
     }
   }
 
