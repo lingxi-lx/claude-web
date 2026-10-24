@@ -21,6 +21,17 @@ describe('routeLink', () => {
     expect(routeLink('vbscript:x', undefined)).toEqual({ to: 'none' });
     expect(routeLink('', undefined)).toEqual({ to: 'none' });
   });
+  it('network (UNC) paths open nothing: a click must not reach out to another machine', () => {
+    expect(routeLink('//h/s/x', '/p')).toEqual({ to: 'none' });
+    expect(routeLink('/\\h\\s', '/p')).toEqual({ to: 'none' });
+    expect(routeLink('\\\\h\\s\\x', undefined)).toEqual({ to: 'none' });
+    expect(routeLink('\\\\h\\s\\x', '/p')).toEqual({ to: 'none' });
+    expect(routeLink('file://host/share/x', undefined)).toEqual({ to: 'none' });
+    expect(routeLink('file:////host/share/x', undefined)).toEqual({ to: 'none' });
+    expect(routeLink('/%2F%2Fhost/share', undefined)).toEqual({ to: 'none' });
+    expect(routeLink('file:///%5C%5Chost/share', undefined)).toEqual({ to: 'none' });
+    expect(routeLink('file://localhost/home/a/x.md', undefined)).toEqual({ to: 'file', path: '/home/a/x.md' });
+  });
   it('in-page anchors are left to the page', () => {
     expect(routeLink('#fn-1', '/p')).toEqual({ to: 'anchor' });
   });

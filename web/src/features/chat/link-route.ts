@@ -43,19 +43,34 @@ function file(path: string): LinkRoute {
   return line === undefined ? { to: 'file', path: p } : { to: 'file', path: p, line };
 }
 
+/**
+ * `//host/share`, `\\host\share`: a network path. Opening one makes Windows connect to that machine over SMB and hand
+ * it the user's NTLM credentials — from one click on a link the model wrote (prompt-injectable), so they open nothing.
+ */
+const UNC = /^[\\/]{2}/;
+
+/** An absolute local path (already decoded); `/C:/x` → `C:/x`. */
+function local(p: string): LinkRoute {
+  if (UNC.test(p)) return { to: 'none' };
+  return file(/^\/[a-zA-Z]:[\\/]/.test(p) ? p.slice(1) : p);
+}
+
 export function routeLink(href: string, cwd: string | undefined): LinkRoute {
   const h = href.trim();
   if (!h) return { to: 'none' };
   if (h.startsWith('#')) return { to: 'anchor' };
+  if (UNC.test(h)) return { to: 'none' };
   if (/^https?:/i.test(h)) return { to: 'web', url: h };
   if (/^(mailto|tel):/i.test(h)) return { to: 'external', url: h };
   if (/^file:/i.test(h)) {
-    const p = decode(h.replace(/^file:\/\/(localhost)?/i, ''));
-    return file(/^\/[a-zA-Z]:[\\/]/.test(p) ? p.slice(1) : p);
+    // file://host/x names another machine; only file:///x and file://localhost/x are this one
+    const m = /^file:(?:\/\/([^/\\]*))?(.*)$/is.exec(h)!;
+    if (m[1] && m[1].toLowerCase() !== 'localhost') return { to: 'none' };
+    return local(decode(m[2]));
   }
   if (DRIVE.test(h)) return file(decode(h));
   if (/^[a-z][a-z0-9+.-]*:/i.test(h)) return { to: 'none' };
-  if (h.startsWith('/')) { const p = decode(h); return file(/^\/[a-zA-Z]:[\\/]/.test(p) ? p.slice(1) : p); }
+  if (h.startsWith('/')) return local(decode(h));
   if (!cwd) return { to: 'none' };
   return file(join(cwd, decode(h)));
 }
