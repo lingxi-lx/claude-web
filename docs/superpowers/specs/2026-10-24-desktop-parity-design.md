@@ -99,7 +99,7 @@ D 部分的节点图用同一套规矩，规则写成共用函数 `web/src/ui/wh
    Skills 黄、其余灰；排序：已用的按大小从大到小，Autocompact buffer、Free space、deferred 固定在最后。条和行用同一套颜色。
    颜色用主题令牌（新加 `--ctx-messages` 等），浅色 / 深色 / 字符画主题都能看清（对比度测试覆盖）。
 2. 快：每个对话最近一次的明细存在前端模块级缓存里（这次运行内有效，不进 localStorage），打开卡片先显示缓存，
-   后台再取新的，取的时候底部「更新中…」。每轮结束（对话从 running 回到 idle）时卡片展开着就自动再取一次。
+   后台再取新的，取的时候底部「更新中…」。**不**每轮结束自动再取（2026-10-23 的决定：每次数要发约 29 个 count_tokens，中转会记，见「界面改版 阶段 3」的「上下文小环不问引擎」）；只在展开时和点「刷新」时取。
 3. 卡片折叠时标题行的「95%」+ 小进度条已经有了（`CardSummary`），不用改。
 4. buffer 的根因（读引擎 fork 代码查到）：`C:\Users\YPY\claude-web-engine\src\utils\analyzeContext.ts` 第 947 行窗口用
    `runtimeModel` 算，第 1015 行自动压缩阈值却用 `model` 算（`getEffectiveContextWindowSize(model) - 13_000`）；两个模型
