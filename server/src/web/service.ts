@@ -2,11 +2,12 @@ import { EventEmitter } from 'node:events';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import dns from 'node:dns';
 import net from 'node:net';
-import type { BrowserAnswer, BrowserCommand, BrowserConsoleEntry, BrowserElement, BrowserNetworkEntry, BrowserOp, BrowserPage, BrowserSearchPage, BrowserTabInfo, WebStatus } from '../protocol.js';
+import type { BrowserAnswer, BrowserCommand, BrowserConsoleEntry, BrowserElement, BrowserNetworkEntry, BrowserOp, BrowserPage, BrowserSearchPage, BrowserTabInfo, PermissionMode, WebStatus } from '../protocol.js';
 import { BROWSER_TIMEOUT_MS, ENGINES, engineSetting, search, type BrowserSearch, type Cooldown, type EngineSetting, type SearchOutcome } from './search.js';
 import { htmlToText } from './html-text.js';
 import { resolvedRefusal, urlRefusal } from './url-guard.js';
-import { ACTION_CHARS, DEFAULT_CHARS, SEARCH_FAILED_HINT, clampChars, errorResult, formatConsole, formatFind, formatNetwork, formatPage, formatSearch, formatSnapshot, formatTabs, textResult, type ToolResult } from './format.js';
+import { ACTION_CHARS, DEFAULT_CHARS, SEARCH_FAILED_HINT, clampChars, errorResult, formatConsole, formatFind, formatNetwork, formatPage, formatEval, formatSearch, formatSnapshot, formatTabs, textResult, type ToolResult } from './format.js';
+import { ALLOWED_SITES_KEY, MUTATING_OPS, allowedSitesOf, hostOfUrl, needsAsk, normHost, type SiteAnswer, type SiteRequest } from './site-gate.js';
 import { tr } from '../i18n/index.js';
 
 /**
@@ -37,11 +38,11 @@ export function maskWebSettings<T extends Record<string, unknown>>(settings: T):
 }
 
 /** What `browser()` carries out in the conversation's own tab (`search` has a page of its own: see `searchInBrowser`). */
-export const BROWSER_OPS: readonly BrowserOp[] = ['open', 'read', 'find', 'click', 'type', 'key', 'scroll', 'back', 'screenshot', 'computer', 'console', 'network', 'snapshot', 'wait', 'tabs', 'viewport'];
+export const BROWSER_OPS: readonly BrowserOp[] = ['open', 'read', 'find', 'click', 'type', 'key', 'scroll', 'back', 'screenshot', 'computer', 'console', 'network', 'snapshot', 'wait', 'tabs', 'viewport', 'hover', 'drag', 'select', 'eval'];
 /** Ops this server can do by itself (fetch + text) when no window hosts the browser. */
 const READ_ONLY_OPS = new Set<BrowserOp>(['open', 'read', 'find']);
 
-const OP_TOOL: Record<BrowserOp, string> = { open: 'browser_open', read: 'browser_read', find: 'browser_find', click: 'browser_click', type: 'browser_type', key: 'browser_press_key', scroll: 'browser_scroll', back: 'browser_back', screenshot: 'browser_screenshot', search: 'web_search', computer: 'browser_computer', console: 'browser_console', network: 'browser_network', snapshot: 'browser_snapshot', wait: 'browser_wait', tabs: 'browser_tabs', viewport: 'browser_viewport' };
+const OP_TOOL: Record<BrowserOp, string> = { open: 'browser_open', read: 'browser_read', find: 'browser_find', click: 'browser_click', type: 'browser_type', key: 'browser_press_key', scroll: 'browser_scroll', back: 'browser_back', screenshot: 'browser_screenshot', search: 'web_search', computer: 'browser_computer', console: 'browser_console', network: 'browser_network', snapshot: 'browser_snapshot', wait: 'browser_wait', tabs: 'browser_tabs', viewport: 'browser_viewport', hover: 'browser_hover', drag: 'browser_drag', select: 'browser_select', eval: 'browser_eval' };
 export const NEEDS_DESKTOP = tr('这个操作需要桌面版 Claude Web 的内置浏览器（现在没有桌面窗口连着）。');
 const needsDesktop = (op: BrowserOp) => tr('{NEEDS_DESKTOP}{v} 现在用不了；browser_open / browser_read / browser_find 可以照常读网页。', { NEEDS_DESKTOP, v: OP_TOOL[op] });
 
@@ -53,6 +54,11 @@ const TAB_ACTIONS = ['list', 'switch', 'new', 'close'] as const;
 const VIEWPORT_PRESETS = ['auto', 'phone', 'tablet', 'desktop'] as const;
 /** What a console / network answer may hold (the shell keeps 200 of each). */
 const MAX_LOG_ENTRIES = 200;
+
+/** browser_eval: the longest script taken. */
+export const MAX_SCRIPT_CHARS = 20_000;
+/** What the window says when the conversation's tab is on another site than the one the server checked (then the URL). */
+export const SITE_CHANGED = 'cw-site-changed:';
 
 /** How long the hosting window has to answer one command. */
 export const COMMAND_TIMEOUT_MS = 30_000;
@@ -97,6 +103,12 @@ export interface WebDeps {
   characterTool?: (tool: string, args: Record<string, unknown>) => Promise<ToolResult>;
   /** 字符画主题's `theme_*` tools (themes/tools.ts), served by the same MCP process */
   themeTool?: (tool: string, args: Record<string, unknown>) => Promise<ToolResult>;
+  /**
+   * 允许的网站 (site-gate.ts): asks the user on a card of the conversation before a page is changed on a new site,
+   * and before every script; `mode` is the conversation's permission mode (完全放开 asks about no site). Without
+   * it (tests, the CLI) nothing is asked.
+   */
+  gate?: { ask: (sessionId: string, req: SiteRequest) => Promise<SiteAnswer>; mode: (sessionId: string) => PermissionMode | undefined };
 }
 
 interface KeptPage { url: string; title: string; text: string; elements: BrowserElement[]; at: number }
@@ -123,6 +135,8 @@ export class WebService extends EventEmitter {
   private pages = new Map<string, KeptPage>();
   /** the hosting window did not answer a search: result pages are fetched by this process until then */
   private browserQuietUntil = 0;
+  /** where each conversation's tab was at the window's last answer (the site the gate judges) */
+  private lastUrl = new Map<string, string>();
 
   constructor(private d: WebDeps) {
     super();
@@ -287,7 +301,8 @@ export class WebService extends EventEmitter {
       if (why) throw new Error(why);
     }
     const host = this.currentHost();
-    if (host) return this.command(host, sessionId, op, args);
+    if (host && this.d.gate && MUTATING_OPS.has(op)) return this.gated(host, sessionId, op, args);
+    if (host) return this.seen(sessionId, await this.command(host, sessionId, op, args));
     if (!READ_ONLY_OPS.has(op)) throw new Error(needsDesktop(op));
     if (op === 'open') return { page: this.window(await this.fetchPage(sessionId, String(args.url)), 0, DEFAULT_CHARS) };
     const kept = this.pages.get(sessionId);
@@ -295,6 +310,57 @@ export class WebService extends EventEmitter {
     kept.at = Date.now();
     if (op === 'read') return { page: this.window(kept, offsetOf(args.offset), clampChars(args.maxChars)) };
     return findIn(kept, String(args.query ?? ''));
+  }
+
+  /** Remember where the conversation's tab is, from an answer that says. */
+  private seen(sessionId: string, a: BrowserAnswer): BrowserAnswer {
+    const url = a.page?.url;
+    if (url) {
+      this.lastUrl.delete(sessionId);
+      this.lastUrl.set(sessionId, url);
+      for (const k of this.lastUrl.keys()) { if (this.lastUrl.size <= MAX_KEPT_PAGES * 4) break; this.lastUrl.delete(k); }
+    }
+    return a;
+  }
+
+  /**
+   * A page-changing op under 允许的网站: the site is the conversation's tab's (the last answer's, else a probe read);
+   * a file: page is never driven; a new site / a script asks the user; the op goes with the site it was judged on,
+   * and the window refuses it if its tab has moved since (then the new site is judged once more).
+   */
+  private async gated(host: [object, (c: BrowserCommand) => void], sessionId: string, op: BrowserOp, args: Record<string, unknown>): Promise<BrowserAnswer> {
+    const gate = this.d.gate!;
+    // a picture changes nothing
+    if (op === 'computer' && (args.action === 'screenshot' || args.action === 'wait')) return this.seen(sessionId, await this.command(host, sessionId, op, args));
+    let url = this.lastUrl.get(sessionId);
+    if (url === undefined) url = this.seen(sessionId, await this.command(host, sessionId, 'read', { offset: 0, maxChars: 1, probe: true })).page?.url ?? '';
+    for (let round = 0; ; round++) {
+      if (/^file:/i.test(url)) throw new Error(tr('不能在本机文件（file:）的页面上点击、输入或运行脚本：这类页面只给你读。'));
+      const site = hostOfUrl(url);
+      const ask = needsAsk(op, site, { list: allowedSitesOf(this.d.settings()), mode: gate.mode(sessionId) });
+      // a page with no host (about:blank) has nothing to protect: only a script is asked about there
+      if (ask === 'eval' || (ask === 'site' && site)) {
+        const tool = OP_TOOL[op];
+        const answer = await gate.ask(sessionId, { host: site, op, tool, ...(op === 'eval' ? { eval: true, script: String(args.script ?? '') } : {}) });
+        if (answer === 'deny') throw new Error(op === 'eval' ? tr('用户没有允许在 {site} 上运行这段脚本。不要再试，除非用户要求。', { site: site || url }) : tr('用户没有允许在 {site} 上操作（{tool}）。不要再试，除非用户要求；读页面不受影响。', { site: site || url, tool }));
+        if (answer === 'always' && op !== 'eval' && site) await this.allowSite(site);
+      }
+      try {
+        return this.seen(sessionId, await this.command(host, sessionId, op, { ...args, ...(site ? { site } : {}) }));
+      } catch (e) {
+        const msg = String((e as Error)?.message ?? '');
+        if (!msg.startsWith(SITE_CHANGED) || round >= 1) throw e;
+        url = msg.slice(SITE_CHANGED.length).trim();
+        this.lastUrl.set(sessionId, url);
+      }
+    }
+  }
+
+  /** 总是允许: the host goes on `web.browser.allowedSites` (once). */
+  private async allowSite(site: string): Promise<void> {
+    const list = allowedSitesOf(this.d.settings());
+    if (list.some((s) => normHost(s) === site)) return;
+    await this.d.setSetting(ALLOWED_SITES_KEY, [...list, site]);
   }
 
   /** `text` from `offset`, at most `maxChars`; the elements go with the start of the page only. */
@@ -463,6 +529,19 @@ export class WebService extends EventEmitter {
         if (!VIEWPORT_PRESETS.includes(preset)) throw new Error(tr('browser_viewport 的 preset 只能是：{v}', { v: VIEWPORT_PRESETS.join('、') }));
         return acted(await this.browser(sid, 'viewport', { preset }), tr('视口已切换。'));
       }
+      case 'browser_hover':
+        return acted(await this.browser(sid, 'hover', { ref: refOf(a.ref, tool) }), tr('鼠标已移到元素上。'));
+      case 'browser_drag':
+        return acted(await this.browser(sid, 'drag', { from: refOf(a.from, tool), to: refOf(a.to, tool) }), tr('已拖放。'));
+      case 'browser_select': {
+        if (typeof a.value !== 'string') throw new Error(tr('browser_select 需要参数 value（选项的值或显示的文字）'));
+        return acted(await this.browser(sid, 'select', { ref: refOf(a.ref, tool), value: a.value.slice(0, 500) }), tr('已选择。'));
+      }
+      case 'browser_eval': {
+        const script = str('script');
+        if (script.length > MAX_SCRIPT_CHARS) throw new Error(tr('browser_eval 的脚本太长（最多 {n} 个字符）', { n: MAX_SCRIPT_CHARS }));
+        return textResult(formatEval(await this.browser(sid, 'eval', { script })));
+      }
       default:
         throw new Error(`unknown tool ${tool}`);
     }
@@ -608,6 +687,7 @@ function cleanAnswer(a: BrowserAnswer | undefined, op: BrowserOp): BrowserAnswer
   const top = elements(a.elements);
   if (top) out.elements = top;
   if (typeof a.note === 'string' && a.note) out.note = a.note.slice(0, 4000);
+  if (op === 'eval' && typeof a.result === 'string') out.result = a.result.slice(0, 8_200);
   const img = a.image as any;
   if ((op === 'screenshot' || op === 'computer') && img && typeof img === 'object') {
     if ((img.mime !== 'image/jpeg' && img.mime !== 'image/png') || typeof img.data !== 'string' || !img.data) throw new Error(tr('内置浏览器返回的截图格式不对'));

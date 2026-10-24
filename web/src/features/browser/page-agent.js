@@ -5,7 +5,7 @@
 // What it gives back is the page's own content — the server marks it as untrusted before a model sees it. Everything
 // returned is plain JSON.
 (() => {
-  if (window.__cwAgent && window.__cwAgent.v === 4) return;
+  if (window.__cwAgent && window.__cwAgent.v === 5) return;
   // an older copy (a page that was open when the app updated): its pick layer goes with it
   if (window.__cwAgent && typeof window.__cwAgent.unpick === 'function') { try { window.__cwAgent.unpick(); } catch (e) { /* gone */ } }
 
@@ -313,7 +313,7 @@
   };
 
   window.__cwAgent = {
-    v: 4,
+    v: 5,
 
     /**
      * browser_wait: is the text on the page (case-insensitive), is the element shown — both, when both are asked.
@@ -485,6 +485,39 @@
       el.scrollTop = before + by;
       const max = Math.max(0, el.scrollHeight - el.clientHeight);
       return { moved: Math.round(el.scrollTop - before), top: Math.round(el.scrollTop), max: Math.round(max), length: fullText().length };
+    },
+
+    /**
+     * Where an element is on screen, for a real mouse (hover / drag) and the visible cursor: brought into view, then the
+     * middle of its box (the part inside the window) in the page's own pixels, and the window's size.
+     */
+    point(o) {
+      const el = get(o && o.ref);
+      if (!(o && o.noScroll)) { try { el.scrollIntoView({ block: 'center', inline: 'center' }); } catch (e) { /* fine */ } }
+      const r = el.getBoundingClientRect();
+      const w = window.innerWidth || document.documentElement.clientWidth || 0;
+      const h = window.innerHeight || document.documentElement.clientHeight || 0;
+      const left = Math.max(0, r.left), right = Math.min(w, r.right), top = Math.max(0, r.top), bottom = Math.min(h, r.bottom);
+      if (right <= left || bottom <= top) throw new Error('[' + refOf.get(el) + '] 现在不在屏幕上（被藏起来了，或者没有大小）。');
+      return { x: Math.round((left + right) / 2), y: Math.round((top + bottom) / 2), width: w, height: h };
+    },
+
+    /** browser_select: pick an option of a <select> by value or shown text (an exact match first), then input + change. */
+    select(o) {
+      const el = get(o && o.ref);
+      if (el.tagName !== 'SELECT') throw new Error('[' + refOf.get(el) + '] 不是下拉框：用 browser_click 点开它，再点要选的那一项。');
+      const want = String(o && o.value != null ? o.value : '').trim().toLowerCase();
+      const opts = Array.from(el.options);
+      const opt = opts.find((x) => x.value.toLowerCase() === want) || opts.find((x) => x.text.trim().toLowerCase() === want) || (want ? opts.find((x) => x.text.toLowerCase().includes(want)) : null);
+      if (!opt) throw new Error('这个下拉框里没有这一项。用 browser_read 或 browser_snapshot 看它有哪些选项。');
+      if (opt.disabled) throw new Error('这一项现在不能选（被禁用了）。');
+      try { el.scrollIntoView({ block: 'center' }); } catch (e) { /* fine */ }
+      try { el.focus({ preventScroll: true }); } catch (e) { /* fine */ }
+      const d = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+      if (d && d.set) d.set.call(el, opt.value); else el.value = opt.value;
+      el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      return { index: el.selectedIndex };
     },
 
     /** Selected text, for 「发给对话」. */

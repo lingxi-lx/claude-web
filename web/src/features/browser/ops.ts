@@ -10,7 +10,11 @@ export interface PageHandle {
   /** Load an address and wait for it. Throws with the reason when it cannot be loaded; false = still loading after the wait. */
   navigate(url: string): Promise<boolean>;
   /** Call the page agent (page-agent.js): `__cwAgent[fn](arg)`. */
-  call<T>(fn: 'read' | 'find' | 'click' | 'type' | 'scroll' | 'view', arg: Record<string, unknown>): Promise<T>;
+  call<T>(fn: 'read' | 'find' | 'click' | 'type' | 'scroll' | 'view' | 'point' | 'select', arg: Record<string, unknown>): Promise<T>;
+  /** browser_eval: run a script in the page; its result as JSON (cut to EVAL_MAX_CHARS). Throws with the script's error. */
+  evaluate(script: string): Promise<string>;
+  /** Where the Agent's mouse is, for the cursor drawn over the page (AgentCursor.tsx). Optional: a page in a test has none. */
+  show?(m: CursorMark): void;
   /** Wait while the page is loading (a click may have started a navigation). False: still loading after `ms`. */
   settle(ms: number): Promise<boolean>;
   /** Go back one page. False: there is none. */
@@ -35,6 +39,76 @@ export interface PageHandle {
   title(): string;
 }
 
+/** One step of the Agent's mouse, in the page's own pixels; `width` / `height`: the page's size then. */
+export interface CursorMark { kind: 'move' | 'down' | 'up'; x: number; y: number; width: number; height: number }
+/** browser_eval: what of a result goes back (the server's 8 KB). */
+export const EVAL_MAX_CHARS = 8_192;
+/** browser_eval: how long a script (a promise it returns) is waited for. */
+export const EVAL_TIMEOUT_MS = 10_000;
+
+/** Ops that change the page: refused while the user has taken over the browser (and asked about by the server). */
+export const MUTATING: ReadonlySet<BrowserOp> = new Set<BrowserOp>(['click', 'type', 'key', 'scroll', 'computer', 'hover', 'drag', 'select', 'eval']);
+export const TAKEN_OVER = tr('用户接管了浏览器。在用户点「交还」之前，不能在页面上点击、输入或运行脚本（读页面可以）；等用户交还，或者问用户要怎么做。');
+/** The server's word for "this tab is on another site than the one I checked" (server/src/web/service.ts SITE_CHANGED). */
+export const SITE_CHANGED = 'cw-site-changed:';
+
+/**
+ * Whether the window refuses an op before it touches the page: the user has taken over the conversation's browser
+ * (a page-changing op, or the server's probe for one); a page-changing op on a local file (never driven); an op
+ * checked for another site than the tab's now (the server judges the new one).
+ */
+export function refusal(op: BrowserOp, args: Record<string, unknown>, o: { takenOver: boolean; url: string }): string | null {
+  const probe = op === 'read' && args.probe === true;
+  if (o.takenOver && (MUTATING.has(op) || probe)) return TAKEN_OVER;
+  if (!MUTATING.has(op)) return null;
+  if (/^file:/i.test(o.url)) return tr('不能在本机文件（file:）的页面上点击、输入或运行脚本：这类页面只给你读。');
+  const site = typeof args.site === 'string' ? args.site : '';
+  if (site && hostOf(o.url) !== site.toLowerCase()) return `${SITE_CHANGED}${o.url}`;
+  return null;
+}
+
+/** A page's host as the server compares it (site-gate.ts normHost): lower case, no brackets, no trailing dot. */
+export function hostOf(url: string): string {
+  try { return new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, ''); } catch { return ''; }
+}
+
+/**
+ * The page-side wrapper browser_eval runs: the script as an expression (`document.title`) or, when it has a
+ * `return`, as a function body; a promise is awaited (EVAL_TIMEOUT_MS at most); the result goes back as JSON —
+ * undefined, functions, DOM nodes and cycles as words — cut to EVAL_MAX_CHARS. A runtime error is an answer
+ * `{ok: false}`; a script that does not parse makes the whole call fail (guest.ts then tries the other form).
+ */
+export function evalSource(script: string, asBody: boolean): string {
+  const body = asBody ? script : `return (\n${script}\n);`;
+  return `(async () => {
+  const __cwOut = (v) => {
+    if (v === undefined) return 'undefined';
+    const seen = new WeakSet();
+    try {
+      const s = JSON.stringify(v, (k, x) => {
+        if (typeof x === 'function') return '[function]';
+        if (typeof x === 'bigint') return String(x);
+        if (typeof Node === 'function' && x instanceof Node) return '[' + (x.nodeName || 'node') + ']';
+        if (x && typeof x === 'object') { if (seen.has(x)) return '[circular]'; seen.add(x); }
+        return x;
+      });
+      return s === undefined ? String(v) : s;
+    } catch (e) { return String(v); }
+  };
+  try {
+    const __cwRun = async () => {
+${body}
+    };
+    const v = await Promise.race([__cwRun(), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), ${EVAL_TIMEOUT_MS}))]);
+    return { ok: true, value: __cwOut(v).slice(0, ${EVAL_MAX_CHARS}) };
+  } catch (e) {
+    return { ok: false, error: String((e && e.message) || e).slice(0, 500) };
+  }
+})()`;
+}
+/** A script with a `return` of its own is a function body; otherwise it is tried as an expression first. */
+export const looksLikeBody = (script: string): boolean => /(^|[;{}\s])return\b/.test(script);
+
 export interface Picture { mime: 'image/jpeg' | 'image/png'; data: string; width?: number; height?: number }
 export type MouseButton = 'left' | 'right' | 'middle';
 export type MouseAct =
@@ -53,6 +127,7 @@ const STILL_LOADING = tr('页面还在加载，下面的内容可能不全（过
 interface Read { page: BrowserPage; length: number }
 interface Did { submitted?: boolean; enter?: boolean }
 interface Scrolled { moved: number; top: number; max: number; length: number }
+interface Point { x: number; y: number; width: number; height: number }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const str = (v: unknown) => (typeof v === 'string' ? v : v == null ? '' : String(v));
@@ -167,11 +242,13 @@ export async function runOp(page: PageHandle, op: BrowserOp, args: Record<string
       return page.call<BrowserAnswer>('find', { query: str(args.query) });
     case 'click': {
       const before = page.url();
+      await pointAt(page, args.ref, true);
       await page.call<Did>('click', { ref: args.ref });
       const a = await glance(tr('已点击 {at}。', { at: at(args.ref) }));
       return page.url() !== before ? { ...a, note: tr('{note}页面换了地址（见下面的「来源」）。', { note: a.note ?? '' }) } : a;
     }
     case 'type': {
+      await pointAt(page, args.ref, false);
       const d = await page.call<Did>('type', { ref: args.ref, text: str(args.text), submit: args.submit === true });
       if (d.enter) await page.key('Enter');
       if (d.submitted || d.enter) return glance(tr('已在 {at} 里输入并提交。', { at: at(args.ref) }));
@@ -242,6 +319,43 @@ export async function runOp(page: PageHandle, op: BrowserOp, args: Record<string
       await page.viewport(preset);
       return glance(tr('视口：{label}。', { label: viewportLabel(preset) }));
     }
+    case 'hover': {
+      const p = await page.call<Point>('point', { ref: args.ref });
+      mark(page, 'move', p);
+      await page.mouse({ type: 'move', x: p.x, y: p.y });
+      return glance(tr('鼠标已移到 {at} 上。', { at: at(args.ref) }));
+    }
+    case 'drag': {
+      const a = await page.call<Point>('point', { ref: args.from });
+      // the target where it is now (bringing it into view could move what is dragged off the screen)
+      const b = await page.call<Point>('point', { ref: args.to, noScroll: true });
+      mark(page, 'move', a);
+      await page.mouse({ type: 'move', x: a.x, y: a.y });
+      mark(page, 'down', a);
+      await page.mouse({ type: 'down', x: a.x, y: a.y, button: 'left', count: 1 });
+      const STEPS = 10;
+      for (let i = 1; i <= STEPS; i++) {
+        const x = Math.round(a.x + ((b.x - a.x) * i) / STEPS);
+        const y = Math.round(a.y + ((b.y - a.y) * i) / STEPS);
+        mark(page, 'move', { ...b, x, y });
+        await page.mouse({ type: 'move', x, y, held: 'left' });
+        await sleep(Math.min(pause, 30));
+      }
+      mark(page, 'up', b);
+      await page.mouse({ type: 'up', x: b.x, y: b.y, button: 'left', count: 1 });
+      return glance(tr('已把 {from} 拖到 {to}。', { from: at(args.from), to: at(args.to) }));
+    }
+    case 'select': {
+      await pointAt(page, args.ref, true);
+      await page.call<{ index: number }>('select', { ref: args.ref, value: str(args.value) });
+      return glance(tr('已在 {at} 里选好。', { at: at(args.ref) }));
+    }
+    case 'eval': {
+      const script = str(args.script);
+      if (!script.trim()) throw new Error(tr('browser_eval 需要参数 script'));
+      const result = await page.evaluate(script);
+      return { result, page: { url: page.url(), title: page.title(), text: '' } };
+    }
     case 'tabs':
       // the conversation's tabs, not a page: host.ts
       throw new Error('tabs is not an operation on a tab');
@@ -249,6 +363,21 @@ export async function runOp(page: PageHandle, op: BrowserOp, args: Record<string
       // a search has a page of its own (search-page.ts): it never comes here
       throw new Error('search is not an operation on a tab');
   }
+}
+
+/** Tell the cursor layer where the mouse is (nothing to tell without one). */
+function mark(page: PageHandle, kind: CursorMark['kind'], p: Point): void {
+  try { page.show?.({ kind, x: p.x, y: p.y, width: p.width, height: p.height }); } catch { /* only a picture */ }
+}
+
+/** The cursor goes to an element before it is acted on by ref (a click shows a press). Where it cannot be found, nothing is shown. */
+async function pointAt(page: PageHandle, ref: unknown, press: boolean): Promise<void> {
+  if (!page.show) return;
+  try {
+    const p = await page.call<Point>('point', { ref });
+    mark(page, 'move', p);
+    if (press) mark(page, 'down', p);
+  } catch { /* the op itself says what is wrong */ }
 }
 
 /**
@@ -329,6 +458,7 @@ async function computer(page: PageHandle, args: Record<string, unknown>, pause: 
   const f = await page.frame();
   if (!f.picture) throw new Error(NEEDS_PICTURE);
   const at = toView(args.coordinate, f.picture, f.view);
+  mark(page, action.endsWith('click') ? 'down' : 'move', { ...at, ...f.view });
   const modifiers = parseModifiers(args.modifiers);
   const mods = modifiers.length ? { modifiers } : {};
   const click = async (button: MouseButton, count: number) => {

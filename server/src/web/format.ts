@@ -217,3 +217,16 @@ export function formatTabs(tabs: BrowserTabInfo[], note?: string): string {
     tr('换一个用：browser_tabs {"action": "switch", "id": "…"}'),
   ].join('\n');
 }
+
+/** `browser_eval`: what the script gave back (JSON, cut by the window to 8 KB), between the markers. */
+export function formatEval(a: BrowserAnswer): string {
+  const result = String(a.result ?? '').slice(0, 8_200);
+  return [
+    ...sourceLines(a.page, a.note),
+    tr('脚本的结果（JSON）：'),
+    UNTRUSTED_NOTE,
+    `${CONTENT_START} eval ${a.page?.url ?? ''}>>>`,
+    defuse(result) || tr('（没有结果：undefined）'),
+    CONTENT_END,
+  ].join('\n');
+}

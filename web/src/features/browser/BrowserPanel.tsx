@@ -6,7 +6,8 @@ import { Icon } from '@/ui/icons';
 import { imeComposing } from '@/ui/ime';
 import { Popover } from '@/features/composer/Popover';
 import { applyViewport, forgetViewport, selectionOf } from './guest';
-import { COOKIES_KEY, COOKIE_MODES, browsingPartitions, closeTab, cookieModeText, cookiesMode, ensureTab, firstPage, frontTab, guestElOf, guestOf, guestReady, hasWebview, newTab, openUrl, patchTab, setGuest, tabOf, tabOfGuest, useBrowser, type BrowserTab, type WebviewEl } from './state';
+import { COOKIES_KEY, COOKIE_MODES, browsingPartitions, closeTab, cookieModeText, cookiesMode, ensureTab, firstPage, frontTab, guestElOf, guestOf, guestReady, hasWebview, newTab, openUrl, patchTab, setGuest, setTakenOver, tabOf, tabOfGuest, useBrowser, type BrowserTab, type WebviewEl } from './state';
+import { AgentCursor } from './AgentCursor';
 import { parseCookies } from './cookies';
 import { AllowedSites } from './AllowedSites';
 import { dlg } from '@/ui/dialog';
@@ -172,7 +173,10 @@ function TabView({ tab, front }: { tab: BrowserTab; front: boolean }) {
       {webview ? (
         // No `allowpopups`: the tag reads the attribute's PRESENCE, so `allowpopups="false"` would turn popups ON.
         // A page's new windows arrive as new tabs here (desktop/src/main.ts → `desktop.onBrowserPopup`).
-        <webview ref={ref as unknown as React.Ref<HTMLWebViewElement>} src={tab.src} partition={tab.partition} style={sized} {...ALLOW_POPUPS} />
+        <>
+          <webview ref={ref as unknown as React.Ref<HTMLWebViewElement>} src={tab.src} partition={tab.partition} style={sized} {...ALLOW_POPUPS} />
+          {tab.agent && <AgentCursor tabId={tab.id} page={ref as unknown as React.RefObject<HTMLElement | null>} />}
+        </>
       ) : (
         <>
           <iframe src={tab.frameUrl ?? tab.src} title={tabName(tab)} sandbox={frameSandbox(tab.frameUrl ?? tab.src, location.origin)} />
@@ -537,15 +541,22 @@ function PageMenu({ tab, close, external, onSites }: { tab: BrowserTab; close: (
   );
 }
 
-/** Whose Agent works in this tab — and, while it does, that it is doing so. */
+/**
+ * Whose Agent works in this tab — and, while it does, that it is doing so. 接管: the user takes the page over — the
+ * Agent's page-changing tools are refused (host.ts) until 交还; reading still works.
+ */
 function AgentStrip({ tab }: { tab: BrowserTab }) {
   const title = useStore((s) => s.sessions.find((x) => x.sessionId === tab.agent)?.title);
   const loadHistory = useStore((s) => s.loadHistory);
+  const taken = tab.takenOver === true;
   return (
-    <div className={clsx('bw-agent', tab.busy && 'busy')} data-id="agent-strip">
-      <Icon name="sparkle" size={13} />
-      <span className="t">{tab.busy ? tr('Agent 正在操作这个页面') : tr('Agent 打开的页面')}{title ? ` · ${title}` : ''}</span>
+    <div className={clsx('bw-agent', tab.busy && !taken && 'busy', taken && 'taken')} data-id="agent-strip" data-taken={taken ? 'true' : undefined}>
+      <Icon name={taken ? 'user' : 'sparkle'} size={13} />
+      <span className="t">{taken ? tr('你接管了这个页面：Agent 暂时不能点击、输入') : tab.busy ? tr('Agent 正在操作这个页面') : tr('Agent 打开的页面')}{title ? ` · ${title}` : ''}</span>
       <span className="grow" />
+      {tab.agent && (taken
+        ? <button className="btn sm" data-id="giveback" onClick={() => setTakenOver(tab.agent!, false)} title={tr('让 Agent 继续操作这个页面')}>{tr('交还')}</button>
+        : <button className="btn sm ghost" data-id="takeover" onClick={() => setTakenOver(tab.agent!, true)} title={tr('自己来操作这个页面：在你交还之前，Agent 不能点击、输入或运行脚本')}>{tr('接管')}</button>)}
       {tab.agent && <button className="link" onClick={() => void loadHistory(tab.agent!)}>{tr('看对话')}</button>}
     </div>
   );

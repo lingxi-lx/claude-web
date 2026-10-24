@@ -1,0 +1,151 @@
+import { EventEmitter } from 'node:events';
+import { randomUUID } from 'node:crypto';
+import net from 'node:net';
+import type { BrowserOp, PermissionMode, PermissionRequestEvent, PermissionResponse } from '../protocol.js';
+
+/**
+ * 允许的网站 (stage B, Task 7): before an Agent changes something on a page of the built-in browser — clicks, types,
+ * presses keys, scrolls, hovers, drags, picks from a list, or runs a script — the user is asked once per site, on a
+ * card of the conversation ("允许一次 / 总是允许这个网站 / 拒绝"). 总是允许 puts the host name in
+ * `web.browser.allowedSites`, after which that site is not asked about again. A script (`browser_eval`) is asked about
+ * every time, allowed site or not, with its first 400 characters on the card.
+ *
+ * Like 操控电脑 (computer/access.ts) the card is raised by this server, not by the agent's own permission prompt —
+ * but unlike it, a conversation in 「完全放开」 (bypassPermissions) is not asked about sites: the user told it to do
+ * things without asking. A script still is.
+ *
+ * Reading (open / read / find / snapshot / screenshot / console / network / tabs, wait, back, viewport) is never asked.
+ */
+
+export const ALLOWED_SITES_KEY = 'web.browser.allowedSites';
+/** The permission card's tool name (web/src/features/chat/permission-dock.ts knows it): not a tool any agent has. */
+export const SITE_TOOL = 'browser.site';
+/** How long a card waits for the user (shorter than the MCP process's own call timeout: mcp.ts ASK_CALL_TIMEOUT_MS). */
+export const SITE_ASK_TIMEOUT_MS = 4 * 60_000;
+/** What of a script the card shows. */
+export const SCRIPT_PREVIEW_CHARS = 400;
+
+/** Ops that change the page: asked about on a new site. */
+export const MUTATING_OPS: ReadonlySet<BrowserOp> = new Set<BrowserOp>(['click', 'type', 'key', 'scroll', 'computer', 'hover', 'drag', 'select', 'eval']);
+
+/** A host as compared: lower case, no trailing dot, no port, no IPv6 brackets. '' when there is none. */
+export function normHost(h: string | undefined | null): string {
+  let s = String(h ?? '').trim().toLowerCase();
+  if (!s) return '';
+  // a whole address pasted in: its host
+  if (/^[a-z][a-z0-9+.-]*:\/\//.test(s)) { try { s = new URL(s).hostname; } catch { return ''; } }
+  if (s.startsWith('[')) { const end = s.indexOf(']'); s = end > 0 ? s.slice(1, end) : s.slice(1); }
+  else if (!net.isIPv6(s)) s = s.replace(/:\d*$/, '');
+  return s.replace(/\.+$/, '');
+}
+
+/** The host of a page's address ('' for one without: about:blank, data:, file:). */
+export function hostOfUrl(url: string | undefined): string {
+  try { return normHost(new URL(String(url ?? '')).hostname); } catch { return ''; }
+}
+
+/**
+ * Whether `host` is on the list. An entry is a host name (`example.com`: that host only) or `*.example.com` (the host
+ * and every subdomain of it). Ports do not count (a site is its host name). An IP address matches only itself.
+ */
+export function siteAllowed(host: string, list: readonly unknown[]): boolean {
+  const h = normHost(host);
+  if (!h || !Array.isArray(list)) return false;
+  const ip = net.isIP(h) !== 0;
+  for (const raw of list) {
+    if (typeof raw !== 'string') continue;
+    const t = raw.trim().toLowerCase();
+    if (t.startsWith('*.')) {
+      const base = normHost(t.slice(2));
+      if (!base || ip || net.isIP(base)) continue;
+      if (h === base || h.endsWith(`.${base}`)) return true;
+    } else if (normHost(t) === h) return true;
+  }
+  return false;
+}
+
+/** The list as stored (strings only). */
+export function allowedSitesOf(settings: Record<string, unknown>): string[] {
+  const v = settings[ALLOWED_SITES_KEY];
+  return Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string' && !!s.trim()) : [];
+}
+
+/**
+ * Must the user be asked before `op` on a page of `host`? `eval`: always (a script, whatever the site or the mode);
+ * `site`: a page-changing op on a site not on the list, unless the conversation lets everything through; `no`.
+ */
+export function needsAsk(op: BrowserOp, host: string | undefined, o: { list: readonly unknown[]; mode?: PermissionMode }): 'no' | 'site' | 'eval' {
+  if (op === 'eval') return 'eval';
+  if (!MUTATING_OPS.has(op)) return 'no';
+  if (o.mode === 'bypassPermissions') return 'no';
+  if (host && siteAllowed(host, o.list)) return 'no';
+  return 'site';
+}
+
+/** What the card shows. */
+export interface SiteRequest { host: string; op: BrowserOp; tool: string; eval?: boolean; script?: string }
+export type SiteAnswer = 'once' | 'always' | 'deny';
+
+interface Waiting { event: PermissionRequestEvent; resolve: (a: SiteAnswer) => void; timer: NodeJS.Timeout }
+
+export interface SiteAskDeps {
+  /** is this conversation open in this server? (one that is not cannot be asked: no) */
+  knows?: (sessionId: string) => boolean;
+  timeoutMs?: number;
+}
+
+/** The card's answer → once / always / deny. 总是允许 is `allow` with `updatedInput.allow = 'always'` (never for a script). */
+export function siteAnswerOf(r: PermissionResponse, isEval: boolean): SiteAnswer {
+  if (r.behavior !== 'allow') return 'deny';
+  return !isEval && r.updatedInput?.allow === 'always' ? 'always' : 'once';
+}
+
+/** The cards a conversation's browser tools raise, and the answers (the same channel as computer/access.ts). */
+export class SiteAsk extends EventEmitter {
+  private waiting = new Map<string, Waiting>();
+
+  constructor(private d: SiteAskDeps = {}) {
+    super();
+  }
+
+  ask(sessionId: string, req: SiteRequest, signal?: AbortSignal): Promise<SiteAnswer> {
+    if (!sessionId || (this.d.knows && !this.d.knows(sessionId))) return Promise.resolve('deny');
+    if (signal?.aborted) return Promise.resolve('deny');
+    const requestId = randomUUID();
+    const input: Record<string, unknown> = { host: req.host, op: req.op, tool: req.tool };
+    if (req.eval) { input.eval = true; input.script = String(req.script ?? '').slice(0, SCRIPT_PREVIEW_CHARS); input.scriptLength = String(req.script ?? '').length; }
+    const event: PermissionRequestEvent = { requestId, sessionId, toolName: SITE_TOOL, input };
+    return new Promise<SiteAnswer>((resolve) => {
+      const done = (a: SiteAnswer) => {
+        const w = this.waiting.get(requestId);
+        if (!w) return;
+        this.waiting.delete(requestId);
+        clearTimeout(w.timer);
+        resolve(a);
+        this.emit('permissionResolved', requestId, sessionId);
+      };
+      const timer = setTimeout(() => done('deny'), this.d.timeoutMs ?? SITE_ASK_TIMEOUT_MS);
+      timer.unref?.();
+      this.waiting.set(requestId, { event, resolve: done, timer });
+      signal?.addEventListener('abort', () => done('deny'), { once: true });
+      this.emit('permission', event);
+    });
+  }
+
+  pendingFor(sessionId: string): PermissionRequestEvent[] {
+    return [...this.waiting.values()].filter((w) => w.event.sessionId === sessionId).map((w) => w.event);
+  }
+
+  /** A window's answer. False: not one of ours (or answered already). */
+  respond(requestId: string, r: PermissionResponse): boolean {
+    const w = this.waiting.get(requestId);
+    if (!w) return false;
+    w.resolve(siteAnswerOf(r, w.event.input.eval === true));
+    return true;
+  }
+
+  /** The conversation is gone: what it asked is withdrawn. */
+  drop(sessionId: string): void {
+    for (const w of [...this.waiting.values()]) if (w.event.sessionId === sessionId) w.resolve('deny');
+  }
+}

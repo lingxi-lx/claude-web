@@ -102,6 +102,31 @@ function startSite() {
     }
     if (u.pathname === '/never.png') return; // never answered: a page whose load does not finish
     // a page to work on by position: everything at a known place, everything that happens to it written down
+    // hover / drag / select (stage B task 7): what happens is written in #log
+    if (u.pathname === '/t7') {
+      return html(`<!doctype html><html><head><meta charset="utf-8"><title>Smoke T7</title><style>
+  body { margin: 0; font: 15px sans-serif; }
+  #hov { position: absolute; left: 40px; top: 40px; width: 160px; height: 40px; }
+  #tip { position: absolute; left: 220px; top: 40px; display: none; }
+  #size { position: absolute; left: 40px; top: 110px; }
+  #src { position: absolute; left: 40px; top: 180px; width: 120px; height: 50px; }
+  #dst { position: absolute; left: 360px; top: 260px; width: 160px; height: 60px; }
+</style></head><body>
+<button id="hov">Hover me</button><span id="tip">TIP-SHOWN</span>
+<select id="size" aria-label="Size"><option value="s">Small</option><option value="m">Medium</option><option value="l">Large</option></select>
+<button id="src">Drag me</button><button id="dst">Drop here</button>
+<p id="log" style="position:absolute;left:40px;top:360px">log:</p>
+<script>
+const log = (w) => { document.getElementById('log').textContent += ' ' + w; };
+document.getElementById('hov').addEventListener('mouseenter', () => { document.getElementById('tip').style.display = 'inline'; log('hover'); });
+document.getElementById('size').addEventListener('change', (e) => log('change:' + e.target.value));
+let held = false, moved = 0;
+document.getElementById('src').addEventListener('mousedown', () => { held = true; moved = 0; log('down'); });
+document.addEventListener('mousemove', (e) => { if (held && e.buttons === 1) moved++; });
+document.getElementById('dst').addEventListener('mouseup', () => { if (held) log('dropped:moves=' + moved); });
+document.addEventListener('mouseup', () => { held = false; });
+</script></body></html>`);
+    }
     if (u.pathname === '/pad') {
       return html(`<!doctype html><html><head><meta charset="utf-8"><title>Smoke Pad</title><style>
   body { margin: 0; font: 15px sans-serif; }
@@ -165,7 +190,9 @@ function runElectron(env, timeoutMs) {
   delete e.ELECTRON_RUN_AS_NODE;
   e.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
   return new Promise((res) => {
-    const c = spawn(electron, [__filename], { env: e, stdio: 'ignore', windowsHide: false });
+    // a profile of its own, never the user's (their Claude Web may be running)
+    const udd = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-bsmoke-udd-'));
+    const c = spawn(electron, [__filename, `--user-data-dir=${udd}`], { env: e, stdio: 'ignore', windowsHide: false });
     const t = setTimeout(() => { c.kill(); res(-1); }, timeoutMs);
     c.on('exit', (code) => { clearTimeout(t); res(code); });
   });
@@ -182,8 +209,10 @@ async function runner() {
   // the checks below quote the interface's Chinese words, so the language is pinned (as ui-smoke.cjs does): a machine
   // whose locale is English would otherwise fail a dozen of them for no reason of the browser's
   fs.mkdirSync(path.join(home, '.claude-web'), { recursive: true });
-  fs.writeFileSync(path.join(home, '.claude-web', 'meta.json'), JSON.stringify({ version: 1, settings: { 'ui.language': 'zh' } }));
   const site = await startSite();
+  // 允许的网站 (stage B task 7): this script's site was allowed before — the MCP conversation here is not an open one,
+  // so nobody could be asked on a card (a page of another host is: the 't7' phase checks it is refused)
+  fs.writeFileSync(path.join(home, '.claude-web', 'meta.json'), JSON.stringify({ version: 1, settings: { 'ui.language': 'zh', 'web.browser.allowedSites': [new URL(site.url).hostname] } }));
   const real = !!arg('--real', false);
   // the search engines are this script's site — unless the real ones are asked for (then the user's proxy is kept too)
   const srv = await startServer(home, out, real ? { KEEP_PROXY: '1' } : { CW_DDG_URL: `${site.url}/ddg`, CW_BING_URL: `${site.url}/bing` });
@@ -573,6 +602,71 @@ function driver() {
         const stranger = new BrowserWindow({ show: false });
         check('…and refuses a page that the asking window does not host, or that does not exist', (await captureGuest(stranger.webContents, gid)) === null && (await captureGuest(wc, 999999)) === null && (await captureGuest(wc, 'x')) === null && !!webContents.fromId(gid));
         stranger.destroy();
+      }
+      // ---- stage B task 7: hover / drag / select / eval, the Agent's cursor, 接管 / 交还, the site gate over MCP
+      phase = 't7';
+      {
+        const T = 'smoke-t7';
+        const o = await op(T, 'open', { url: `${E.SMOKE_SITE}/t7` });
+        check('t7: the page opens', o.ok && o.a.page?.title === 'Smoke T7', JSON.stringify(o).slice(0, 300));
+        const r = o.a?.page;
+        const ref = (re) => refOf({ page: r }, re);
+        const hov = ref(/Hover me/), size = ref(/Size/), src = ref(/Drag me/), dst = ref(/Drop here/);
+        check('t7: the elements have refs', !!(hov && size && src && dst), JSON.stringify(r?.elements).slice(0, 300));
+        const logText = () => js(`(() => { const s = window.__cwBrowser.state.getState(); const t = s.tabs.find((x) => x.agent === '${T}'); return document.querySelector('.bw-view[data-tab="' + t.id + '"] webview').executeJavaScript('document.getElementById("log").textContent'); })()`);
+        const h = await op(T, 'hover', { ref: hov });
+        const shown = await waitFor(`(() => { const s = window.__cwBrowser.state.getState(); const t = s.tabs.find((x) => x.agent === '${T}'); const c = document.querySelector('.bw-view[data-tab="' + t.id + '"] [data-id=agent-cursor]'); return !!c && c.dataset.shown === 'true'; })()`, 3000);
+        check('t7: hover moves a real mouse onto the element (mouseenter fires) and the Agent cursor shows over the page', h.ok && /hover/.test(await logText()) && shown, `${JSON.stringify(h).slice(0, 200)} log=${await logText()} cursor=${shown}`);
+        const sel = await op(T, 'select', { ref: size, value: 'Large' });
+        check('t7: select picks an option by its text and fires change', sel.ok && /change:l/.test(await logText()), `${JSON.stringify(sel).slice(0, 200)} log=${await logText()}`);
+        const d = await op(T, 'drag', { from: src, to: dst });
+        check('t7: drag presses on one element, moves with the button held, and lets go on the other', d.ok && /down/.test(await logText()) && /dropped:moves=([1-9]\d*)/.test(await logText()), `${JSON.stringify(d).slice(0, 200)} log=${await logText()}`);
+        const ev = await op(T, 'eval', { script: 'document.querySelectorAll("button").length' });
+        check('t7: eval runs an expression in the page and gives back JSON', ev.ok && ev.a.result === '3', JSON.stringify(ev).slice(0, 300));
+        const ev2 = await op(T, 'eval', { script: 'const t = document.title; return { t, n: 2 }' });
+        check('t7: eval runs a function body with return', ev2.ok && ev2.a.result === '{"t":"Smoke T7","n":2}', JSON.stringify(ev2).slice(0, 300));
+        const ev3 = await op(T, 'eval', { script: 'let a = 1; a++' });
+        check('t7: statements without return run as a body (no syntax error)', ev3.ok && ev3.a.result === 'undefined', JSON.stringify(ev3).slice(0, 300));
+        const ev4 = await op(T, 'eval', { script: 'throw new Error("boom")' });
+        check('t7: a script that throws comes back as an error', !ev4.ok && /boom/.test(ev4.error), JSON.stringify(ev4).slice(0, 300));
+        // 接管: the strip's button; a click is refused, reading still works; 交还 lets it go again
+        const tid = await js(`window.__cwBrowser.state.getState().tabs.find((x) => x.agent === '${T}').id`);
+        await js(`(() => { const s = window.__cwBrowser.state.getState(); s.activate ? s.activate('${tid}') : null; })()`);
+        await js(`window.__cwBrowser.state.setState({ active: '${tid}' })`);
+        const btn = await waitFor(`!!document.querySelector('.bw [data-id=agent-strip] [data-id=takeover]')`, 3000);
+        await js(`document.querySelector('.bw [data-id=agent-strip] [data-id=takeover]').click()`);
+        const taken = await waitFor(`!!document.querySelector('.bw [data-id=agent-strip][data-taken=true] [data-id=giveback]')`, 3000);
+        const refused = await op(T, 'click', { ref: hov });
+        const readOk = await op(T, 'read');
+        const probe = await op(T, 'read', { probe: true });
+        check('t7: 接管 — the strip turns into 「交还」, a click is refused with 用户接管了浏览器, reading still works, the probe for a change is refused', btn && taken && !refused.ok && /用户接管了浏览器/.test(refused.error) && readOk.ok && !probe.ok, `btn=${btn} taken=${taken} ${JSON.stringify(refused).slice(0, 200)} read=${readOk.ok} probe=${probe.ok}`);
+        await js(`document.querySelector('.bw [data-id=agent-strip] [data-id=giveback]').click()`);
+        const back = await waitFor(`!!document.querySelector('.bw [data-id=agent-strip] [data-id=takeover]')`, 3000);
+        const again = await op(T, 'click', { ref: hov });
+        check('t7: 交还 — the Agent can click again', back && again.ok, `${back} ${JSON.stringify(again).slice(0, 200)}`);
+        // a page-changing op checked for another site than the tab is on: the window says where it is
+        const moved = await op(T, 'click', { ref: hov, site: 'elsewhere.example' });
+        check('t7: an op judged for another site is refused with where the tab is now', !moved.ok && moved.error.startsWith('cw-site-changed:') && moved.error.includes('/t7'), JSON.stringify(moved).slice(0, 200));
+        // the site gate over the real MCP loop: localhost is another host than the allowed 127.0.0.1, and this
+        // conversation is not open in the server — nobody can say yes, so the click is refused before it happens
+        const text = (r) => (r.content ?? []).filter((c) => c.type === 'text').map((c) => c.text).join('\n');
+        const tokenDir = path.join(E.SMOKE_DATA, 'runtime', 'web-mcp');
+        const TOKEN_FILE = fs.readdirSync(tokenDir).filter((n) => /\.token$/.test(n)).map((n) => path.join(tokenDir, n))[0];
+        const mcp = startMcp({ CW_WEB_URL: E.SMOKE_ORIGIN, CW_WEB_TOKEN_FILE: TOKEN_FILE, CW_SESSION_ID: 'smoke-gate' });
+        await mcp.rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'smoke', version: '0' } });
+        const tl = await mcp.rpc('tools/list');
+        const names = (tl.result?.tools ?? []).map((t) => t.name);
+        check('t7: the MCP server lists browser_hover / browser_drag / browser_select / browser_eval', ['browser_hover', 'browser_drag', 'browser_select', 'browser_eval'].every((n) => names.includes(n)), names.join(','));
+        const local = E.SMOKE_SITE.replace('127.0.0.1', 'localhost');
+        const op1 = await mcp.call('browser_open', { url: `${local}/t7` });
+        const pageText = text(op1);
+        const m = /\[(\w+)\][^\n]*Hover me/.exec(pageText);
+        const gated = await mcp.call('browser_click', { ref: m ? m[1] : '1' });
+        const logNow = await js(`(() => { const s = window.__cwBrowser.state.getState(); const t = s.tabs.find((x) => x.agent === 'smoke-gate'); return t ? document.querySelector('.bw-view[data-tab="' + t.id + '"] webview').executeJavaScript('document.getElementById("log").textContent') : 'no tab'; })()`);
+        check('t7: over MCP, a click on a site nobody allowed (localhost) is refused and nothing happens on the page', !op1.isError && gated.isError && /localhost/.test(text(gated)) && !/hover/.test(String(logNow)), `${text(gated).slice(0, 200)} log=${logNow}`);
+        const ev5 = await mcp.call('browser_eval', { script: '1+1' });
+        check('t7: over MCP, a script is refused too when nobody can be asked', ev5.isError, text(ev5).slice(0, 200));
+        mcp.stop();
       }
       // closing the Agent's tab: its next operation says there is no page
       phase = 'close';

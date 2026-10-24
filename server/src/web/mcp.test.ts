@@ -6,7 +6,8 @@ import os from 'node:os';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
-import { TOOLS, callServer } from './mcp.js';
+import { TOOLS, callServer, callTimeoutOf } from './mcp.js';
+import { SITE_ASK_TIMEOUT_MS } from './site-gate.js';
 import { webMcpEntry } from './launcher.js';
 
 /** The claude-web server as the MCP process sees it: one endpoint, a bearer, MCP content back. */
@@ -84,7 +85,7 @@ function start(env: Record<string, string>) {
 }
 
 describe('the web MCP server over stdio', () => {
-  it('handshakes, lists the twenty-nine tools (seventeen of 联网, five of 网吧, seven of 字符画主题), and carries each call to the server with the secret and the conversation id', async () => {
+  it('handshakes, lists the thirty-three tools (twenty-one of 联网, five of 网吧, seven of 字符画主题), and carries each call to the server with the secret and the conversation id', async () => {
     const tokenFile = path.join(dir, 'secret.token');
     fs.writeFileSync(tokenFile, `${SECRET}\n`);
     hits.length = 0;
@@ -97,7 +98,7 @@ describe('the web MCP server over stdio', () => {
       m.notify('notifications/initialized');
       expect((await m.rpc('ping')).result).toEqual({});
       const tools = (await m.rpc('tools/list')).result.tools;
-      expect(tools.map((t: any) => t.name)).toEqual(['web_search', 'browser_open', 'browser_read', 'browser_find', 'browser_click', 'browser_type', 'browser_press_key', 'browser_scroll', 'browser_back', 'browser_screenshot', 'browser_computer', 'browser_console', 'browser_network', 'browser_snapshot', 'browser_wait', 'browser_tabs', 'browser_viewport', 'character_guide', 'character_draft', 'character_save', 'character_assign', 'character_list', 'theme_guide', 'theme_draft', 'theme_get', 'theme_save', 'theme_apply', 'theme_list', 'theme_delete']);
+      expect(tools.map((t: any) => t.name)).toEqual(['web_search', 'browser_open', 'browser_read', 'browser_find', 'browser_click', 'browser_type', 'browser_press_key', 'browser_scroll', 'browser_back', 'browser_screenshot', 'browser_computer', 'browser_console', 'browser_network', 'browser_snapshot', 'browser_wait', 'browser_tabs', 'browser_viewport', 'browser_hover', 'browser_drag', 'browser_select', 'browser_eval', 'character_guide', 'character_draft', 'character_save', 'character_assign', 'character_list', 'theme_guide', 'theme_draft', 'theme_get', 'theme_save', 'theme_apply', 'theme_list', 'theme_delete']);
       expect(hits).toHaveLength(0); // nothing so far needed the server
 
       const search = (await m.rpc('tools/call', { name: 'web_search', arguments: { query: 'node streams', count: 3 } })).result;
@@ -168,6 +169,33 @@ describe('the tool list', () => {
     expect(schema('browser_viewport').properties.preset.enum).toEqual(['auto', 'phone', 'tablet', 'desktop']);
     expect(schema('browser_viewport').required).toEqual(['preset']);
     for (const n of ['browser_console', 'browser_network', 'browser_snapshot', 'browser_wait', 'browser_tabs', 'browser_viewport']) expect(TOOLS.find((t) => t.name === n)!.description, n).toMatch(/desktop app/);
+  });
+
+  it('hover / drag / select / eval take what the contract says, and say who is asked', () => {
+    const schema = (name: string) => TOOLS.find((t) => t.name === name)!.inputSchema as { properties: Record<string, any>; required?: string[] };
+    expect(Object.keys(schema('browser_hover').properties)).toEqual(['ref']);
+    expect(schema('browser_hover').required).toEqual(['ref']);
+    expect(Object.keys(schema('browser_drag').properties)).toEqual(['from', 'to']);
+    expect(schema('browser_drag').required).toEqual(['from', 'to']);
+    expect(Object.keys(schema('browser_select').properties)).toEqual(['ref', 'value']);
+    expect(schema('browser_select').required).toEqual(['ref', 'value']);
+    expect(Object.keys(schema('browser_eval').properties)).toEqual(['script']);
+    expect(schema('browser_eval').required).toEqual(['script']);
+    expect(schema('browser_eval').properties.script.maxLength).toBe(20000);
+    for (const n of ['browser_hover', 'browser_drag', 'browser_select', 'browser_eval']) {
+      const t = TOOLS.find((x) => x.name === n)!;
+      expect(t.description, n).toMatch(/desktop app/);
+      expect(t.annotations.readOnlyHint, n).toBe(false);
+    }
+    // the gate is in the description: a new site asks once, a script asks every time
+    expect(TOOLS.find((t) => t.name === 'browser_click')!.description).toMatch(/new site/);
+    expect(TOOLS.find((t) => t.name === 'browser_eval')!.description).toMatch(/every time/);
+  });
+
+  it('a call that may wait for the user (a page-changing tool) gets a longer timeout than a read', () => {
+    expect(callTimeoutOf('browser_click')).toBeGreaterThan(SITE_ASK_TIMEOUT_MS);
+    expect(callTimeoutOf('browser_eval')).toBeGreaterThan(SITE_ASK_TIMEOUT_MS);
+    expect(callTimeoutOf('browser_read')).toBe(90_000);
   });
 });
 

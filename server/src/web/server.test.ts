@@ -131,6 +131,10 @@ beforeAll(async () => {
   process.env.CW_BING_URL = siteUrl;
   process.env.CW_DDG_URL = `${siteUrl}/nothing-here`;
 
+  // 允许的网站: the site the clicks below are on was allowed before (a new site asks on a card of an open
+  // conversation — this file has none: see "a page-changing tool on a new site")
+  fs.mkdirSync(process.env.CLAUDE_WEB_DIR!, { recursive: true });
+  fs.writeFileSync(path.join(process.env.CLAUDE_WEB_DIR!, 'meta.json'), JSON.stringify({ settings: { 'web.browser.allowedSites': ['app.example'] } }));
   const { startServer } = await import('../index.js');
   server = await startServer({ port: 0, host: '127.0.0.1', distDir: fs.mkdtempSync(path.join(home, 'dist-')), version: '0.0.0-test' });
   a = client(`ws://127.0.0.1:${server.port}/ws`);
@@ -240,6 +244,19 @@ describe('联网 through a running server', () => {
     expect(sent[0]).toMatchObject({ sessionId: '', args: { engine: 'duckduckgo', url: `${siteUrl}/nothing-here/html/?q=backpressure` } });
     expect(b.events.some((e) => e.kind === 'browser.command')).toBe(false);
     expect(engineHits).toHaveLength(fetched);
+  });
+
+  it('a page-changing tool on a new site: nobody can be asked for a conversation that is not open here, so it is refused before the window acts', async () => {
+    const n = a.commands().length;
+    const pending = tool(server.port, { sessionId: 'conv-new-site', tool: 'browser_click', args: { ref: 'e1' } });
+    // the window is asked where the conversation's tab is (a probe read), and says: on a site nobody allowed
+    const probe = await until(() => a.commands()[n], 'the probe');
+    expect(probe).toMatchObject({ sessionId: 'conv-new-site', op: 'read', args: { probe: true } });
+    await a.req('browser.result', { id: probe.id, ok: true, answer: { page: { url: 'https://shop.example/cart', title: 'Cart', text: '' } } });
+    const r = await pending;
+    expect(r.json?.isError).toBe(true);
+    expect(textOf(r)).toContain('shop.example');
+    expect(a.commands().length).toBe(n + 1); // no click was sent
   });
 
   it('the MCP server, started as the launcher tells an agent to start it, reaches the hosting window', async () => {

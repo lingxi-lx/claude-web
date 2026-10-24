@@ -148,3 +148,17 @@
 .bw-allowed-list li:hover { background: var(--layer-hover); }
 .bw-allowed-list .h { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: var(--fs-meta); color: var(--ink-1); }
 .bw-allowed .empty { color: var(--ink-4); font-size: var(--fs-sm); padding: var(--sp-2) 0; }
+
+/* the Agent's mouse over its page (AgentCursor.tsx, stage B task 7): only a picture, never in the way */
+.bw-cursor-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 3; }
+.bw-cursor { position: absolute; left: 0; top: 0; width: 18px; height: 22px; margin: -1px 0 0 -1px; opacity: 0; transition: transform 220ms var(--ease-out), opacity 300ms var(--ease-out); }
+.bw-cursor.on { opacity: 1; }
+.bw-cursor svg { display: block; filter: drop-shadow(0 1px 2px rgb(0 0 0 / 35%)); }
+.bw-cursor svg path { fill: var(--accent); stroke: #fff; stroke-width: 1.4; stroke-linejoin: round; }
+.bw-cursor.down svg { transform: scale(0.9); transform-origin: 1px 1px; }
+.bw-ripple { position: absolute; width: 28px; height: 28px; margin: -14px 0 0 -14px; border-radius: 50%; border: 2px solid var(--accent); opacity: 0.8; animation: bw-ripple 600ms var(--ease-out) forwards; }
+@keyframes bw-ripple { from { transform: scale(0.3); opacity: 0.85; } to { transform: scale(1.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .bw-cursor { transition: opacity 200ms linear; } .bw-ripple { animation-duration: 1ms; } }
+.bw-agent.taken { background: color-mix(in oklab, var(--warn) 12%, transparent); }
+.bw-agent.taken > svg { color: var(--warn); }
+.bw-agent .btn.sm { flex: none; }

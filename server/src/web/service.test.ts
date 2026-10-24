@@ -744,3 +744,164 @@ describe('WebService.tool: what the MCP server answers', () => {
     expect(computerArgs({ action: 'double_click', coordinate: [3.5, 4.25], extra: true })).toEqual({ action: 'double_click', coordinate: [3.5, 4.25] });
   });
 });
+
+describe('WebService: 允许的网站 — the gate before a page is changed', () => {
+  /** A window that answers by itself: `reply(cmd)` gives the answer, or throws the window's error. */
+  function autoWin(web: WebService, reply: (c: BrowserCommand) => any) {
+    const got: BrowserCommand[] = [];
+    const key = {};
+    web.setHost(key, true, (c) => {
+      got.push(c);
+      setTimeout(() => {
+        try { web.result(key, c.id, true, reply(c)); } catch (e) { web.result(key, c.id, false, undefined, (e as Error).message); }
+      }, 1);
+    });
+    return { key, got, ops: () => got.map((c) => c.op) };
+  }
+  type Asked = { sid: string; req: any };
+  function gated(answer: 'once' | 'always' | 'deny', settings: Record<string, unknown> = {}, mode?: string) {
+    const asked: Asked[] = [];
+    const m = make({
+      gate: {
+        ask: async (sid, req) => { asked.push({ sid, req }); return answer; },
+        mode: () => mode as any,
+      },
+    }, settings);
+    return { ...m, asked };
+  }
+  const page = (url: string) => ({ page: { url, title: 'T', text: 'x' } });
+
+  it('a new site: the window is asked where the tab is (a probe read), the user is asked, then the op goes with the site', async () => {
+    const { web, asked } = gated('once');
+    const w = autoWin(web, () => page('https://shop.example/cart'));
+    const r = await web.tool('conv-1', 'browser_click', { ref: '3' });
+    expect(r.isError).toBeFalsy();
+    expect(w.ops()).toEqual(['read', 'click']);
+    expect(w.got[0].args).toMatchObject({ probe: true });
+    expect(asked).toEqual([{ sid: 'conv-1', req: { host: 'shop.example', op: 'click', tool: 'browser_click' } }]);
+    expect(w.got[1].args).toEqual({ ref: '3', site: 'shop.example' });
+    // 允许一次 is this once: the next change on that site asks again
+    await web.tool('conv-1', 'browser_type', { ref: '4', text: 'hi' });
+    expect(asked).toHaveLength(2);
+    expect(asked[1].req).toMatchObject({ host: 'shop.example', op: 'type', tool: 'browser_type' });
+    web.dropConnection(w.key);
+  });
+
+  it('总是允许 puts the host on the list: the next change there is not asked about, and needs no probe', async () => {
+    const settings: Record<string, unknown> = { 'web.browser.allowedSites': ['other.example'] };
+    const { web, asked } = gated('always', settings);
+    const w = autoWin(web, () => page('https://shop.example/'));
+    await web.tool('conv-1', 'browser_click', { ref: '1' });
+    expect(settings['web.browser.allowedSites']).toEqual(['other.example', 'shop.example']);
+    await web.tool('conv-1', 'browser_scroll', { direction: 'down' });
+    expect(asked).toHaveLength(1);
+    expect(w.ops()).toEqual(['read', 'click', 'scroll']);
+    expect(w.got[2].args).toEqual({ direction: 'down', site: 'shop.example' });
+    web.dropConnection(w.key);
+  });
+
+  it('an allowed site (and *. for its subdomains) is not asked about; reading is never asked about', async () => {
+    const { web, asked } = gated('deny', { 'web.browser.allowedSites': ['*.example.org'] });
+    const w = autoWin(web, () => page('https://docs.example.org/a'));
+    await web.tool('conv-2', 'browser_read', {});
+    await web.tool('conv-2', 'browser_hover', { ref: '9' });
+    await web.tool('conv-2', 'browser_select', { ref: '5', value: 'Large' });
+    await web.tool('conv-2', 'browser_drag', { from: '1', to: '[2]' });
+    await web.tool('conv-2', 'browser_computer', { action: 'screenshot' });
+    expect(asked).toEqual([]);
+    expect(w.ops()).toEqual(['read', 'hover', 'select', 'drag', 'computer']);
+    expect(w.got[1].args).toEqual({ ref: '9', site: 'docs.example.org' });
+    expect(w.got[2].args).toEqual({ ref: '5', value: 'Large', site: 'docs.example.org' });
+    expect(w.got[3].args).toEqual({ from: '1', to: '2', site: 'docs.example.org' });
+    expect(w.got[4].args).toEqual({ action: 'screenshot' }); // a picture changes nothing
+    web.dropConnection(w.key);
+  });
+
+  it('a script is asked about every time — allowed site, 总是允许 or not — with its start on the card; its result comes back as data', async () => {
+    const settings: Record<string, unknown> = { 'web.browser.allowedSites': ['app.example'] };
+    const { web, asked } = gated('always', settings);
+    const w = autoWin(web, (c) => (c.op === 'eval' ? { page: { url: 'https://app.example/', title: 'A', text: '' }, result: '{"n":3}' } : page('https://app.example/')));
+    const script = "return document.querySelectorAll('li').length // " + 'x'.repeat(600);
+    const r = await web.tool('conv-3', 'browser_eval', { script });
+    expect(asked).toHaveLength(1);
+    expect(asked[0].req).toMatchObject({ host: 'app.example', op: 'eval', tool: 'browser_eval', eval: true });
+    expect(asked[0].req.script).toBe(script);
+    expect(settings['web.browser.allowedSites']).toEqual(['app.example']); // never written for a script
+    expect(w.got[w.got.length - 1]).toMatchObject({ op: 'eval', args: { script, site: 'app.example' } });
+    const text = textOf(r);
+    expect(text).toContain(CONTENT_START);
+    expect(text).toContain('{"n":3}');
+    await web.tool('conv-3', 'browser_eval', { script: 'document.title' });
+    expect(asked).toHaveLength(2);
+    // nothing to run: never reaches the window or the user
+    const n = w.got.length;
+    expect((await web.tool('conv-3', 'browser_eval', { script: '  ' })).isError).toBe(true);
+    expect((await web.tool('conv-3', 'browser_eval', { script: 'x'.repeat(20_001) })).isError).toBe(true);
+    expect(w.got).toHaveLength(n);
+    expect(asked).toHaveLength(2);
+    web.dropConnection(w.key);
+  });
+
+  it('完全放开 (bypassPermissions): no site is asked about — a script still is', async () => {
+    const { web, asked } = gated('once', {}, 'bypassPermissions');
+    const w = autoWin(web, (c) => (c.op === 'eval' ? { result: '1' } : page('https://new.example/')));
+    await web.tool('conv-4', 'browser_click', { ref: '1' });
+    expect(asked).toEqual([]);
+    await web.tool('conv-4', 'browser_eval', { script: '1' });
+    expect(asked).toHaveLength(1);
+    web.dropConnection(w.key);
+  });
+
+  it('declined: nothing is done and the model is told not to retry', async () => {
+    const { web, asked } = gated('deny');
+    const w = autoWin(web, () => page('https://bank.example/'));
+    const r = await web.tool('conv-5', 'browser_click', { ref: '1' });
+    expect(r.isError).toBe(true);
+    expect(textOf(r)).toContain('bank.example');
+    expect(textOf(r)).toContain('没有允许');
+    expect(asked).toHaveLength(1);
+    expect(w.ops()).toEqual(['read']);
+    web.dropConnection(w.key);
+  });
+
+  it('a file: page is never driven — refused before the user is asked', async () => {
+    const { web, asked } = gated('once', {}, 'bypassPermissions');
+    const w = autoWin(web, () => page('file:///C:/Users/me/secret.html'));
+    const r = await web.tool('conv-6', 'browser_type', { ref: '1', text: 'x' });
+    expect(r.isError).toBe(true);
+    expect(textOf(r)).toContain('file:');
+    expect(asked).toEqual([]);
+    expect(w.ops()).toEqual(['read']);
+    web.dropConnection(w.key);
+  });
+
+  it('the tab moved to another site since: the window says so, the gate runs again for the new site, the op goes once', async () => {
+    const settings: Record<string, unknown> = { 'web.browser.allowedSites': ['a.example'] };
+    const { web, asked } = gated('once', settings);
+    let where = 'https://a.example/';
+    const w = autoWin(web, (c) => {
+      if (c.op === 'read') return page(where);
+      if (c.args.site !== new URL(where).hostname) throw new Error('cw-site-changed:' + where);
+      return page(where);
+    });
+    await web.tool('conv-7', 'browser_read', {});
+    where = 'https://b.example/'; // the user went elsewhere in that tab
+    const r = await web.tool('conv-7', 'browser_click', { ref: '1' });
+    expect(r.isError).toBeFalsy();
+    // the window's word on where the tab is now is fresh: no probe is needed for it
+    expect(w.ops()).toEqual(['read', 'click', 'click']);
+    expect(asked).toEqual([{ sid: 'conv-7', req: { host: 'b.example', op: 'click', tool: 'browser_click' } }]);
+    expect(w.got[2].args).toEqual({ ref: '1', site: 'b.example' });
+    web.dropConnection(w.key);
+  });
+
+  it('the user has taken over the browser: the window refuses the probe, and nobody is asked', async () => {
+    const { web, asked } = gated('once');
+    const w = autoWin(web, () => { throw new Error('用户接管了浏览器。'); });
+    const r = await web.tool('conv-8', 'browser_click', { ref: '1' });
+    expect(r.isError).toBe(true);
+    expect(textOf(r)).toContain('用户接管了浏览器');
+    expect(asked).toEqual([]);
+    web.dropConnection(w.key);
+  });
+});

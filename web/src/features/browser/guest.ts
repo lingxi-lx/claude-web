@@ -3,7 +3,8 @@
 // server reads pages itself.
 import { desktop } from '@/desktop';
 import agentSrc from './page-agent.js?raw';
-import { parseKey, type MouseAct, type PageHandle, type Picture } from './ops';
+import { evalSource, looksLikeBody, parseKey, type MouseAct, type PageHandle, type Picture } from './ops';
+import { markCursor } from './cursor';
 import { viewportOf, type ViewportId } from './viewport';
 import { guestOf, patchTab, tabOf, waitGuest, type WebviewEl } from './state';
 import { loadable } from './url';
@@ -125,6 +126,23 @@ export function pageOf(tabId: string): PageHandle {
       return done;
     },
     call: call as PageHandle['call'],
+    async evaluate(script) {
+      const el = await need();
+      await askable(el);
+      const run = (asBody: boolean) => el.executeJavaScript<{ ok: boolean; value?: string; error?: string }>(evalSource(script, asBody));
+      let r: { ok: boolean; value?: string; error?: string } | undefined;
+      if (looksLikeBody(script)) r = await run(true);
+      else {
+        // an expression first; statements without a return do not parse as one — then as a function body
+        try { r = await run(false); } catch { r = await run(true).catch((e) => { throw new Error(tr('脚本有语法错误：{why}', { why: String((e as Error)?.message ?? e).slice(0, 300) })); }); }
+      }
+      if (!r) throw new Error(tr('页面没有回应这个操作。'));
+      if (!r.ok) throw new Error(r.error === 'timeout' ? tr('脚本 10 秒内没有结束。') : tr('脚本出错：{why}', { why: String(r.error ?? '').slice(0, 500) }));
+      return String(r.value ?? '');
+    },
+    show(m) {
+      markCursor(tabId, m);
+    },
     async settle(ms) {
       return idle(await need(), ms);
     },

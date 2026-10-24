@@ -272,7 +272,10 @@ export interface ProxyStatus {
  *  the last 200 of each). `snapshot` `{}`: the page's structure, one element a line, with the refs click / type take.
  *  `wait` `{text? | ref?, timeoutMs}`. `tabs` `{action: 'list' | 'switch' | 'new' | 'close', id?, url?}`: the
  *  conversation's own tabs only. `viewport` `{preset: 'auto' | 'phone' | 'tablet' | 'desktop'}`. */
-export type BrowserOp = 'open' | 'read' | 'find' | 'click' | 'type' | 'key' | 'scroll' | 'back' | 'screenshot' | 'search' | 'computer' | 'console' | 'network' | 'snapshot' | 'wait' | 'tabs' | 'viewport';
+/** `hover` `{ref}` / `drag` `{from, to}` (refs; a real mouse), `select` `{ref, value: string | string[]}` (a list's
+ *  option by value or text), `eval` `{script}` (run in the page; the result as JSON, cut to 8 KB). Page-changing ops
+ *  carry `site`: the host the server checked (web/site-gate.ts) — the window refuses when its page is elsewhere now. */
+export type BrowserOp = 'open' | 'read' | 'find' | 'click' | 'type' | 'key' | 'scroll' | 'back' | 'screenshot' | 'search' | 'computer' | 'console' | 'network' | 'snapshot' | 'wait' | 'tabs' | 'viewport' | 'hover' | 'drag' | 'select' | 'eval';
 /** One console message of a page (console.*, an uncaught error, the browser's own lines such as a failed load). `at`: ms since 1970. */
 export interface BrowserConsoleEntry { level: string; text: string; at: number; url?: string }
 /** One request of a page. No `status` and no `failed`: still on its way. `ms`: how long it took. */
@@ -288,7 +291,7 @@ export interface BrowserCommand { id: string; sessionId: string; op: BrowserOp; 
 /** What a result page listed, as the page had it (the server knows each engine's link wrapping): `failed` = the page could not be loaded. */
 export interface BrowserSearchPage { url: string; title: string; text: string; candidates: { title: string; href: string; snippet?: string; alt?: string }[]; failed?: string }
 /** `image.width / height`: the picture's own size in pixels — the frame `computer` coordinates are given in. */
-export interface BrowserAnswer { page?: BrowserPage; elements?: BrowserElement[]; image?: { mime: 'image/jpeg' | 'image/png'; data: string; width?: number; height?: number }; note?: string; search?: BrowserSearchPage; console?: BrowserConsoleEntry[]; network?: BrowserNetworkEntry[]; tabs?: BrowserTabInfo[] }
+export interface BrowserAnswer { page?: BrowserPage; elements?: BrowserElement[]; image?: { mime: 'image/jpeg' | 'image/png'; data: string; width?: number; height?: number }; note?: string; search?: BrowserSearchPage; console?: BrowserConsoleEntry[]; network?: BrowserNetworkEntry[]; tabs?: BrowserTabInfo[]; result?: string }
 /** `web.status`: the switch (`web.mcp`), the search engine, whether a desktop window is hosting the browser. Keys never leave the server. */
 export interface WebStatus { enabled: boolean; engine: string; engines: { id: string; label: string; needsKey: boolean; hasKey?: boolean; browser?: boolean }[]; host: boolean; isolated: boolean }
 export interface WebSearchResult { title: string; url: string; snippet: string }

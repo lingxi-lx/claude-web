@@ -6,10 +6,10 @@ import type { BrowserAnswer, BrowserCommand, ServerEvent } from '@shared';
 import { ws } from '@/ws/client';
 import { useStore } from '@/store';
 import { showPanel } from '@/features/workbench/right-panel';
-import { agentTabsOf, runOp } from './ops';
+import { agentTabsOf, refusal, runOp } from './ops';
 import { pageOf } from './guest';
 import { searchPage } from './search-page';
-import { agentCurrentOf, agentTab, closeTab, cookiesMode, frontTab, guestElOf, hasWebview, newTab, partitionsFor, patchTab, setAgentCurrent, setPartitionSource, tabOf, useBrowser } from './state';
+import { agentCurrentOf, agentTab, closeTab, cookiesMode, frontTab, guestElOf, hasWebview, newTab, partitionsFor, patchTab, setAgentCurrent, setPartitionSource, tabOf, takenOverBy, useBrowser } from './state';
 import { loadable } from './url';
 import { tr } from '@/i18n';
 
@@ -55,6 +55,9 @@ export async function carryOut(c: BrowserCommand): Promise<BrowserAnswer> {
     showPanel('browser');
     tab = tabOf(id)!;
   }
+  // 接管 / a file: page / the tab moved to another site than the server checked: refused before the page is touched
+  const why = refusal(c.op, c.args ?? {}, { takenOver: takenOverBy(useBrowser.getState().tabs, c.sessionId), url: pageOf(tab.id).url() || tab.url });
+  if (why) throw new Error(why);
   // a tab opened by browser_tabs "new" without an address has no page yet
   if (!tab.src && c.op !== 'open') throw new Error(tr('这个标签还没有打开网页：先用 browser_open 打开一个网址。'));
   return inTab(tab.id, c.op, c.args ?? {});
@@ -63,7 +66,7 @@ export async function carryOut(c: BrowserCommand): Promise<BrowserAnswer> {
 async function inTab(id: string, op: BrowserCommand['op'], args: Record<string, unknown>): Promise<BrowserAnswer> {
   await onScreen(id);
   // mouse and keyboard by position go by what is drawn, and answer with a picture of it
-  if (op === 'screenshot' || op === 'computer') await inFront(id);
+  if (op === 'screenshot' || op === 'computer' || op === 'hover' || op === 'drag') await inFront(id);
   patchTab(id, { busy: true });
   try {
     return await runOp(pageOf(id), op, args);

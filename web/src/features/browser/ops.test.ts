@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BrowserPage } from '@shared';
-import { CONSOLE_MAX, GLANCE_CHARS, NETWORK_MAX, OPEN_CHARS, SNAPSHOT_CHARS, WAIT_MAX_MS, WHEEL_NOTCH, agentTabsOf, outlineText, parseKey, parseModifiers, runOp, toView, type MouseAct, type PageHandle } from './ops';
+import { CONSOLE_MAX, GLANCE_CHARS, NETWORK_MAX, OPEN_CHARS, SNAPSHOT_CHARS, WAIT_MAX_MS, WHEEL_NOTCH, agentTabsOf, outlineText, parseKey, parseModifiers, runOp, toView, refusal, TAKEN_OVER, SITE_CHANGED, hostOf, evalSource, looksLikeBody, EVAL_MAX_CHARS, type MouseAct, type PageHandle } from './ops';
 
 /** A page that records what it was asked, in order. */
 function fakePage(o: { text?: string; url?: string; idle?: boolean; canBack?: boolean; onClick?: (p: Fake) => void; typed?: { submitted?: boolean; enter?: boolean }; scroll?: { moved: number; top: number; max: number; length: number }; picture?: { width: number; height: number } | null; view?: { width: number; height: number } } = {}) {
@@ -418,5 +418,118 @@ describe('browser_tabs: only the tabs of the conversation', () => {
     expect(agentTabsOf(tabs, 's1', undefined).map((t) => t.active)).toEqual([true, false]);
     expect(agentTabsOf(tabs, 's1', 'b1').map((t) => t.active)).toEqual([true, false]);
     expect(agentTabsOf(tabs, 'nobody', undefined)).toEqual([]);
+  });
+});
+
+describe('hover / drag / select / eval, the cursor, 接管 (stage B task 7)', () => {
+  /** fakePage + the page agent's point / select, a script runner and the cursor layer. */
+  function page7(o: { evalResult?: string; evalError?: string } = {}) {
+    const p = fakePage();
+    const marks: string[] = [];
+    const call0 = p.call;
+    const at: Record<string, { x: number; y: number }> = { a: { x: 10, y: 20 }, b: { x: 110, y: 220 } };
+    const ext = Object.assign(p, {
+      call: async (fn: string, arg: Record<string, unknown>) => {
+        if (fn === 'point') { p.log.push(`point ${JSON.stringify(arg)}`); const q = at[String(arg.ref)]; if (!q) throw new Error('元素不在页面上了'); return { ...q, width: 800, height: 600 }; }
+        if (fn === 'select') { p.log.push(`select ${JSON.stringify(arg)}`); return { index: 2 }; }
+        return call0(fn, arg);
+      },
+      evaluate: async (script: string) => { p.log.push(`eval ${script}`); if (o.evalError) throw new Error(o.evalError); return o.evalResult ?? '"ok"'; },
+      show: (m: { kind: string; x: number; y: number; width: number; height: number }) => { marks.push(`${m.kind} ${m.x},${m.y} /${m.width}x${m.height}`); },
+    });
+    return { p: ext, marks };
+  }
+
+  it('hover: a real mouse moved to the middle of the element, the cursor shown there, then the glance', async () => {
+    const { p, marks } = page7();
+    const a = await run(p, 'hover', { ref: 'a' });
+    expect(p.log.slice(0, 2)).toEqual(['point {"ref":"a"}', 'move 10,20']);
+    expect(marks).toEqual(['move 10,20 /800x600']);
+    expect(a.note).toContain('[a]');
+    expect(a.page).toBeDefined();
+  });
+
+  it('drag: pressed on one element, moved in steps with the button held, released on the other', async () => {
+    const { p, marks } = page7();
+    await run(p, 'drag', { from: 'a', to: 'b' });
+    expect(p.log[0]).toBe('point {"ref":"a"}');
+    expect(p.log[1]).toBe('point {"ref":"b","noScroll":true}');
+    expect(p.log[2]).toBe('move 10,20');
+    expect(p.log[3]).toBe('down left 1 10,20');
+    const moves = p.log.filter((l) => l.endsWith('held left'));
+    expect(moves).toHaveLength(10);
+    expect(moves.at(-1)).toBe('move 110,220 held left');
+    expect(p.log).toContain('up left 1 110,220');
+    expect(marks[0]).toBe('move 10,20 /800x600');
+    expect(marks[1]).toBe('down 10,20 /800x600');
+    expect(marks.at(-1)).toBe('up 110,220 /800x600');
+  });
+
+  it('select: the cursor goes there, the page agent picks the option, the glance', async () => {
+    const { p, marks } = page7();
+    const a = await run(p, 'select', { ref: 'a', value: 'Large' });
+    expect(p.log.slice(0, 2)).toEqual(['point {"ref":"a"}', 'select {"ref":"a","value":"Large"}']);
+    expect(marks).toEqual(['move 10,20 /800x600', 'down 10,20 /800x600']);
+    expect(a.note).toContain('[a]');
+  });
+
+  it('click and type show the cursor first when there is a layer; an element the cursor cannot find still gets the op', async () => {
+    const { p, marks } = page7();
+    await run(p, 'click', { ref: 'a' });
+    expect(p.log.slice(0, 2)).toEqual(['point {"ref":"a"}', 'click {"ref":"a"}']);
+    expect(marks).toEqual(['move 10,20 /800x600', 'down 10,20 /800x600']);
+    await run(p, 'click', { ref: 'zz' });
+    expect(p.log).toContain('click {"ref":"zz"}');
+  });
+
+  it('eval: the script runs in the page and its result comes back with the page it ran on; an empty one never runs', async () => {
+    const { p } = page7({ evalResult: '{"n":3}' });
+    const a = await run(p, 'eval', { script: 'return 3' });
+    expect(a).toEqual({ result: '{"n":3}', page: { url: 'https://a.test/', title: 'T', text: '' } });
+    await expect(run(p, 'eval', { script: '  ' })).rejects.toThrow(/script/);
+    const bad = page7({ evalError: '脚本出错：boom' });
+    await expect(run(bad.p, 'eval', { script: 'boom()' })).rejects.toThrow('脚本出错：boom');
+  });
+
+  it('接管: page-changing ops — and the probe the server makes before one — are refused; reading is not', () => {
+    const o = { takenOver: true, url: 'https://a.test/' };
+    for (const op of ['click', 'type', 'key', 'scroll', 'computer', 'hover', 'drag', 'select', 'eval'] as const) expect(refusal(op, {}, o), op).toBe(TAKEN_OVER);
+    expect(TAKEN_OVER).toContain('用户接管了浏览器');
+    expect(refusal('read', { probe: true }, o)).toBe(TAKEN_OVER);
+    for (const op of ['read', 'find', 'open', 'snapshot', 'screenshot', 'console', 'network', 'wait', 'back', 'viewport'] as const) expect(refusal(op, {}, o), op).toBeNull();
+    // 交还: the same ops go again
+    expect(refusal('click', {}, { takenOver: false, url: 'https://a.test/' })).toBeNull();
+  });
+
+  it('a file: page is never driven; an op checked for another site says where the tab is now', () => {
+    expect(refusal('click', {}, { takenOver: false, url: 'file:///C:/x.html' })).toMatch(/file:/);
+    expect(refusal('read', {}, { takenOver: false, url: 'file:///C:/x.html' })).toBeNull();
+    expect(refusal('click', { site: 'a.test' }, { takenOver: false, url: 'https://A.test:8080/x' })).toBeNull();
+    expect(refusal('click', { site: 'a.test' }, { takenOver: false, url: 'https://b.test/' })).toBe(`${SITE_CHANGED}https://b.test/`);
+    expect(refusal('click', { site: '::1' }, { takenOver: false, url: 'http://[::1]:3000/' })).toBeNull();
+    expect(hostOf('not a url')).toBe('');
+  });
+
+  it('evalSource: an expression is returned, a body runs as is; looksLikeBody tells them apart', () => {
+    expect(looksLikeBody('return 1')).toBe(true);
+    expect(looksLikeBody('const n = 2; return n')).toBe(true);
+    expect(looksLikeBody('document.title')).toBe(false);
+    expect(looksLikeBody('returnValue')).toBe(false);
+    expect(evalSource('document.title', false)).toContain('return (\ndocument.title\n);');
+    expect(evalSource('return 1', true)).toContain('\nreturn 1\n');
+    expect(evalSource('1', false)).toContain(String(EVAL_MAX_CHARS));
+  });
+
+  it('evalSource runs: JSON back, undefined / functions / cycles as words, a thrown error as an answer, the cut', async () => {
+    // the wrapper is plain JS: it runs in Node the same way it runs in the page
+    const go = (script: string, body: boolean) => (0, eval)(evalSource(script, body)) as Promise<{ ok: boolean; value?: string; error?: string }>;
+    expect(await go('({ a: 1, b: [2, 3] })', false)).toEqual({ ok: true, value: '{"a":1,"b":[2,3]}' });
+    expect(await go('const x = { n: 1 }; x.self = x; return x', true)).toEqual({ ok: true, value: '{"n":1,"self":"[circular]"}' });
+    expect(await go('undefined', false)).toEqual({ ok: true, value: 'undefined' });
+    expect(await go('({ f() {} })', false)).toEqual({ ok: true, value: '{"f":"[function]"}' });
+    expect(await go('Promise.resolve(7)', false)).toEqual({ ok: true, value: '7' });
+    expect(await go('throw new Error("boom")', true)).toEqual({ ok: false, error: 'boom' });
+    expect((await go('"x".repeat(20000)', false)).value).toHaveLength(EVAL_MAX_CHARS);
+    expect(() => (0, eval)(evalSource('a = ; b', false))).toThrow(SyntaxError);
   });
 });

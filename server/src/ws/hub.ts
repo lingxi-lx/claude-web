@@ -81,6 +81,7 @@ import { handleBackground, isBackgroundRequest, type BackgroundService } from '.
 import { isWebKeySetting, maskWebSettings, type WebService } from '../web/service.js';
 import { setWebMcpEnabled } from '../web/launcher.js';
 import type { ComputerAccess } from '../computer/access.js';
+import type { SiteAsk } from '../web/site-gate.js';
 import { computerSupported, defaultFeaturesOf } from '../computer/launcher.js';
 import { tr } from '../i18n/index.js';
 
@@ -144,6 +145,8 @@ export interface Services {
   web: WebService;
   /** 操控电脑: the user's answer to an agent asking for control of applications (computer/access.ts). */
   computer: ComputerAccess;
+  /** 允许的网站: the user's answer before an agent changes a page of a new site in the built-in browser (web/site-gate.ts). */
+  siteAsk?: SiteAsk;
 }
 
 /** Requests after which something connects out: they wait for a fresh look at the proxy. (`web.search` waits inside WebService, like the agents' searches.) */
@@ -179,6 +182,13 @@ export class Hub {
     s.computer.on('permission', (request) => this.broadcast({ kind: 'permission.request', request }));
     s.computer.on('permissionResolved', (requestId) => this.broadcast({ kind: 'permission.resolved', requestId }));
     s.pool.on('state', (sessionId, state) => { if (state === 'closed' || state === 'error') s.computer.drop(sessionId); });
+    // …and the built-in browser's 允许的网站 cards, the same way
+    if (s.siteAsk) {
+      const site = s.siteAsk;
+      site.on('permission', (request) => this.broadcast({ kind: 'permission.request', request }));
+      site.on('permissionResolved', (requestId) => this.broadcast({ kind: 'permission.resolved', requestId }));
+      s.pool.on('state', (sessionId, state) => { if (state === 'closed' || state === 'error') site.drop(sessionId); });
+    }
     s.sessions.on('changed', () => this.broadcast({ kind: 'sessions.changed' }));
     s.meta.on('changed', () => this.broadcast({ kind: 'meta.changed' }));
     s.schedules.on?.('notice', (n: { text: string; notify?: boolean; sessionId?: string }) => this.broadcast({ kind: 'notice', ...n }));
@@ -282,7 +292,7 @@ export class Hub {
 
   /** What a conversation is waiting on the user for: its tools' requests, and what 操控电脑 asked. */
   private pendingOf(sessionId: string) {
-    return [...(this.s.pool.get(sessionId)?.getPendingPermissions() ?? []), ...this.s.computer.pendingFor(sessionId)];
+    return [...(this.s.pool.get(sessionId)?.getPendingPermissions() ?? []), ...this.s.computer.pendingFor(sessionId), ...(this.s.siteAsk?.pendingFor(sessionId) ?? [])];
   }
 
   /**
@@ -858,6 +868,7 @@ export class Hub {
         return null;
       case 'permission.respond': {
         if (s.computer.respond(req.requestId, req.response)) return null;
+        if (s.siteAsk?.respond(req.requestId, req.response)) return null;
         const r = s.pool.findPermission(req.requestId);
         if (!r) throw new Error('permission request not found (already answered?)');
         r.respondPermission(req.requestId, req.response);

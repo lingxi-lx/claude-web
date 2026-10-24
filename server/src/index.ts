@@ -81,6 +81,7 @@ import { WebService } from './web/service.js';
 import { handleWebTool } from './web/http.js';
 import { configureWebMcp, setWebMcpEnabled } from './web/launcher.js';
 import { ComputerAccess } from './computer/access.js';
+import { SiteAsk } from './web/site-gate.js';
 import { handleComputerAsk } from './computer/http.js';
 import { configureComputerMcp } from './computer/launcher.js';
 
@@ -197,6 +198,10 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   let web: WebService;
   // eslint-disable-next-line prefer-const
   let computer: ComputerAccess;
+  // 允许的网站: the browser tools' cards (web/site-gate.ts); knows the pool once it is made
+  let knowsSession: (sid: string) => boolean = () => false;
+  const siteAsk = new SiteAsk({ knows: (sid) => knowsSession(sid) });
+  let modeOf: (sid: string) => import('./protocol.js').PermissionMode | undefined = () => undefined;
   // made after `web`, which only calls into it later (a character tool)
   let characters: CharacterService;
   const themes = new ThemeService();
@@ -349,12 +354,15 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     characterTool: (tool, args) => characterTool(characters, tool, args) as any,
     themeTool: (tool, args) => themeTool({ svc: themes, getTheme: () => meta.settings()['ui.theme'], setTheme: (v) => meta.setSetting('ui.theme', v) }, tool, args) as any,
     ownPorts: () => [listenPort, remote?.port ?? 0].filter((p) => p > 0),
+    gate: { ask: (sid, req) => siteAsk.ask(sid, req), mode: (sid) => modeOf(sid) },
   });
   await web.warm();
   setWebMcpEnabled(meta.settings()['web.mcp'] !== false);
   const pool = new RunnerPool(providers, agents, transcripts);
   // 操控电脑: only a conversation that is open here can ask for control of applications
   computer = new ComputerAccess({ knows: (sid) => !!pool.get(sid) });
+  knowsSession = (sid) => !!pool.get(sid);
+  modeOf = (sid) => pool.get(sid)?.info.permissionMode;
   const config = new ConfigService();
   pool.accountLoggedOut = () => config.knownLoggedOut();
   const ledger = new LedgerService((id) => meta.provider(id)?.type);
@@ -462,7 +470,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     },
   });
   themes.watch();
-  const services = { importer, customCss, orchestra, background, characters, themes, remote, anywhere, tunnels, im, vcs: new VcsService(gitSvc), goals, android: new AndroidService(), pool, sessions: sessionsSvc, config, usage: new UsageService(async (sid) => providerTimeline(await canonical.providerSwitches(sid), meta.sessionMeta(sid).providerId, (id) => { const p = meta.provider(id); return p ? { type: p.type, name: p.name } : undefined; })), files, terminal, meta, limits: new LimitsService(), schedules: new ScheduleService(meta, pool), providers, git: gitSvc, search: new SearchService(), skills: new SkillsService(), mcp: new McpService(), diag: new DiagService(version), ledger, agents, transcripts, canonical, memory, library, version, federation, agentConfig: new AgentConfigService({ agents, backupDir: path.join(dataDir(), 'config-backups') }), gateway, upstreams, tasks, web, computer, localEnv: localEnvStore, previews };
+  const services = { importer, customCss, orchestra, background, characters, themes, remote, anywhere, tunnels, im, vcs: new VcsService(gitSvc), goals, android: new AndroidService(), pool, sessions: sessionsSvc, config, usage: new UsageService(async (sid) => providerTimeline(await canonical.providerSwitches(sid), meta.sessionMeta(sid).providerId, (id) => { const p = meta.provider(id); return p ? { type: p.type, name: p.name } : undefined; })), files, terminal, meta, limits: new LimitsService(), schedules: new ScheduleService(meta, pool), providers, git: gitSvc, search: new SearchService(), skills: new SkillsService(), mcp: new McpService(), diag: new DiagService(version), ledger, agents, transcripts, canonical, memory, library, version, federation, agentConfig: new AgentConfigService({ agents, backupDir: path.join(dataDir(), 'config-backups') }), gateway, upstreams, tasks, web, computer, siteAsk, localEnv: localEnvStore, previews };
   new Hub(wss, services);
   tasks.start();
   // model lists older than a day (or never pulled) are refreshed in the background — list only, no tokens

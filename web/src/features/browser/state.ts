@@ -33,7 +33,12 @@ export interface BrowserTab {
   zoom?: number;
   /** drawn as a device (viewport.ts); undefined = auto, the panel's size */
   viewport?: ViewportId;
+  /** 接管: the user took the page over from the Agent — its page-changing ops are refused until 交还 */
+  takenOver?: boolean;
 }
+
+/** Has the user taken over the browser from this conversation's Agent (any of its tabs)? */
+export const takenOverBy = (tabs: readonly BrowserTab[], sessionId: string): boolean => tabs.some((t) => t.agent === sessionId && t.takenOver === true);
 
 /**
  * The browser profiles (Electron partitions): the user's own (what the browser tile always used), Claude's separate
@@ -115,6 +120,13 @@ export function closeTab(id: string): void {
 
 export function frontTab(id: string): void {
   useBrowser.setState((s) => (s.active === id || !s.tabs.some((t) => t.id === id) ? s : { ...s, active: id }));
+}
+
+/** 接管 (on) / 交还 (off): every tab of this conversation's Agent. */
+export function setTakenOver(sessionId: string, on: boolean): void {
+  useBrowser.setState((s) => (s.tabs.some((t) => t.agent === sessionId && !!t.takenOver !== on)
+    ? { ...s, tabs: s.tabs.map((t) => (t.agent === sessionId ? { ...t, takenOver: on || undefined } : t)) }
+    : s));
 }
 
 export function patchTab(id: string, patch: Partial<BrowserTab>): void {
