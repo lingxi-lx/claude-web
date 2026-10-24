@@ -38,6 +38,16 @@ describe('MetaStore', () => {
     expect(siblings.some((f) => f.startsWith('meta.json.corrupt-'))).toBe(true);
   });
 
+  it('null clears a profile’s 自动压缩 point and windows (the editor’s 跟着上下文窗口)', async () => {
+    const m = new MetaStore(await tmpFile());
+    await m.load();
+    const p = await m.upsertProvider({ name: 'acct', type: 'claude-account', compactAt: 700_000, contextWindows: { opus: 200_000 } });
+    await m.upsertProvider({ id: p.id, compactAt: null as unknown as undefined, contextWindows: null as unknown as undefined });
+    const after = m.providers().find((x) => x.id === p.id)!;
+    expect('compactAt' in after).toBe(false);
+    expect('contextWindows' in after).toBe(false);
+  });
+
   it('round-trips through load', async () => {
     const file = await tmpFile();
     const a = new MetaStore(file);

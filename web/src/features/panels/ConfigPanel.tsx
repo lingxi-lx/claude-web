@@ -13,6 +13,8 @@ import { REGION_BLOCKED, REGION_RE } from '@/features/providers/quick';
 import { contextWindowFor, contextWindowSource } from '../../../../server/src/models/context-window';
 import { tr } from '@/i18n';
 import { Select } from '@/ui/Select';
+import { CompactAt } from '@/features/settings/CompactAt';
+import { compactWindowOfProvider } from '@/features/settings/compact-model';
 
 type Tab = 'overview' | 'providers' | 'plugins' | 'mcp' | 'skills' | 'agents' | 'hooks' | 'settings';
 const TABS: { id: Tab; l: string }[] = [
@@ -303,7 +305,10 @@ export function ProviderProfiles() {
   }, []);
   const isGw = editing?.type === 'gateway';
 
-  const startEdit = (p?: Provider) => { setEditing(p ? { ...p, modelMap: { ...(p.modelMap ?? {}) } } : emptyDraft()); setProbe(p?.models?.length ? { ok: true, models: p.models, modelNames: p.modelNames, modelEfforts: p.modelEfforts, modelContext: p.modelContext, ms: 0 } : null); setShowKey(false); setPicked(null); setPicking(false); autoPicked.current = false; };
+  // 自动压缩 (A7): why the typed point is not saved ('' = it is), and a fresh editor for every 编辑 / 添加
+  const [compactErr, setCompactErr] = useState('');
+  const [editSeq, setEditSeq] = useState(0);
+  const startEdit = (p?: Provider) => { setCompactErr(''); setEditSeq((n) => n + 1); setEditing(p ? { ...p, modelMap: { ...(p.modelMap ?? {}) } } : emptyDraft()); setProbe(p?.models?.length ? { ok: true, models: p.models, modelNames: p.modelNames, modelEfforts: p.modelEfforts, modelContext: p.modelContext, ms: 0 } : null); setShowKey(false); setPicked(null); setPicking(false); autoPicked.current = false; };
   const test = async () => {
     if (!editing) return;
     setBusy(true);
@@ -329,6 +334,8 @@ export function ProviderProfiles() {
     if ((editing.type === 'anthropic' || editing.type === 'openai') && !editing.baseUrl?.trim()) return toast(tr('请填 Base URL'));
     if (editing.type === 'gateway' && !editing.gatewayGroupId) return toast(tr('请选一个网关组'));
     if (!editing.id && editing.type !== 'gateway' && !editing.apiKey.trim()) return toast(tr('请填 API Key'));
+    // not a toast: toasts run failures through the error explainer, which reads 「上下文窗口」 as a too-long conversation
+    if (compactErr) return void dlg.alert(tr('自动压缩'), { message: compactErr });
     setBusy(true);
     try {
       const fresh = !!(probe?.ok && probe.models.length);
@@ -452,6 +459,8 @@ export function ProviderProfiles() {
           {modelPick('sonnet →', 'sonnet')}
           {modelPick('opus →', 'opus')}
           <ContextWindows editing={editing} models={models} listed={probe?.ok ? probe.modelContext : editing.modelContext} set={setEditing} />
+          <CompactAt key={editSeq} value={editing.compactAt ?? undefined} window={compactWindowOfProvider({ ...editing, modelContext: probe?.ok ? probe.modelContext : editing.modelContext })}
+            onChange={(v, e) => { setCompactErr(e ?? ''); setEditing((d) => (d ? { ...d, compactAt: v ?? (null as any) } : d)); }} />
           {(editing.type === 'anthropic' || editing.type === 'gateway') && (
             <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13, color: 'var(--fg-2)', margin: '6px 0' }}>
               <input type="checkbox" checked={editing.runtime === 'claude'} onChange={(e) => setEditing({ ...editing, runtime: e.target.checked ? 'claude' : (null as any) })} />

@@ -5,6 +5,9 @@ import { Row } from './controls';
 import { connectModel, loginInTerminal } from '@/features/providers/ConnectModel';
 import { tr } from '@/i18n';
 import { ClaudeAccounts } from './ClaudeAccounts';
+import { familyWindows } from '@account-window';
+import { AccountWindowsDialog } from './AccountWindows';
+import { accountSummary, savedWindows } from './compact-model';
 
 /** `claude auth status` (the server shares one run for 30 s; 重新检查 forces a fresh one). */
 interface AuthStatus { loggedIn?: boolean; authMethod?: string; email?: string; orgName?: string; apiProvider?: string; error?: boolean }
@@ -15,6 +18,11 @@ interface AuthStatus { loggedIn?: boolean; authMethod?: string; email?: string; 
  */
 export function AccountSection() {
   const providers = useStore((s) => s.providers.filter((p) => p.type !== 'claude-account').length);
+  // A7: the own login's 200K / 1M picks and 自动压缩 point (meta settings; the server applies them to the conversations)
+  const rawWindows = useStore((s) => s.settings['claude.contextWindows']);
+  const rawCompact = useStore((s) => s.settings['claude.compactAt']);
+  const windowsHint = accountSummary(familyWindows(rawWindows), typeof rawCompact === 'number' ? rawCompact : undefined);
+  const [editing, setEditing] = useState(false);
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const check = (force = false) => {
@@ -40,7 +48,18 @@ export function AccountSection() {
           <button className="btn sm ghost" disabled={busy} onClick={() => check(true)}>{busy ? tr('检查中…') : tr('重新检查')}</button>
         </Row>
         {auth?.apiProvider && <Row label={tr('API 提供方')} hint={tr('Claude 账号的请求发往哪里。')}>{auth.apiProvider}</Row>}
+        <Row label={tr('上下文窗口')} hint={windowsHint}>
+          <button className="btn sm ghost" data-act="account-windows-edit" onClick={() => setEditing(true)}>{tr('编辑')}</button>
+        </Row>
       </div>
+      {editing && (
+        <AccountWindowsDialog windows={familyWindows(rawWindows)} compactAt={typeof rawCompact === 'number' ? rawCompact : undefined} onClose={() => setEditing(false)}
+          onSave={async (p) => {
+            const set = useStore.getState().setSetting;
+            await set('claude.contextWindows', savedWindows(p.windows));
+            await set('claude.compactAt', p.compactAt);
+          }} />
+      )}
       <ClaudeAccounts />
       <div className="sp-blk-h">{tr('第三方接口')}</div>
       <div className="sp-card">

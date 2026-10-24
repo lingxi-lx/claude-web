@@ -2353,6 +2353,23 @@ html.desktop.mac .app.no-sidebar .workbench:not(.gb) .over-head { padding-left: 
 .modal.add-account .sub.err { color: var(--err); white-space: pre-wrap; }
 .modal.add-account .row-btns { display: flex; gap: var(--sp-2); margin-top: var(--sp-1); }
 .claude-accounts .sp-row .ctl { flex-wrap: wrap; justify-content: flex-end; }
+/* A7: 自动压缩 (features/settings/CompactAt.tsx; also in a provider's edit page) and the Claude account's windows dialog */
+.compact-at { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+.compact-at-h { font-size: 13px; color: var(--fg-2); }
+.compact-at-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+.compact-at-ctl > .field, .modal .compact-at-ctl > .field { width: 140px; flex: none; height: 28px; }
+.compact-at .sub { font-size: var(--fs-sm); }
+.compact-at .compact-at-err { color: var(--err); }
+.modal.account-windows-dlg { width: min(560px, 94vw); max-height: 92vh; overflow-y: auto; display: flex; flex-direction: column; gap: var(--sp-2); }
+.modal.account-windows-dlg h3 { margin: 0; }
+.modal.account-windows-dlg .sub.err { color: var(--err); white-space: pre-wrap; }
+.modal.account-windows-dlg .row-btns { display: flex; gap: var(--sp-2); margin-top: var(--sp-1); }
+.modal.account-windows-dlg .row-btns .grow { flex: 1; }
+.account-windows { display: flex; flex-direction: column; gap: var(--sp-2); }
+.account-windows .aw-rows { display: flex; flex-direction: column; gap: 6px; }
+.account-windows .aw-row { display: flex; align-items: center; gap: var(--sp-2); min-height: 28px; }
+.account-windows .aw-name { width: 5em; flex: none; color: var(--ink-1); }
+.account-windows .aw-row.dim .aw-name { color: var(--ink-3); }
 /* …while the terminal runs claude setup-token: a card out of its way */
 .add-account-wait { position: fixed; right: 16px; bottom: 16px; z-index: 900; width: min(360px, calc(100vw - 32px)); padding: var(--sp-3); border-radius: var(--r-lg); background: var(--surface-elev); border: 1px solid var(--edge); box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 6px; }
 .add-account-wait .t { display: flex; align-items: center; gap: 8px; font-weight: 600; }

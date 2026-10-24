@@ -9,6 +9,9 @@ import { imeComposing } from '@/ui/ime';
 import { Row } from './controls';
 import { tr } from '@/i18n';
 import { tokenIn } from './account-token';
+import { familyWindows } from '@account-window';
+import { AccountWindowsDialog } from './AccountWindows';
+import { accountSummary, savedWindows } from './compact-model';
 
 const isAccount = (p: Provider) => p.type === 'claude-account';
 
@@ -29,6 +32,9 @@ export function ClaudeAccounts() {
   const setSetting = useStore((s) => s.setSetting);
   const accounts = providers.filter(isAccount);
   const [checking, setChecking] = useState<string | null>(null);
+  // A7: the profile whose 200K / 1M and 自动压缩 are being edited
+  const [editing, setEditing] = useState<string | null>(null);
+  const editingP = accounts.find((p) => p.id === editing);
   const st = useStore.getState;
   const check = async (p: Provider) => {
     setChecking(p.id);
@@ -61,6 +67,7 @@ export function ClaudeAccounts() {
           <Row key={p.id} label={p.name} hint={def === p.id ? tr('新对话默认用这个账号 · 在模型菜单里选「{name} / …」换用', { name: p.name }) : tr('在模型菜单里选「{name} / …」的模型，这个对话就用这个账号', { name: p.name })}>
             <button className={clsx('btn sm', def === p.id && 'primary')} disabled={def === p.id} onClick={() => void setSetting('defaultProviderId', p.id)}>{def === p.id ? tr('默认') : tr('设为默认')}</button>
             <button className="btn sm ghost" disabled={checking === p.id} onClick={() => void check(p)}>{checking === p.id ? tr('测试中…') : tr('测试')}</button>
+            <button className="btn sm ghost" data-act="account-profile-edit" title={accountSummary(familyWindows(p.contextWindows), p.compactAt)} onClick={() => setEditing(p.id)}>{tr('编辑')}</button>
             <button className="btn sm ghost" onClick={() => void rename(p)}>{tr('改名')}</button>
             <button className="btn sm ghost danger" onClick={() => void remove(p)}>{tr('移除')}</button>
           </Row>
@@ -69,6 +76,14 @@ export function ClaudeAccounts() {
           <button className="btn sm" data-act="account-add" onClick={() => useAddAccount.setState({ open: true })}>{tr('添加账号')}</button>
         </Row>
       </div>
+      {editingP && (
+        <AccountWindowsDialog key={editingP.id} name={editingP.name} windows={familyWindows(editingP.contextWindows)} compactAt={editingP.compactAt} onClose={() => setEditing(null)}
+          onSave={async (x) => {
+            // null clears (meta upsertProvider): 1M everywhere / 跟着上下文窗口 leave nothing behind
+            await ws.request({ kind: 'providers.upsert', provider: { id: editingP.id, contextWindows: (savedWindows(x.windows) ?? null) as Provider['contextWindows'], compactAt: (x.compactAt ?? null) as Provider['compactAt'] } });
+            await st().loadProviders();
+          }} />
+      )}
     </>
   );
 }
