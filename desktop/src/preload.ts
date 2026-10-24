@@ -46,6 +46,15 @@ contextBridge.exposeInMainWorld('desktop', {
   captureGuest: (id: number) => ipcRenderer.invoke('desktop:browser:capture', id),
   // a file:/// page the app opens in it next (file-guard.ts: any other file: load there is refused)
   allowFileOnce: (url: string) => ipcRenderer.invoke('desktop:browser:allowFile', url),
+  // the browser panel's tools (guest-tools.ts): a key pressed in a page that is the panel's (find, page zoom); a
+  // page drawn as a device; its downloads; a picture of it saved; a local HTML file picked
+  onGuestKey: on('desktop:guestKey'),
+  guestEmulate: (id: number, vp: unknown) => ipcRenderer.invoke('desktop:browser:emulate', id, vp),
+  onGuestDownload: on('desktop:guestDownload'),
+  openDownload: (p: string) => ipcRenderer.invoke('desktop:download:open', p),
+  showDownload: (p: string) => ipcRenderer.invoke('desktop:download:show', p),
+  saveScreenshot: (id: number, name: string) => ipcRenderer.invoke('desktop:browser:saveShot', id, name),
+  pickHtmlFile: () => ipcRenderer.invoke('desktop:browser:pickHtml'),
   geminiLogin: (partition?: string, proxyServer?: string) => ipcRenderer.invoke('desktop:gemini:login', partition, proxyServer),
   geminiForget: (partition: string) => ipcRenderer.invoke('desktop:gemini:forget', partition),
   geminiRefresh: (partition: string) => ipcRenderer.invoke('desktop:gemini:refresh', partition),

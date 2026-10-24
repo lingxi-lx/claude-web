@@ -3,6 +3,7 @@
 // the app opens a page in it.
 import { create } from 'zustand';
 import { viewable } from './url';
+import type { ViewportId } from './viewport';
 
 export interface BrowserTab {
   id: string;
@@ -25,6 +26,12 @@ export interface BrowserTab {
   busy?: boolean;
   /** the browser profile it was created in: fixed for the tab's life (a <webview>'s partition cannot change) */
   partition: string;
+  /** the loading bar under the address bar, 0–1 (panel-logic.ts `progressOn`); undefined: no bar */
+  progress?: number;
+  /** this tab's page zoom (Ctrl/Cmd + = / - / 0 with the focus in the page); undefined = 100% */
+  zoom?: number;
+  /** drawn as a device (viewport.ts); undefined = auto, the panel's size */
+  viewport?: ViewportId;
 }
 
 /** The user's own profile (what the browser tile always used), and the Agent's separate one (`web.browser.isolated`). */
@@ -109,6 +116,10 @@ export interface WebviewEl extends HTMLElement {
   capturePage?(): Promise<{ toDataURL(): string; isEmpty?(): boolean; getSize?(): { width: number; height: number } }>;
   insertText?(text: string): Promise<void>;
   openDevTools?(): void;
+  setZoomFactor?(factor: number): void;
+  /** the request's id; the answer arrives as `found-in-page` */
+  findInPage?(text: string, o?: { forward?: boolean; findNext?: boolean; matchCase?: boolean }): number;
+  stopFindInPage?(action: 'clearSelection' | 'keepSelection' | 'activateSelection'): void;
 }
 
 interface Live { el: WebviewEl; ready: boolean }
@@ -131,6 +142,13 @@ export function guestReady(tabId: string): void {
 export const guestOf = (tabId: string): WebviewEl | undefined => { const g = live.get(tabId); return g?.ready ? g.el : undefined; };
 /** The element whether or not it is ready yet (its size can be read at once). */
 export const guestElOf = (tabId: string): WebviewEl | undefined => live.get(tabId)?.el;
+/** The tab whose page is the shell's webContents `id` (what the shell names a page by: `desktop.onGuestKey`). */
+export function tabOfGuest(id: number): string | undefined {
+  for (const [tabId, g] of live) {
+    try { if (g.ready && g.el.getWebContentsId() === id) return tabId; } catch { /* not attached */ }
+  }
+  return undefined;
+}
 
 /** The tab's page once it can be driven; undefined when it did not get there in `ms` (no browser here, tab closed). */
 export function waitGuest(tabId: string, ms: number): Promise<WebviewEl | undefined> {

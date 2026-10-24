@@ -24,10 +24,39 @@
 .bw-addr input { flex: 1 1 auto; min-width: 0; height: 100%; border: 0; background: none; outline: none; color: var(--ink-2); font-size: var(--fs-sm); text-overflow: ellipsis; }
 .bw-addr input:focus-visible { outline: none; }
 .bw-addr.on input { color: var(--ink-1); }
-/* loading: a short bar runs along the field's bottom edge */
-.bw-addr.loading::after { content: ''; position: absolute; left: 0; bottom: 0; width: 38%; height: 2px; border-radius: 1px; background: var(--accent); animation: bw-load 1.15s var(--ease-in-out) infinite; }
-@keyframes bw-load { from { transform: translateX(-100%); } to { transform: translateX(265%); } }
-.menu.cm.bw-menu { min-width: 200px; }
+/* loading: a thin bar along the address bar's foot that moves on with the load (panel-logic.ts progressOn), then fades */
+.bw-bar { position: relative; }
+.bw-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--accent); transform-origin: left center; pointer-events: none; transition: transform 0.4s var(--ease-out), opacity 0.25s var(--ease-out) 0.1s; }
+.bw-progress.done { opacity: 0; }
+/* this tab's page zoom when it is not 100%: click to put it back */
+.bw-zoom { flex: none; height: 20px; padding: 0 7px; border-radius: var(--r-pill); background: var(--layer-selected); color: var(--ink-2); font-size: var(--fs-meta); font-variant-numeric: tabular-nums; }
+.bw-zoom:hover { color: var(--ink-1); }
+.menu.cm.bw-menu { min-width: 220px; }
+
+/* 在页面中查找 (Ctrl/Cmd+F) */
+.bw-find { flex: none; display: flex; align-items: center; gap: 2px; margin: 0 8px 6px; padding: 3px 4px 3px 10px; border-radius: var(--r-pill); background: var(--fill-subtle); }
+.bw-find input { flex: 1 1 auto; min-width: 0; height: 24px; border: 0; background: none; outline: none; color: var(--ink-1); font-size: var(--fs-sm); }
+.bw-find input:focus-visible { outline: none; }
+.bw-find:focus-within { box-shadow: 0 0 0 2px var(--focus-ring); }
+.bw-find .cnt { flex: none; min-width: 52px; padding: 0 4px; text-align: center; color: var(--ink-3); font-size: var(--fs-meta); font-variant-numeric: tabular-nums; }
+
+/* 视口: the page at a device's size, centred in the panel and scaled down to fit (BrowserPanel.tsx TabView) */
+.bw-view.page.vp { align-items: center; justify-content: center; overflow: hidden; background: var(--surface-1); }
+.bw-view.page.vp webview { transform-origin: center center; box-shadow: var(--elev-1); background: #fff; }
+
+/* the downloads bar at the panel's foot */
+.bw-dl { flex: none; display: flex; flex-direction: column; gap: 2px; padding: 4px 8px 6px; border-top: 1px solid var(--fill-subtle); background: var(--surface-0); max-height: 40%; overflow: auto; }
+.bw-dl-row { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 2px 4px 2px 8px; border-radius: var(--r-md); }
+.bw-dl-row:hover { background: var(--layer-hover); }
+.bw-dl-row .ic { flex: none; display: inline-flex; color: var(--ink-3); }
+.bw-dl-row.done .ic { color: var(--ok); }
+.bw-dl-row.failed .ic { color: var(--err); }
+.bw-dl-row .tx { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.bw-dl-row .n { color: var(--ink-1); font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bw-dl-row .s { color: var(--ink-3); font-size: var(--fs-meta); font-variant-numeric: tabular-nums; }
+.bw-dl-row .bar { height: 3px; border-radius: 2px; background: var(--fill-subtle); overflow: hidden; }
+.bw-dl-row .bar > i { display: block; height: 100%; background: var(--accent); transform-origin: left center; transition: transform 0.25s var(--ease-out); }
+.bw-dl-row .btn { flex: none; }
 
 /* whose Agent the tab is, and that it is at work */
 .bw-agent { flex: none; display: flex; align-items: center; gap: 7px; min-height: 28px; padding: 0 12px; background: color-mix(in oklab, var(--accent) 9%, transparent); color: var(--ink-2); font-size: var(--fs-meta); }
@@ -71,10 +100,10 @@
 .bw-tip > svg { flex: none; margin-top: 4px; color: var(--accent-text); }
 
 @media (prefers-reduced-motion: reduce) {
-  .bw-addr.loading::after, .bw-agent.busy > svg { animation: none; }
-  .bw-addr.loading::after { width: 100%; opacity: 0.5; }
+  .bw-agent.busy > svg { animation: none; }
+  .bw-progress, .bw-dl-row .bar > i { transition: none; }
 }
-:root[data-reduce-motion='1'] .bw-addr.loading::after { animation: none; width: 100%; opacity: 0.5; }
+:root[data-reduce-motion='1'] .bw-progress, :root[data-reduce-motion='1'] .bw-dl-row .bar > i { transition: none; }
 :root[data-reduce-motion='1'] .bw-agent.busy > svg { animation: none; }
 
 /* 设置 → 联网 → 试一下: what a search came back with */

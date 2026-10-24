@@ -49,6 +49,20 @@ export interface DesktopBridge {
   /** the app opens this `file:///…` page in the built-in browser next: the shell lets that one tab load it, and refuses
    *  every other file: load there (desktop/src/file-guard.ts). False: not a file address it takes. */
   allowFileOnce?(url: string): Promise<boolean>;
+  // the browser panel's tools (desktop/src/guest-tools.ts); `id` is always a <webview>'s `getWebContentsId()`
+  /** Ctrl/Cmd+F or Ctrl/Cmd + = / - / 0 pressed in a page: the panel finds / zooms that tab (not the app) */
+  onGuestKey?(cb: (e: { id: number; key: 'find' | 'zoomIn' | 'zoomOut' | 'zoomReset' }) => void): () => void;
+  /** draw the page as this device (touch, a mobile user agent when `mobile`), or as the panel again (null). False: refused. */
+  guestEmulate?(id: number, vp: { w: number; h: number; touch: boolean; mobile: boolean } | null): Promise<boolean>;
+  /** a download of one of this window's pages, as it goes (features/browser/panel-logic.ts `DownloadRow`) */
+  onGuestDownload?(cb: (e: import('@/features/browser/panel-logic').DownloadRow) => void): () => void;
+  /** open / show a file one of those downloads saved (the shell refuses any other path). False: it did not. */
+  openDownload?(path: string): Promise<boolean>;
+  showDownload?(path: string): Promise<boolean>;
+  /** the page as a PNG where the user picks: the path saved, null when they cancelled, false when it failed */
+  saveScreenshot?(id: number, name: string): Promise<string | null | false>;
+  /** the system's open dialog for one .html / .htm file: its path, or null */
+  pickHtmlFile?(): Promise<string | null>;
   /** 右键菜单 → 引用到输入框 (desktop/src/context-menu.ts): the text that was selected where the menu was opened */
   onQuoteSelection?(cb: (text: string) => void): () => void;
   /** 网关 → Gemini 账号: sign in to Google in a window of its own (`partition`: one from an earlier login, to sign in

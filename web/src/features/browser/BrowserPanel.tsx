@@ -6,8 +6,13 @@ import { Icon } from '@/ui/icons';
 import { imeComposing } from '@/ui/ime';
 import { Popover } from '@/features/composer/Popover';
 import { selectionOf } from './guest';
-import { closeTab, ensureTab, frontTab, guestOf, guestReady, hasWebview, newTab, patchTab, setGuest, useBrowser, type BrowserTab, type WebviewEl } from './state';
+import { closeTab, ensureTab, frontTab, guestElOf, guestOf, guestReady, hasWebview, newTab, openUrl, patchTab, setGuest, tabOf, tabOfGuest, useBrowser, type BrowserTab, type WebviewEl } from './state';
 import { RECENT_KEY, addressToUrl, frameSandbox, loadable, pushRecent, readRecent, siteHue, siteLetter, siteOf } from './url';
+import { VIEWPORT_IDS, fitScale, viewportLabel, viewportOf, type ViewportId } from './viewport';
+import { nextPageZoom, progressOn, screenshotName, type LoadEvent } from './panel-logic';
+import { fileUrl } from './auto-open';
+import { FindBar } from './FindBar';
+import { DownloadsBar, useDownloadEvents } from './Downloads';
 import './browser.css';
 import { tr } from '@/i18n';
 import { ws } from '@/ws/client';
@@ -37,6 +42,44 @@ function go(tab: BrowserTab, input: string): boolean {
   return true;
 }
 
+/** The loading bar moves on (panel-logic.ts); once full it fades away a moment later. */
+function progress(tabId: string, ev: LoadEvent) {
+  patchTab(tabId, { progress: progressOn(tabOf(tabId)?.progress, ev) });
+  if (ev === 'stop') setTimeout(() => { const t = tabOf(tabId); if (t && !t.loading && t.progress === 1) patchTab(tabId, { progress: undefined }); }, 320);
+}
+
+/** A tab's page zoom: one step in / out, or back to 100% — that tab's page only, not the app (zoom.ts is the app's). */
+function zoomTab(tabId: string, ask: 'in' | 'out' | 'reset') {
+  const z = nextPageZoom(tabOf(tabId)?.zoom, ask);
+  patchTab(tabId, { zoom: z });
+  try { guestOf(tabId)?.setZoomFactor?.(z); } catch { /* not attached */ }
+}
+
+/** The device the shell draws each tab's page as, as last told (tab id → choice): told again only when it changes. */
+const emulated = new Map<string, ViewportId>();
+function applyViewport(tabId: string) {
+  const el = guestOf(tabId);
+  const want = tabOf(tabId)?.viewport ?? 'auto';
+  if (!el || !desktop?.guestEmulate || (emulated.get(tabId) ?? 'auto') === want) return;
+  emulated.set(tabId, want);
+  try { void desktop.guestEmulate(el.getWebContentsId(), viewportOf(want)).catch(() => emulated.delete(tabId)); } catch { emulated.delete(tabId); }
+}
+
+/** The size of an element's box, followed while `on` (a device's page is scaled to fit it). */
+function useBox(ref: React.RefObject<HTMLElement | null>, on: boolean) {
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || !on) return;
+    const measure = () => setBox((b) => (b.w === el.clientWidth && b.h === el.clientHeight ? b : { w: el.clientWidth, h: el.clientHeight }));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref, on]);
+  return box;
+}
+
 function recordVisit(url: string, title: string) {
   const st = useStore.getState();
   const next = pushRecent(readRecent(st.settings[RECENT_KEY]), { url, title, at: Date.now() });
@@ -61,7 +104,10 @@ const ALLOW_POPUPS = { allowpopups: 'true' } as unknown as { allowpopups?: boole
  */
 function TabView({ tab, front }: { tab: BrowserTab; front: boolean }) {
   const ref = useRef<WebviewEl | null>(null);
+  const view = useRef<HTMLDivElement>(null);
   const webview = hasWebview();
+  const vp = webview ? viewportOf(tab.viewport) : null;
+  const box = useBox(view, !!vp);
   useEffect(() => {
     const el = ref.current;
     if (!el || !webview) return;
@@ -70,10 +116,21 @@ function TabView({ tab, front }: { tab: BrowserTab; front: boolean }) {
     const sync = () => {
       try { patchTab(id, { url: el.getURL() || tab.src, title: el.getTitle(), back: el.canGoBack(), fwd: el.canGoForward() }); } catch { /* not attached yet */ }
     };
-    const onReady = () => { guestReady(id); sync(); };
-    const onStart = () => patchTab(id, { loading: true, error: undefined });
+    const onReady = () => {
+      guestReady(id);
+      sync();
+      progress(id, 'ready');
+      // the tab's own zoom and device, said again to each new page (Chromium keeps zoom per site, and a new renderer
+      // after a cross-site navigation starts without the device)
+      const t = tabOf(id);
+      try { if (t?.zoom && t.zoom !== 1) el.setZoomFactor?.(t.zoom); } catch { /* not attached */ }
+      if (t?.viewport && t.viewport !== 'auto') emulated.delete(id);
+      applyViewport(id);
+    };
+    const onStart = () => { patchTab(id, { loading: true, error: undefined }); progress(id, 'start'); };
     const onStop = () => {
       patchTab(id, { loading: false });
+      progress(id, 'stop');
       sync();
       // the user's own browsing is what 最近打开 lists (not what an Agent looked up)
       try { if (!tab.agent) recordVisit(el.getURL(), el.getTitle()); } catch { /* not attached */ }
@@ -81,13 +138,13 @@ function TabView({ tab, front }: { tab: BrowserTab; front: boolean }) {
     // a page that arrives after all is no failure: the shell cancels a load and starts it again with another user
     // agent (desktop/src/main.ts, Google's sign-in), and the cancelled one reports -2. A load that really fails
     // never reaches did-navigate.
-    const onNavigate = () => { patchTab(id, { error: undefined }); sync(); };
+    const onNavigate = () => { patchTab(id, { error: undefined }); progress(id, 'navigate'); sync(); };
     const onTitle = (e: Event) => patchTab(id, { title: String((e as unknown as { title?: string }).title ?? '').slice(0, 200) });
     const onFail = (e: Event) => {
       const f = e as unknown as { errorCode?: number; errorDescription?: string; isMainFrame?: boolean };
       // -3: the load was replaced by another (a redirect in script, a download) — not a failure to show
       if (f.isMainFrame === false || f.errorCode === -3) return;
-      patchTab(id, { loading: false, error: `${f.errorDescription || tr('加载失败')}（${f.errorCode ?? '?'}）` });
+      patchTab(id, { loading: false, progress: undefined, error: `${f.errorDescription || tr('加载失败')}（${f.errorCode ?? '?'}）` });
     };
     el.addEventListener('dom-ready', onReady);
     el.addEventListener('did-start-loading', onStart);
@@ -105,16 +162,23 @@ function TabView({ tab, front }: { tab: BrowserTab; front: boolean }) {
       el.removeEventListener('page-title-updated', onTitle);
       el.removeEventListener('did-fail-load', onFail);
       setGuest(id, null);
+      emulated.delete(id);
     };
   }, [tab.id, webview, !!tab.src]);
+  // the menu's 视口 changed: the shell draws the page as that device (or as the panel again)
+  useEffect(() => { if (webview && tab.src) applyViewport(tab.id); }, [tab.viewport, tab.id, webview, !!tab.src]);
 
   if (!tab.src) return <div className="bw-view" data-tab={tab.id} hidden={!front}><NewTabPage tab={tab} front={front} /></div>;
+  // a device: the page at the device's size, centred, scaled down to fit the panel. Only the element's style
+  // changes — moving it into another parent would make a new page
+  const scale = vp ? fitScale(box, vp) : 1;
+  const sized = vp ? { width: vp.w, height: vp.h, flex: 'none', transform: scale < 1 ? `scale(${scale})` : undefined } : undefined;
   return (
-    <div className={clsx('bw-view page', !front && 'back')} data-tab={tab.id} aria-hidden={!front}>
+    <div ref={view} className={clsx('bw-view page', !front && 'back', vp && 'vp')} data-tab={tab.id} data-viewport={tab.viewport && tab.viewport !== 'auto' ? tab.viewport : undefined} aria-hidden={!front}>
       {webview ? (
         // No `allowpopups`: the tag reads the attribute's PRESENCE, so `allowpopups="false"` would turn popups ON.
         // A page's new windows arrive as new tabs here (desktop/src/main.ts → `desktop.onBrowserPopup`).
-        <webview ref={ref as unknown as React.Ref<HTMLWebViewElement>} src={tab.src} partition={tab.partition} {...ALLOW_POPUPS} />
+        <webview ref={ref as unknown as React.Ref<HTMLWebViewElement>} src={tab.src} partition={tab.partition} style={sized} {...ALLOW_POPUPS} />
       ) : (
         <>
           <iframe src={tab.frameUrl ?? tab.src} title={tabName(tab)} sandbox={frameSandbox(tab.frameUrl ?? tab.src, location.origin)} />
@@ -259,7 +323,7 @@ function AddressBar({ tab }: { tab: BrowserTab }) {
       {tab.loading
         ? <button className="icon-btn xs" title={tr('停止加载')} aria-label={tr('停止加载')} onClick={() => drive(tab.id, 'stop')}><Icon name="close" size={14} /></button>
         : <button className="icon-btn xs" disabled={!hasPage} title={tr('重新加载')} aria-label={tr('重新加载')} onClick={() => drive(tab.id, 'reload')}><Icon name="refresh" size={14} /></button>}
-      <div className={clsx('bw-addr', editing && 'on', tab.loading && 'loading')}>
+      <div className={clsx('bw-addr', editing && 'on')}>
         <Icon name={/^https:/i.test(tab.url) ? 'lock' : 'web'} size={13} />
         <input
           ref={field}
@@ -277,17 +341,95 @@ function AddressBar({ tab }: { tab: BrowserTab }) {
             if (e.key === 'Escape') { e.stopPropagation(); setAddr(tab.url); e.currentTarget.blur(); }
           }}
         />
+        {tab.zoom !== undefined && Math.abs(tab.zoom - 1) > 0.001 && (
+          <button className="bw-zoom" data-id="zoom" title={tr('这个标签页的缩放：点一下还原到 100%')} onClick={() => zoomTab(tab.id, 'reset')}>{Math.round(tab.zoom * 100)}%</button>
+        )}
       </div>
       <button className="icon-btn xs" disabled={!hasPage} title={tr('把这个页面的地址（和选中的文字）放进对话的输入框')} aria-label={tr('发给对话')} data-id="to-chat" onClick={() => void toChat()}><Icon name="quote" size={14} /></button>
       <button className="icon-btn xs" title={tr('新标签页')} aria-label={tr('新标签页')} data-id="new-tab" onClick={() => newTab()}><Icon name="plus" size={15} /></button>
-      <button ref={more} className={clsx('icon-btn xs', menu && 'active')} disabled={!hasPage} title={tr('更多')} aria-label={tr('更多')} aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)}><Icon name="more" size={15} /></button>
+      <button ref={more} className={clsx('icon-btn xs', menu && 'active')} disabled={!hasPage && !canPickHtml()} title={tr('更多')} aria-label={tr('更多')} aria-haspopup="menu" aria-expanded={menu} data-id="more" onClick={() => setMenu(!menu)}><Icon name="more" size={15} /></button>
       {menu && (
         <Popover anchor={more} onClose={closeMenu} prefer="down" align="right" className="bw-menu" label={tr('这个页面')}>
-          <button type="button" data-mi role="menuitem" className="cm-it" onClick={() => { closeMenu(false); external(); }}><span className="cm-ck"><Icon name="external" size={14} /></span><span className="cm-tx"><span className="cm-l">{tr('在系统浏览器打开')}</span></span></button>
-          <button type="button" data-mi role="menuitem" className="cm-it" onClick={() => { closeMenu(false); void navigator.clipboard?.writeText(tab.url).then(() => toast(tr('已复制地址'), true), () => toast(tr('没能复制'))); }}><span className="cm-ck"><Icon name="copy" size={14} /></span><span className="cm-tx"><span className="cm-l">{tr('复制地址')}</span></span></button>
-          {hasWebview() && <button type="button" data-mi role="menuitem" className="cm-it" onClick={() => { closeMenu(false); try { guestOf(tab.id)?.openDevTools?.(); } catch { /* not attached */ } }}><span className="cm-ck"><Icon name="bash" size={14} /></span><span className="cm-tx"><span className="cm-l">{tr('开发者工具')}</span></span></button>}
+          <PageMenu tab={tab} close={closeMenu} external={external} />
         </Popover>
       )}
+      {tab.progress !== undefined && <span className={clsx('bw-progress', tab.progress >= 1 && 'done')} data-id="progress" aria-hidden style={{ transform: `scaleX(${tab.progress})` }} />}
+    </div>
+  );
+}
+
+/** 打开本地 HTML 文件… is there: the desktop app, whose shell has the open dialog and lets the app open a file: page. */
+const canPickHtml = () => hasWebview() && !!desktop?.pickHtmlFile && !!desktop.allowFileOnce;
+
+/** 打开本地 HTML 文件…: the system's open dialog, then the file in a tab — once the shell has let that tab load it (file-guard.ts). */
+async function openLocalHtml() {
+  const toast = useStore.getState().toast;
+  const path = await desktop?.pickHtmlFile?.().catch(() => null);
+  if (!path) return;
+  const url = fileUrl(path);
+  const ok = await desktop?.allowFileOnce?.(url).catch(() => false);
+  if (!ok) return toast(tr('打不开这个文件'));
+  openUrl(url);
+}
+
+/** 保存截图: the page as it is drawn, as a PNG where the user says (the shell's save dialog: dlg has no file picker). */
+async function saveShot(tab: BrowserTab) {
+  const toast = useStore.getState().toast;
+  const el = guestOf(tab.id);
+  if (!el || !desktop?.saveScreenshot) return toast(tr('页面还没加载好'));
+  let r: string | null | false;
+  try { r = await desktop.saveScreenshot(el.getWebContentsId(), screenshotName(tab.title || siteOf(tab.url), new Date())); } catch { r = false; }
+  if (r === null) return;
+  if (r === false) return toast(tr('没能保存截图'));
+  toast(tr('截图已保存：{path}', { path: r }), true);
+}
+
+/** The ⋯ menu: what can be done with the page, and 视口 › (a view of its own, like the + menu's 连接器 ›). */
+function PageMenu({ tab, close, external }: { tab: BrowserTab; close: (refocus: boolean) => void; external: () => void }) {
+  const [view, setView] = useState<'main' | 'viewport'>('main');
+  const toast = useStore((s) => s.toast);
+  const box = useRef<HTMLDivElement>(null);
+  // a view switched under the keyboard: its checked row (else its first) takes the focus
+  const first = useRef(true);
+  useLayoutEffect(() => {
+    if (first.current) { first.current = false; return; }
+    const rows = [...(box.current?.querySelectorAll<HTMLElement>('[data-mi]:not(:disabled)') ?? [])];
+    (rows.find((b) => b.getAttribute('aria-checked') === 'true') ?? rows[0])?.focus({ preventScroll: true });
+  }, [view]);
+  const hasPage = !!tab.src;
+  const live = hasWebview() && hasPage;
+  const row = (id: string, icon: Parameters<typeof Icon>[0]['name'], label: string, act: () => void, after?: React.ReactNode) => (
+    <button type="button" data-mi role="menuitem" className="cm-it" data-act={id} onClick={act}>
+      <span className="cm-ck"><Icon name={icon} size={14} /></span><span className="cm-tx"><span className="cm-l">{label}</span></span>{after}
+    </button>
+  );
+  if (view === 'viewport') {
+    const cur = tab.viewport ?? 'auto';
+    return (
+      <div ref={box} className="cm-ref" data-id="viewport-menu">
+        <div className="cm-ref-head">
+          <button type="button" data-mi className="icon-btn xs" aria-label={tr('返回')} onClick={() => setView('main')}><Icon name="chevronRight" size={12} className="flip" /></button>
+          <span className="cm-l">{tr('视口')}</span>
+        </div>
+        {VIEWPORT_IDS.map((id) => (
+          <button key={id} type="button" data-mi role="menuitemradio" aria-checked={cur === id} className={clsx('cm-it', cur === id && 'on')} data-vp={id}
+            onClick={() => { close(false); patchTab(tab.id, { viewport: id === 'auto' ? undefined : id }); }}>
+            <span className="cm-ck">{cur === id && <Icon name="check" size={14} />}</span>
+            <span className="cm-tx"><span className="cm-l">{viewportLabel(id)}</span></span>
+          </button>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div ref={box} className="cm-ref">
+      {hasPage && row('external', 'external', tr('在系统浏览器打开'), () => { close(false); external(); })}
+      {hasPage && row('copy-url', 'copy', tr('复制地址'), () => { close(false); void navigator.clipboard?.writeText(tab.url).then(() => toast(tr('已复制地址'), true), () => toast(tr('没能复制'))); })}
+      {live && desktop?.saveScreenshot && row('screenshot', 'image', tr('保存截图'), () => { close(false); void saveShot(tab); })}
+      {live && desktop?.guestEmulate && row('viewport', 'device', tr('视口'), () => setView('viewport'),
+        <span className="cm-r">{tab.viewport && tab.viewport !== 'auto' ? viewportLabel(tab.viewport).split(' · ')[0] : ''} <Icon name="chevronRight" size={12} /></span>)}
+      {canPickHtml() && row('open-html', 'folder', tr('打开本地 HTML 文件…'), () => { close(false); void openLocalHtml(); })}
+      {live && row('devtools', 'bash', tr('开发者工具'), () => { close(false); try { guestOf(tab.id)?.openDevTools?.(); } catch { /* not attached */ } })}
     </div>
   );
 }
@@ -317,10 +459,34 @@ export function BrowserPanel({ visible }: { visible: boolean }) {
   useLayoutEffect(() => { ensureTab(); }, []);
   // a page's own new windows open as tabs here
   useEffect(() => desktop?.onBrowserPopup?.((p) => { if (p?.url && loadable(p.url)) newTab({ url: p.url }); }), []);
+  useDownloadEvents();
+  // 在页面中查找: which tab it searches; `n` changes each time it is asked for again (the field takes the focus back)
+  const [find, setFind] = useState<{ tabId: string; n: number } | null>(null);
+  const openFind = useCallback((tabId: string) => {
+    if (!guestOf(tabId)) return;
+    frontTab(tabId);
+    setFind((f) => ({ tabId, n: (f?.n ?? 0) + 1 }));
+  }, []);
+  // the keys pressed in a page come from the shell (desktop/src/guest-tools.ts): find, or that tab's zoom
+  useEffect(() => desktop?.onGuestKey?.((e) => {
+    const tabId = typeof e?.id === 'number' ? tabOfGuest(e.id) : undefined;
+    if (!tabId) return;
+    if (e.key === 'find') openFind(tabId);
+    else zoomTab(tabId, e.key === 'zoomIn' ? 'in' : e.key === 'zoomOut' ? 'out' : 'reset');
+  }), [openFind]);
   const tab = tabs.find((t) => t.id === activeId) ?? tabs[0];
   if (!tab) return <div className="bw" />;
+  const findOn = find && find.tabId === tab.id && !!tab.src ? find : null;
   return (
-    <div className="bw" data-visible={visible || undefined}>
+    <div className="bw" data-visible={visible || undefined}
+      // Ctrl/Cmd+F with the focus in the panel (not in the page — that one the shell sends): this page, not the
+      // conversation's find (ChatView listens on window: stopping it here keeps it from opening too)
+      onKeyDown={(e) => {
+        if (!((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && !e.shiftKey && !e.altKey) || !tab.src || !guestOf(tab.id)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        openFind(tab.id);
+      }}>
       {tabs.length > 1 && (
         <div className="bw-tabs" role="tablist" aria-label={tr('浏览器的标签页')}>
           {tabs.map((t) => (
@@ -336,10 +502,12 @@ export function BrowserPanel({ visible }: { visible: boolean }) {
         </div>
       )}
       <AddressBar tab={tab} />
+      {findOn && <FindBar key={findOn.tabId} tabId={findOn.tabId} focusKey={findOn.n} onClose={() => { setFind(null); guestElOf(findOn.tabId)?.focus(); }} />}
       {tab.agent && <AgentStrip tab={tab} />}
       <div className="bw-body">
         {tabs.map((t) => <TabView key={t.id} tab={t} front={t.id === tab.id} />)}
       </div>
+      <DownloadsBar />
     </div>
   );
 }

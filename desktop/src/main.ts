@@ -7,7 +7,8 @@ import { autoUpdater } from 'electron-updater';
 import { CHECK_EVERY_MS, FIRST_CHECK_MS, firstLine, isRequired, macBundle, macSelfUpdateBlocker, macZip, manualDownloadUrl, notesText, releaseFileUrl, releasePage, updateMode, type MacBlocker, type ReleaseFile, type UpdateMode } from './update-policy';
 import { MacSelfUpdate } from './mac-update';
 import { execFileSync } from 'node:child_process';
-import { captureGuest } from './browser-capture';
+import { captureGuest, drawGuest, hostedGuest } from './browser-capture';
+import { Downloads, cleanVp, emulate, emulatedUa, forgetGuest, guestKeyOf, safeName } from './guest-tools';
 import { geminiForget, geminiLogin, geminiRefresh } from './gemini-login';
 import { cleanUserAgent } from './user-agent';
 import { userAgentFor } from './sign-in-ua';
@@ -96,6 +97,17 @@ const stateFile = () => path.join(app.getPath('userData'), 'window-state.json');
 // — except Google's sign-in, which only lets Electron's own user agent in (sign-in-ua.ts)
 const HONEST_UA = app.userAgentFallback;
 app.userAgentFallback = cleanUserAgent(app.userAgentFallback);
+/** The user agent a built-in browser page loads `url` with: Google's sign-in its own, a tab drawn as a phone / tablet that one's (guest-tools.ts), else the cleaned one. */
+const guestUa = (guestId: number, url: string) => userAgentFor(url, HONEST_UA, emulatedUa(guestId) ?? app.userAgentFallback);
+/** The built-in browser's downloads (guest-tools.ts): into the Downloads folder, reported to the window of the page. */
+const downloads = new Downloads(() => {
+  // the system's Downloads folder; where Windows cannot say (a profile without the known folder), ~/Downloads
+  try { return app.getPath('downloads'); } catch {
+    const dir = path.join(os.homedir(), 'Downloads');
+    fs.mkdirSync(dir, { recursive: true });
+    return dir;
+  }
+}, (p) => fs.existsSync(p));
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -307,8 +319,17 @@ function createWindow(url: string | null, winId = 'main', bounds?: Bounds, hidde
   });
   win.webContents.on('did-attach-webview', (_e, guest) => {
     guardSession(guest.session, fileGuard);
+    downloads.watch(guest.session);
     const guestId = guest.id;
-    guest.once('destroyed', () => fileGuard.forget(guestId));
+    guest.once('destroyed', () => { fileGuard.forget(guestId); forgetGuest(guestId); });
+    // Ctrl/Cmd+F and Ctrl/Cmd + = / - / 0 pressed in the page belong to the panel (find, this tab's zoom) — and not to
+    // the menu's accelerators, which would zoom the app (guest-tools.ts guestKeyOf)
+    guest.on('before-input-event', (e, input) => {
+      const key = guestKeyOf(input, isMac);
+      if (!key || win.isDestroyed()) return;
+      e.preventDefault();
+      win.webContents.send('desktop:guestKey', { id: guestId, key });
+    });
     // a page's new window is a new tab of this window's built-in browser (features/browser/BrowserPanel.tsx)
     guest.setWindowOpenHandler(({ url: target }) => {
       if (/^https?:/.test(target) && !win.isDestroyed()) win.webContents.send('desktop:browserPopup', { url: target });
@@ -334,7 +355,7 @@ function createWindow(url: string | null, winId = 'main', bounds?: Bounds, hidde
     });
     guest.on('did-start-navigation', (e) => {
       if (!e.isMainFrame || e.isSameDocument) return;
-      const ua = userAgentFor(e.url, HONEST_UA, app.userAgentFallback);
+      const ua = guestUa(guestId, e.url);
       if (guest.getUserAgent() === ua) return;
       guest.setUserAgent(ua);
       if (ua === HONEST_UA) void guest.loadURL(e.url).catch(() => { /* replaced, or the tab closed */ });
@@ -827,6 +848,43 @@ ipcMain.handle('desktop:browser:capture', (e, id: unknown) => captureGuest(e.sen
 // the app is about to open a page on this machine in its built-in browser (a page Claude wrote: auto-open.ts); only
 // our own windows can say so (a guest page has no preload)
 ipcMain.handle('desktop:browser:allowFile', (e, url: unknown) => !!BrowserWindow.fromWebContents(e.sender) && fileGuard.allowOnce(url));
+// the browser panel's tools (guest-tools.ts). Only for a page the asking window hosts.
+// 视口: draw a tab's page as a phone / tablet / desktop, or as the panel again (null)
+ipcMain.handle('desktop:browser:emulate', async (e, id: unknown, vp: unknown) => {
+  const guest = hostedGuest(e.sender, id);
+  const clean = cleanVp(vp);
+  if (!guest || clean === undefined) return false;
+  await emulate(guest, clean, { base: app.userAgentFallback, uaFor: guestUa });
+  return true;
+});
+// 保存截图: the page as it is drawn, full size, as a PNG where the user says. The path saved, null when the user
+// cancelled, false when nothing could be drawn or written.
+ipcMain.handle('desktop:browser:saveShot', async (e, id: unknown, name: unknown) => {
+  const w = BrowserWindow.fromWebContents(e.sender);
+  const img = w ? await drawGuest(e.sender, id) : null;
+  if (!w || !img) return false;
+  const file = safeName(typeof name === 'string' && name ? name : 'screenshot.png').replace(/(\.png)?$/i, '.png');
+  const r = await dialog.showSaveDialog(w, { title: tr('保存截图'), defaultPath: path.join(app.getPath('downloads'), file), filters: [{ name: 'PNG', extensions: ['png'] }] });
+  if (r.canceled || !r.filePath) return null;
+  try { await fs.promises.writeFile(r.filePath, img.toPNG()); return r.filePath; } catch (err) { mainLog(`saveShot: ${(err as Error).message}`); return false; }
+});
+// 打开本地 HTML 文件…: the file the user picks (the page then asks allowFile for it like any other file it opens)
+ipcMain.handle('desktop:browser:pickHtml', async (e) => {
+  const w = BrowserWindow.fromWebContents(e.sender);
+  if (!w) return null;
+  const r = await dialog.showOpenDialog(w, { title: tr('打开本地 HTML 文件'), properties: ['openFile'], filters: [{ name: 'HTML', extensions: ['html', 'htm'] }] });
+  return r.canceled ? null : r.filePaths[0] ?? null;
+});
+// the downloads bar's 打开 / 在文件夹中显示: only a file a download of the built-in browser saved
+ipcMain.handle('desktop:download:open', async (e, p: unknown) => {
+  if (!BrowserWindow.fromWebContents(e.sender) || !downloads.owns(p)) return false;
+  return (await shell.openPath(p as string)) === '';
+});
+ipcMain.handle('desktop:download:show', (e, p: unknown) => {
+  if (!BrowserWindow.fromWebContents(e.sender) || !downloads.owns(p)) return false;
+  shell.showItemInFolder(p as string);
+  return true;
+});
 // 网关 → 添加 Gemini 账号: sign in to Google in this computer's Chrome and hand back its cookies (gemini-login.ts)
 ipcMain.handle('desktop:gemini:login', (_e, partition: unknown, proxyServer: unknown) =>
   geminiLogin(partition, typeof proxyServer === 'string' ? proxyServer : undefined));
