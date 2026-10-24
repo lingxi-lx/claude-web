@@ -6,10 +6,20 @@
 // request is only ever the top frame of a tab the app itself opened on that very file: nothing the page asks for
 // from file: (fetch, script, picture, style, frame) loads, and the page cannot take its tab to another file.
 // A page's own pictures and styles next to it do not load either — the app's doc preview shows those.
-import type { Session } from 'electron';
+//
+// Workers (stage B task 9, found by the real-Electron check): a blob: dedicated Worker or a SharedWorker started by
+// such a page fetched — and read with a synchronous XMLHttpRequest — any file, and those requests never reach
+// `webRequest` at all. So the guard also serves the file: scheme itself in these profiles (`protocol.handle`): only
+// the top-frame load `webRequest` has just let through is served, with a Content-Security-Policy that lets the page
+// start no worker, frame or plugin; whatever else reaches the handler is refused.
+import { net, type Session } from 'electron';
 
 /** How long an address the app is about to open stays allowed before its tab asks for it. */
 export const ALLOW_TTL_MS = 15_000;
+/** How long a top-frame load `webRequest` let through waits for the file: handler to serve it. */
+export const SERVE_TTL_MS = 10_000;
+/** What a file: page served by the guard may not do: start a worker (dedicated / shared / service), a frame, a plugin. */
+export const FILE_PAGE_CSP = "worker-src 'none'; child-src 'none'; frame-src 'none'; object-src 'none'";
 
 /** One key per file address (`file:///C:/a%20b/x.html`, the `#…` cut off); null for anything that is not `file:///…`. */
 export function fileKey(url: string): string | null {
@@ -40,6 +50,8 @@ export function fileRequestAllowed(req: FileRequest, allow: ReadonlySet<string>)
 export class FileGuard {
   private pending = new Map<string, number>();
   private granted = new Map<number, string>();
+  /** top-frame loads `allowed` let through, until the file: handler serves them (`takeServe`) */
+  private passed = new Map<string, number>();
 
   allowOnce(url: unknown, now = Date.now()): boolean {
     const key = typeof url === 'string' ? fileKey(url) : null;
@@ -61,7 +73,24 @@ export class FileGuard {
       this.pending.delete(key);
       if (req.webContentsId !== undefined) this.granted.set(req.webContentsId, key);
     }
+    if (ok && key) {
+      for (const [k, at] of this.passed) if (at <= now) this.passed.delete(k);
+      this.passed.set(key, now + SERVE_TTL_MS);
+    }
     return ok;
+  }
+
+  /**
+   * The file: handler asks whether to serve `url`: only a top-frame load `allowed` has just let through, once. A
+   * request `webRequest` never saw (a worker's) is refused.
+   */
+  takeServe(url: string, now = Date.now()): boolean {
+    const key = fileKey(url);
+    if (!key) return false;
+    const at = this.passed.get(key);
+    if (at === undefined) return false;
+    this.passed.delete(key);
+    return at > now;
   }
 
   /** A tab's page is gone. */
@@ -83,4 +112,15 @@ export function guardSession(ses: Session, guard: FileGuard): void {
   ses.webRequest.onBeforeRequest({ urls: ['file://*/*'] }, (d, cb) => {
     cb({ cancel: !guard.allowed({ url: d.url, resourceType: d.resourceType, webContentsId: d.webContentsId }) });
   });
+  ses.protocol.handle('file', (req) => serveFile(req.url, guard));
+}
+
+/** The guard's file: handler: the page `webRequest` let through, read from disk, with FILE_PAGE_CSP; anything else 403. */
+export async function serveFile(url: string, guard: Pick<FileGuard, 'takeServe'>, read: (url: string) => Promise<Response> = (u) => net.fetch(u, { bypassCustomProtocolHandlers: true })): Promise<Response> {
+  if (!guard.takeServe(url)) return new Response(null, { status: 403 });
+  let r: Response;
+  try { r = await read(url); } catch { return new Response(null, { status: 404 }); }
+  const headers = new Headers(r.headers);
+  headers.set('Content-Security-Policy', FILE_PAGE_CSP);
+  return new Response(r.body, { status: r.status, statusText: r.statusText, headers });
 }

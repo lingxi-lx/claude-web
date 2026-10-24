@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ALLOW_TTL_MS, FileGuard, fileKey, fileRequestAllowed } from './file-guard';
+import { ALLOW_TTL_MS, FILE_PAGE_CSP, FileGuard, SERVE_TTL_MS, fileKey, fileRequestAllowed, serveFile } from './file-guard';
 
 const PAGE = 'file:///C:/w/my%20page.html';
 
@@ -72,5 +72,41 @@ describe('FileGuard', () => {
     g.allowOnce('file:///C:/w/b.html', 2);
     expect(g.allowed({ url: 'file:///C:/w/b.html', resourceType: 'mainFrame', webContentsId: 1 }, 3)).toBe(true);
     expect(g.allowed({ url: PAGE, resourceType: 'mainFrame', webContentsId: 1 }, 4)).toBe(false);
+  });
+});
+
+describe('the file: handler (workers: their requests never reach webRequest)', () => {
+  it('serves only a top-frame load webRequest has just let through, once, and not after it runs out', () => {
+    const g = new FileGuard();
+    // nothing let through: a worker's fetch of any file is refused
+    expect(g.takeServe('file:///C:/Users/me/.ssh/id_ed25519', 0)).toBe(false);
+    g.allowOnce(PAGE, 0);
+    expect(g.allowed({ url: PAGE, resourceType: 'mainFrame', webContentsId: 1 }, 1)).toBe(true);
+    expect(g.takeServe(`${PAGE}#x`, 2)).toBe(true);
+    expect(g.takeServe(PAGE, 3)).toBe(false); // once
+    // a refused request is never served
+    expect(g.allowed({ url: 'file:///C:/secret.txt', resourceType: 'xhr', webContentsId: 1 }, 4)).toBe(false);
+    expect(g.takeServe('file:///C:/secret.txt', 5)).toBe(false);
+    // let through, but served too late
+    expect(g.allowed({ url: PAGE, resourceType: 'mainFrame', webContentsId: 1 }, 10)).toBe(true);
+    expect(g.takeServe(PAGE, 10 + SERVE_TTL_MS + 1)).toBe(false);
+    expect(g.takeServe('https://a.b/', 0)).toBe(false);
+  });
+
+  it('the page goes out with a policy that starts no worker, frame or plugin; anything else is 403', async () => {
+    const ok = { takeServe: () => true };
+    const r = await serveFile(PAGE, ok, async () => new Response('<h1>hi</h1>', { status: 200, headers: { 'Content-Type': 'text/html' } }));
+    expect(r.status).toBe(200);
+    expect(r.headers.get('Content-Security-Policy')).toBe(FILE_PAGE_CSP);
+    expect(FILE_PAGE_CSP).toContain("worker-src 'none'");
+    expect(FILE_PAGE_CSP).toContain("frame-src 'none'");
+    expect(r.headers.get('Content-Type')).toBe('text/html');
+    expect(await r.text()).toBe('<h1>hi</h1>');
+    let read = 0;
+    const no = await serveFile('file:///C:/secret.txt', { takeServe: () => false }, async () => { read++; return new Response('secret'); });
+    expect(no.status).toBe(403);
+    expect(read).toBe(0);
+    const gone = await serveFile(PAGE, ok, async () => { throw new Error('ENOENT'); });
+    expect(gone.status).toBe(404);
   });
 });
