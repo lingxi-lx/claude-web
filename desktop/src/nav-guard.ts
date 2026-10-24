@@ -15,6 +15,18 @@ export function allowNavigation(target: string, appUrl: string | undefined): boo
 }
 
 /**
+ * What a `window.open` / middle click / target=_blank from the app page gets: the app page itself (a new app window
+ * from the browser path of features/workbench/windows.ts) → a window; another web page → the system browser; anything
+ * else, including other addresses on the app's own origin (`/C:/Users/a/x.html`: a path link resolved against the
+ * app), → nothing (2026-10-24 review I2: same origin used to be enough and opened a stray blank window).
+ */
+export function windowOpenAction(target: string, appUrl: string | undefined): 'app-window' | 'external' | 'deny' {
+  if (allowNavigation(target, appUrl)) return 'app-window';
+  if (sameOrigin(target, appUrl)) return 'deny';
+  return /^https?:/i.test(target) ? 'external' : 'deny';
+}
+
+/**
  * A renderer that keeps dying is not reloaded for ever: `limit` crashes inside `windowMs` → stop on a notice page.
  * Stopping is final: the notice page needs a renderer too, and one that dies on every start would otherwise load it
  * again and again — so every later crash is 'ignore' until `reset()` (the app page loaded again).

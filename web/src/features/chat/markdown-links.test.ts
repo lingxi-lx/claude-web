@@ -1,13 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { Markdown } from './Markdown';
+import { linkHandlers, Markdown } from './Markdown';
 import { routeLink } from './link-route';
 
 // the real <Markdown> (react-markdown + its urlTransform + the `a` component) rendered without a DOM; what it imports
 // that touches browser globals or the app is stubbed
+const openTile = vi.fn();
 vi.mock('@/store', () => {
-  const state = { open: {}, activeId: null };
+  const state = { open: {}, activeId: null, openTile: (...a: unknown[]) => openTile(...a) };
   const useStore = Object.assign((sel: (s: unknown) => unknown) => sel(state), { getState: () => state });
   return { useStore };
 });
@@ -39,6 +40,25 @@ describe('<Markdown> links keep their href and route', () => {
   it('dangerous schemes are still blanked by the default transform', () => {
     expect(hrefs('[x](javascript:alert(1))')).toEqual(['']);
     expect(hrefs('[x](https://e.com/a)')).toEqual(['https://e.com/a']);
+  });
+  // review I2: a middle click on a path link opened a stray window on the app's address
+  it('a middle click is routed like a click (and prevented); other buttons are left alone', () => {
+    const h = linkHandlers('file:///C:/x.html', undefined, 's1');
+    const ev = (button: number) => ({ button, preventDefault: vi.fn() });
+    openTile.mockClear();
+    const right = ev(2);
+    h.onAuxClick(right);
+    expect(right.preventDefault).not.toHaveBeenCalled();
+    expect(openTile).not.toHaveBeenCalled();
+    const middle = ev(1);
+    h.onAuxClick(middle);
+    expect(middle.preventDefault).toHaveBeenCalled();
+    expect(openTile).toHaveBeenCalledWith(expect.objectContaining({ kind: 'doc', path: 'C:/x.html' }), 'tab');
+    // a middle click on a link that goes nowhere still does not open a window
+    const none = ev(1);
+    linkHandlers('data:text/html,x', undefined, null).onAuxClick(none);
+    linkHandlers('javascript:x', undefined, null).onAuxClick(none);
+    expect(none.preventDefault).toHaveBeenCalledTimes(2);
   });
   it('an image src keeps the default transform', () => {
     const html = renderToStaticMarkup(createElement(Markdown, { text: '![i](file:///C:/x.png)' }));

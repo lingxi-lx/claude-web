@@ -30,6 +30,22 @@ const CodeRunCtx = createContext<CodeRunContext | undefined>(undefined);
  */
 const urlTransform: UrlTransform = (url, key) => (key === 'href' && /^(file:|tel:|[a-zA-Z]:)/i.test(url) ? url : defaultUrlTransform(url));
 
+type LinkMouse = { button: number; preventDefault(): void };
+
+/**
+ * A click — and a middle click, which the browser / Electron would otherwise open as a new window on the href
+ * resolved against the app's own address (2026-10-24 review I2) — goes where routeLink says.
+ */
+export function linkHandlers(href: string | undefined, cwd: string | undefined, sid: string | null) {
+  const go = (e: LinkMouse) => {
+    const r = routeLink(href ?? '', cwd);
+    if (r.to === 'anchor') return;
+    e.preventDefault();
+    followLink(r, sid ?? useStore.getState().activeId);
+  };
+  return { onClick: go, onAuxClick: (e: LinkMouse) => { if (e.button === 1) go(e); } };
+}
+
 const components: Components = {
   pre({ children }) {
     // fenced code: unwrap the <pre><code class="language-x"> pair into CodeBlock
@@ -48,16 +64,7 @@ const components: Components = {
     const sid = ctx?.sessionId ?? null;
     const cwd = useStore((s) => (sid ? s.open[sid]?.cwd : undefined));
     return (
-      <a
-        href={href}
-        title={href}
-        onClick={(e) => {
-          const r = routeLink(href ?? '', cwd);
-          if (r.to === 'anchor') return;
-          e.preventDefault();
-          followLink(r, sid ?? useStore.getState().activeId);
-        }}
-      >
+      <a href={href} title={href} {...linkHandlers(href, cwd, sid)}>
         {children}
       </a>
     );

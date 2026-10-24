@@ -16,7 +16,7 @@ import { ZOOM_STEPS, cleanZoom, fitWindow, minWindow, nextZoom, scaleCaption, tr
 import { getLocale, initLanguage, tr } from './i18n.js';
 import { SCHEME, linkFromArgv, parseDeepLink, type DeepLink } from './deep-link';
 import { menuItems } from './context-menu';
-import { CrashGuard, allowNavigation, sameOrigin } from './nav-guard';
+import { CrashGuard, allowNavigation, sameOrigin, windowOpenAction } from './nav-guard';
 
 const isMac = process.platform === 'darwin';
 
@@ -250,14 +250,12 @@ function createWindow(url: string | null, winId = 'main', bounds?: Bounds, hidde
   });
   win.on('closed', () => { if (wins.get(winId) === win) wins.delete(winId); });
   win.webContents.setWindowOpenHandler(({ url: target }) => {
-    const origin = host.info?.url.split('/?')[0] ?? '\0';
-    if (target.startsWith(origin)) {
-      // same-origin window.open (browser-style "new window"): give it a real id and our preload
+    const act = windowOpenAction(target, host.info?.url);
+    if (act === 'app-window') {
+      // window.open of the app page (browser-style "new window"): give it a real id and our preload
       const id = `w${Date.now().toString(36)}`;
       createWindow(windowUrl(target, id), id);
-      return { action: 'deny' };
-    }
-    if (/^https?:/.test(target)) void shell.openExternal(target);
+    } else if (act === 'external') void shell.openExternal(target);
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (e, target) => {
