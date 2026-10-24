@@ -111,7 +111,7 @@
   按原图量出的尺寸重画成矢量（超椭圆 n≈4.5）。`web/public/icon.svg` 是唯一源，`node scripts/icons.cjs`
   （sharp）出 PWA / 桌面 / 官网的图；侧栏内联画同样的形状（`ui/AppLogo.tsx`）。
 - 新对话页的动态背景（第二段录屏）：`features/home/AsciiField.tsx`（canvas，15 fps，看不见时不画，减少动效时静止，设置 `ui.welcomeBackdrop`），
-  数学在 `ascii-noise.ts`。
+  数学在 `ascii-noise.ts`。（2026-10-24 这个「字场」删了，设置换成 外观 → 背景动画，见第五轮末尾。）
 - 新对话页的输入框：框里一行，框下一行是 代码 / 聊天（官方标题栏的 chat / code：这里就是「只聊天」）、电脑、文件夹、分支、权限，右边模型
   （设置 `ui.welcomeLayout`，`inbox` 放回框里；ui-smoke 的首页那一大段用 `inbox`，新布局有自己的一条检查）。
 - ☰（图标栏最上面）：桌面版弹出原生应用菜单（`desktop:appMenu` → `Menu.getApplicationMenu().popup`，新加「前往」：后退 / 前进），浏览器里是
@@ -149,7 +149,7 @@
 - 欢迎页背景：字在内容列（`.home-col`）附近渐隐、里面只留一点，整体更暗（`AsciiField` 的 `calm()`）。
 - 第四轮（用户：「背景还是有一点丑」，又给了一段官方录屏）：改成满屏很暗的细小字母数字（每格都有一层底 `FIELD_BASE`，斜向的亮带 `bandLevel` 叠上去），
   字偶尔跳变；**每次点击页面放出一圈涟漪**（`rippleLevel`：主题强调色的小圆盘张开成环、淡出，1.3 s），没有鼠标悬停高亮了。
-  纯函数在 `ascii-noise.ts`，有测试。
+  纯函数在 `ascii-noise.ts`，有测试（2026-10-24 删字场时 `rippleLevel` / `bandLevel` 一起删了，只留字流用的 `makeNoise`）。
   **画法要省**（独立验证测出：每帧逐个 fillText 一万多个字，1440×900 下占主线程约八成）：字常驻在一张离屏层上，每帧只重画闪烁的 0.8%；
   亮度是一张每 2×2 格一个像素的小图（`MASK`），每帧 `copy` 层 + `destination-in` 遮罩两次 drawImage；只有涟漪照到的格子用 fillText。
   平时 8 fps、有涟漪时 20 fps。无头 Chromium（软件渲染）1440×900 下主线程约 14%，帧内 JS 约 3 ms。
@@ -162,6 +162,7 @@
   （独立验证测出；改后按 keydown → rAF → setTimeout 量：10 万字时字流 / 关 p50 20 / 18 ms）。按**生效的**主题（`store.theme`，跟随系统时系统一切换也算）重建，画布是不透明的，颜色必须跟着换。
   内容列附近淡一些。
   设置 `ui.welcomeBackdrop` 从开关改成三选一 字流 / 字场（上一版）/ 关（`backdropStyle()`：旧的 `false` = 关；`Seg` 加了 `norm`）。
+  2026-10-24（用户：「就做动画或者无在外观里面设置就好」）：三选一去掉，换成 外观 → **背景动画** 开 / 关（`ui.backdropMotion`，默认开，`letter-flow.ts` 的 `backdropOn()`；没设过时旧的 `ui.welcomeBackdrop` 是 `'off'` / `false` 仍算关，不写迁移；设置页的开关用 `Toggle` 的 `read` 显示同一个结果）；字场（`AsciiField.tsx`）和 `Seg` 的 `norm` 删了。
   调参记录：拖尾 0.16 太长（字被拖成一串「]]]]]」），0.34 又太散像灰尘，0.24 + 每 1700 px² 一个字 + 墨色 0.36 合适。
   普通的字从一张一次画好的字模（每个字一格）贴上去，不逐个排字；主题色的字（打的、溅的，任何文字）才用 fillText。20 fps。
   **拖尾不能往透明擦**（独立验证测出）：`destination-out` 在 8 位透明度里擦不到 0，一分钟后整页蒙一层 2/255 的灰；改成每帧用面板自己的背景色

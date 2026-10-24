@@ -9,8 +9,8 @@ import { imeComposing } from '@/ui/ime';
 // The controls of one settings row (a meta.json key through `settings.set`) and the row itself: 标题 + 一句后果 +
 // 右侧控件 (spec §5.7). Every row of the settings window uses these; section components may use `Row` too.
 
-export function Toggle({ k, def = false, label }: { k: string; def?: boolean; label?: string }) {
-  const v = useStore((s) => s.settings[k]);
+export function Toggle({ k, def = false, label, read }: { k: string; def?: boolean; label?: string; /** the state shown, from all the settings (an older key still counting while `k` is unset) */ read?: (settings: Record<string, unknown>) => boolean }) {
+  const v = useStore((s) => (read ? read(s.settings) : s.settings[k]));
   const set = useStore((s) => s.setSetting);
   const on = (v ?? def) as boolean;
   return <button className={clsx('toggle', on && 'on')} role="switch" aria-checked={on} aria-label={label} onClick={() => void set(k, !on)} />;
@@ -44,10 +44,10 @@ export function NumberSelect({ k, def, options, label }: { k: string; def: numbe
 }
 
 /** A segmented choice for two or three short options (改动的显示方式: 上下对照 / 左右并排). */
-export function Seg({ k, def, options, label, norm }: { k: string; def: string; options: { id: string; l: string }[]; label?: string; /** an older stored value → one of the options */ norm?: (v: unknown) => string }) {
+export function Seg({ k, def, options, label }: { k: string; def: string; options: { id: string; l: string }[]; label?: string }) {
   const v = useStore((s) => s.settings[k]);
   const set = useStore((s) => s.setSetting);
-  const cur = norm ? norm(v) : String(v ?? def);
+  const cur = String(v ?? def);
   return (
     <Segmented className="sp-seg" label={label ?? ''} arrows value={cur} options={options.map((o) => ({ value: o.id, label: o.l }))} onChange={(id) => { if (id !== cur) void set(k, id); }} />
   );

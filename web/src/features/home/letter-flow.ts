@@ -2,13 +2,19 @@
  * 字流, the new-conversation page's backdrop (2026-10-17, designed here — the user asked for 「一个有意思特别的」): letters
  * drift like ink in slow water, along a current that turns over time, each leaving a short fading trail. The pointer
  * parts the current; a click splashes a ring of letters in the theme's accent; and what you type in the box floats out
- * of it, in the accent, and joins the stream. The motion is here (pure, tested); AsciiField / LetterFlow.tsx draw it.
+ * of it, in the accent, and joins the stream. The motion is here (pure, tested); LetterFlow.tsx draws it.
  */
 
-export type BackdropStyle = 'flow' | 'field' | 'off';
-/** `ui.welcomeBackdrop`: 'flow' (字流, the default) / 'field' (字场, the one before) / 'off'; the old switch's false is off */
-export function backdropStyle(v: unknown): BackdropStyle {
-  return v === false || v === 'off' ? 'off' : v === 'field' ? 'field' : 'flow';
+/**
+ * 背景动画 (外观, spec 2026-10-24 A6 — the user: 「就做动画或者无在外观里面设置就好」): on → the new-conversation page
+ * moves (a character theme's own backdrop, 字流 on the classic themes), off → still. Not set yet: the old
+ * `ui.welcomeBackdrop` decides ('off' / false was off; 字流 / 字场 were on).
+ */
+export function backdropOn(settings: Record<string, unknown>): boolean {
+  const v = settings['ui.backdropMotion'];
+  if (typeof v === 'boolean') return v;
+  const old = settings['ui.welcomeBackdrop'];
+  return !(old === false || old === 'off');
 }
 
 export interface Mote {

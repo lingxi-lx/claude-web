@@ -19,7 +19,7 @@ export const SETTINGS_GROUPS: { id: SettingsGroupId; l: string }[] = [
 
 /** One setting row (a meta.json key). */
 export type EntryId =
-  | 'ui.defaultMode' | 'autoContinueOnReset' | 'ui.showThinking' | 'ui.viewMode' | 'ui.infoPanel' | 'ui.sidebarFolded' | 'ui.welcomeBackdrop' | 'ui.backdropInChat' | 'ui.welcomeLayout' | 'ui.autoArchivePr' | 'sessions.mcp' | 'claude.desktopSkills' | 'worktree.dir' | 'worktree.prefix' | 'ui.promptSuggestions' | 'ui.diffMode' | 'ui.inlineDiffs' | 'ui.workbench' | 'ui.autoSave'
+  | 'ui.defaultMode' | 'autoContinueOnReset' | 'ui.showThinking' | 'ui.viewMode' | 'ui.infoPanel' | 'ui.sidebarFolded' | 'ui.backdropMotion' | 'ui.backdropInChat' | 'ui.welcomeLayout' | 'ui.autoArchivePr' | 'sessions.mcp' | 'claude.desktopSkills' | 'worktree.dir' | 'worktree.prefix' | 'ui.promptSuggestions' | 'ui.diffMode' | 'ui.inlineDiffs' | 'ui.workbench' | 'ui.autoSave'
   | 'ui.notifications' | 'ui.closeToTray' | 'ui.confirmExit' | 'ui.softwareRender' | 'orchestra.maxParallel' | 'cafe.rate' | 'cafe.sound'
   | 'ai.thinkingLanguage'
   | 'ui.language' | 'ui.theme' | 'ui.zoom' | 'ui.fontSize' | 'ui.density' | 'ui.cjkFont' | 'ui.reduceMotion' | 'ui.haptics';
@@ -106,7 +106,6 @@ const GENERAL: EntryMeta[] = [
   { id: 'ui.viewMode', block: tr('对话显示'), label: tr('查看模式'), hint: tr('普通：做完的回合收成一行。显示思考：回合照样收起，思考过程展开。详细：每一步和思考全部展开。Ctrl+O 随时切换。'), keywords: tr('view mode thinking verbose 查看 详细 思考 展开 Ctrl+O') },
   { id: 'ui.infoPanel', block: tr('对话显示'), label: tr('对话右边的信息栏'), hint: tr('环境、上下文用量、连接器、改动和后台任务一栏摆在对话右边；对话头上的 ⓘ 按钮也能开关。窗口太窄时自动让开。'), keywords: tr('info panel column context connectors changes background 信息栏 上下文 连接器 改动 后台') },
   { id: 'ui.welcomeLayout', block: tr('对话显示'), label: tr('新对话页的输入框'), hint: tr('框下一行：和官方 App 一样，代码 / 聊天、电脑、文件夹、分支和权限在输入框下面，模型在右边。框里：这些都放在输入框里面。'), keywords: tr('welcome composer layout chips under new conversation 输入框 新对话 首页 布局') },
-  { id: 'ui.welcomeBackdrop', block: tr('对话显示'), label: tr('新对话页的动态背景'), hint: tr('字流：字母像水里的墨一样顺着水流飘，鼠标会把它们拨开，点一下溅出一圈字，在输入框里打的字会飘出来汇进去。字场：一片很暗的字，斜着慢慢流动，点一下荡开一圈。跟着主题配色；系统开了「减少动态效果」时是静止的。'), keywords: tr('background backdrop animation ascii welcome new conversation flow letters 背景 动态 字符 字流 字场 新对话 首页') },
   { id: 'ui.backdropInChat', block: tr('对话显示'), label: tr('对话里的淡背景'), hint: tr('用字符画主题时，对话后面也垫一层很淡、很慢的背景；关掉就是纯色。'), keywords: tr('background backdrop ascii theme conversation dim 背景 字符画 主题 对话 淡') },
   { id: 'ui.sidebarFolded', block: tr('对话显示'), label: tr('侧栏的项目和文件夹默认收起'), hint: tr('打开时只露出标题；你点开的那几个会一直开着，当前对话所在的也会打开。搜索时全部展开。'), keywords: tr('sidebar folders projects collapse expand 侧栏 折叠 收起 展开 项目 文件夹') },
   { id: 'ui.autoArchivePr', block: tr('对话显示'), label: tr('PR 合并或关闭后自动归档对话'), hint: tr('对话分支的 PR 合并或关闭、对话也没在跑时，把对话归档（从侧栏收起，随时能找回）。'), keywords: tr('pr pull request archive merge 归档 合并 自动') },
@@ -135,6 +134,7 @@ const MODEL_ENTRIES: EntryMeta[] = [
 const APPEARANCE: EntryMeta[] = [
   { id: 'ui.language', block: tr('显示'), label: tr('语言'), hint: tr('界面用中文还是英文。默认跟随这台电脑的语言；改了会重新加载界面。'), keywords: tr('language locale english chinese 语言 中文 英文 English') },
   { id: 'ui.theme', block: tr('显示'), label: tr('主题'), hint: tr('跟随系统会按操作系统的深浅色切换。'), keywords: tr('theme dark light 深色 浅色 暗色 亮色 system 跟随系统') },
+  { id: 'ui.backdropMotion', block: tr('显示'), label: tr('背景动画'), hint: tr('新对话页的背景会动：字符画主题放它自己的背景，其它主题放飘动的字。关掉就是静止的纯色；系统开了「减少动态效果」时也是静止的。'), keywords: tr('background backdrop animation motion ascii welcome 背景 动画 动态 字符 新对话') },
   // not a meta.json key: the desktop shell keeps it (flags.json) — it has to be known before a window's first paint
   { id: 'ui.zoom', block: tr('显示'), label: tr('界面缩放'), hint: tr('把整个界面一起放大或缩小：屏幕分辨率高、东西看着小的时候调大。桌面版会记住；网页版请用浏览器自己的缩放。'), keywords: tr('zoom scale dpi 4k hidpi 缩放 放大 缩小 分辨率 高分屏 太小 看不清 大小 比例') },
   { id: 'ui.fontSize', block: tr('显示'), label: tr('字号'), hint: tr('整个界面的字号（像素）。'), keywords: tr('font size 字体大小') },

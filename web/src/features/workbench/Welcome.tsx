@@ -11,9 +11,8 @@ import { DiscoveryHint } from '@/features/sidebar/hint';
 import { hintReady } from '@/features/sidebar/newcomer';
 import { SidebarReveal, usePaneEdge } from './pane-edge';
 import { tr } from '@/i18n';
-import { AsciiField } from '@/features/home/AsciiField';
 import { LetterFlow } from '@/features/home/LetterFlow';
-import { backdropStyle } from '@/features/home/letter-flow';
+import { backdropOn } from '@/features/home/letter-flow';
 import { Backdrop } from '@/themes/Backdrop';
 import { useActivePack } from '@/themes/apply';
 
@@ -29,7 +28,7 @@ export function Welcome({ paneId, tileId }: { paneId: string; tileId: string }) 
   const edge = usePaneEdge();
   const mobile = useStore((s) => s.mobile);
   // nothing until the settings are in: someone who turned it off would see the default flash for a second
-  const backdrop = useStore((s) => (s.metaLoaded ? backdropStyle(s.settings['ui.welcomeBackdrop']) : 'off'));
+  const moving = useStore((s) => s.metaLoaded && backdropOn(s.settings));
   const theme = useStore((s) => s.theme);
   const ascii = useActivePack();
   const pick = (sid: string) => {
@@ -38,11 +37,10 @@ export function Welcome({ paneId, tileId }: { paneId: string; tileId: string }) 
   };
   return (
     <div className="welcome-tile">
-      {/* a character theme brings its own backdrop (themes/Backdrop); the classic themes keep 字流 / 字场 */}
-      {!mobile && backdrop !== 'off' && ascii?.backdrop && <Backdrop scene="welcome" />}
-      {!mobile && !ascii?.backdrop && backdrop === 'field' && <AsciiField />}
+      {/* 外观 → 背景动画: a character theme brings its own backdrop (themes/Backdrop); the classic themes get 字流 */}
+      {!mobile && moving && ascii?.backdrop && <Backdrop scene="welcome" />}
       {/* keyed by the theme in effect (a system switch too): its colours are read when it starts */}
-      {!mobile && !ascii?.backdrop && backdrop === 'flow' && <LetterFlow key={String(theme)} />}
+      {!mobile && moving && !ascii?.backdrop && <LetterFlow key={String(theme)} />}
       {/* the empty page's top row: nothing but the sidebar reveal; on the desktop it is also the title bar (drag) */}
       <div className="welcome-top">{((edge.lead && !edge.strip) || mobile) && <SidebarReveal />}</div>
       <div className="welcome">

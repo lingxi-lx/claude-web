@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { makeNoise } from './ascii-noise';
-import { MAX_MOTES, MIN_MOTES, PART_R, ambient, current, moteAlpha, moteCount, splash, step, typed } from './letter-flow';
+import { MAX_MOTES, MIN_MOTES, PART_R, ambient, backdropOn, current, moteAlpha, moteCount, splash, step, typed } from './letter-flow';
 
 const seeded = (s = 1) => () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
 const noise = makeNoise(7);
@@ -64,5 +64,18 @@ describe('字流: letters drifting on a current', () => {
     expect(moteAlpha(m)).toBe(0);
     expect(moteAlpha({ ...m, age: 5 })).toBe(1);
     expect(moteAlpha({ ...m, age: 9.9 })).toBeLessThan(0.1);
+  });
+});
+
+describe('背景动画 (A6)', () => {
+  it('the new switch wins', () => {
+    expect(backdropOn({ 'ui.backdropMotion': false })).toBe(false);
+    expect(backdropOn({ 'ui.backdropMotion': true, 'ui.welcomeBackdrop': 'off' })).toBe(true);
+  });
+  it('unset: the old setting decides (off / false → off; flow / field / unset → on)', () => {
+    expect(backdropOn({ 'ui.welcomeBackdrop': 'off' })).toBe(false);
+    expect(backdropOn({ 'ui.welcomeBackdrop': false })).toBe(false);
+    expect(backdropOn({ 'ui.welcomeBackdrop': 'field' })).toBe(true);
+    expect(backdropOn({})).toBe(true);
   });
 });
