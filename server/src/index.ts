@@ -15,7 +15,7 @@ import { getSessionInfo } from '@anthropic-ai/claude-agent-sdk';
 import { ConfigService } from './config/service.js';
 import { UsageService } from './usage/service.js';
 import { providerTimeline } from './usage/timeline.js';
-import { ATTACH_MAX_BYTES, FilesService, attachmentPath, dataDir } from './files/service.js';
+import { ATTACH_MAX_BYTES, FilesService, attachmentPath, dataDir, workspaceRoots } from './files/service.js';
 import { TerminalService } from './terminal/service.js';
 import { engineInfo } from './claude-exe.js';
 import { MetaStore } from './meta/store.js';
@@ -322,7 +322,8 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   const secrets = new SecretService();
   const providers = new ProviderService(meta, secrets);
   await providers.warm();
-  const files = new FilesService();
+  // a network path is touched only inside a project folder the user added (files/service.ts uncAllowed)
+  const files = new FilesService(() => workspaceRoots(meta.workspaces()));
   const agents = new AgentRegistry(meta);
   // agent CLIs installed where a GUI-started app's PATH does not look (npm -g after login, fnm, uv tool…): added before
   // the first probe / session / terminal needs them (agents/locate.ts)

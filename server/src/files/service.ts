@@ -42,17 +42,85 @@ export function isUncPath(p: string): boolean {
   return !/^\\\\[?.]\\[A-Za-z]:\\/.test(s);
 }
 
-/** Every entry point that takes a path from the page calls this before it touches `fs` (there is no shared resolver). */
-function local(...paths: string[]): void {
-  for (const p of paths) if (isUncPath(p)) throw new Error(tr('不支持网络路径'));
+/**
+ * A UNC path as its segments (`host`, `share`, …), `.` / `..` resolved over the whole path — host included, so
+ * `\\nas\proj\..\other` is `nas/other`, not `nas/proj/other` as Windows would read it (the stricter reading: a `..`
+ * never keeps a path under a share it climbs out of). `\\?\UNC\h\s` and `\\.\UNC\h\s` are `\\h\s`. Any other
+ * `\\?\…` / `\\.\…` (a device, a volume, a pipe) → null: never a trusted share.
+ */
+function uncSegments(p: string): string[] | null {
+  if (!isUncPath(p)) return null;
+  let s = p.replace(/\//g, '\\');
+  const ext = /^\\\\[?.]\\UNC\\/i.exec(s);
+  if (ext) s = '\\\\' + s.slice(ext[0].length);
+  else if (/^\\\\[?.](\\|$)/.test(s)) return null;
+  const out: string[] = [];
+  for (const seg of s.split('\\')) {
+    if (seg === '' || seg === '.') continue;
+    if (seg === '..') out.pop();
+    else out.push(seg);
+  }
+  return out;
+}
+
+/**
+ * A network path the user already trusts: equal to or under one of `roots` (the project folders they added — Windows
+ * connects to that share with their credentials anyway). A path from a reply naming another host or share, or climbing
+ * out of a trusted one with `..`, is not. A root has to name a host and a share (`\\nas` alone trusts nothing).
+ * Share and host names compare without case on Windows (`caseless`).
+ */
+export function uncAllowed(p: string, roots: readonly string[], caseless = process.platform === 'win32'): boolean {
+  const fold = (x: string[]) => (caseless ? x.map((s) => s.toLowerCase()) : x);
+  const segs = uncSegments(p);
+  if (!segs || segs.length < 2) return false;
+  const want = fold(segs);
+  for (const r of roots) {
+    const rs = typeof r === 'string' ? uncSegments(r) : null;
+    if (!rs || rs.length < 2 || rs.length > want.length) continue;
+    if (fold(rs).every((x, i) => x === want[i])) return true;
+  }
+  return false;
+}
+
+/**
+ * The roots `uncAllowed` trusts, from the project list (meta.json workspaces): each one's `path`, and its extra
+ * `folders` (strings or `{ path }`) if it has any.
+ */
+export function workspaceRoots(workspaces: readonly { path: string; folders?: unknown }[]): string[] {
+  const out: string[] = [];
+  for (const w of workspaces) {
+    if (typeof w.path === 'string') out.push(w.path);
+    if (Array.isArray(w.folders)) {
+      for (const f of w.folders) {
+        const p = typeof f === 'string' ? f : (f as { path?: unknown } | null)?.path;
+        if (typeof p === 'string') out.push(p);
+      }
+    }
+  }
+  return out;
 }
 
 export class FilesService extends EventEmitter {
   private watchers = new Map<string, { w: any; refs: number }>();
 
+  /** `trustedRoots`: the project folders a network path may be in (index.ts: the meta store's workspaces). */
+  constructor(private trustedRoots: () => readonly string[] = () => []) {
+    super();
+  }
+
+  /** A path the page may have this server touch: not a network path, or one inside a project folder (`uncAllowed`). */
+  pathAllowed(p: string): boolean {
+    return !isUncPath(p) || uncAllowed(p, this.trustedRoots());
+  }
+
+  /** Every entry point that takes a path from the page calls this before it touches `fs` (there is no shared resolver). */
+  private local(...paths: string[]): void {
+    for (const p of paths) if (!this.pathAllowed(p)) throw new Error(tr('不支持网络路径'));
+  }
+
   // ---------- phase 3: editor & file operations ----------
   async stat(p: string): Promise<FsStat> {
-    local(p);
+    this.local(p);
     const st = await fs.stat(p);
     let binary: boolean | undefined;
     if (st.isFile() && st.size < TEXT_MAX) {
@@ -67,7 +135,7 @@ export class FilesService extends EventEmitter {
   }
 
   async open(p: string): Promise<FsOpenResult> {
-    local(p);
+    this.local(p);
     const st = await fs.stat(p);
     if (st.isDirectory()) throw new Error(tr('是目录'));
     const buf = await fs.readFile(p);
@@ -79,7 +147,7 @@ export class FilesService extends EventEmitter {
 
   /** Write text; refuses when the file changed on disk after `expectMtime` (the editor then offers reload / overwrite). */
   async write(p: string, text: string, expectMtime?: number): Promise<{ mtime: number }> {
-    local(p);
+    this.local(p);
     if (expectMtime !== undefined) {
       const st = await fs.stat(p).catch(() => null);
       if (st && Math.abs(st.mtimeMs - expectMtime) > 1) {
@@ -95,23 +163,23 @@ export class FilesService extends EventEmitter {
     return { mtime: st.mtimeMs };
   }
 
-  async mkdir(p: string) { local(p); await fs.mkdir(p, { recursive: true }); }
+  async mkdir(p: string) { this.local(p); await fs.mkdir(p, { recursive: true }); }
 
   async create(p: string, text = '') {
-    local(p);
+    this.local(p);
     if (await fs.stat(p).catch(() => null)) throw new Error(tr('已存在同名文件'));
     await fs.mkdir(path.dirname(p), { recursive: true });
     await fs.writeFile(p, text, 'utf8');
   }
 
   async rename(from: string, to: string) {
-    local(from, to);
+    this.local(from, to);
     if (await fs.stat(to).catch(() => null)) throw new Error(tr('目标已存在'));
     await fs.rename(from, to);
   }
 
   async copy(from: string, to: string) {
-    local(from, to);
+    this.local(from, to);
     if (await fs.stat(to).catch(() => null)) throw new Error(tr('目标已存在'));
     await fs.cp(from, to, { recursive: true });
   }
@@ -119,7 +187,7 @@ export class FilesService extends EventEmitter {
   /** Move to the OS recycle bin (Windows: PowerShell + VisualBasic FileIO; macOS: Finder; Linux: gio). Falls back to rm. */
   async trash(paths: string[]) {
     if (!paths.length) return;
-    local(...paths);
+    this.local(...paths);
     if (process.platform === 'win32') {
       const script = [
         'Add-Type -AssemblyName Microsoft.VisualBasic',
@@ -145,7 +213,7 @@ export class FilesService extends EventEmitter {
 
   /** Watch a directory (depth 1) or file; ref-counted per path. Emits ('changed', {path, type}). */
   async watch(p: string) {
-    local(p);
+    this.local(p);
     const cur = this.watchers.get(p);
     if (cur) { cur.refs++; return; }
     const st = await fs.stat(p);
@@ -196,7 +264,7 @@ export class FilesService extends EventEmitter {
 
   /** git diff for a file relative to HEAD; falls back to full content when not in a repo. */
   async diff(filePath: string) {
-    local(filePath);
+    this.local(filePath);
     const dir = path.dirname(filePath);
     try {
       const { stdout: root } = await execFileAsync('git', ['rev-parse', '--show-toplevel'], { cwd: dir, windowsHide: true });
@@ -214,7 +282,7 @@ export class FilesService extends EventEmitter {
   }
 
   async list(dir: string): Promise<FsEntry[]> {
-    local(dir);
+    this.local(dir);
     const entries = await fs.readdir(dir, { withFileTypes: true });
     const out: FsEntry[] = [];
     for (const e of entries) {
@@ -233,7 +301,7 @@ export class FilesService extends EventEmitter {
   }
 
   async read(p: string) {
-    local(p);
+    this.local(p);
     const st = await fs.stat(p);
     if (st.size > 2 * 1024 * 1024) throw new Error('file too large');
     return fs.readFile(p, 'utf8');

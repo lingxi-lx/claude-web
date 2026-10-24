@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { FilesService, appleScriptEscape, isUncPath } from './service.js';
+import { FilesService, appleScriptEscape, isUncPath, uncAllowed, workspaceRoots } from './service.js';
 
 // stage B task 1: a network path makes Windows connect to that machine over SMB and hand it the user's NTLM
 // credentials — a path from the page (a link the model wrote, a file tab) must never reach `fs`
@@ -64,6 +64,65 @@ describe('network paths', () => {
       await expect(call(), name).rejects.toThrow('不支持网络路径');
     }
     expect(touched).toEqual([]);
+  });
+
+  // fix round 1: a share the user added as a project folder is already trusted — its files open as before
+  describe('inside a project folder on a share', () => {
+    const fsTouched = () => {
+      const touched: string[] = [];
+      vi.spyOn(fs, 'stat').mockImplementation((async (p: string) => { touched.push(String(p)); throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); }) as never);
+      return touched;
+    };
+
+    it('uncAllowed: equal to or under a root; case-insensitive where asked; `..` and other shares are not', () => {
+      const roots = ['\\\\nas\\proj'];
+      expect(uncAllowed('\\\\nas\\proj', roots, true)).toBe(true);
+      expect(uncAllowed('\\\\nas\\proj\\a.txt', roots, true)).toBe(true);
+      expect(uncAllowed('//nas/proj/sub/a.txt', roots, true)).toBe(true);
+      expect(uncAllowed('\\\\?\\UNC\\nas\\proj\\a.txt', roots, true)).toBe(true);
+      expect(uncAllowed('\\\\nas\\proj\\.\\sub\\..\\a.txt', roots, true)).toBe(true);
+      expect(uncAllowed('\\\\NAS\\Proj\\x', roots, true)).toBe(true);
+      expect(uncAllowed('\\\\NAS\\Proj\\x', roots, false)).toBe(false);
+      expect(uncAllowed('\\\\nas\\proj2\\x', roots, true)).toBe(false);
+      expect(uncAllowed('\\\\nas\\proj\\..\\other\\x', roots, true)).toBe(false);
+      expect(uncAllowed('\\\\nas\\proj\\..\\..\\evil\\s\\x', roots, true)).toBe(false);
+      expect(uncAllowed('\\\\evil\\s\\x', roots, true)).toBe(false);
+      expect(uncAllowed('\\\\nas', roots, true)).toBe(false);
+      expect(uncAllowed('\\\\nas\\proj\\x', [], true)).toBe(false);
+      // a root has to name a host and a share; a device / volume root trusts nothing
+      expect(uncAllowed('\\\\nas\\proj\\x', ['\\\\nas'], true)).toBe(false);
+      expect(uncAllowed('\\\\.\\pipe\\x', ['\\\\.\\pipe'], true)).toBe(false);
+      expect(uncAllowed('\\\\nas\\proj\\x', ['C:\\proj', '/home/a'], true)).toBe(false);
+    });
+
+    it('workspaceRoots: each path and its extra folders', () => {
+      expect(workspaceRoots([
+        { path: 'C:\\a' },
+        { path: '\\\\nas\\proj', folders: ['\\\\nas\\more', { path: 'D:\\x' }, 3, null] },
+      ])).toEqual(['C:\\a', '\\\\nas\\proj', '\\\\nas\\more', 'D:\\x']);
+    });
+
+    it('the service opens a file under a trusted share (fs is reached) and still refuses everything else', async () => {
+      const touched = fsTouched();
+      let roots = ['\\\\nas\\proj'];
+      const svc = new FilesService(() => roots);
+      await expect(svc.open('\\\\nas\\proj\\a.txt')).rejects.toThrow('ENOENT');
+      expect(touched).toEqual(['\\\\nas\\proj\\a.txt']);
+      if (process.platform === 'win32') {
+        await expect(svc.stat('\\\\NAS\\Proj\\x')).rejects.toThrow('ENOENT');
+        expect(touched).toHaveLength(2);
+      }
+      touched.length = 0;
+      for (const p of ['\\\\nas\\proj2\\x', '\\\\nas\\proj\\..\\other\\x', '\\\\evil\\s\\x']) {
+        await expect(svc.open(p), p).rejects.toThrow('不支持网络路径');
+      }
+      // read from the meta store on every call: a project removed is no longer trusted
+      roots = [];
+      await expect(svc.open('\\\\nas\\proj\\a.txt')).rejects.toThrow('不支持网络路径');
+      expect(touched).toEqual([]);
+      expect(svc.pathAllowed('C:\\a')).toBe(true);
+      expect(new FilesService().pathAllowed('\\\\nas\\proj\\a.txt')).toBe(false);
+    });
   });
 });
 

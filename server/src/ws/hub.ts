@@ -19,7 +19,7 @@ import { userCompactSource } from '../runtime/user-env.js';
 import { SessionService, claudeDir } from '../sessions/service.js';
 import { ConfigService } from '../config/service.js';
 import { UsageService } from '../usage/service.js';
-import { FilesService, isUncPath } from '../files/service.js';
+import { FilesService } from '../files/service.js';
 import { TerminalService } from '../terminal/service.js';
 import { MetaStore } from '../meta/store.js';
 import { LimitsService } from '../usage/limits.js';
@@ -917,9 +917,9 @@ export class Hub {
       case 'files.diff':
         return s.files.diff(req.path);
       case 'fs.findFiles': {
-        // a project folder: absolute and a directory (an empty root would list the server's own folder); never a
-        // network path (files/service.ts isUncPath)
-        if (!req.root || !path.isAbsolute(req.root) || isUncPath(req.root) || !(await fs.promises.stat(req.root).then((st) => st.isDirectory(), () => false))) return { files: [] };
+        // a project folder: absolute and a directory (an empty root would list the server's own folder); a network
+        // path only inside a project folder the user added (files/service.ts pathAllowed — the same check)
+        if (!req.root || !path.isAbsolute(req.root) || !s.files.pathAllowed(req.root) || !(await fs.promises.stat(req.root).then((st) => st.isDirectory(), () => false))) return { files: [] };
         const limit = Math.max(1, Math.min(Math.floor(Number(req.limit) || 30), 100));
         return { files: rankFiles(await listProjectFiles(req.root), String(req.query ?? ''), limit) };
       }
