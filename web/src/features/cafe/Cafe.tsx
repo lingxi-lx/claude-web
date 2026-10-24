@@ -6,6 +6,7 @@ import type { BgSession } from '@shared';
 import { resolveCharacter } from '@characters';
 import { useStore } from '@/store';
 import { Icon } from '@/ui/icons';
+import { wheelZoom } from '@/ui/wheel-zoom';
 import { clsx } from '@/util';
 import { createWorld, step, type Actor, type World } from './sim';
 import { fitView, hitTest, onPage, render, sceneSize, type View } from './render';
@@ -129,7 +130,7 @@ export function Cafe({ session, compact, onPick, onAdmin }: { session: BgSession
     const w = world.current, el = can.current;
     return w && el ? (user.current ?? fitView(w, el.width, el.height)) : null;
   };
-  const at = (e: React.PointerEvent | React.MouseEvent) => {
+  const at = (e: { clientX: number; clientY: number }) => {
     const r = can.current!.getBoundingClientRect();
     return { x: (e.clientX - r.left) * dpr(), y: (e.clientY - r.top) * dpr() };
   };
@@ -182,15 +183,26 @@ export function Cafe({ session, compact, onPick, onAdmin }: { session: BgSession
     const h = hitTest(world.current, v, at(e).x, at(e).y);
     if (h) choose(h.key, h.kind);
   };
-  const onWheel = (e: React.WheelEvent) => {
+  // the wheel zooms and the page stays put (a native non-passive listener: React's onWheel is passive, so its
+  // preventDefault did nothing and the page scrolled too); at a zoom limit or with Shift the page scrolls
+  const wheel = useRef<(e: WheelEvent) => void>(() => {});
+  wheel.current = (e: WheelEvent) => {
     const v = viewNow();
     if (!v) return;
+    const scale = wheelZoom(v.scale, e, { min: 0.25, max: 8, step: 1.25 });
+    if (scale === null) return;
+    e.preventDefault();
     const p = at(e);
-    const k = e.deltaY < 0 ? 1.25 : 0.8;
-    const scale = Math.max(0.25, Math.min(8, v.scale * k));
     const f = scale / v.scale;
     user.current = { scale, x: p.x - (p.x - v.x) * f, y: p.y - (p.y - v.y) * f };
   };
+  useEffect(() => {
+    const c = can.current;
+    if (!c) return;
+    const on = (e: WheelEvent) => wheel.current(e);
+    c.addEventListener('wheel', on, { passive: false });
+    return () => c.removeEventListener('wheel', on);
+  }, [broken]);
   const style = useMemo(() => ({}), []);
   if (broken) return null;
   return (
@@ -203,7 +215,6 @@ export function Cafe({ session, compact, onPick, onAdmin }: { session: BgSession
         onPointerMove={onMove}
         onPointerUp={onUp}
         onPointerLeave={() => { hover.current = undefined; setTip(null); }}
-        onWheel={onWheel}
         onDoubleClick={() => { user.current = null; }}
       />
       <div className="cafe-people">
