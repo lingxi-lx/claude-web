@@ -1300,12 +1300,28 @@ describe('SessionRunner: the account’s 200K / 1M picks and the 自动压缩 po
     });
   });
 
-  it('a value past the window or under 50K is ignored (Opus at 200K and 500000 → nothing of ours)', async () => {
-    await withHome(null, async (dir) => {
-      const r = new SessionRunner({ sessionId: 'a7-12', cwd: dir, model: 'claude-opus-5-5' } as any, undefined, { account: { windows: { opus: 200_000 }, compactAt: 500_000 } });
+  // final review M4 (was: a value past the window was left out — and the user's settings.json won again, which the
+  // editor's 「设了就以这里为准」 says it does not): past the window it is capped at the window; under 50K it is left out
+  it('a value past the window is capped at the window, over settings.json (Opus at 200K, 500000 set, settings.json 700000 / 150000 → 200000)', async () => {
+    for (const fromSettings of ['700000', '150000']) {
+      await withHome({ CLAUDE_CODE_AUTO_COMPACT_WINDOW: fromSettings }, async (dir) => {
+        const r = new SessionRunner({ sessionId: `a7-12-${fromSettings}`, cwd: dir, model: 'claude-opus-5-5' } as any, undefined, { account: { windows: { opus: 200_000 }, compactAt: 500_000 } });
+        await tick();
+        expect(queries[0].options.env?.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe('200000');
+        expect((await flagEnv(queries[0].options.settings))?.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBe('200000');
+        expect(r.info.compactWindow).toBe(200_000);
+        await r.close();
+      });
+    }
+  });
+
+  it('a value under 50K is ignored (nothing of ours: settings.json stays)', async () => {
+    await withHome({ CLAUDE_CODE_AUTO_COMPACT_WINDOW: '150000' }, async (dir) => {
+      const r = new SessionRunner({ sessionId: 'a7-12-small', cwd: dir, model: 'claude-opus-5-5' } as any, undefined, { account: { windows: { opus: 200_000 }, compactAt: 30_000 } });
       await tick();
       expect(queries[0].options.env?.CLAUDE_CODE_AUTO_COMPACT_WINDOW).toBeUndefined();
-      expect(r.info.compactWindow).toBeUndefined();
+      expect(queries[0].options.settings).toBeUndefined();
+      expect(r.info.compactWindow).toBe(150_000);
       await r.close();
     });
   });

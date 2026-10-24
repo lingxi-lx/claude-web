@@ -1074,13 +1074,16 @@ export class SessionRunner extends EventEmitter {
   }
 
   /**
-   * The 自动压缩 point the user set for this conversation's provider / account (A7) that holds for `model`: 50K or more
-   * and within its window (compactAtOk) — another value is left out. Undefined: none set (or none that holds).
+   * The 自动压缩 point the user set for this conversation's provider / account (A7) as it holds for `model`: 50K or more
+   * (under that it is left out), and no further than its window when that is known — a point past it is capped there
+   * (final review M4: leaving it out let the user's settings.json win again, against the editor's 「设了就以这里为准」;
+   * the account's point is checked against its largest pick, so a 200K family meets a 700K one). Undefined: none set.
    */
   private userCompact(model: string | undefined): number | undefined {
-    const window = this.windowOf(model);
     const set = this.provider ? this.provider.compactAt : this.account ? this.account.compactAt : this.accountPrefs.compactAt;
-    return compactAtOk(set, window) ? set : undefined;
+    if (!compactAtOk(set, undefined)) return undefined;
+    const window = this.windowOf(model);
+    return window ? Math.min(set!, window) : set;
   }
 
   /** Where `model` compacts on `kind`: the official binary's earlier point and the user's, the smaller one (none: the engine's own). */
