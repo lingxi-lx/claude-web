@@ -5,7 +5,7 @@ import { EventEmitter } from 'node:events';
 import { statSync } from 'node:fs';
 import { withExplanation } from '../errors/explain.js';
 import { dropEmptyBlocks, findClaudeTranscript, hasClaudeTranscript, hasEntry, lastCostState, lastHumanPrompt, repairLeaf } from './transcript-file.js';
-import { ownAnthropicBase, ownOverride, settingsOverride, userAnthropicEnv } from './user-env.js';
+import { compactCap, ownAnthropicBase, ownOverride, settingsOverride, userAnthropicEnv } from './user-env.js';
 import { providerKey, splitSupport, subAlias, subagentTarget, unalias, type SplitKind, type SubagentPick } from '../models/subagent.js';
 import { splitEndpoint, splitTarget, type SplitSub } from '../gateway/split.js';
 import { desktopSkillsPlugin } from './desktop-skills.js';
@@ -423,6 +423,11 @@ export class SessionRunner extends EventEmitter {
       const compact = engine.kind === 'claude' ? this.officialCompactWindow(this.model) : undefined;
       if (compact && !('CLAUDE_CODE_AUTO_COMPACT_WINDOW' in fenv)) fenv.CLAUDE_CODE_AUTO_COMPACT_WINDOW = String(compact);
     }
+    // the cap the engine will put on the window (both engines take it): the composer's ring and the folded context card
+    // divide by min(window, this) as the card's body (the engine's count) does (2026-10-24 review I3: 58 % against 82 %)
+    const cap = compactCap(fenv, this.cwd, !!(this.provider || this.account));
+    if (cap) this.info.compactWindow = cap;
+    else delete this.info.compactWindow;
     // the subagents' model (the composer's 子代理 chip), over an agent's own `model:` and the tool's haiku / sonnet /
     // opus: ccb always; the official binary only with `_FORCE` — without it the agent's own model came first, and
     // Explore (inherit) ran on the main model (2026-10-19, real: Opus 5.5 + a DeepSeek pick, the Explore subagent on

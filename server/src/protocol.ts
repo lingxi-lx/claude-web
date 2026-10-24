@@ -443,6 +443,15 @@ export interface SessionInfoSnapshot {
   /** why fast mode can't serve right now (the SDK's FastModeDisabledReason) */
   fastModeOff?: string;
   runtime?: RuntimeKind;
+  /**
+   * Claude: the autocompact cap this conversation's engine runs with — `CLAUDE_CODE_AUTO_COMPACT_WINDOW` as its CLI
+   * ends up with it (the runner's own cap for the official binary, the session's / 本机环境变量, the user's settings
+   * files, the server's environment: `runtime/user-env.ts` `compactCap`). The engine caps the context window at it, so
+   * every context percentage outside the engine's own count divides by `min(model window, compactWindow)`
+   * (`web/src/features/composer/stats.ts` estimateContext). Absent: no cap. A per-provider compaction setting is to
+   * feed this same field.
+   */
+  compactWindow?: number;
   providerId?: string;
   providerName?: string;
   features?: SessionFeatures;

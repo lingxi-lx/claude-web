@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ownAnthropicBase, ownOverride, settingsOverride } from './user-env.js';
+import { compactCap, ownAnthropicBase, ownOverride, settingsOverride } from './user-env.js';
 import { sweepFlagSettings, writeFlagSettings } from './flag-settings.js';
 
 let tmp: string;
@@ -111,5 +111,43 @@ describe('writeFlagSettings', () => {
     expect(fs.existsSync(stale)).toBe(false);
     expect(fs.existsSync(mine.file)).toBe(true);
     mine.dispose();
+  });
+});
+
+// 2026-10-24 review I3: the composer ring / the folded context card divided by the provider's window (1M) while the
+// card body (the engine) used the autocompact cap (700k from ~/.claude/settings.json) — 58 % against 82 %
+describe('compactCap (the autocompact window a conversation really has)', () => {
+  let envCap: string | undefined;
+  beforeEach(() => { envCap = process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW; delete process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW; });
+  afterEach(() => { if (envCap === undefined) delete process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW; else process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = envCap; });
+  const user = () => path.join(process.env.CLAUDE_CONFIG_DIR!, 'settings.json');
+
+  it('none set anywhere: undefined', () => {
+    expect(compactCap({}, path.join(tmp, 'proj'), true)).toBeUndefined();
+  });
+  it('the server environment, under the settings files, under the conversation\'s own env (provider / account)', () => {
+    const proj = path.join(tmp, 'proj');
+    process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = '900000';
+    expect(compactCap({}, proj, true)).toBe(900_000);
+    write(user(), { env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '700000' } });
+    expect(compactCap({}, proj, true)).toBe(700_000);
+    write(path.join(proj, '.claude', 'settings.local.json'), { env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: 600000 } });
+    expect(compactCap({}, proj, true)).toBe(600_000);
+    // ours goes over the files through the flag tier (settingsOverride)
+    expect(compactCap({ CLAUDE_CODE_AUTO_COMPACT_WINDOW: '272000' }, proj, true)).toBe(272_000);
+  });
+  it('the account without a provider: the settings files go over what the conversation was started with', () => {
+    write(user(), { env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '700000' } });
+    expect(compactCap({ CLAUDE_CODE_AUTO_COMPACT_WINDOW: '500000' }, undefined, false)).toBe(700_000);
+    expect(compactCap({ CLAUDE_CODE_AUTO_COMPACT_WINDOW: '500000' }, path.join(tmp, 'none'), false)).toBe(700_000);
+    fs.rmSync(user());
+    expect(compactCap({ CLAUDE_CODE_AUTO_COMPACT_WINDOW: '500000' }, undefined, false)).toBe(500_000);
+  });
+  it('blank, zero or not a number on the layer that wins: no cap (a blank in a settings file unsets the environment\'s)', () => {
+    process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = '800000';
+    expect(compactCap({ CLAUDE_CODE_AUTO_COMPACT_WINDOW: 'abc' }, undefined, true)).toBeUndefined();
+    expect(compactCap({ CLAUDE_CODE_AUTO_COMPACT_WINDOW: '0' }, undefined, true)).toBeUndefined();
+    write(user(), { env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '' } });
+    expect(compactCap({}, undefined, true)).toBeUndefined();
   });
 });

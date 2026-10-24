@@ -29,6 +29,10 @@ spec §5.4、§5.5（定案 1：模型菜单保持平铺）、mock-composer.png�
   （在跑的对话也一样，就是官方 CLI 小指示的算法），`refreshContextUsage` 和 `OpenSession.contextUsage` 删了；信息栏的上下文卡只在展开时取一次
   `full`、点「刷新」再取（2026-10-24 起先立刻显示这个对话上一次的结果、脚注「更新中…」，见「照官方桌面版录屏改的界面」的上下文卡）。`store.test.ts`「turn end」查一轮结束不发 `session.contextUsage`。ui-smoke 的环检查改设 `conv.contextUsage`。
   model 切换前的 `fitBeforeSwitch`（服务端）还会问一次——只在换模型时。
+  **自动压缩上限（2026-10-24 总审查 I3）**：cw.7 起卡的明细（引擎数的）按 `min(窗口, CLAUDE_CODE_AUTO_COMPACT_WINDOW)` 算，环 / 状态条 / 折起来的卡头还按供应商窗口（1M）除——用户 settings.json 设 700000 时 577k 卡头 58%、明细 82%，环的 80 / 95% 在 650k 压缩前根本到不了。
+  修法：服务端算出每个对话的上限放在 `SessionInfoSnapshot.compactWindow`（`runtime/user-env.ts` 的 `compactCap(fenv, cwd, oursWins)`：按 CLI 看到的叠法——server 进程 env，上面是对话自己的 env（runner 给官方二进制设的上限、本机环境变量、会话的），再上面是 settings 文件 env（user → project → local，后者赢）；供应商 / 账号对话经 flag 层把我们设的放回最上面（`settingsOverride`）；空 / 0 / 非数字 = 没有上限），`session-runner.ts` 每次起进程时写进 `this.info`；
+  `estimateContext(items, { …, compactWindow })` 先照旧定窗口（含「已经装了更多就按 1M」），再 `min(窗口, compactWindow)`；`useContextUsage` 传 `o.info?.compactWindow`，所以环、状态条的「上下文满了」、卡头一起改。**环仍然不问引擎**，只是多读一个服务端给的数。
+  没在跑的对话（没有 `info`）还是按窗口算——以后「按供应商设压缩上限」的功能会用同一个字段。测试：`stats.test.ts` 的上限例子、`user-env.test.ts` 的 `compactCap`（叠法）、`session-runner.test.ts`「the autocompact cap goes on the session info」。
   **连带的坑**（独立审查抓到）：reducer 收到 `message_delta` 时以前用它的 usage **整个替换**这条回答的 usage，Anthropic 文档里的 `message_delta`
   只带 `output_tokens`——输入和缓存就成了 0，在跑的对话环掉到 ~0%（以前被每轮的 `getContextUsage` 盖住了）。现在只覆盖它带了的字段
   （`conversation.ts` 的 `presentUsage`），`conversation.test.ts`「usage on message_delta」。

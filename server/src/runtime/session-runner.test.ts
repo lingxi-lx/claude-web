@@ -1111,6 +1111,34 @@ describe('SessionRunner: the account through a relay of the user’s own (settin
   });
 });
 
+// 2026-10-24 review I3: the web divides the ring's context by min(window, this cap), as the engine's own count does
+describe('SessionRunner: the autocompact cap goes on the session info', () => {
+  it('from the user\'s settings.json env; absent when nothing sets it', async () => {
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-cap-'));
+    const was = { cfg: process.env.CLAUDE_CONFIG_DIR, cap: process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW };
+    process.env.CLAUDE_CONFIG_DIR = dir;
+    delete process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW;
+    try {
+      const a = new SessionRunner({ sessionId: 'cap1', cwd: path.join(dir, 'proj') } as any);
+      await tick();
+      expect(a.info.compactWindow).toBeUndefined();
+      await a.close();
+      fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify({ env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '700000' } }));
+      const b = new SessionRunner({ sessionId: 'cap2', cwd: path.join(dir, 'proj') } as any);
+      await tick();
+      expect(b.info.compactWindow).toBe(700_000);
+      await b.close();
+    } finally {
+      if (was.cfg === undefined) delete process.env.CLAUDE_CONFIG_DIR; else process.env.CLAUDE_CONFIG_DIR = was.cfg;
+      if (was.cap !== undefined) process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = was.cap;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('cliSaid: what the CLI wrote to stderr, for the error message', () => {
   it('the last lines, warnings left out', async () => {
     const { cliSaid } = await import('./session-runner.js');

@@ -95,3 +95,21 @@ export function ownAnthropicBase(cwd?: string): string | undefined {
   for (const env of settingsEnvs(cwd)) if (typeof env.ANTHROPIC_BASE_URL === 'string') v = env.ANTHROPIC_BASE_URL;
   return v?.trim() || undefined;
 }
+
+/**
+ * The `CLAUDE_CODE_AUTO_COMPACT_WINDOW` a conversation's CLI ends up with — the engine caps the context window at it
+ * (it only ever lowers the window) and compacts below it. Layered as the CLI sees it: this server's environment, then
+ * `ours` (the conversation's own env: the runner's official-binary cap, 本机环境变量, the session's), then the settings
+ * files' `env` (user, project, local: the later wins) over both — except that a provider / account conversation puts
+ * what `ours` sets back on top through the flag tier (`settingsOverride`; `oursWins`). Blank, zero or not a number on
+ * the winning layer: no cap (the CLI's parseInt). Undefined: no cap.
+ */
+export function compactCap(ours: Record<string, string>, cwd: string | undefined, oursWins: boolean): number | undefined {
+  const K = 'CLAUDE_CODE_AUTO_COMPACT_WINDOW';
+  let v: unknown = process.env[K];
+  if (K in ours) v = ours[K];
+  for (const env of settingsEnvs(cwd)) if (K in env) v = env[K];
+  if (oursWins && K in ours) v = ours[K];
+  const n = parseInt(String(v ?? ''), 10);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}

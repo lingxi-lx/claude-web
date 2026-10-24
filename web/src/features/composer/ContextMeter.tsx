@@ -34,8 +34,10 @@ export function useContextUsage(sessionId: string): ContextUsage | undefined {
     const v = resumeView(o, recorded);
     // another Claude account is the account: its windows are the account's (200K, 1M for a [1m] pick)
     const p = v.providerId !== 'claude' ? providers.find((x) => x.id === v.providerId) : undefined;
-    return estimateContext(o.conv.items, { provider: p?.type === 'claude-account' ? undefined : p, model: v.model });
-  }, [o?.version, providers, recorded]);
+    // the engine's autocompact cap (the server reports it; review I3): the window this divides by is the one the card's
+    // body counts against
+    return estimateContext(o.conv.items, { provider: p?.type === 'claude-account' ? undefined : p, model: v.model, compactWindow: o.info?.compactWindow });
+  }, [o?.version, o?.info?.compactWindow, providers, recorded]);
 }
 
 /**

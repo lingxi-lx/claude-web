@@ -52,9 +52,11 @@ export function meterMode(pct: number | undefined): 'ring' | null {
 /**
  * The context of a conversation not running here, read off its last top-level answer (input + cache + output of that
  * call is what the next one starts from) against the model's window: the provider's (what the user set, the list's,
- * the name's), the account's 1M for a `[1m]` pick, else 200K — 1M when it already holds more.
+ * the name's), the account's 1M for a `[1m]` pick, else 200K — 1M when it already holds more. `compactWindow`: the
+ * conversation's autocompact cap (`SessionInfoSnapshot.compactWindow`); the engine caps the window at it, so this does
+ * too — the card's body (the engine's own count) and this agree (2026-10-24 review I3). Still not asked of the engine.
  */
-export function estimateContext(items: readonly ConvItem[], o: { provider?: Pick<Provider, 'contextWindows' | 'modelContext'>; model?: string }): ContextUsage | undefined {
+export function estimateContext(items: readonly ConvItem[], o: { provider?: Pick<Provider, 'contextWindows' | 'modelContext'>; model?: string; compactWindow?: number }): ContextUsage | undefined {
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i];
     if (it.kind !== 'assistant' || it.parentToolUseId || !it.usage) continue;
@@ -65,6 +67,7 @@ export function estimateContext(items: readonly ConvItem[], o: { provider?: Pick
     let max = o.provider ? contextWindowFor(o.provider, model) : /\[1m\]$/i.test(model) ? ONE_M : undefined;
     max ??= ENGINE_DEFAULT_WINDOW;
     if (total > max && max < ONE_M) max = ONE_M;
+    if (o.compactWindow && o.compactWindow > 0) max = Math.min(max, o.compactWindow);
     return { percentage: Math.min(100, Math.round((total / max) * 100)), totalTokens: total, maxTokens: max, estimated: true };
   }
   return undefined;
