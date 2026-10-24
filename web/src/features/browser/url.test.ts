@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_RECENT, SEARCH_URL, addressToUrl, frameSandbox, loadable, pushRecent, readRecent, siteHue, siteLetter, siteOf } from './url';
+import { MAX_RECENT, SEARCH_URL, addressToUrl, frameSandbox, loadable, pushRecent, readRecent, siteHue, siteLetter, siteOf, viewable } from './url';
 
 describe('the address field', () => {
   it('keeps an address, completes a local one, a bare domain gets https', () => {
@@ -24,6 +24,14 @@ describe('the address field', () => {
     expect(loadable('about:blank')).toBe(true);
     expect(loadable('javascript:alert(1)')).toBe(false);
     expect(loadable('file:///c:/x')).toBe(false);
+  });
+  it('the app itself may also open a file on this machine, never one on another', () => {
+    expect(viewable('https://a.b')).toBe(true);
+    expect(viewable('file:///C:/w/a.html')).toBe(true);
+    expect(viewable('file:///home/me/a.html')).toBe(true);
+    expect(viewable('file://host/share/a.html')).toBe(false);
+    expect(viewable('file:////host/share/a.html')).toBe(false);
+    expect(viewable('javascript:alert(1)')).toBe(false);
   });
 });
 

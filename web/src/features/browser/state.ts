@@ -2,7 +2,7 @@
 // of its own — the panel draws it, the host (host.ts) drives it for an Agent, and `openInBrowser` is how the rest of
 // the app opens a page in it.
 import { create } from 'zustand';
-import { loadable } from './url';
+import { viewable } from './url';
 
 export interface BrowserTab {
   id: string;
@@ -39,7 +39,7 @@ const blank = (o: Partial<BrowserTab> = {}): BrowserTab => ({ id: `b${Date.now()
 
 /** A new tab, in front unless `front: false`. Returns its id. */
 export function newTab(o: { url?: string; agent?: string; partition?: string; front?: boolean } = {}): string {
-  const url = o.url && loadable(o.url) ? o.url : '';
+  const url = o.url && viewable(o.url) ? o.url : '';
   const tab = blank({ src: url, url, agent: o.agent, partition: o.partition ?? USER_PARTITION, loading: !!url });
   useBrowser.setState((s) => ({ tabs: [...s.tabs, tab], active: o.front === false && s.active ? s.active : tab.id }));
   return tab.id;
@@ -84,7 +84,7 @@ export function ensureTab(): void {
 export function openUrl(url: string): string {
   const s = useBrowser.getState();
   const cur = s.tabs.find((t) => t.id === s.active);
-  if (cur && !cur.src && !cur.agent && loadable(url)) { patchTab(cur.id, { src: url, url, loading: true, error: undefined }); return cur.id; }
+  if (cur && !cur.src && !cur.agent && viewable(url)) { patchTab(cur.id, { src: url, url, loading: true, error: undefined }); return cur.id; }
   return newTab({ url });
 }
 

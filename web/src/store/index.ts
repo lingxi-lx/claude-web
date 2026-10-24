@@ -25,6 +25,7 @@ import { SIMPLIFIED_NOTICE } from '@/ui/terms';
 import { MOBILE_QUERY } from '@/ui/viewport';
 import type { SheetDetent } from '@/ui/sheet-snap';
 import { haptic } from '@/ui/haptics';
+import { onTurnEndAutoOpen } from '@/features/browser/auto-open';
 import { LANGUAGE_KEY, reconcileLanguage, tr } from '@/i18n';
 
 /** 后台 fills this in (features/background/state.ts — it imports the store, not the other way round): what kept running after the turn's Stop. */
@@ -748,6 +749,8 @@ export const useStore = create<State>((set, get) => ({
       const at = resetsAt ? resetsAt * (resetsAt < 1e12 ? 1000 : 1) + 5000 : Date.now() + (res.errorKind === 'throttled' ? 60_000 : 30 * 60_000);
       armAutoContinue(sessionId, at);
     }
+    // the last page / document / picture this turn wrote opens, when the conversation is on screen here
+    try { onTurnEndAutoOpen(sessionId, get(), !!desktop); } catch { /* opening a preview never breaks the turn's end */ }
   },
 
   recall(sessionId, id) {

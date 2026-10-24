@@ -47,6 +47,15 @@ export function loadable(url: string): boolean {
 }
 
 /**
+ * What the app itself may open in a tab (`openUrl` / `newTab`): a web page, or a file on this machine (`file:///…`,
+ * never `file://host/…`) — a page Claude wrote, opened when its turn ends (auto-open.ts). The address field, a page's
+ * popups and an Agent's tools stay on `loadable`.
+ */
+export function viewable(url: string): boolean {
+  return loadable(url) || /^file:\/\/\/[^/\\]/i.test(url.trim());
+}
+
+/**
  * The sandbox of the web version's iframe. A page of another origin keeps its own origin (its cookies and storage
  * work). A document that would share OURS does not — the app's own address, or about:blank, which inherits it: with
  * scripts and our origin together it could reach into the app around it (Chromium warns about exactly this pair).
