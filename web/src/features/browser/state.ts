@@ -3,6 +3,7 @@
 // the app opens a page in it.
 import { create } from 'zustand';
 import { viewable } from './url';
+import { tr } from '@/i18n';
 import type { ViewportId } from './viewport';
 
 export interface BrowserTab {
@@ -34,20 +35,69 @@ export interface BrowserTab {
   viewport?: ViewportId;
 }
 
-/** The user's own profile (what the browser tile always used), and the Agent's separate one (`web.browser.isolated`). */
+/**
+ * The browser profiles (Electron partitions): the user's own (what the browser tile always used), Claude's separate
+ * one, and one that is not kept on disk (gone when the app quits). The desktop shell knows the same three names
+ * (desktop/src/guest-tools.ts `BROWSER_PARTITIONS`: the file: guard, cookie import and clearing take only these).
+ */
 export const USER_PARTITION = 'persist:cw-browser';
 export const AGENT_PARTITION = 'persist:cw-agent';
+export const SESSION_PARTITION = 'cw-session';
+
+/**
+ * 保留 Cookie: shared — the user and Claude browse with the same logins; separate — Claude in a profile of its own;
+ * session — both in one that is cleared when the app quits.
+ */
+export type CookieMode = 'shared' | 'separate' | 'session';
+export const COOKIE_MODES: readonly CookieMode[] = ['shared', 'separate', 'session'];
+export const COOKIES_KEY = 'web.browser.cookies';
+
+/** `web.browser.cookies` when it is one of the three, else the old `web.browser.isolated` (true → separate). */
+export function cookiesMode(settings: Record<string, unknown> | undefined): CookieMode {
+  const v = settings?.[COOKIES_KEY];
+  if (typeof v === 'string' && (COOKIE_MODES as readonly string[]).includes(v)) return v as CookieMode;
+  return settings?.['web.browser.isolated'] === true ? 'separate' : 'shared';
+}
+
+/** How 保留 Cookie words each choice (the ⋯ menu and 设置 → 联网 say the same). */
+export function cookieModeText(mode: CookieMode): { label: string; desc: string } {
+  if (mode === 'separate') return { label: tr('分开'), desc: tr('Claude 用单独的一份，你登录过的网站对它来说都没登录') };
+  if (mode === 'session') return { label: tr('关掉就清'), desc: tr('你和 Claude 共用一份，关掉应用就全部清掉') };
+  return { label: tr('共用'), desc: tr('Claude 打开的网页带着你在内置浏览器里登录过的账号') };
+}
+
+export function partitionsFor(mode: CookieMode): { user: string; agent: string } {
+  if (mode === 'session') return { user: SESSION_PARTITION, agent: SESSION_PARTITION };
+  return { user: USER_PARTITION, agent: mode === 'separate' ? AGENT_PARTITION : USER_PARTITION };
+}
+
+/**
+ * Where a new page of the user's is made. The settings live in the app's store, which this module may not import (the
+ * store imports auto-open.ts, which imports this): host.ts hands in the source.
+ */
+let partitionSource: () => string = () => USER_PARTITION;
+export function setPartitionSource(fn: () => string): void { partitionSource = fn; }
+export const userPartition = (): string => partitionSource();
+
+/** 清除浏览数据: the profiles the mode uses, and any an open tab still uses (a tab keeps its profile for life). */
+export function browsingPartitions(mode: CookieMode): string[] {
+  const p = partitionsFor(mode);
+  return [...new Set([p.user, p.agent, ...useBrowser.getState().tabs.filter((t) => t.src).map((t) => t.partition)])];
+}
 
 interface BrowserState { tabs: BrowserTab[]; active: string | null }
 export const useBrowser = create<BrowserState>(() => ({ tabs: [], active: null }));
 
 let seq = 0;
-const blank = (o: Partial<BrowserTab> = {}): BrowserTab => ({ id: `b${Date.now().toString(36)}${(seq++).toString(36)}`, src: '', url: '', title: '', loading: false, back: false, fwd: false, partition: USER_PARTITION, ...o });
+const blank = (o: Partial<BrowserTab> = {}): BrowserTab => ({ id: `b${Date.now().toString(36)}${(seq++).toString(36)}`, src: '', url: '', title: '', loading: false, back: false, fwd: false, partition: userPartition(), ...o });
 
-/** A new tab, in front unless `front: false`. Returns its id. */
+/**
+ * A new tab, in front unless `front: false`. Returns its id. Its profile is the one of this moment (or `partition`,
+ * an Agent's); a tab still without a page takes the profile of the moment it gets one (`firstPage`).
+ */
 export function newTab(o: { url?: string; agent?: string; partition?: string; front?: boolean } = {}): string {
   const url = o.url && viewable(o.url) ? o.url : '';
-  const tab = blank({ src: url, url, agent: o.agent, partition: o.partition ?? USER_PARTITION, loading: !!url });
+  const tab = blank({ src: url, url, agent: o.agent, partition: o.partition ?? userPartition(), loading: !!url });
   useBrowser.setState((s) => ({ tabs: [...s.tabs, tab], active: o.front === false && s.active ? s.active : tab.id }));
   return tab.id;
 }
@@ -91,9 +141,12 @@ export function ensureTab(): void {
 export function openUrl(url: string): string {
   const s = useBrowser.getState();
   const cur = s.tabs.find((t) => t.id === s.active);
-  if (cur && !cur.src && !cur.agent && viewable(url)) { patchTab(cur.id, { src: url, url, loading: true, error: undefined }); return cur.id; }
+  if (cur && !cur.src && !cur.agent && viewable(url)) { patchTab(cur.id, { src: url, url, loading: true, error: undefined, partition: firstPage(cur) }); return cur.id; }
   return newTab({ url });
 }
+
+/** The profile a tab without a page yet makes its page in: the user's of this moment (the mode may have changed since the tab opened); an Agent's tab keeps its own. */
+export const firstPage = (tab: BrowserTab): string => (tab.agent || tab.src ? tab.partition : userPartition());
 
 // ---- the live pages: a tab's <webview> (desktop) once it is in the document ----
 

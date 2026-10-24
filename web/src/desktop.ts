@@ -63,6 +63,11 @@ export interface DesktopBridge {
   saveScreenshot?(id: number, name: string): Promise<string | null | false>;
   /** the system's open dialog for one .html / .htm file: its path, or null */
   pickHtmlFile?(): Promise<string | null>;
+  /** 导入 Cookie…: cookies parsed from the user's file (features/browser/cookies.ts) set into one of the browser's
+   *  profiles (state.ts); false: refused (not one of ours). The values never go anywhere else. */
+  importCookies?(partition: string, cookies: import('@/features/browser/cookies').ImportedCookie[]): Promise<{ set: number; failed: number } | false>;
+  /** 清除浏览数据: that profile's cookies, site storage and cache; false: refused or failed */
+  clearBrowsingData?(partition: string): Promise<boolean>;
   /** 右键菜单 → 引用到输入框 (desktop/src/context-menu.ts): the text that was selected where the menu was opened */
   onQuoteSelection?(cb: (text: string) => void): () => void;
   /** 网关 → Gemini 账号: sign in to Google in a window of its own (`partition`: one from an earlier login, to sign in

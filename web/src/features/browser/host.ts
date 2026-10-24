@@ -9,8 +9,11 @@ import { showPanel } from '@/features/workbench/right-panel';
 import { runOp } from './ops';
 import { pageOf } from './guest';
 import { searchPage } from './search-page';
-import { AGENT_PARTITION, USER_PARTITION, agentTab, frontTab, guestElOf, hasWebview, newTab, patchTab, tabOf, useBrowser } from './state';
+import { agentTab, cookiesMode, frontTab, guestElOf, hasWebview, newTab, partitionsFor, patchTab, setPartitionSource, tabOf, useBrowser } from './state';
 import { tr } from '@/i18n';
+
+// the user's new pages are made in the profile 保留 Cookie gives them (state.ts cannot read the settings itself)
+setPartitionSource(() => partitionsFor(cookiesMode(useStore.getState().settings)).user);
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -38,13 +41,14 @@ async function inFront(tabId: string): Promise<void> {
 
 /** One operation, in the tab this conversation's Agent works in (its first `open` makes the tab and shows the browser). */
 export async function carryOut(c: BrowserCommand): Promise<BrowserAnswer> {
-  const isolated = useStore.getState().settings['web.browser.isolated'] === true;
+  // 保留 Cookie: Claude's pages are in the profile the mode gives it (an open tab keeps the one it was made in)
+  const agentPartition = partitionsFor(cookiesMode(useStore.getState().settings)).agent;
   // a search has a page of its own, off screen: it must not replace what the conversation has open
-  if (c.op === 'search') return { search: await searchPage(String(c.args?.url ?? ''), isolated ? AGENT_PARTITION : USER_PARTITION) };
+  if (c.op === 'search') return { search: await searchPage(String(c.args?.url ?? ''), agentPartition) };
   let tab = agentTab(c.sessionId);
   if (!tab) {
     if (c.op !== 'open') throw new Error(tr('这个对话还没有打开网页：先用 browser_open 打开一个网址。'));
-    const id = newTab({ agent: c.sessionId, partition: isolated ? AGENT_PARTITION : USER_PARTITION });
+    const id = newTab({ agent: c.sessionId, partition: agentPartition });
     // the Agent's own tab is new: the browser comes to the front once, so what it does is seen
     showPanel('browser');
     tab = tabOf(id)!;

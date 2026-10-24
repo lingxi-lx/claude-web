@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Downloads, cleanVp, guestKeyOf, metricsParams, mobileUserAgent, safeName, uniqueIn } from './guest-tools';
+import { BROWSER_PARTITIONS, Downloads, browserPartition, cleanCookie, cleanVp, clearBrowsingData, guestKeyOf, importCookies, metricsParams, mobileUserAgent, safeName, uniqueIn } from './guest-tools';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
 
@@ -151,5 +151,56 @@ describe('the downloads tracker', () => {
     expect(() => session.emit('will-download', {}, item, { hostWebContents: { isDestroyed: () => false, send: (...a: unknown[]) => sent.push(a) } })).not.toThrow();
     expect(item.savePath).toBe('');
     expect(sent).toEqual([]);
+  });
+});
+
+describe('cookies imported from a file, and clearing browsing data', () => {
+  it('only the built-in browser\'s own profiles (never the app\'s, never a Gemini login\'s)', () => {
+    expect(BROWSER_PARTITIONS).toEqual(['persist:cw-browser', 'persist:cw-agent', 'cw-session']);
+    for (const p of BROWSER_PARTITIONS) expect(browserPartition(p)).toBe(p);
+    expect(browserPartition('')).toBeNull();
+    expect(browserPartition('persist:gemini-1')).toBeNull();
+    expect(browserPartition(undefined)).toBeNull();
+    expect(browserPartition(['persist:cw-browser'])).toBeNull();
+  });
+  it('a cookie the page hands over is checked again before it is set', () => {
+    const c = { url: 'https://example.com/', name: 'sid', value: 'v', domain: '.example.com', path: '/', secure: true, httpOnly: true, expirationDate: 2_000_000_000 };
+    expect(cleanCookie(c)).toEqual(c);
+    expect(cleanCookie({ url: 'http://a.com/', name: 'n', value: '' })).toEqual({ url: 'http://a.com/', name: 'n', value: '' });
+    // anything that is not a web address, no name, junk types
+    expect(cleanCookie({ url: 'file:///C:/x', name: 'n', value: 'v' })).toBeNull();
+    expect(cleanCookie({ url: 'javascript:alert(1)', name: 'n', value: 'v' })).toBeNull();
+    expect(cleanCookie({ url: 'https://a.com/', name: '', value: 'v' })).toBeNull();
+    expect(cleanCookie({ url: 'https://a.com/', name: 'n', value: 3 })).toBeNull();
+    expect(cleanCookie({ url: 'https://a.com/', name: 'n', value: 'v'.repeat(5000) })).toBeNull();
+    expect(cleanCookie('cookie')).toBeNull();
+    expect(cleanCookie(null)).toBeNull();
+    // optional fields of the wrong type are dropped, not trusted
+    expect(cleanCookie({ url: 'https://a.com/', name: 'n', value: 'v', secure: 'yes', expirationDate: 'soon', domain: 7, path: {} })).toEqual({ url: 'https://a.com/', name: 'n', value: 'v' });
+  });
+  it('sets each good cookie into the profile, counts what did not go in', async () => {
+    const set: unknown[] = [];
+    const ses = { cookies: { set: async (d: { name: string }) => { if (d.name === 'refused') throw new Error('bad cookie'); set.push(d); } } };
+    const r = await importCookies(ses, [
+      { url: 'https://a.com/', name: 'one', value: '1' },
+      { url: 'https://a.com/', name: 'refused', value: '2' },
+      { url: 'ftp://a.com/', name: 'junk', value: '3' },
+      'junk',
+    ]);
+    expect(r).toEqual({ set: 1, failed: 3 });
+    expect(set).toEqual([{ url: 'https://a.com/', name: 'one', value: '1' }]);
+    expect(await importCookies(ses, 'not a list')).toEqual({ set: 0, failed: 0 });
+  });
+  it('no more than 10 000 at once', async () => {
+    let n = 0;
+    const ses = { cookies: { set: async () => { n++; } } };
+    const many = Array.from({ length: 10_050 }, (_, i) => ({ url: 'https://a.com/', name: `c${i}`, value: '' }));
+    expect(await importCookies(ses, many)).toEqual({ set: 10_000, failed: 50 });
+    expect(n).toBe(10_000);
+  });
+  it('clearing: the storage (cookies, local storage, caches of pages) and the HTTP cache', async () => {
+    const calls: string[] = [];
+    await clearBrowsingData({ clearStorageData: async () => { calls.push('storage'); }, clearCache: async () => { calls.push('cache'); } });
+    expect(calls.sort()).toEqual(['cache', 'storage']);
   });
 });

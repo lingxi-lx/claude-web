@@ -104,6 +104,55 @@ export async function emulate(guest: WebContents, vp: Vp | null, o: { base: stri
   if (url && url !== 'about:blank') guest.reload();
 }
 
+// ---------- cookies and browsing data (stage B task 4) ----------
+
+/**
+ * The built-in browser's profiles (web features/browser/state.ts): the user's, Claude's separate one, and the one
+ * 保留 Cookie → 关掉就清 uses — in memory (no `persist:`), gone when the app quits. Cookie import and clearing take
+ * only these: never the app's own session (''), never a Gemini sign-in's profile.
+ */
+export const BROWSER_PARTITIONS = ['persist:cw-browser', 'persist:cw-agent', 'cw-session'] as const;
+export const browserPartition = (p: unknown): string | null => (typeof p === 'string' && (BROWSER_PARTITIONS as readonly string[]).includes(p) ? p : null);
+
+export interface CookieDetails { url: string; name: string; value: string; domain?: string; path?: string; secure?: boolean; httpOnly?: boolean; expirationDate?: number }
+const MAX_COOKIES = 10_000;
+
+/**
+ * A cookie the panel parsed from the user's file (web features/browser/cookies.ts), checked again here: a web
+ * address, a name, a value of cookie size; optional fields of another type are dropped. null: not set.
+ */
+export function cleanCookie(v: unknown): CookieDetails | null {
+  if (!v || typeof v !== 'object') return null;
+  const o = v as Record<string, unknown>;
+  if (typeof o.url !== 'string' || !/^https?:\/\/[^/\s]+/i.test(o.url) || o.url.length > 2048) return null;
+  if (typeof o.name !== 'string' || !o.name || o.name.length > 256 || typeof o.value !== 'string' || o.value.length > 4096) return null;
+  const c: CookieDetails = { url: o.url, name: o.name, value: o.value };
+  if (typeof o.domain === 'string' && o.domain.length <= 255) c.domain = o.domain;
+  if (typeof o.path === 'string' && o.path.length <= 1024) c.path = o.path;
+  if (typeof o.secure === 'boolean') c.secure = o.secure;
+  if (typeof o.httpOnly === 'boolean') c.httpOnly = o.httpOnly;
+  if (typeof o.expirationDate === 'number' && Number.isFinite(o.expirationDate) && o.expirationDate > 0) c.expirationDate = o.expirationDate;
+  return c;
+}
+
+/** 导入 Cookie…: each good cookie set into the profile; `failed` = refused here or by Chromium (values are never logged). */
+export async function importCookies(ses: { cookies: { set(d: CookieDetails): Promise<void> } }, list: unknown): Promise<{ set: number; failed: number }> {
+  if (!Array.isArray(list)) return { set: 0, failed: 0 };
+  let set = 0;
+  let failed = Math.max(0, list.length - MAX_COOKIES);
+  for (const it of list.slice(0, MAX_COOKIES)) {
+    const c = cleanCookie(it);
+    if (!c) { failed++; continue; }
+    try { await ses.cookies.set(c); set++; } catch { failed++; }
+  }
+  return { set, failed };
+}
+
+/** 清除浏览数据: everything the profile keeps for sites (cookies, storage, service workers…) and its HTTP cache. */
+export async function clearBrowsingData(ses: { clearStorageData(): Promise<void>; clearCache(): Promise<void> }): Promise<void> {
+  await Promise.all([ses.clearStorageData(), ses.clearCache()]);
+}
+
 // ---------- downloads ----------
 
 const RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|$)/i;

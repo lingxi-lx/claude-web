@@ -8,7 +8,7 @@ import { CHECK_EVERY_MS, FIRST_CHECK_MS, firstLine, isRequired, macBundle, macSe
 import { MacSelfUpdate } from './mac-update';
 import { execFileSync } from 'node:child_process';
 import { captureGuest, drawGuest, hostedGuest } from './browser-capture';
-import { Downloads, cleanVp, emulate, emulatedUa, forgetGuest, guestKeyOf, safeName } from './guest-tools';
+import { BROWSER_PARTITIONS, Downloads, browserPartition, cleanVp, clearBrowsingData, emulate, emulatedUa, forgetGuest, guestKeyOf, importCookies, safeName } from './guest-tools';
 import { geminiForget, geminiLogin, geminiRefresh } from './gemini-login';
 import { cleanUserAgent } from './user-agent';
 import { userAgentFor } from './sign-in-ua';
@@ -875,6 +875,20 @@ ipcMain.handle('desktop:browser:pickHtml', async (e) => {
   const r = await dialog.showOpenDialog(w, { title: tr('打开本地 HTML 文件'), properties: ['openFile'], filters: [{ name: 'HTML', extensions: ['html', 'htm'] }] });
   return r.canceled ? null : r.filePaths[0] ?? null;
 });
+// 导入 Cookie… / 清除浏览数据 (guest-tools.ts): only our own windows, only the built-in browser's profiles. The cookies
+// come parsed from the panel (the user's file is read there); their values are never logged.
+ipcMain.handle('desktop:browser:importCookies', async (e, partition: unknown, cookies: unknown) => {
+  const p = browserPartition(partition);
+  if (!BrowserWindow.fromWebContents(e.sender) || !p) return false;
+  const ses = session.fromPartition(p);
+  guardSession(ses, fileGuard);
+  return importCookies(ses, cookies);
+});
+ipcMain.handle('desktop:browser:clearData', async (e, partition: unknown) => {
+  const p = browserPartition(partition);
+  if (!BrowserWindow.fromWebContents(e.sender) || !p) return false;
+  try { await clearBrowsingData(session.fromPartition(p)); return true; } catch (err) { mainLog(`clearData: ${(err as Error).message}`); return false; }
+});
 // the downloads bar's 打开 / 在文件夹中显示: only a file a download of the built-in browser saved
 ipcMain.handle('desktop:download:open', async (e, p: unknown) => {
   if (!BrowserWindow.fromWebContents(e.sender) || !downloads.owns(p)) return false;
@@ -934,7 +948,7 @@ if (gotLock) app.whenReady().then(async () => {
   initLanguage(app.getLocale()); // before any window, menu or dialog is worded
   // the built-in browser's profiles (web features/browser/state.ts) are guarded before any page; any other profile a
   // <webview> names gets it as it attaches (createWindow)
-  for (const p of ['persist:cw-browser', 'persist:cw-agent']) guardSession(session.fromPartition(p), fileGuard);
+  for (const p of BROWSER_PARTITIONS) guardSession(session.fromPartition(p), fileGuard);
   // the window first (on the splash), then the server: see splashUrl
   const hidden = process.argv.includes('--hidden');
   const main = createWindow(null, 'main', undefined, hidden);

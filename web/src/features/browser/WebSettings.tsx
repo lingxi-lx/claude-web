@@ -10,6 +10,7 @@ import { showPanel } from '@/features/workbench/right-panel';
 import './browser.css';
 import { tr } from '@/i18n';
 import { Select } from '@/ui/Select';
+import { COOKIES_KEY, COOKIE_MODES, cookieModeText, cookiesMode } from './state';
 
 /** The search services that need a key of their own → the setting it is kept in (protected on the server, never sent back). */
 const KEY_SETTING: Record<string, string> = { brave: 'web.search.braveKey' };
@@ -28,6 +29,10 @@ export function WebSettings() {
   const [found, setFound] = useState<(WebSearchAnswer & { weak?: boolean }) | null>(null);
   const [searching, setSearching] = useState(false);
   const [err, setErr] = useState('');
+  // 保留 Cookie: web.browser.cookies, else the old web.browser.isolated (state.ts cookiesMode)
+  const storedMode = useStore((s) => s.settings[COOKIES_KEY]);
+  const oldIsolated = useStore((s) => s.settings['web.browser.isolated']);
+  const cookieMode = cookiesMode({ [COOKIES_KEY]: storedMode, 'web.browser.isolated': oldIsolated });
 
   const load = () => ws.request<WebStatus>({ kind: 'web.status' }).then(setSt).catch(() => {});
   useEffect(() => { void load(); const off = ws.on((e) => { if (e.kind === 'web.changed') void load(); }); return () => { off(); }; }, []);
@@ -99,8 +104,8 @@ export function WebSettings() {
         <Row label={tr('Agent 在哪里打开网页')} hint={st?.host ? tr('在桌面窗口右侧面板的「浏览器」里，每个对话的 Agent 各用一个标签页，你看得到它在做什么。') : tr('现在没有桌面窗口连着（网页版、手机）：Agent 只能读网页上的文字，点击、填表和截图要桌面版。')}>
           <button className="btn sm" onClick={() => { useStore.setState({ settingsOpen: null }); showPanel('browser'); }}><Icon name="web" size={13} /> {tr('打开浏览器')}</button>
         </Row>
-        <Row label={tr('Agent 用单独的浏览器身份')} hint={tr('关着：Agent 打开的网页带着你在内置浏览器里登录过的账号。打开：它用单独的一份，你登录过的网站对它来说都没登录。对之后新开的 Agent 标签页生效。')}>
-          <button className={clsx('toggle', st?.isolated && 'on')} role="switch" aria-checked={!!st?.isolated} aria-label={tr('Agent 用单独的浏览器身份')} disabled={!st} data-id="web-isolated" onClick={() => void set('web.browser.isolated', !st?.isolated)} />
+        <Row label={tr('保留 Cookie')} hint={tr('{desc}。已经打开的页面还用原来的，之后新开的页面用新的设置。', { desc: cookieModeText(cookieMode).desc })}>
+          <Select className="field" aria-label={tr('保留 Cookie')} data-id="web-cookies" value={cookieMode} onValueChange={(value) => void set(COOKIES_KEY, String(value))} options={COOKIE_MODES.map((m) => ({ value: m, label: cookieModeText(m).label }))} />
         </Row>
       </div>
     </>

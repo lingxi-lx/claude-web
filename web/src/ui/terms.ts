@@ -130,6 +130,8 @@ export const EMPTY = {
   workflowOpen: { what: tr('打开的工作流'), when: tr('在左边选一个工作流或新建一个') },
   orchestraRuns: { what: tr('运行记录'), when: tr('运行一个工作流') },
   orphans: { what: tr('遗留的独立副本'), when: tr('删除运行记录时没清理它的独立副本') },
+  // the built-in browser's 管理允许的网站…
+  allowedSites: { what: tr('允许的网站'), when: tr('在授权卡上选「总是允许这个网站」') },
   // the start page
   recent: { what: tr('对话'), when: trAs('发出第一个任务', 'you send your first task') },
   archived: { what: tr('归档的对话'), when: tr('归档一个对话') },

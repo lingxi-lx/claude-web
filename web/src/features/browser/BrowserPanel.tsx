@@ -6,7 +6,10 @@ import { Icon } from '@/ui/icons';
 import { imeComposing } from '@/ui/ime';
 import { Popover } from '@/features/composer/Popover';
 import { selectionOf } from './guest';
-import { closeTab, ensureTab, frontTab, guestElOf, guestOf, guestReady, hasWebview, newTab, openUrl, patchTab, setGuest, tabOf, tabOfGuest, useBrowser, type BrowserTab, type WebviewEl } from './state';
+import { COOKIES_KEY, COOKIE_MODES, browsingPartitions, closeTab, cookieModeText, cookiesMode, ensureTab, firstPage, frontTab, guestElOf, guestOf, guestReady, hasWebview, newTab, openUrl, patchTab, setGuest, tabOf, tabOfGuest, useBrowser, type BrowserTab, type WebviewEl } from './state';
+import { parseCookies } from './cookies';
+import { AllowedSites } from './AllowedSites';
+import { dlg } from '@/ui/dialog';
 import { RECENT_KEY, addressToUrl, frameSandbox, loadable, pushRecent, readRecent, siteHue, siteLetter, siteOf } from './url';
 import { VIEWPORT_IDS, fitScale, viewportLabel, viewportOf, type ViewportId } from './viewport';
 import { nextPageZoom, progressOn, screenshotName, type LoadEvent } from './panel-logic';
@@ -34,7 +37,7 @@ function drive(tabId: string, fn: 'goBack' | 'goForward' | 'reload' | 'stop') {
 function go(tab: BrowserTab, input: string): boolean {
   const url = addressToUrl(input);
   if (!url || !loadable(url)) return false;
-  if (!tab.src) { patchTab(tab.id, { src: url, url, loading: true, error: undefined }); return true; }
+  if (!tab.src) { patchTab(tab.id, { src: url, url, loading: true, error: undefined, partition: firstPage(tab) }); return true; }
   patchTab(tab.id, { url, error: undefined });
   const el = guestOf(tab.id);
   if (el) void el.loadURL(url).catch(() => {});
@@ -296,6 +299,7 @@ function AddressBar({ tab }: { tab: BrowserTab }) {
   const [addr, setAddr] = useState(tab.url);
   const [editing, setEditing] = useState(false);
   const [menu, setMenu] = useState(false);
+  const [sites, setSites] = useState(false);
   const more = useRef<HTMLButtonElement>(null);
   const field = useRef<HTMLInputElement>(null);
   // the field follows the page unless it is being typed in
@@ -347,12 +351,13 @@ function AddressBar({ tab }: { tab: BrowserTab }) {
       </div>
       <button className="icon-btn xs" disabled={!hasPage} title={tr('把这个页面的地址（和选中的文字）放进对话的输入框')} aria-label={tr('发给对话')} data-id="to-chat" onClick={() => void toChat()}><Icon name="quote" size={14} /></button>
       <button className="icon-btn xs" title={tr('新标签页')} aria-label={tr('新标签页')} data-id="new-tab" onClick={() => newTab()}><Icon name="plus" size={15} /></button>
-      <button ref={more} className={clsx('icon-btn xs', menu && 'active')} disabled={!hasPage && !canPickHtml()} title={tr('更多')} aria-label={tr('更多')} aria-haspopup="menu" aria-expanded={menu} data-id="more" onClick={() => setMenu(!menu)}><Icon name="more" size={15} /></button>
+      <button ref={more} className={clsx('icon-btn xs', menu && 'active')} title={tr('更多')} aria-label={tr('更多')} aria-haspopup="menu" aria-expanded={menu} data-id="more" onClick={() => setMenu(!menu)}><Icon name="more" size={15} /></button>
       {menu && (
         <Popover anchor={more} onClose={closeMenu} prefer="down" align="right" className="bw-menu" label={tr('这个页面')}>
-          <PageMenu tab={tab} close={closeMenu} external={external} />
+          <PageMenu tab={tab} close={closeMenu} external={external} onSites={() => setSites(true)} />
         </Popover>
       )}
+      {sites && <AllowedSites onClose={() => { setSites(false); more.current?.focus(); }} />}
       {tab.progress !== undefined && <span className={clsx('bw-progress', tab.progress >= 1 && 'done')} data-id="progress" aria-hidden style={{ transform: `scaleX(${tab.progress})` }} />}
     </div>
   );
@@ -384,10 +389,82 @@ async function saveShot(tab: BrowserTab) {
   toast(tr('截图已保存：{path}', { path: r }), true);
 }
 
-/** The ⋯ menu: what can be done with the page, and 视口 › (a view of its own, like the + menu's 连接器 ›). */
-function PageMenu({ tab, close, external }: { tab: BrowserTab; close: (refocus: boolean) => void; external: () => void }) {
-  const [view, setView] = useState<'main' | 'viewport'>('main');
+/** A file the user picks with the system's open dialog (dlg has no file picker); null when they cancel. Read in this page only. */
+function pickFile(accept: string): Promise<File | null> {
+  return new Promise((resolve) => {
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = accept;
+    inp.addEventListener('change', () => resolve(inp.files?.[0] ?? null), { once: true });
+    inp.addEventListener('cancel', () => resolve(null), { once: true });
+    inp.click();
+  });
+}
+
+const MAX_COOKIE_FILE = 5 * 1024 * 1024;
+
+/**
+ * 导入 Cookie…: a cookies.txt or an extension's JSON export, parsed here (cookies.ts) and handed straight to the shell,
+ * into the profile this tab's page is in (or would be made in). The values go nowhere else — not to the server.
+ */
+async function importCookieFile(tab: BrowserTab) {
+  const toast = useStore.getState().toast;
+  if (!desktop?.importCookies) return;
+  const file = await pickFile('.txt,.json,text/plain,application/json');
+  if (!file) return;
+  if (file.size > MAX_COOKIE_FILE) return toast(tr('这个文件太大，不像是 Cookie 文件'));
+  let text: string;
+  try { text = await file.text(); } catch { return toast(tr('读不了这个文件')); }
+  const { ok, bad } = parseCookies(text);
+  if (!ok.length) return toast(tr('这个文件里没有能导入的 Cookie（支持 cookies.txt 和浏览器扩展导出的 JSON）'));
+  const r = await desktop.importCookies(firstPage(tab), ok).catch(() => false as const);
+  if (!r) return toast(tr('没能导入 Cookie'));
+  const skipped = bad + r.failed;
+  toast(skipped
+    ? tr('导入了 {n} 条 Cookie，{m} 条没能导入。重新加载页面就能用上。', { n: r.set, m: skipped })
+    : tr('导入了 {n} 条 Cookie。重新加载页面就能用上。', { n: r.set }), r.set > 0);
+}
+
+/** 清除浏览数据: after asking, every profile the current 保留 Cookie uses (and any an open tab still uses) is emptied. */
+async function clearBrowsingData() {
+  const st = useStore.getState();
+  if (!desktop?.clearBrowsingData) return;
+  const ok = await dlg.confirm(tr('清除内置浏览器的浏览数据？'), {
+    message: tr('Cookie（网站的登录状态）、网站存在本机的数据和缓存都会删掉：你和 Claude 在内置浏览器里登录过的网站都要重新登录。不影响电脑上的其它浏览器。'),
+    okLabel: tr('清除'), danger: true, focusCancel: true,
+  });
+  if (!ok) return;
+  const done = await Promise.all(browsingPartitions(cookiesMode(st.settings)).map((p) => desktop!.clearBrowsingData!(p).catch(() => false)));
+  st.toast(done.every(Boolean) ? tr('浏览数据已清除') : tr('没能清除全部浏览数据'), done.every(Boolean));
+}
+
+/** The menu's three switches: absent = on. */
+const SWITCHES = [
+  { act: 'open-links', key: 'web.browser.openLinks', icon: 'link', label: () => tr('在内置浏览器打开链接') },
+  { act: 'open-files', key: 'web.browser.openFiles', icon: 'files', label: () => tr('自动打开 Claude 写的文件') },
+  { act: 'auto-verify', key: 'web.browser.autoVerify', icon: 'checkCircle', label: () => tr('自动检查改动') },
+] as const;
+
+function SwitchRow({ act, setting, icon, label }: { act: string; setting: string; icon: Parameters<typeof Icon>[0]['name']; label: string }) {
+  const on = useStore((s) => s.settings[setting]) !== false;
+  const setSetting = useStore((s) => s.setSetting);
+  return (
+    <button type="button" data-mi role="menuitemcheckbox" aria-checked={on} className={clsx('cm-it', on && 'on')} data-act={act} onClick={() => void setSetting(setting, !on)}>
+      <span className="cm-ck"><Icon name={icon} size={14} /></span>
+      <span className="cm-tx"><span className="cm-l">{label}</span></span>
+      <span className={clsx('toggle sm', on && 'on')} aria-hidden />
+    </button>
+  );
+}
+
+/** The ⋯ menu: what can be done with the page, 视口 › and 保留 Cookie › (views of their own, like the + menu's 连接器 ›), the switches. */
+function PageMenu({ tab, close, external, onSites }: { tab: BrowserTab; close: (refocus: boolean) => void; external: () => void; onSites: () => void }) {
+  const [view, setView] = useState<'main' | 'viewport' | 'cookies'>('main');
   const toast = useStore((s) => s.toast);
+  const setSetting = useStore((s) => s.setSetting);
+  const storedMode = useStore((s) => s.settings[COOKIES_KEY]);
+  const oldIsolated = useStore((s) => s.settings['web.browser.isolated']);
+  const mode = cookiesMode({ [COOKIES_KEY]: storedMode, 'web.browser.isolated': oldIsolated });
   const box = useRef<HTMLDivElement>(null);
   // a view switched under the keyboard: its checked row (else its first) takes the focus
   const first = useRef(true);
@@ -421,6 +498,28 @@ function PageMenu({ tab, close, external }: { tab: BrowserTab; close: (refocus: 
       </div>
     );
   }
+  if (view === 'cookies') {
+    return (
+      <div ref={box} className="cm-ref" data-id="cookies-menu">
+        <div className="cm-ref-head">
+          <button type="button" data-mi className="icon-btn xs" aria-label={tr('返回')} onClick={() => setView('main')}><Icon name="chevronRight" size={12} className="flip" /></button>
+          <span className="cm-l">{tr('保留 Cookie')}</span>
+        </div>
+        {COOKIE_MODES.map((id) => {
+          const t = cookieModeText(id);
+          return (
+            <button key={id} type="button" data-mi role="menuitemradio" aria-checked={mode === id} className={clsx('cm-it', mode === id && 'on')} data-cookies={id}
+              onClick={() => { close(false); if (id !== mode) void setSetting(COOKIES_KEY, id); }}>
+              <span className="cm-ck">{mode === id && <Icon name="check" size={14} />}</span>
+              <span className="cm-tx"><span className="cm-l">{t.label}</span><span className="cm-d">{t.desc}</span></span>
+            </button>
+          );
+        })}
+        <div className="cm-sub">{tr('已经打开的页面还用原来的，之后新开的页面用新的设置。')}</div>
+      </div>
+    );
+  }
+  const browser = hasWebview();
   return (
     <div ref={box} className="cm-ref">
       {hasPage && row('external', 'external', tr('在系统浏览器打开'), () => { close(false); external(); })}
@@ -430,6 +529,18 @@ function PageMenu({ tab, close, external }: { tab: BrowserTab; close: (refocus: 
         <span className="cm-r">{tab.viewport && tab.viewport !== 'auto' ? viewportLabel(tab.viewport).split(' · ')[0] : ''} <Icon name="chevronRight" size={12} /></span>)}
       {canPickHtml() && row('open-html', 'folder', tr('打开本地 HTML 文件…'), () => { close(false); void openLocalHtml(); })}
       {live && row('devtools', 'bash', tr('开发者工具'), () => { close(false); try { guestOf(tab.id)?.openDevTools?.(); } catch { /* not attached */ } })}
+      {(hasPage || canPickHtml()) && <div className="menu-sep" />}
+      {SWITCHES.map((s) => <SwitchRow key={s.act} act={s.act} setting={s.key} icon={s.icon} label={s.label()} />)}
+      {row('allowed-sites', 'shield', tr('管理允许的网站…'), () => { close(false); onSites(); })}
+      {browser && (
+        <>
+          <div className="menu-sep" />
+          <div className="cm-h">Cookie</div>
+          {desktop?.importCookies && row('import-cookies', 'attach', tr('导入 Cookie…'), () => { close(false); void importCookieFile(tab); })}
+          {row('cookies', 'database', tr('保留 Cookie'), () => setView('cookies'), <span className="cm-r">{cookieModeText(mode).label} <Icon name="chevronRight" size={12} /></span>)}
+          {desktop?.clearBrowsingData && row('clear-data', 'trash', tr('清除浏览数据'), () => { close(false); void clearBrowsingData(); })}
+        </>
+      )}
     </div>
   );
 }
