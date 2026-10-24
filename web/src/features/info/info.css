@@ -50,9 +50,10 @@
 .ctx .ctx-list-h { display: flex; align-items: center; gap: 4px; width: 100%; font-size: var(--fs-meta); color: var(--fg-2); min-height: 22px; }
 .ctx .ctx-list-h .ic-dim { margin-left: auto; }
 .ctx .ctx-foot { margin-top: 8px; font-size: var(--fs-meta); }
-.sw-0 { background: var(--blue); } .sw-1 { background: var(--red); } .sw-2 { background: var(--green); } .sw-3 { background: var(--yellow); }
-.sw-4 { background: color-mix(in oklab, var(--blue) 55%, var(--red)); } .sw-5 { background: var(--accent); }
-.sw-6 { background: color-mix(in oklab, var(--green) 50%, var(--blue)); } .sw-7 { background: color-mix(in oklab, var(--fg) 45%, transparent); }
+/* one colour per category, the same in every conversation (info-model toneOf) */
+.ctx { --ctx-messages: var(--blue); --ctx-tools: color-mix(in oklab, var(--red) 55%, var(--yellow)); --ctx-mcp: color-mix(in oklab, var(--green) 55%, var(--blue)); --ctx-skills: var(--yellow); --ctx-other: color-mix(in oklab, var(--fg) 42%, transparent); }
+.ctx-t-messages { background: var(--ctx-messages); } .ctx-t-tools { background: var(--ctx-tools); } .ctx-t-mcp { background: var(--ctx-mcp); }
+.ctx-t-skills { background: var(--ctx-skills); } .ctx-t-other { background: var(--ctx-other); }
 .sw-buf { background: repeating-linear-gradient(135deg, color-mix(in oklab, var(--fg) 30%, transparent) 0 2px, transparent 2px 4px); }
 .sw-free { background: color-mix(in oklab, var(--fg) 14%, transparent); }
 .info-card .ic-row-btn { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; min-height: 26px; border-radius: var(--r-sm); text-align: left; color: var(--fg); }

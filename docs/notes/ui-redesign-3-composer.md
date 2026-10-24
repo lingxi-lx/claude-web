@@ -27,7 +27,7 @@ spec §5.4、§5.5（定案 1：模型菜单保持平铺）、mock-composer.png�
   count_tokens、0 个非流式；cw.6 = 29 个 count_tokens、0 个非流式。修法两头：引擎 cw.6 不再走那个回退（fork 的 `CLAUDE-WEB.md`）；
   claude-web 的环 / 状态条 / 信息栏摘要统一用 `ContextMeter.tsx` 的 `useContextUsage()` = 进程放在消息上的占用，否则 `estimateContext()`
   （在跑的对话也一样，就是官方 CLI 小指示的算法），`refreshContextUsage` 和 `OpenSession.contextUsage` 删了；信息栏的上下文卡只在展开时取一次
-  `full`、点「刷新」再取。`store.test.ts`「turn end」查一轮结束不发 `session.contextUsage`。ui-smoke 的环检查改设 `conv.contextUsage`。
+  `full`、点「刷新」再取（2026-10-24 起卡展开着时每轮结束也取一次，见「照官方桌面版录屏改的界面」的上下文卡）。`store.test.ts`「turn end」查一轮结束不发 `session.contextUsage`。ui-smoke 的环检查改设 `conv.contextUsage`。
   model 切换前的 `fitBeforeSwitch`（服务端）还会问一次——只在换模型时。
   **连带的坑**（独立审查抓到）：reducer 收到 `message_delta` 时以前用它的 usage **整个替换**这条回答的 usage，Anthropic 文档里的 `message_delta`
   只带 `output_tokens`——输入和缓存就成了 0，在跑的对话环掉到 ~0%（以前被每轮的 `getContextUsage` 盖住了）。现在只覆盖它带了的字段

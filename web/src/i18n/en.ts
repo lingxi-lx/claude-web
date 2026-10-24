@@ -2402,6 +2402,7 @@ export const EN_WEB: Record<string, string> = {
   "更多面板：目标、编排、用量、Issue 与 PR…": "More panels: goals, orchestration, usage, Issues and PRs…",
   "更强 · 较慢": "stronger · slower",
   "更新": "Updated",
+  "更新中…": "Updating…",
   "更新内容": "What’s new",
   "更新计划": "Update plan",
   "更新还没准备好，稍后再试": "The update isn't ready yet, try again later",

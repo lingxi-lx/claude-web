@@ -1,7 +1,7 @@
 // 信息栏 (spec 2026-10-16 recording-ux §1; the official app's right column): the conversation's environment, context,
 // connectors, changes and background tasks as cards beside it. Each folds; their order is dragged (or Alt+↑/↓ on a
 // title); both are kept in meta.json `ui.infoCards`.
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { RemoteStatus } from '@shared';
 import { useStore } from '@/store';
 import { ws } from '@/ws/client';
@@ -157,18 +157,43 @@ function EnvCard({ sessionId }: { sessionId: string }) {
 
 // ---------- 上下文 ----------
 
+/** The last breakdown per conversation for this run of the app: the card shows it at once, then counts again.
+ *  Memory only (not meta.json, not localStorage): a count is stale by the next launch anyway. */
+const ctxCache = new Map<string, { b: CtxBreakdown; at: number }>();
+
 function ContextCard({ sessionId }: { sessionId: string }) {
   const state = useStore((s) => s.open[sessionId]?.state);
   const live = state === 'idle' || state === 'running' || state === 'waiting';
-  const [data, setData] = useState<{ b: CtxBreakdown; at: number } | null>(null);
+  const [data, setData] = useState(() => ctxCache.get(sessionId) ?? null);
+  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(false);
+  // the conversation the card shows now: an answer for one it has left is cached, not shown
+  const shown = useRef(sessionId);
+  shown.current = sessionId;
   const load = () => {
-    ws.request({ kind: 'session.contextUsage', sessionId, detail: 'full' })
-      .then((u: any) => { const b = contextBreakdown(u); if (b) { setData({ b, at: Date.now() }); setErr(false); } else setErr(true); })
-      .catch(() => setErr(true));
+    const sid = sessionId;
+    setBusy(true);
+    ws.request({ kind: 'session.contextUsage', sessionId: sid, detail: 'full' })
+      .then((u: any) => {
+        const b = contextBreakdown(u);
+        if (b) ctxCache.set(sid, { b, at: Date.now() });
+        if (shown.current !== sid) return;
+        if (b) { setData(ctxCache.get(sid)!); setErr(false); } else setErr(true);
+      })
+      .catch(() => { if (shown.current === sid) setErr(true); })
+      .finally(() => { if (shown.current === sid) setBusy(false); });
   };
-  // when unfolded and on 刷新 only: the engine counts it with the model's API, ~15–30 requests (useContextUsage)
-  useEffect(() => { if (live) load(); }, [sessionId, live]);
+  // the card only lives while unfolded (InfoColumn unmounts a folded body), so all of this runs only then: the engine
+  // counts it with the model's API, ~15–30 requests (useContextUsage) — on opening, on 刷新, and when a turn ends
+  useEffect(() => { setData(ctxCache.get(sessionId) ?? null); setErr(false); setBusy(false); if (live) load(); }, [sessionId, live]);
+  // a turn ended (running → idle) in the same conversation: count again (running → idle keeps `live`, so the effect
+  // above does not fire too; a switch to another conversation is that effect's job)
+  const prev = useRef({ sessionId, state });
+  useEffect(() => {
+    const p = prev.current;
+    if (p.sessionId === sessionId && p.state === 'running' && state === 'idle') load();
+    prev.current = { sessionId, state };
+  }, [sessionId, state]);
   const [, tick] = useState(0);
   useEffect(() => { const t = setInterval(() => tick((n) => n + 1), 30_000); return () => clearInterval(t); }, []);
   if (!data) return <div className="ic-dim">{!live ? tr('对话开着时才有明细') : err ? tr('这个对话的 agent 不提供明细') : tr('加载中…')}</div>;
@@ -177,18 +202,18 @@ function ContextCard({ sessionId }: { sessionId: string }) {
   return (
     <div className="ctx">
       <div className="ctx-top"><span>{tr('已用 {p}%', { p: b.percentage })}</span><span className="ic-dim">{fmtTokens(b.total)} / {fmtTokens(b.max)}</span></div>
-      <div className="ctx-bar">{b.used.map((c) => <i key={c.name} className={`sw-${c.swatch}`} style={{ width: `${c.pct}%` }} />)}{b.buffer.map((c) => <i key={c.name} className="sw-buf" style={{ width: `${c.pct}%` }} />)}</div>
-      {[...b.used, ...b.buffer, ...b.free].map((c) => (
-        <div key={c.name} className="ctx-row">
-          <i className={'swatch' in c ? `sw-${(c as any).swatch}` : c.kind === 'buffer' ? 'sw-buf' : 'sw-free'} />
-          <span className="n">{c.name}</span><span className="t">{fmtTokens(c.tokens)}</span><span className="p">{c.pct.toFixed(1)}%</span>
-        </div>
+      <div className="ctx-bar">{b.used.map((c) => <i key={c.name} className={`ctx-t-${c.tone}`} style={{ width: `${c.pct}%` }} />)}{b.buffer.map((c) => <i key={c.name} className="sw-buf" style={{ width: `${c.pct}%` }} />)}</div>
+      {b.used.map((c) => (
+        <div key={c.name} className="ctx-row"><i className={`ctx-t-${c.tone}`} /><span className="n">{c.name}</span><span className="t">{fmtTokens(c.tokens)}</span><span className="p">{c.pct.toFixed(1)}%</span></div>
+      ))}
+      {[...b.buffer, ...b.free].map((c) => (
+        <div key={c.name} className="ctx-row"><i className={c.kind === 'buffer' ? 'sw-buf' : 'sw-free'} /><span className="n">{c.name}</span><span className="t">{fmtTokens(c.tokens)}</span><span className="p">{c.pct.toFixed(1)}%</span></div>
       ))}
       {b.deferred.map((c) => <div key={c.name} className="ctx-row dim"><i className="sw-free" /><span className="n">{c.name}</span><span className="t">{fmtTokens(c.tokens)}</span><span className="p">—</span></div>)}
       <CtxList title={tr('MCP 工具')} rows={b.mcpTools.map((t) => [t.name.replace(/^mcp__/, ''), t.tokens])} />
       <CtxList title={tr('记忆文件')} rows={b.memoryFiles.map((m) => [basename(m.path), m.tokens])} />
       <CtxList title={tr('自定义子代理')} rows={b.agents.map((a) => [a.name, a.tokens])} />
-      <div className="ic-dim ctx-foot">{mins < 1 ? tr('刚刚更新') : tr('{n} 分钟前更新', { n: mins })} <button className="link" data-act="ctx-refresh" onClick={load}>{tr('刷新')}</button></div>
+      <div className="ic-dim ctx-foot">{busy ? tr('更新中…') : mins < 1 ? tr('刚刚更新') : tr('{n} 分钟前更新', { n: mins })} {!busy && <button className="link" data-act="ctx-refresh" onClick={load}>{tr('刷新')}</button>}</div>
     </div>
   );
 }

@@ -47,7 +47,7 @@ export interface CtxBreakdown {
   percentage: number;
   total: number;
   max: number;
-  used: (CtxCategory & { pct: number; swatch: number })[];
+  used: (CtxCategory & { pct: number; tone: CtxTone })[];
   buffer: (CtxCategory & { pct: number })[];
   free: (CtxCategory & { pct: number })[];
   deferred: CtxCategory[];
@@ -56,8 +56,27 @@ export interface CtxBreakdown {
   agents: { name: string; tokens: number }[];
 }
 
-/** getContextUsage's answer (`detail: 'full'`) → rows for the card. `swatch` is a palette index (the CLI's colour
- *  names are its terminal theme's, not ours). Classified on `kind`, never on the English name. */
+export type CtxTone = 'messages' | 'tools' | 'mcp' | 'skills' | 'other';
+const TONES: Record<string, CtxTone> = { 'Messages': 'messages', 'System tools': 'tools', 'MCP tools': 'mcp', 'Skills': 'skills' };
+/** The colour a category keeps in every conversation (the official card's: messages blue, tools orange, MCP teal, skills yellow, the rest grey). */
+export function toneOf(name: string): CtxTone {
+  return TONES[name.replace(/^\[ANT-ONLY\]\s*/, '')] ?? 'other';
+}
+
+const KINDS = new Set(['used', 'free', 'buffer', 'deferred']);
+/** The row's `kind` as the SDK documents it. The ccb fork answers without it (seen live 2026-10-24: every row came as
+ *  `used`, so 141k of free space sorted to the top): then `isDeferred`, and the two rows the CLI always names the same. */
+function kindOf(c: { name: string; kind?: unknown; isDeferred?: unknown }): CtxCategory['kind'] {
+  if (typeof c.kind === 'string' && KINDS.has(c.kind)) return c.kind as CtxCategory['kind'];
+  if (c.isDeferred) return 'deferred';
+  if (/^free space$/i.test(c.name)) return 'free';
+  if (/^(auto)?compact buffer$/i.test(c.name)) return 'buffer';
+  return 'used';
+}
+
+/** getContextUsage's answer (`detail: 'full'`) → rows for the card, the used ones biggest first. `tone`: a fixed
+ *  colour per category (toneOf; the CLI's colour names are its terminal theme's, not ours). Classified on `kind`
+ *  (kindOf when an engine leaves it out). */
 export function contextBreakdown(u: any): CtxBreakdown | null {
   if (!u || !Array.isArray(u.categories)) return null;
   const max = Number(u.rawMaxTokens ?? u.maxTokens ?? 0) || 0;
@@ -65,13 +84,12 @@ export function contextBreakdown(u: any): CtxBreakdown | null {
   const pct = (t: number) => (max ? (t / max) * 100 : 0);
   const cats: CtxCategory[] = u.categories
     .filter((c: any) => c && typeof c.name === 'string' && Number.isFinite(c.tokens))
-    .map((c: any) => ({ name: c.name, tokens: c.tokens, color: c.color, kind: c.kind ?? (c.isDeferred ? 'deferred' : 'used') }));
-  let swatch = 0;
+    .map((c: any) => ({ name: c.name, tokens: c.tokens, color: c.color, kind: kindOf(c) }));
   return {
     percentage: Number.isFinite(u.percentage) ? u.percentage : Math.round(pct(total)),
     total,
     max,
-    used: cats.filter((c) => c.kind === 'used').map((c) => ({ ...c, pct: pct(c.tokens), swatch: swatch++ % 8 })),
+    used: cats.filter((c) => c.kind === 'used').sort((a, b) => b.tokens - a.tokens).map((c) => ({ ...c, pct: pct(c.tokens), tone: toneOf(c.name) })),
     buffer: cats.filter((c) => c.kind === 'buffer').map((c) => ({ ...c, pct: pct(c.tokens) })),
     free: cats.filter((c) => c.kind === 'free').map((c) => ({ ...c, pct: pct(c.tokens) })),
     deferred: cats.filter((c) => c.kind === 'deferred'),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { connectorSummary, contextBreakdown, fmtTokens, moveCard, normInfoLayout, nudgeCard, toggleCard } from './info-model';
+import { connectorSummary, contextBreakdown, fmtTokens, moveCard, normInfoLayout, nudgeCard, toggleCard, toneOf } from './info-model';
 
 describe('信息栏 layout', () => {
   it('a stored layout is repaired: unknown dropped, duplicates gone, new cards appended; context folded by default', () => {
@@ -32,7 +32,7 @@ describe('上下文 breakdown', () => {
       agents: [{ agentType: 'Explore', source: 'built-in', tokens: 300 }],
     })!;
     expect(b.percentage).toBe(13);
-    expect(b.used.map((c) => [c.name, c.swatch])).toEqual([['Messages', 0], ['System tools', 1]]);
+    expect(b.used.map((c) => [c.name, c.tone])).toEqual([['Messages', 'messages'], ['System tools', 'tools']]);
     expect(b.used[0].pct).toBeCloseTo(2.8, 1);
     expect(b.buffer[0].name).toBe('Autocompact buffer');
     expect(b.free[0].pct).toBeCloseTo(82.6, 1);
@@ -50,5 +50,51 @@ describe('上下文 breakdown', () => {
   it('connectors: failed or waiting for a login need a hand', () => {
     expect(connectorSummary([{ name: 'a', status: 'connected' }, { name: 'b', status: 'failed' }, { name: 'c', status: 'needs-auth' }, { name: 'd' }]).broken).toBe(2);
     expect(connectorSummary(undefined).rows).toEqual([]);
+  });
+});
+
+describe('context colours (A5)', () => {
+  it('each category always has its own colour; unknown names are grey', () => {
+    expect(toneOf('Messages')).toBe('messages');
+    expect(toneOf('System tools')).toBe('tools');
+    expect(toneOf('[ANT-ONLY] System tools')).toBe('tools');
+    expect(toneOf('MCP tools')).toBe('mcp');
+    expect(toneOf('Skills')).toBe('skills');
+    expect(toneOf('System prompt')).toBe('other');
+    expect(toneOf('Something new')).toBe('other');
+  });
+  it('used categories biggest first; buffer / free / deferred kept apart', () => {
+    const b = contextBreakdown({
+      rawMaxTokens: 700_000, totalTokens: 520_000,
+      categories: [
+        { name: 'System prompt', tokens: 8600 },
+        { name: 'Messages', tokens: 482_300 },
+        { name: 'System tools', tokens: 16_500 },
+        { name: 'Autocompact buffer', tokens: 33_000, kind: 'buffer' },
+        { name: 'Free space', tokens: 89_500, kind: 'free' },
+        { name: 'MCP tools (deferred)', tokens: 194_700, kind: 'deferred' },
+      ],
+    })!;
+    expect(b.used.map((c) => c.name)).toEqual(['Messages', 'System tools', 'System prompt']);
+    expect(b.used.map((c) => c.tone)).toEqual(['messages', 'tools', 'other']);
+    expect(b.buffer.map((c) => c.name)).toEqual(['Autocompact buffer']);
+    expect(b.deferred.map((c) => c.name)).toEqual(['MCP tools (deferred)']);
+  });
+  it('an engine that leaves `kind` out (the ccb fork, seen live): free space and the compact buffer still kept apart', () => {
+    const b = contextBreakdown({
+      rawMaxTokens: 200_000, totalTokens: 25_200,
+      categories: [
+        { name: 'System prompt', tokens: 7100, color: 'promptBorder' },
+        { name: 'System tools', tokens: 15_300, color: 'inactive' },
+        { name: 'Messages', tokens: 554, color: 'purple' },
+        { name: 'Free space', tokens: 141_000, color: 'promptBorder' },
+        { name: 'Autocompact buffer', tokens: 33_000, color: 'inactive' },
+        { name: 'MCP tools (deferred)', tokens: 4100, color: 'cyan', isDeferred: true },
+      ],
+    })!;
+    expect(b.used.map((c) => c.name)).toEqual(['System tools', 'System prompt', 'Messages']);
+    expect(b.free.map((c) => c.name)).toEqual(['Free space']);
+    expect(b.buffer.map((c) => c.name)).toEqual(['Autocompact buffer']);
+    expect(b.deferred.map((c) => c.name)).toEqual(['MCP tools (deferred)']);
   });
 });
