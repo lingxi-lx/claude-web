@@ -15,6 +15,11 @@ export function parseBtw(text: string): string | null {
   return m ? (m[1] ?? '').trim() : null;
 }
 
+/** A quote from the selection menu's 旁聊 into the side chat's input line: in front of a question already typed there. */
+export function withQuote(cur: string, quote: string): string {
+  return cur.trim() ? quote + cur : quote;
+}
+
 /** 「放进对话」: the last answered question and its answer, as a draft for the conversation itself. */
 export function sideDraft(qa: SideQA): string {
   return `${qa.question}\n\n> ${(qa.response ?? '').split('\n').join('\n> ')}`;

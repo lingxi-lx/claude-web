@@ -5,7 +5,7 @@ import { imeComposing } from '@/ui/ime';
 import { tr } from '@/i18n';
 import { Markdown } from './Markdown';
 import { askSide, closeSideChat, dropSide, useSideChat } from './side-chat';
-import { sideDraft } from './side-chat-model';
+import { sideDraft, withQuote } from './side-chat-model';
 
 export function SideChat({ sessionId, onDraft }: { sessionId: string; onDraft: (text: string) => void }) {
   const open = useSideChat((s) => s.sessionId === sessionId);
@@ -18,7 +18,7 @@ export function SideChat({ sessionId, onDraft }: { sessionId: string; onDraft: (
   // a quote handed over by the selection menu's 旁聊: into the input line, not sent
   useEffect(() => {
     const d = useSideChat.getState().draft;
-    if (open && d) { setQ(d); useSideChat.setState({ draft: '' }); }
+    if (open && d) { setQ((cur) => withQuote(cur, d)); useSideChat.setState({ draft: '' }); }
   }, [open, focusTick]);
   useEffect(() => { const el = list.current; if (el) el.scrollTop = el.scrollHeight; }, [qas]);
   if (!open) return null;
