@@ -209,9 +209,12 @@ export class SessionRunner extends EventEmitter {
    * families run at 1M (`[1m]`) and where to compact. Another Claude account reads its own profile's instead.
    */
   private accountPrefs: AccountPrefs = { windows: {} };
-  /** a change of those that shrinks the window, made mid-turn: applied (compaction first) when the turn is over */
-  private deferredPrefs: AccountPrefs | null = null;
-  /** bumped by each setAccountPrefs: an older one still waiting for its compaction gives way */
+  /**
+   * a change of those (or of another Claude account's profile: reprovide) that shrinks the window, made mid-turn:
+   * applied (compaction first) when the turn is over
+   */
+  private deferredChange: (() => Promise<void>) | null = null;
+  /** bumped by each setAccountPrefs / claude-account reprovide: an older one still waiting for its compaction gives way */
   private prefsSeq = 0;
 
   constructor(params: OpenSessionParams, provider?: SessionProvider, opts: { thinkingLanguage?: string; account?: AccountPrefs } = {}) {
@@ -769,12 +772,13 @@ export class SessionRunner extends EventEmitter {
     // starts a turn of its own, whose result lands here again)
     // An account window change deferred to the turn's end goes first (it may compact on the current process before
     // the new window takes effect); a restart pending for something else follows it, unless the change restarted already
-    if (m.type === 'result' && this.deferredPrefs && !this.closed) {
-      const prefs = this.deferredPrefs;
+    if (m.type === 'result' && this.deferredChange && !this.closed) {
+      const change = this.deferredChange;
+      this.deferredChange = null;
       const pending = this.respawnPending;
       this.respawnPending = false;
       const q = this.q;
-      void this.setAccountPrefs(prefs).then(() => { if (pending && this.q === q && !this.closed) return this.respawnWhenIdle(); }).catch(() => { /* the old process keeps going */ });
+      void change().then(() => { if (pending && this.q === q && !this.closed) return this.respawnWhenIdle(); }).catch(() => { /* the old process keeps going */ });
       return;
     }
     if (m.type === 'result' && this.respawnPending && !this.closed && !this.hasBackgroundWork()) {
@@ -1275,10 +1279,32 @@ export class SessionRunner extends EventEmitter {
     const cur = this.provider ?? this.account;
     if (!p || !cur || p.id !== cur.id || (p.type === 'claude-account') !== !!this.account) return;
     const changed = JSON.stringify({ ...cur, modelsAt: 0 }) !== JSON.stringify({ ...p, modelsAt: 0 });
-    if (this.account) this.account = p;
+    if (this.account) {
+      // its 200K / 1M picks may shrink the current model's window: as for the own login's (setAccountPrefs), the
+      // conversation is compacted on the current window first, mid-turn once the turn is over (final review I2); the
+      // latest save wins
+      const seq = ++this.prefsSeq;
+      this.deferredChange = null;
+      if (changed && !(await this.fitForShrink(seq, accountWindowOf(this.model, familyWindows(p.contextWindows)), () => this.reprovide(p)))) return;
+      this.account = p;
+    }
     else this.provider = p;
     this.noteWindow();
     if (changed) await this.respawnWhenIdle();
+  }
+
+  /**
+   * A change that would take the current model's window to `then` (the account's 200K / 1M picks: setAccountPrefs; a
+   * claude-account profile saved: reprovide). When it shrinks: mid-turn the change waits for the turn's end (`redo`
+   * runs then, from ingest), idle the conversation is compacted on the current window first (fitBeforeSwitch).
+   * Whether the caller goes on now — not when it waits, or a later change (`seq`) took over meanwhile.
+   */
+  private async fitForShrink(seq: number, then: number | undefined, redo: () => Promise<void>): Promise<boolean> {
+    const now = this.windowOf(this.model);
+    if (!then || (now && then >= now)) return true;
+    if (this.busy()) { this.deferredChange = redo; return false; }
+    await this.fitBeforeSwitch(this.model ?? '', then);
+    return seq === this.prefsSeq && !this.closed;
   }
 
   /** The subagents' model as the engine is given it, when it is one of this conversation's own provider / account. */
@@ -1297,18 +1323,12 @@ export class SessionRunner extends EventEmitter {
     const next: AccountPrefs = { windows: familyWindows(p.windows), ...(typeof p.compactAt === 'number' ? { compactAt: p.compactAt } : {}) };
     // the latest call wins: one waiting for its compaction, or deferred to the end of a turn, gives way
     const seq = ++this.prefsSeq;
-    this.deferredPrefs = null;
+    this.deferredChange = null;
     if (JSON.stringify(next) === JSON.stringify(this.accountPrefs)) return;
     // the current model's window shrinking (Opus 1M → 200K at 500K): as for a model switch (fitBeforeSwitch), the
     // conversation is compacted on the current window first. Mid-turn that cannot happen: the whole change waits for
     // the turn's end (ingest), and the fit runs then, before the new window takes effect
-    const now = this.windowOf(this.model);
-    const then = this.windowOf(this.model, next);
-    if (then && (!now || then < now)) {
-      if (this.busy()) { this.deferredPrefs = next; return; }
-      await this.fitBeforeSwitch(this.model ?? '', then);
-      if (seq !== this.prefsSeq || this.closed) return;
-    }
+    if (!(await this.fitForShrink(seq, this.windowOf(this.model, next), () => this.setAccountPrefs(next)))) return;
     const kind = this.info.runtime;
     const before = { main: this.engineModel(kind, this.model), sub: this.subEngineModel(kind) };
     this.accountPrefs = next;

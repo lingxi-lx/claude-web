@@ -1559,6 +1559,61 @@ describe('SessionRunner: the account’s 200K / 1M picks and the 自动压缩 po
     });
   });
 
+  /** A claude-account Opus conversation (Opus left at 1M) that has run a turn, idle, its context holding `used`. */
+  const ranAccountTurn = async (id: string, used: number) => {
+    const p = acct();
+    const r = new SessionRunner({ sessionId: id, cwd: '/x', model: 'claude-opus-5-5' } as any, p);
+    await tick();
+    const sent: string[] = [];
+    r.on('sent', (m: any) => sent.push(typeof m.message.content === 'string' ? m.message.content : JSON.stringify(m.message.content)));
+    r.send('hi');
+    queries[0].push({ type: 'result', subtype: 'success', session_id: id, uuid: 'r0', is_error: false, result: 'ok' });
+    await tick();
+    queries[0].usage = { totalTokens: used };
+    return { r, sent, p };
+  };
+
+  // final review I2: the profile path went straight to a restart — the new 200K process could not even read 500K
+  it('a claude-account profile saved with Opus 1M → 200K under a conversation that does not fit: /compact first, then the restart', async () => {
+    await withHome(null, async () => {
+      const { r, sent, p } = await ranAccountTurn('a7-i2-1', 500_000);
+      const done = r.reprovide({ ...p, contextWindows: { opus: 200_000 } });
+      await tick();
+      expect(sent).toEqual(['hi', '/compact']);
+      expect(queries).toHaveLength(1);
+      expect(r.info.contextWindow).toBe(1_000_000);
+      queries[0].push({ type: 'result', subtype: 'success', session_id: 'a7-i2-1', uuid: 'r1', is_error: false, result: 'compacted' });
+      await done;
+      await tick();
+      expect(r.info.contextWindow).toBe(200_000);
+      expect(queries).toHaveLength(2);
+      expect(queries[1].options.model).toBe('claude-opus-5-5');
+      await r.close();
+    });
+  });
+
+  it('…saved mid-turn: nothing until the turn is over, then the compaction, then the restart', async () => {
+    await withHome(null, async () => {
+      const { r, sent, p } = await ranAccountTurn('a7-i2-2', 500_000);
+      r.send('more');
+      await r.reprovide({ ...p, contextWindows: { opus: 200_000 } });
+      await tick();
+      expect(sent).toEqual(['hi', 'more']);
+      expect(r.info.contextWindow).toBe(1_000_000);
+      queries[0].push({ type: 'result', subtype: 'success', session_id: 'a7-i2-2', uuid: 'r1', is_error: false, result: 'ok' });
+      await tick();
+      expect(sent).toEqual(['hi', 'more', '/compact']);
+      expect(queries).toHaveLength(1);
+      queries[0].push({ type: 'result', subtype: 'success', session_id: 'a7-i2-2', uuid: 'r2', is_error: false, result: 'compacted' });
+      await tick();
+      await tick();
+      expect(r.info.contextWindow).toBe(200_000);
+      expect(queries).toHaveLength(2);
+      expect(queries[1].options.model).toBe('claude-opus-5-5');
+      await r.close();
+    });
+  });
+
   it('a claude-account profile saved with a new compactAt reaches its running conversation (reprovide)', async () => {
     await withHome(null, async (dir) => {
       const p = acct();
