@@ -15,6 +15,11 @@ export function SideChat({ sessionId, onDraft }: { sessionId: string; onDraft: (
   const input = useRef<HTMLTextAreaElement>(null);
   const list = useRef<HTMLDivElement>(null);
   useEffect(() => { if (open) input.current?.focus(); }, [open, focusTick]);
+  // a quote handed over by the selection menu's 旁聊: into the input line, not sent
+  useEffect(() => {
+    const d = useSideChat.getState().draft;
+    if (open && d) { setQ(d); useSideChat.setState({ draft: '' }); }
+  }, [open, focusTick]);
   useEffect(() => { const el = list.current; if (el) el.scrollTop = el.scrollHeight; }, [qas]);
   if (!open) return null;
   const last = [...qas].reverse().find((x) => typeof x.response === 'string');
@@ -45,7 +50,8 @@ export function SideChat({ sessionId, onDraft }: { sessionId: string; onDraft: (
       <div className="sc-input">
         <textarea
           ref={input}
-          rows={1}
+          // as tall as its lines (a handed-over quote is 3+), up to the CSS max-height
+          rows={Math.min(4, q.split('\n').length)}
           value={q}
           placeholder={qas.length ? tr('接着问…') : tr('问一个关于这个对话的小问题…')}
           onChange={(e) => setQ(e.target.value)}

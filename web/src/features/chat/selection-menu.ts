@@ -1,7 +1,7 @@
 // The menu that shows up when text in the conversation is selected (2026-10-20, user request: 「不想右键」 — like the
 // Claude panel in VS Code). SelectionMenu.tsx reads the selection and the DOM; what it offers and where it goes is here.
 
-export type SelItem = 'copy' | 'copyCode' | 'copyMsg' | 'copyMd' | 'quote' | 'pin' | 'fork';
+export type SelItem = 'copy' | 'copyCode' | 'copyMsg' | 'copyMd' | 'quote' | 'side' | 'pin' | 'fork';
 
 /** What the selection is in. `msg`: the one message it lies inside (null: it spans several, or none we know). */
 export interface SelContext {
@@ -11,6 +11,8 @@ export interface SelContext {
   hasText: boolean;
   /** the message can be forked from (a user message, or a reply with its uuid) */
   canFork: boolean;
+  /** a live conversation of this machine: it can take a side question */
+  canSide?: boolean;
 }
 
 /** The rows, in groups (a separator between groups); a group with nothing in it is left out. */
@@ -19,7 +21,8 @@ export function selectionItems(c: SelContext): SelItem[][] {
     ['copy', ...(c.inCode ? (['copyCode'] as const) : [])],
     // a user message is its own Markdown: one row
     c.msg === 'assistant' ? (c.hasText ? ['copyMsg', 'copyMd'] : []) : c.msg === 'user' ? ['copyMsg'] : [],
-    ['quote'],
+    // 旁聊 (spec 2026-10-24 A4): the side chat opens with the selection quoted in its input
+    ['quote', ...(c.canSide ? (['side'] as const) : [])],
     [...(c.msg === 'assistant' && c.hasText ? (['pin'] as const) : []), ...(c.msg && c.canFork ? (['fork'] as const) : [])],
   ];
   return groups.filter((g) => g.length > 0);

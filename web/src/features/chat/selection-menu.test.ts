@@ -5,6 +5,10 @@ describe('selectionItems', () => {
   it('a reply: copy, the message (plain / Markdown), quote, pin and fork', () => {
     expect(selectionItems({ inCode: false, msg: 'assistant', hasText: true, canFork: true })).toEqual([['copy'], ['copyMsg', 'copyMd'], ['quote'], ['pin', 'fork']]);
   });
+  it('travels with 引用: 旁聊 when the conversation can take a side question', () => {
+    expect(selectionItems({ inCode: false, msg: 'assistant', hasText: true, canFork: true, canSide: true })).toEqual([['copy'], ['copyMsg', 'copyMd'], ['quote', 'side'], ['pin', 'fork']]);
+    expect(selectionItems({ inCode: false, msg: 'assistant', hasText: true, canFork: true, canSide: false })[2]).toEqual(['quote']);
+  });
   it('inside a code block: 复制代码块 next to 复制', () => {
     expect(selectionItems({ inCode: true, msg: 'assistant', hasText: true, canFork: false })[0]).toEqual(['copy', 'copyCode']);
   });

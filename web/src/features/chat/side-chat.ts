@@ -15,19 +15,24 @@ interface SideChatState {
   qas: SideQA[];
   /** bumped to put the focus in the card's own input line */
   focusTick: number;
+  /** text to put in the card's input line when it opens (a quoted selection); taken once */
+  draft: string;
 }
 
-export const useSideChat = create<SideChatState>(() => ({ sessionId: null, qas: [], focusTick: 0 }));
+export const useSideChat = create<SideChatState>(() => ({ sessionId: null, qas: [], focusTick: 0, draft: '' }));
 
-/** Opens the side chat on a conversation (a different one starts afresh), and asks `question` if there is one. */
-export function openSideChat(sessionId: string, question?: string): void {
+/**
+ * Opens the side chat on a conversation (a different one starts afresh), and asks `question` if there is one.
+ * `draft`: put in the card's input line, not sent (the selection menu's 旁聊: the quote, the user adds the question).
+ */
+export function openSideChat(sessionId: string, question?: string, draft?: string): void {
   const cur = useSideChat.getState();
-  useSideChat.setState({ sessionId, qas: cur.sessionId === sessionId ? cur.qas : [], focusTick: cur.focusTick + 1 });
+  useSideChat.setState({ sessionId, qas: cur.sessionId === sessionId ? cur.qas : [], focusTick: cur.focusTick + 1, draft: draft ?? '' });
   if (question) void askSide(question);
 }
 
 export function closeSideChat(): void {
-  useSideChat.setState({ sessionId: null, qas: [] });
+  useSideChat.setState({ sessionId: null, qas: [], draft: '' });
 }
 
 const patch = (id: string, p: Partial<SideQA>) =>

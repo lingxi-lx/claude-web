@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
+import { parsePeerId } from '@shared';
 import type { AssistantItem, UserItem } from '@/model/conversation';
 import { useStore } from '@/store';
 import { Icon, type IconName } from '@/ui/icons';
@@ -12,12 +13,15 @@ import { menuKey } from '@/features/composer/dir-menu';
 import { modKey } from '@/features/workbench/shortcuts';
 import { codeOf } from './CodeBlock';
 import { forkFrom, replyMarkdown, togglePin } from './MessageActions';
+import { refineDoubleClick } from './dblclick-select';
+import { openSideChat } from './side-chat';
 import { isQuoteKey, placeSelectionMenu, selectionItems, type Rect, type SelItem } from './selection-menu';
 
 // The menu that comes up as soon as text in the conversation is selected (2026-10-20, user request: 「不想右键」 — like
-// the Claude panel in VS Code): 复制 · 复制代码块 · 复制整条消息 / 复制为 Markdown · 引用到输入框 (Ctrl+Shift+L) ·
+// the Claude panel in VS Code): 复制 · 复制代码块 · 复制整条消息 / 复制为 Markdown · 引用到输入框 (Ctrl+Shift+L) · 旁聊 ·
 // 钉住 · 从这里分叉. Pure parts (which rows, where it goes) in selection-menu.ts; the desktop right-click menu stays.
 //
+// A double click in a reply selects one thing (dblclick-select.ts: a whole inline code span, one word), then the menu.
 // Shown on the mouse-up of a drag (or double click) that started in this conversation, and on the key-up of a
 // keyboard selection; not for a touch (the system has its own), not for text in a field / editor / terminal. Gone on
 // Esc, a click elsewhere, a scroll, a resize, the selection collapsing, another menu opening. It does not take the
@@ -106,6 +110,13 @@ function quote(text: string) {
   if (!quoteInComposer(text)) useStore.getState().toast(tr('先打开一个对话（或新对话），再引用'));
 }
 
+/** 旁聊 is offered as the header's ··· offers it (ChatTile): a running conversation of this machine. */
+function canSideChat(sessionId: string): boolean {
+  const active = useStore.getState().open[sessionId];
+  const live = !!active && active.state !== 'history' && active.state !== 'closed' && active.state !== 'error';
+  return live && !parsePeerId(sessionId);
+}
+
 const mac = modKey === '⌘';
 const KEYS: Partial<Record<SelItem, string>> = { copy: mac ? '⌘C' : 'Ctrl+C', quote: mac ? '⇧⌘L' : 'Ctrl+Shift+L' };
 
@@ -128,6 +139,9 @@ export function SelectionMenu({ root, sessionId }: { root: RefObject<HTMLDivElem
       const s = root.current ? readSelection(root.current, sessionId) : null;
       if (s) setSnap((cur) => ({ ...s, n: (cur?.n ?? 0) + 1 })); else if (shown.current) close();
     });
+    // the double click's own word / code span, in place of the browser's (it fires after the mouse-up above)
+    // (not for a touch: the system has its own)
+    const dbl = (e: MouseEvent) => { if (!touch && refineDoubleClick(e, el)) show(); };
     const up = (e: MouseEvent) => {
       if (!pressed || e.button !== 0) return;
       pressed = false;
@@ -160,6 +174,7 @@ export function SelectionMenu({ root, sessionId }: { root: RefObject<HTMLDivElem
     const gone = () => { if (shown.current) close(); };
     el.addEventListener('pointerdown', down, true);
     el.addEventListener('scroll', gone, true);
+    el.addEventListener('dblclick', dbl);
     document.addEventListener('mouseup', up);
     document.addEventListener('keyup', keyUp);
     document.addEventListener('keydown', keyDown);
@@ -168,6 +183,7 @@ export function SelectionMenu({ root, sessionId }: { root: RefObject<HTMLDivElem
     return () => {
       el.removeEventListener('pointerdown', down, true);
       el.removeEventListener('scroll', gone, true);
+      el.removeEventListener('dblclick', dbl);
       document.removeEventListener('mouseup', up);
       document.removeEventListener('keyup', keyUp);
       document.removeEventListener('keydown', keyDown);
@@ -200,6 +216,7 @@ function Menu({ snap, sessionId, box, close }: { snap: Snap; sessionId: string; 
     msg: m ? m.item.kind : null,
     hasText: !!reply && !!replyMarkdown(reply).trim(),
     canFork: !!m && (m.item.kind === 'user' ? !(m.item as UserItem).meta : !!reply?.uuid),
+    canSide: canSideChat(sessionId),
   });
   const run = (it: SelItem) => {
     close();
@@ -209,6 +226,7 @@ function Menu({ snap, sessionId, box, close }: { snap: Snap; sessionId: string; 
       case 'copyMsg': return m && copy(plainOf(m));
       case 'copyMd': return reply && copy(replyMarkdown(reply));
       case 'quote': return quote(snap.text);
+      case 'side': return openSideChat(sessionId, undefined, `> ${snap.text.replace(/\n/g, '\n> ')}\n\n`);
       case 'pin': return reply && togglePin(sessionId, reply.id, replyMarkdown(reply));
       case 'fork': return m && forkFrom(sessionId, m.item);
     }
@@ -219,6 +237,7 @@ function Menu({ snap, sessionId, box, close }: { snap: Snap; sessionId: string; 
     copyMsg: { icon: 'clipboard', l: tr('复制整条消息') },
     copyMd: { icon: 'read', l: tr('复制为 Markdown') },
     quote: { icon: 'quote', l: tr('引用到输入框') },
+    side: { icon: 'chat', l: tr('旁聊'), d: tr('带上这段，在旁边问一句，不打断这条对话') },
     pin: pinned ? { icon: 'pinOff', l: tr('取消钉住') } : { icon: 'pin', l: tr('钉住这条回复'), d: tr('在右边信息栏的「钉住的回复」里能找回') },
     fork: { icon: 'branch', l: tr('从这里分叉'), d: m?.item.kind === 'user' ? tr('从这条消息之前新开一个对话，这个保留') : tr('新开一个对话，这个保留') },
   };
