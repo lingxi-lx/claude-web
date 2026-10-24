@@ -60,3 +60,12 @@
 @supports (animation-timeline: scroll()) {
   :is(.chat:has(.find-bar), .sb-list:has(> .sb-filtered, > .sel-bar)) { --fade: 0px; }
 }
+
+/* a menu drawn in place (position: fixed, inside a row of the list) is clipped to the list's box by the mask — the
+   sidebar's ··· menu lost its top under 新对话 (2026-10-24, user screenshot). While a menu is open in a list, no fade. */
+@supports (animation-timeline: scroll()) {
+  :is(.chat, .welcome, .sb-list, .sb-attn-list, .cmdk .list, .dirmenu-list, .branch-menu .list, .ft-body, .git-body, .rv-git-body, .search-results, .memory-list):has(.menu) {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}

@@ -37,13 +37,16 @@ export function useAnchoredMenu(ref: React.RefObject<HTMLElement | null>, onClos
     if (!el || !anchor) return;
     if (kb) el.dataset.kb = '';
     const place = () => {
-      Object.assign(el.style, { position: 'fixed', right: 'auto', bottom: 'auto', maxHeight: '' });
+      // measuring at full height drops the scroll of a pinned menu; a re-place (any change in the sidebar) keeps it
+      const scrolled = el.scrollTop;
+      Object.assign(el.style, { position: 'fixed', right: 'auto', bottom: 'auto', maxHeight: '', overflowY: '', overscrollBehavior: '' });
       const a = anchor.getBoundingClientRect(), size = { w: el.offsetWidth, h: el.scrollHeight };
       const side = anchor.closest('.sidebar')?.getBoundingClientRect();
       const spot = placeFixed(a, size, { vw: window.innerWidth, vh: window.innerHeight }, { ...opts.current, ...(side && opts.current.side !== 'right' ? { minLeft: Math.max(8, Math.round(side.left) + 4) } : {}) });
       el.style.left = `${spot.left}px`;
       el.style.top = `${spot.top}px`;
-      if (spot.maxHeight) el.style.maxHeight = `${spot.maxHeight}px`;
+      if (spot.maxHeight) Object.assign(el.style, { maxHeight: `${spot.maxHeight}px`, overflowY: 'auto', overscrollBehavior: 'contain' });
+      if (scrolled) el.scrollTop = scrolled;
       el.style.setProperty('--menu-origin', spotOrigin(a, spot, size, opts.current));
     };
     place();

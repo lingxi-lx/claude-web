@@ -29,6 +29,11 @@ describe('placeFixed: a sidebar menu next to its anchor, never clipped by the sc
     expect(placeFixed(anchor(1300, 100, 130), { w: 300, h: 100 }, view, { align: 'left' }).left).toBe(1440 - 300 - 8);
     expect(placeFixed(anchor(0, 100, 50), { w: 300, h: 100 }, view).left).toBe(8);
   });
+  it('a menu taller than the room on either side is pinned to the top with a max height', () => {
+    const spot = placeFixed({ left: 100, top: 300, right: 300, bottom: 328 }, { w: 200, h: 500 }, { vw: 1200, vh: 600 });
+    expect(spot.top).toBe(8);
+    expect(spot.maxHeight).toBe(584);
+  });
 });
 
 describe('spotOrigin: where a sidebar menu scales in from (UI refresh §4.5)', () => {
