@@ -123,7 +123,8 @@ function seedHome(home) {
     tr('toolu_t_edit', 'updated', 31),
     am([{ type: 'tool_use', id: 'toolu_t_bash', name: 'Bash', input: { command: 'git status --short' } }], 40, 'msg_t3'),
     tr('toolu_t_bash', ' M README.md', 41),
-    am([{ type: 'text', text: 'smoke: the readme is tidy now.\n\n```\nline one\nline two\n```' }], 45, 'msg_t4'),
+    // the inline code is for the double click (parity-a A4: it selects the whole span)
+    am([{ type: 'text', text: 'smoke: the readme is tidy now, see `activation_status` there.\n\n```\nline one\nline two\n```' }], 45, 'msg_t4'),
   ].map((x) => JSON.stringify(x)).join('\n') + '\n');
   // a third: /code-review's findings, reported through ReportFindings (spec 2026-10-16 review-pr §2)
   const reviewSid = '5a0e0e0e-0000-4000-8000-00000000c0e1';
@@ -2856,6 +2857,53 @@ function driver() {
         const bgErr = await noBoundary('.bg-page');
         check('后台 without error boundary', !bgErr, bgErr);
         await shot('background-page');
+        // ---- stage A of 2026-10-24 (spec desktop-parity): the cafe wheel (A3) — here, while the page is up
+        phase = 'parity-a';
+        {
+          // a shorter window gives the page room to scroll; it starts a little down, so a wheel either way would move it
+          win.setContentSize(1360, 700);
+          await sleep(500);
+          const bodySel = `'.bg-page .over-body.bg-body'`;
+          const room = await js(`(() => { const p = document.querySelector(${bodySel}); if (!p) return -1; p.scrollTop = 40; return p.scrollHeight - p.clientHeight; })()`);
+          await sleep(200);
+          // every wheel event the page sees, after the cafe had its say (a passive listener on window: bubble phase)
+          await js(`(() => { window.__smokeWheel = []; window.__smokeWheelOn = (e) => window.__smokeWheel.push({ prevented: e.defaultPrevented, shift: e.shiftKey, dy: e.deltaY, cafe: !!e.target.closest?.('.cafe-canvas') }); addEventListener('wheel', window.__smokeWheelOn, { passive: true }); })()`);
+          // a point on the canvas itself (not on a guest's button over it), nearest its middle and on screen
+          const pos = () => js(`(() => { const c = document.querySelector('.bg-page .cafe-canvas'); const b = c.getBoundingClientRect(); let best = null; for (let i = 1; i < 12; i++) for (let j = 1; j < 8; j++) { const x = Math.round(b.left + (b.width * i) / 12), y = Math.round(b.top + (b.height * j) / 8); if (y < 0 || y > innerHeight - 4 || document.elementFromPoint(x, y) !== c) continue; const d = Math.hypot(x - (b.left + b.width / 2), y - (b.top + b.height / 2)); if (!best || d < best.d) best = { x, y, d: Math.round(d) }; } const s = document.querySelector(${bodySel}).getBoundingClientRect(); let other = null; for (let y = Math.max(s.top, 0) + 10; !other && y < Math.min(s.bottom, innerHeight) - 4; y += 24) for (const x of [s.left + 12, s.left + s.width / 2, s.right - 30]) { const el = document.elementFromPoint(Math.round(x), Math.round(y)); if (el && document.querySelector(${bodySel}).contains(el) && !el.closest('.cafe-canvas, .cafe-person, .cafe-tools, .cafe-lib')) { other = { x: Math.round(x), y: Math.round(y), el: el.className?.baseVal ?? el.className }; break; } } return { ...(best || { x: -1, y: -1 }), below: other }; })()`);
+          const scrollTop = () => js(`document.querySelector(${bodySel}).scrollTop`);
+          const wheelAt = async (x, y, deltaY, modifiers) => { wc.sendInputEvent({ type: 'mouseMove', x, y }); wc.sendInputEvent({ type: 'mouseWheel', x, y, deltaX: 0, deltaY, ...(modifiers ? { modifiers } : {}) }); await sleep(120); };
+          const p = await pos();
+          await sleep(200);
+          const before = await scrollTop();
+          // in and out by turns: the fitted view sits a step or two above the zoom floor, where the page would scroll
+          for (const dy of [120, -120, 120, -120]) await wheelAt(p.x, p.y, dy);
+          await sleep(300);
+          const after = await scrollTop();
+          const plain = await js('window.__smokeWheel.splice(0)');
+          check('A3: the wheel over the cafe zooms it (each wheel taken by the cafe) and the page stays where it was', room >= 40 && p.x > 0 && before === after && plain.length >= 4 && plain.every((w) => w.cafe && w.prevented), JSON.stringify({ room, at: p, before, after, wheels: plain }));
+          // Shift + wheel: the cafe leaves it alone (no zoom, not prevented). Chromium on Windows turns it into a
+          // sideways scroll, so the page does not move down either — that is the platform, not asserted
+          for (const dy of [-120, 120]) await wheelAt(p.x, p.y, dy, ['shift']);
+          await sleep(300);
+          const shifted = await js('window.__smokeWheel.splice(0)');
+          check('A3: Shift + wheel over the cafe is not taken by it (no zoom, not prevented)', shifted.length >= 2 && shifted.every((w) => w.cafe && w.shift && !w.prevented), JSON.stringify(shifted));
+          // the control: the same wheel on the page outside the cafe scrolls it (so the input above did reach the page)
+          let control = null;
+          if (p.below) {
+            const t0 = await scrollTop();
+            for (const dy of [120, -120]) {
+              await wheelAt(p.below.x, p.below.y, dy);
+              await sleep(400);
+              control = { from: t0, to: await scrollTop(), wheels: [...(control?.wheels ?? []), ...(await js('window.__smokeWheel.splice(0)'))] };
+              if (control.to !== t0) break;
+            }
+          }
+          check('A3 (control): the same wheel on the page outside the cafe scrolls it', p.x > 0 && !!control && control.to !== control.from && control.wheels.every((w) => !w.cafe && !w.prevented), JSON.stringify({ control, at: p }));
+          await js(`(() => { removeEventListener('wheel', window.__smokeWheelOn, { passive: true }); delete window.__smokeWheel; delete window.__smokeWheelOn; document.querySelector('.bg-page .cafe-canvas').dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); document.querySelector(${bodySel}).scrollTop = 0; })()`);
+          win.setContentSize(1360, 860);
+          await sleep(500);
+        }
+        phase = 'background';
         await js(`document.querySelector('.bg-page .cafe-person[aria-label^="alpha"]').click()`);
         const drawer = await waitFor(`/alpha/.test(document.querySelector('.bg-page .bg-drawer .bg-drawer-title .n')?.textContent ?? '')`, 4000);
         check('a guest in the cafe opens their own conversation beside the board', drawer);
@@ -2884,6 +2932,37 @@ function driver() {
         await js(`(() => { window.__cwBackground.inject({ sessionId: ${bsid}, updatedAt: Date.now(), tasks: [], events: [] }); window.__store.getState().dispatchLayout({ t: 'dock.set', patch: { open: false } }); })()`);
         const pillGone = await waitFor(`!document.querySelector('.pane.focused .composer .bg-pill')`, 3000);
         check('nothing running: no pill', pillGone);
+      }
+
+      // ---- stage A of 2026-10-24 (spec desktop-parity), A2: a sidebar row's ··· menu in a short window — its first and
+      // last item can be reached, and the list's fading mask (which clipped the menu, a fixed descendant, to the list's
+      // box: the top lost under 新对话) is off while it is open
+      if (E.SMOKE_READONLY !== '1') {
+        phase = 'parity-a';
+        await js('window.__store.setState({ sidebarOpen: true })');
+        win.setContentSize(1360, 600);
+        await sleep(500);
+        await js(`(() => { const l = document.querySelector('.sb-list'); if (l) l.scrollTop = l.scrollHeight / 2; })()`);
+        await sleep(200);
+        const opened = await js(`(() => { const rows = [...document.querySelectorAll('.sb-list .sb-row.sess')].filter((r) => { const b = r.getBoundingClientRect(); return b.height > 0 && b.top > 60 && b.bottom < innerHeight - 40; }); const row = rows[0]; const more = row && row.querySelector(':scope > .more'); if (!more) return false; more.click(); return true; })()`);
+        const up = await waitFor(`!!document.querySelector('.sb-list .menu.sess-menu') && document.querySelector('.sb-list .menu.sess-menu').style.visibility !== 'hidden'`, 3000);
+        await sleep(400);
+        const reach = up && await js(`(() => {
+          const m = document.querySelector('.sb-list .menu.sess-menu'); const list = m.closest('.sb-list');
+          const items = [...m.querySelectorAll('button')].filter((b) => b.getClientRects().length);
+          const at = (b, top) => { m.scrollTop = top ? 0 : m.scrollHeight; const r = b.getBoundingClientRect(); const h = document.elementFromPoint(r.left + r.width / 2, r.top + Math.min(r.height / 2, 6)); return !!h && m.contains(h) && r.top >= 0 && r.bottom <= innerHeight; };
+          const box = m.getBoundingClientRect(), lb = list.getBoundingClientRect();
+          const mask = getComputedStyle(list).maskImage || getComputedStyle(list).webkitMaskImage;
+          const first = at(items[0], true); const last = at(items[items.length - 1], false);
+          return { first, last, n: items.length, mask, menu: [Math.round(box.top), Math.round(box.bottom)], list: [Math.round(lb.top), Math.round(lb.bottom)], scrolls: m.scrollHeight > m.clientHeight, overflowY: getComputedStyle(m).overflowY };
+        })()`);
+        check('A2: a sidebar ··· menu in a short window — first and last item can be reached, the list\'s mask is off while it is open', opened && reach && reach.n > 3 && reach.first && reach.last && reach.mask === 'none', JSON.stringify({ opened, up, reach }));
+        await shot('parity-a-sidebar-menu');
+        await key('Escape');
+        const maskBack = await waitFor(`!document.querySelector('.sb-list .menu') && getComputedStyle(document.querySelector('.sb-list')).maskImage !== 'none'`, 3000);
+        check('A2: the menu closed, the list fades again', maskBack, await js(`getComputedStyle(document.querySelector('.sb-list')).maskImage.slice(0, 40)`));
+        win.setContentSize(1360, 860);
+        await sleep(400);
       }
 
       {
@@ -3009,6 +3088,78 @@ function driver() {
         win.setContentSize(1360, 860);
         await waitFor('!document.querySelector(".app").classList.contains("mobile")', 4000);
         await sleep(300);
+
+        // ---- stage A of 2026-10-24 (spec desktop-parity): double click (A4), context colours (A5), 背景动画 (A6)
+        phase = 'parity-a';
+        // A4: a real double click on inline code selects the code span whole (no trailing space), then the selection
+        // menu; with the conversation running on this machine it offers 旁聊, which opens the side chat with the quote
+        {
+          const codeSel = `.pane.focused .msg.assistant .msg-text code:not(pre code):not(.code code)`;
+          const p = await js(`(async () => { const c = document.querySelector(${JSON.stringify(codeSel)}); if (!c) return null; c.scrollIntoView({ block: 'center' }); await new Promise((r) => setTimeout(r, 300)); const r = c.getBoundingClientRect(); return { x: Math.round(r.left + 4), y: Math.round(r.top + r.height / 2), text: c.textContent }; })()`);
+          if (p) {
+            // the conversation counts as running here (no engine is started, nothing is sent): 旁聊 is offered then
+            await js(`window.__store.setState((s) => { const o = s.open[${tsid}]; return o ? { open: { ...s.open, [${tsid}]: { ...o, state: 'idle', version: o.version + 1 } } } : {}; })`);
+            await js('document.activeElement && document.activeElement.blur && document.activeElement.blur(); getSelection().removeAllRanges()');
+            await sleep(200);
+            wc.sendInputEvent({ type: 'mouseMove', x: p.x, y: p.y });
+            wc.sendInputEvent({ type: 'mouseDown', x: p.x, y: p.y, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: p.x, y: p.y, button: 'left', clickCount: 1 });
+            wc.sendInputEvent({ type: 'mouseDown', x: p.x, y: p.y, button: 'left', clickCount: 2 }); wc.sendInputEvent({ type: 'mouseUp', x: p.x, y: p.y, button: 'left', clickCount: 2 });
+            await sleep(400);
+            const sel = await js('getSelection().toString()');
+            check('A4: a double click on inline code selects exactly that code (no trailing space)', sel === p.text && p.text === 'activation_status', JSON.stringify({ sel, code: p.text }));
+            const menu = await waitFor(`!!document.querySelector('.menu.sel-menu [data-act="copy"]') && document.querySelector('.menu.sel-menu').style.visibility !== 'hidden'`, 2000);
+            const rows = await js(`[...document.querySelectorAll('.menu.sel-menu [data-act]')].map((b) => b.dataset.act).join(',')`);
+            if (rows.includes('side')) await js(`document.querySelector('.menu.sel-menu [data-act="side"]').click()`);
+            const side = rows.includes('side') && await waitFor(`!document.querySelector('.menu.sel-menu') && document.querySelector('.pane.focused .side-chat .sc-input textarea')?.value === '> activation_status\\n\\n'`, 3000);
+            // the side chat card sits inside .composer: the main box is the other textarea
+            const mainBox = await js(`document.querySelector('.pane.focused .composer textarea:not(.side-chat textarea)')?.value ?? null`);
+            check('A4: the selection menu comes up and offers 旁聊; 旁聊 opens the side chat with the quote filled in, nothing sent', menu && side && mainBox === '', JSON.stringify({ menu, rows, side, sideBox: await js(`document.querySelector('.pane.focused .side-chat .sc-input textarea')?.value ?? null`), mainBox }));
+            if (await js('!!document.querySelector(".pane.focused .side-chat")')) {
+              await js(`document.querySelector('.side-chat .icon-btn[aria-label]')?.click()`);
+              await waitFor('!document.querySelector(".side-chat")', 3000);
+            }
+            await js(`window.__store.setState((s) => { const o = s.open[${tsid}]; return o ? { open: { ...s.open, [${tsid}]: { ...o, state: 'history', version: o.version + 1 } } } : {}; })`);
+            await js('getSelection().removeAllRanges()');
+            if (await js('!!document.querySelector(".menu.sel-menu")')) await key('Escape');
+            // not running: no 旁聊 (as the header's ··· has it)
+            wc.sendInputEvent({ type: 'mouseDown', x: p.x, y: p.y, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: p.x, y: p.y, button: 'left', clickCount: 1 });
+            wc.sendInputEvent({ type: 'mouseDown', x: p.x, y: p.y, button: 'left', clickCount: 2 }); wc.sendInputEvent({ type: 'mouseUp', x: p.x, y: p.y, button: 'left', clickCount: 2 });
+            const menu2 = await waitFor(`!!document.querySelector('.menu.sel-menu [data-act="copy"]')`, 2000);
+            const rows2 = await js(`[...document.querySelectorAll('.menu.sel-menu [data-act]')].map((b) => b.dataset.act).join(',')`);
+            check('A4: a conversation that is not running gets the menu without 旁聊', menu2 && !rows2.split(',').includes('side'), JSON.stringify({ menu2, rows2 }));
+            await key('Escape');
+            await js('getSelection().removeAllRanges()');
+            await waitFor(`!document.querySelector('.menu.sel-menu')`, 2000);
+          } else check('A4: the seeded reply has inline code', false, 'no inline code in the seed');
+        }
+        // A5: context colours are fixed per category — the card's rows (when it has a count; no engine runs here, so
+        // usually none) never use the old rotating sw-0…7, those rules are gone, and the five tones are five colours
+        {
+          const tones = await js(`[...document.querySelectorAll('.ctx .ctx-row > i, .ctx .ctx-bar > i')].map((i) => i.className).join(',')`);
+          const css = await js(`(() => {
+            const sels = []; const walk = (rules) => { for (const r of rules) { if (r.selectorText) sels.push(r.selectorText); if (r.cssRules) walk(r.cssRules); } };
+            for (const s of document.styleSheets) { try { walk(s.cssRules); } catch { /* another origin */ } }
+            const probe = document.createElement('div'); probe.className = 'ctx'; probe.style.cssText = 'position:fixed;left:-50px;top:0;';
+            const tones = ['messages', 'tools', 'mcp', 'skills', 'other'];
+            probe.innerHTML = tones.map((t) => '<i class="ctx-t-' + t + '" style="display:block;width:4px;height:4px"></i>').join('');
+            document.body.appendChild(probe);
+            const colours = [...probe.children].map((i) => getComputedStyle(i).backgroundColor);
+            probe.remove();
+            return { oldRules: sels.filter((x) => /\\.sw-[0-7]\\b/.test(x)), colours, distinct: new Set(colours).size, clear: colours.filter((c) => c === 'rgba(0, 0, 0, 0)' || c === 'transparent').length };
+          })()`);
+          check('A5: context rows use the fixed per-category colours (no sw-0…7 rows or rules; five tones, five colours)', !/\bsw-[0-7]\b/.test(tones) && !css.oldRules.length && css.distinct === 5 && !css.clear, JSON.stringify({ tones, ...css }));
+        }
+        // A6: the old setting is gone, 背景动画 is under 外观
+        {
+          await js('window.__store.getState().openSettings({ section: "appearance" })');
+          await waitFor(`!!document.querySelector('.modal.settings.sp')`, 4000);
+          await sleep(600);
+          const rows = await js(`({ motion: !!document.querySelector('.sp [data-entry="ui.backdropMotion"]'), label: document.querySelector('.sp [data-entry="ui.backdropMotion"]')?.textContent.slice(0, 20) ?? null, old: !!document.querySelector('[data-entry="ui.welcomeBackdrop"]') })`);
+          check('A6: 外观 has 背景动画 and the old backdrop setting is gone', rows.motion && /背景动画/.test(rows.label ?? '') && !rows.old, JSON.stringify(rows));
+          await js('window.__store.setState({ settingsOpen: null })');
+          await waitFor(`!document.querySelector('.modal.settings.sp')`, 3000);
+          await sleep(300);
+        }
 
         // ---- the docked permission card, with a real request (the mock ACP agent asks before its Read)
         phase = 'chat-permission';
