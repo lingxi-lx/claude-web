@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { accountCompactWindow, accountSummary, compactErrText, compactText, compactValue, compactWindowOfProvider, nowLine, savedWindows } from './compact-model';
+import { accountCompactWindow, accountSummary, compactErrText, compactText, compactValue, compactWindowOfProvider, nowLine, prefillText, savedWindows } from './compact-model';
+
+// final review M2: 「在这个大小时压缩」 opened with settings.json's 700000 on a 200K / 272K provider showed 「不能超过上下文窗口」
+// before the user typed anything
+describe('prefillText: what the box starts with when 在这个大小时压缩 is picked', () => {
+  it('the point in effect (settings.json / the environment) when it holds for the window', () => {
+    expect(prefillText(700_000, 1_000_000)).toBe('700k');
+    expect(prefillText(700_000, undefined)).toBe('700k');
+  });
+  it('empty (the placeholder shows) when it would be refused: over the window, under 50K, nothing in effect', () => {
+    expect(prefillText(700_000, 200_000)).toBe('');
+    expect(prefillText(700_000, 272_000)).toBe('');
+    expect(prefillText(30_000, 1_000_000)).toBe('');
+    expect(prefillText(undefined, 1_000_000)).toBe('');
+  });
+});
 
 // A7 自动压缩 / Claude 账号的上下文窗口: what the editors save and what they refuse
 describe('compactValue: the draft (mode + text) → the value to save', () => {

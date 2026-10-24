@@ -4,7 +4,7 @@ import { ws } from '@/ws/client';
 import { Segmented } from '@/ui/Segmented';
 import { imeComposing } from '@/ui/ime';
 import { tr } from '@/i18n';
-import { compactErrText, compactText, compactValue, nowLine, type CompactMode } from './compact-model';
+import { compactErrText, compactText, compactValue, nowLine, prefillText, type CompactMode } from './compact-model';
 
 /** `config.compactSource` once per editor: the point in effect when nothing is set here, and where it comes from. */
 function useCompactSource(): CompactSource | null {
@@ -36,8 +36,9 @@ export function CompactAt({ value, window, onChange, onEnter }: { value: number 
   useEffect(() => { if (first.current) { first.current = false; return; } emit(mode, text); }, [window]);
   const pick = (m: CompactMode) => {
     if (m === mode) return;
-    // the first time the box opens: start from what is in effect now (settings.json / the environment), if anything
-    const t = m === 'at' && !text.trim() && src?.value ? compactText(src.value) : text;
+    // the first time the box opens: start from what is in effect now (settings.json / the environment), if it holds
+    // for this window — otherwise empty, the placeholder (final review M2)
+    const t = m === 'at' && !text.trim() ? prefillText(src?.value, window) : text;
     setMode(m);
     setText(t);
     emit(m, t);

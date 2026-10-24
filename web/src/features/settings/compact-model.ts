@@ -30,6 +30,15 @@ export function compactText(v: number | undefined): string {
   return String(v);
 }
 
+/**
+ * What the box starts with when 在这个大小时压缩 is first picked: the point in effect now (settings.json / the
+ * environment) when it would be saved as it is; otherwise empty, with the placeholder — the user's settings.json
+ * 700000 on a 200K provider showed a refusal before anything was typed (final review M2).
+ */
+export function prefillText(inEffect: number | undefined, window: number | undefined): string {
+  return compactAtOk(inEffect, window) ? compactText(inEffect) : '';
+}
+
 /** The window the account's point is checked against: the largest of the picks (a family left alone is 1M). */
 export function accountCompactWindow(w: AccountWindows): number {
   return Math.max(w.opus ?? ONE_M, w.sonnet ?? ONE_M, w.fable ?? ONE_M);
