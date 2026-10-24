@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 /** Every query() the runner starts: end / fail its message stream, push a message into it, react to interrupt(). */
-interface FakeQuery { options: any; end: () => void; fail: (e: Error) => void; push: (m: any) => void; onInterrupt?: () => void; flags: any[]; sides: any[]; sideAnswer?: any; toggles: [string, boolean][]; mcp?: any[] }
+interface FakeQuery { options: any; end: () => void; fail: (e: Error) => void; push: (m: any) => void; onInterrupt?: () => void; flags: any[]; sides: any[]; sideAnswer?: any; toggles: [string, boolean][]; mcp?: any[]; usage?: any }
 const queries: FakeQuery[] = [];
 
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
@@ -23,6 +23,8 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
       supportedModels: async () => cli.models,
       supportedAgents: async () => [],
       mcpServerStatus: async () => h.mcp ?? [],
+      // what the context holds now (fitBeforeSwitch asks); nothing said: an empty answer, as before
+      getContextUsage: async () => h.usage,
       toggleMcpServer: async (name: string, enabled: boolean) => { h.toggles.push([name, enabled]); },
       [Symbol.asyncIterator]: () => ({ next }),
       return: async () => { h.end(); return { value: undefined, done: true }; },
@@ -1374,6 +1376,122 @@ describe('SessionRunner: the account’s 200K / 1M picks and the 自动压缩 po
       // the fake engine has no in-process setModel: another process, on the plain id
       expect(queries).toHaveLength(2);
       expect(queries[1].options.model).toBe('claude-opus-5-5');
+      await r.close();
+    });
+  });
+
+  /** An own-login Opus conversation that has run a turn (so it has a transcript), idle, its context holding `used`. */
+  const ranTurn = async (id: string, used: number) => {
+    const r = new SessionRunner({ sessionId: id, cwd: '/x', model: 'claude-opus-5-5' } as any, undefined, { account: { windows: {} } });
+    await tick();
+    const sent: string[] = [];
+    r.on('sent', (m: any) => sent.push(typeof m.message.content === 'string' ? m.message.content : JSON.stringify(m.message.content)));
+    r.send('hi');
+    queries[0].push({ type: 'result', subtype: 'success', session_id: id, uuid: 'r0', is_error: false, result: 'ok' });
+    await tick();
+    queries[0].usage = { totalTokens: used };
+    return { r, sent };
+  };
+
+  it('setAccountPrefs shrinking the window under a conversation that does not fit: /compact on the current window first, then the change', async () => {
+    await withHome(null, async () => {
+      const { r, sent } = await ranTurn('a7-fit-1', 500_000);
+      const done = r.setAccountPrefs({ windows: { opus: 200_000 } });
+      await tick();
+      expect(sent).toEqual(['hi', '/compact']);
+      expect(queries).toHaveLength(1); // nothing restarted while it compacts
+      expect(r.info.contextWindow).toBe(1_000_000);
+      queries[0].push({ type: 'result', subtype: 'success', session_id: 'a7-fit-1', uuid: 'r1', is_error: false, result: 'compacted' });
+      await done;
+      await tick();
+      expect(r.info.contextWindow).toBe(200_000);
+      expect(queries).toHaveLength(2); // the fake engine has no in-process setModel: another process, on the plain id
+      expect(queries[1].options.model).toBe('claude-opus-5-5');
+      await r.close();
+    });
+  });
+
+  it('…when it fits (under FIT_SHARE of the new window), no compaction', async () => {
+    await withHome(null, async () => {
+      const { r, sent } = await ranTurn('a7-fit-2', 100_000);
+      await r.setAccountPrefs({ windows: { opus: 200_000 } });
+      await tick();
+      expect(sent).toEqual(['hi']);
+      expect(queries).toHaveLength(2);
+      expect(queries[1].options.model).toBe('claude-opus-5-5');
+      await r.close();
+    });
+  });
+
+  it('…the window growing never compacts', async () => {
+    await withHome(null, async () => {
+      const r = new SessionRunner({ sessionId: 'a7-fit-3', cwd: '/x', model: 'claude-opus-5-5' } as any, undefined, { account: { windows: { opus: 200_000 } } });
+      await tick();
+      const sent: string[] = [];
+      r.on('sent', (m: any) => sent.push(String(m.message.content)));
+      r.send('hi');
+      queries[0].push({ type: 'result', subtype: 'success', session_id: 'a7-fit-3', uuid: 'r0', is_error: false, result: 'ok' });
+      await tick();
+      queries[0].usage = { totalTokens: 190_000 };
+      await r.setAccountPrefs({ windows: {} });
+      await tick();
+      expect(sent).toEqual(['hi']);
+      expect(queries[1].options.model).toBe('claude-opus-5-5[1m]');
+      await r.close();
+    });
+  });
+
+  it('…made mid-turn: nothing until the turn is over, then the compaction, then the change', async () => {
+    await withHome(null, async () => {
+      const { r, sent } = await ranTurn('a7-fit-4', 500_000);
+      r.send('more');
+      await r.setAccountPrefs({ windows: { opus: 200_000 } });
+      await tick();
+      expect(sent).toEqual(['hi', 'more']);
+      expect(r.info.contextWindow).toBe(1_000_000);
+      queries[0].push({ type: 'result', subtype: 'success', session_id: 'a7-fit-4', uuid: 'r1', is_error: false, result: 'ok' });
+      await tick();
+      expect(sent).toEqual(['hi', 'more', '/compact']);
+      expect(queries).toHaveLength(1);
+      queries[0].push({ type: 'result', subtype: 'success', session_id: 'a7-fit-4', uuid: 'r2', is_error: false, result: 'compacted' });
+      await tick();
+      await tick();
+      expect(r.info.contextWindow).toBe(200_000);
+      expect(queries).toHaveLength(2);
+      expect(queries[1].options.model).toBe('claude-opus-5-5');
+      await r.close();
+    });
+  });
+
+  it('…changed back while it compacts: the later call wins, nothing restarts', async () => {
+    await withHome(null, async () => {
+      const { r, sent } = await ranTurn('a7-fit-5', 500_000);
+      const first = r.setAccountPrefs({ windows: { opus: 200_000 } });
+      await tick();
+      expect(sent).toEqual(['hi', '/compact']);
+      await r.setAccountPrefs({ windows: {} });
+      queries[0].push({ type: 'result', subtype: 'success', session_id: 'a7-fit-5', uuid: 'r1', is_error: false, result: 'compacted' });
+      await first;
+      await tick();
+      expect(r.info.contextWindow).toBe(1_000_000);
+      expect(queries).toHaveLength(1);
+      await r.close();
+    });
+  });
+
+  it('setModel to a smaller window still compacts first (fitBeforeSwitch unchanged)', async () => {
+    await withHome(null, async () => {
+      const { r, sent } = await ranTurn('a7-fit-6', 500_000);
+      const done = r.setModel('claude-haiku-4-5');
+      await tick();
+      expect(sent).toEqual(['hi', '/compact']);
+      expect(queries).toHaveLength(1);
+      queries[0].push({ type: 'result', subtype: 'success', session_id: 'a7-fit-6', uuid: 'r1', is_error: false, result: 'compacted' });
+      await done;
+      await tick();
+      expect(r.info.model).toBe('claude-haiku-4-5');
+      expect(r.info.contextWindow).toBe(200_000);
+      expect(queries).toHaveLength(2);
       await r.close();
     });
   });

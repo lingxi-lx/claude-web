@@ -209,6 +209,10 @@ export class SessionRunner extends EventEmitter {
    * families run at 1M (`[1m]`) and where to compact. Another Claude account reads its own profile's instead.
    */
   private accountPrefs: AccountPrefs = { windows: {} };
+  /** a change of those that shrinks the window, made mid-turn: applied (compaction first) when the turn is over */
+  private deferredPrefs: AccountPrefs | null = null;
+  /** bumped by each setAccountPrefs: an older one still waiting for its compaction gives way */
+  private prefsSeq = 0;
 
   constructor(params: OpenSessionParams, provider?: SessionProvider, opts: { thinkingLanguage?: string; account?: AccountPrefs } = {}) {
     super();
@@ -763,6 +767,16 @@ export class SessionRunner extends EventEmitter {
     // a model / effort change made during the turn that needs another process: now that the turn is over
     // — and once its background subagents / workflows are back: a restart would take them down (their notification
     // starts a turn of its own, whose result lands here again)
+    // An account window change deferred to the turn's end goes first (it may compact on the current process before
+    // the new window takes effect); a restart pending for something else follows it, unless the change restarted already
+    if (m.type === 'result' && this.deferredPrefs && !this.closed) {
+      const prefs = this.deferredPrefs;
+      const pending = this.respawnPending;
+      this.respawnPending = false;
+      const q = this.q;
+      void this.setAccountPrefs(prefs).then(() => { if (pending && this.q === q && !this.closed) return this.respawnWhenIdle(); }).catch(() => { /* the old process keeps going */ });
+      return;
+    }
     if (m.type === 'result' && this.respawnPending && !this.closed && !this.hasBackgroundWork()) {
       this.respawnPending = false;
       void this.respawn();
@@ -1042,10 +1056,10 @@ export class SessionRunner extends EventEmitter {
    * through a relay the user set up in settings.json / the environment: its models and windows are its own, and a
    * `[1m]` it was never sent before could be refused there.
    */
-  private accountWindows(): AccountWindows | undefined {
+  private accountWindows(prefs = this.accountPrefs): AccountWindows | undefined {
     if (this.provider) return undefined;
     if (this.account) return familyWindows(this.account.contextWindows);
-    return userAnthropicEnv().relay ? undefined : this.accountPrefs.windows;
+    return userAnthropicEnv().relay ? undefined : prefs.windows;
   }
 
   /** The official binary's `CLAUDE_CODE_AUTO_COMPACT_WINDOW` for `model` on this provider (none: it assumes right). */
@@ -1073,14 +1087,15 @@ export class SessionRunner extends EventEmitter {
   /**
    * The context window `model` will have here, when it is known: the provider's settings (engine default otherwise);
    * on the account, the family's 200K / 1M pick (A7; haiku 200K, "default" is whatever the plan says); the own login
-   * through a relay of the user's: `[1m]` is 1M and a plain id the 200K both engines give it.
+   * through a relay of the user's: `[1m]` is 1M and a plain id the 200K both engines give it. `prefs`: the own login's
+   * picks to read it under (setAccountPrefs asks with the new ones before they take effect).
    */
-  private windowOf(model: string | undefined): number | undefined {
+  private windowOf(model: string | undefined, prefs = this.accountPrefs): number | undefined {
     if (this.provider) {
       const id = providerModelId(this.provider, model);
       return id ? contextWindowFor(this.provider, id) ?? ENGINE_DEFAULT_WINDOW : undefined;
     }
-    const w = this.accountWindows();
+    const w = this.accountWindows(prefs);
     if (w) return accountWindowOf(model, w);
     if (!model || model === 'default') return undefined;
     return /\[1m\]$/i.test(model) ? ONE_M : ENGINE_DEFAULT_WINDOW;
@@ -1099,10 +1114,10 @@ export class SessionRunner extends EventEmitter {
    * Switching to a model with a smaller window than the conversation already uses (Claude 1M → GPT 272K at 600K):
    * the new model could not even read the conversation to compact it, so the current one compacts it first
    * (`/compact`), then the switch goes ahead. Nothing happens while a turn runs, or when it fits (FIT_SHARE).
+   * `window`: the window `model` will have after the change (the account's 200K / 1M pick moving: setAccountPrefs).
    */
-  private async fitBeforeSwitch(model: string): Promise<boolean> {
+  private async fitBeforeSwitch(model: string, window = this.windowOf(model)): Promise<boolean> {
     if (!this.q || this.busy() || !this.hasTranscript || this.closed) return false;
-    const window = this.windowOf(model);
     if (!window) return false;
     let used = 0;
     try { const u = await this.contextUsage('summary'); used = Number(u?.totalTokens ?? u?.total_tokens ?? 0); } catch { return false; }
@@ -1265,7 +1280,20 @@ export class SessionRunner extends EventEmitter {
   async setAccountPrefs(p: AccountPrefs) {
     if (this.provider || this.account || this.closed) return;
     const next: AccountPrefs = { windows: familyWindows(p.windows), ...(typeof p.compactAt === 'number' ? { compactAt: p.compactAt } : {}) };
+    // the latest call wins: one waiting for its compaction, or deferred to the end of a turn, gives way
+    const seq = ++this.prefsSeq;
+    this.deferredPrefs = null;
     if (JSON.stringify(next) === JSON.stringify(this.accountPrefs)) return;
+    // the current model's window shrinking (Opus 1M → 200K at 500K): as for a model switch (fitBeforeSwitch), the
+    // conversation is compacted on the current window first. Mid-turn that cannot happen: the whole change waits for
+    // the turn's end (ingest), and the fit runs then, before the new window takes effect
+    const now = this.windowOf(this.model);
+    const then = this.windowOf(this.model, next);
+    if (then && (!now || then < now)) {
+      if (this.busy()) { this.deferredPrefs = next; return; }
+      await this.fitBeforeSwitch(this.model ?? '', then);
+      if (seq !== this.prefsSeq || this.closed) return;
+    }
     const kind = this.info.runtime;
     const before = { main: this.engineModel(kind, this.model), sub: this.subEngineModel(kind) };
     this.accountPrefs = next;
