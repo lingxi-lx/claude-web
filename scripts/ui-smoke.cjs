@@ -126,7 +126,7 @@ function seedHome(home) {
     // the inline code is for the double click (parity-a A4: it selects the whole span)
     // the two links are for parity-a A1 (review I1): a file:/// link and a drive path in a reply keep their href
     am([{ type: 'text', text: 'smoke: the readme is tidy now, see `activation_status` there.\n\n```\nline one\nline two\n```\n\n'
-      + `Links: [smoke-file-url](${require('node:url').pathToFileURL(readme).href}) and [smoke-drive-path](<${process.platform === 'win32' ? readme.replace(/\//g, '\\') : 'C:\\smoke\\README.md'}>)` }], 45, 'msg_t4'),
+      + `Links: [smoke-file-url](${require('node:url').pathToFileURL(readme).href}) and [smoke-drive-path](<${process.platform === 'win32' ? readme.replace(/\//g, '\\') : 'C:\\smoke\\README.md'}>) and [smoke-web-link](https://example.invalid/stage-b)` }], 45, 'msg_t4'),
   ].map((x) => JSON.stringify(x)).join('\n') + '\n');
   // a third: /code-review's findings, reported through ReportFindings (spec 2026-10-16 review-pr §2)
   const reviewSid = '5a0e0e0e-0000-4000-8000-00000000c0e1';
@@ -177,7 +177,9 @@ function runElectron(env, timeoutMs) {
   delete e.ELECTRON_RUN_AS_NODE;
   e.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'; // Electron's dev-only CSP notice (never shown when packaged) is not an app error
   return new Promise((res) => {
-    const c = spawn(electron, [__filename], { env: e, stdio: 'ignore', windowsHide: false });
+    // a profile of its own, never the user's (their Claude Web may be running)
+    const udd = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-uismoke-udd-'));
+    const c = spawn(electron, [__filename, `--user-data-dir=${udd}`], { env: e, stdio: 'ignore', windowsHide: false });
     const t = setTimeout(() => { c.kill(); res(-1); }, timeoutMs);
     c.on('exit', (code) => { clearTimeout(t); res(code); });
   });
@@ -3646,6 +3648,186 @@ function driver() {
 
       const emptyBad = [...emptySeen].filter(([t, b]) => !/^还没有[^。]+。[^。]*之后[^。]*会出现在这里。$/.test(t) || b > 1).map(([t, b]) => `${t} (${b} buttons)`);
       check(`empty states read 「还没有 X。Y 之后会出现在这里。」 with at most one button (${emptySeen.size} seen)`, emptySeen.size > 0 && !emptyBad.length, emptyBad.join(' | ') || [...emptySeen.keys()].join(' | '));
+
+      // ---- stage B (the built-in browser): its hooks, in a second window that can host it (a <webview> tag, and a
+      // stand-in for the desktop shell's bridge with the shell's real file guard and viewport emulation behind it)
+      if (E.SMOKE_READONLY !== '1') {
+        phase = 'browser-b';
+        const http = require('node:http');
+        const { ipcMain, webContents: allWc, session } = require('electron');
+        const D = (m) => require(path.join(ROOT, 'desktop', 'dist', m));
+        const { FileGuard, guardSession } = D('file-guard.js');
+        const { emulate, cleanVp, BROWSER_PARTITIONS } = D('guest-tools.js');
+        const guard = new FileGuard();
+        for (const p of BROWSER_PARTITIONS) guardSession(session.fromPartition(p), guard);
+        ipcMain.handle('smoke:allowFile', (_e, u) => guard.allowOnce(u));
+        ipcMain.handle('smoke:emulate', async (_e, id, vp) => { const g = allWc.fromId(id); if (!g) return false; await emulate(g, cleanVp(vp) ?? null, { base: g.getUserAgent(), uaFor: () => g.getUserAgent() }); return true; });
+        const site = http.createServer((req, res) => {
+          if (req.url === '/slow') { res.writeHead(200, { 'Content-Type': 'text/html' }); res.write('<!doctype html><title>Slow</title><p>still coming'); return; } // never ends: a page that keeps loading
+          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.end('<!doctype html><html><head><title>B Page</title><meta name="viewport" content="width=device-width"></head><body style="margin:0;font:15px sans-serif"><button id="b" style="position:absolute;left:40px;top:40px;width:160px;height:50px" onclick="document.title=\'pressed\'">Press</button><p style="position:absolute;top:140px;left:40px">Stage B page</p></body></html>');
+        });
+        await new Promise((r) => site.listen(0, '127.0.0.1', r));
+        const SITE = `http://127.0.0.1:${site.address().port}`;
+        const preload = path.join(out, 'browser-b-preload.js');
+        fs.writeFileSync(preload, `const { ipcRenderer } = require('electron');
+window.__smokeExternal = [];
+window.desktop = {
+  version: '0.0.0-smoke', platform: 'win32',
+  pickDir: async () => null, openPath: async () => {}, openExternal: async (u) => { window.__smokeExternal.push(String(u)); },
+  notify() {}, setBadge() {}, setTitleBarColors() {}, getLoginItem: async () => false, setLoginItem: async () => {},
+  onCommand: () => () => {}, onFocusSession: () => () => {},
+  allowFileOnce: (u) => ipcRenderer.invoke('smoke:allowFile', u),
+  guestEmulate: (id, vp) => ipcRenderer.invoke('smoke:emulate', id, vp),
+  saveScreenshot: async () => null, pickHtmlFile: async () => null, importCookies: async () => false, clearBrowsingData: async () => true,
+};`);
+        const bw = new BrowserWindow({ width: 1320, height: 860, show: false, webPreferences: { webviewTag: true, preload, contextIsolation: false, sandbox: false, backgroundThrottling: false } });
+        bw.showInactive();
+        const bwc = bw.webContents;
+        // as the desktop shell does: a page of the browser gets no preload, opens no window, and its profile is guarded
+        bwc.on('will-attach-webview', (_e, prefs, params) => { delete prefs.preload; prefs.nodeIntegration = false; prefs.contextIsolation = true; guardSession(session.fromPartition(params.partition || ''), guard); });
+        bwc.on('did-attach-webview', (_e, g) => { g.setWindowOpenHandler(() => ({ action: 'deny' })); });
+        bwc.on('console-message', (a, b, c) => {
+          const level = typeof a === 'object' && a && 'level' in a ? a.level : b;
+          const message = typeof a === 'object' && a && 'message' in a ? a.message : c;
+          if (level === 'error' || level === 'warning' || Number(level) >= 2) res.console.push({ phase, level: String(level), message: String(message).slice(0, 800) });
+        });
+        const bjs = (code) => bwc.executeJavaScript(code, true);
+        const bwait = async (code, ms = 15_000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await bjs(code).catch(() => false)) return true; await sleep(150); } return false; };
+        let bseq = 0;
+        const op = (sessionId, o, args = {}) => bjs(`window.__cwBrowser.carryOut(${JSON.stringify({ id: `b${++bseq}`, sessionId, op: o, args })}).then((a) => ({ ok: true, a }), (e) => ({ ok: false, error: String(e && e.message || e) }))`);
+        const bkey = async (keyCode) => { bwc.sendInputEvent({ type: 'keyDown', keyCode }); bwc.sendInputEvent({ type: 'keyUp', keyCode }); await sleep(250); };
+        const openMore = async () => { await bjs(`document.querySelector('.bw [data-id=more]').click()`); return bwait(`!!document.querySelector('.cm-ref [data-act]')`, 3000); };
+        const tabSel = (id) => `.bw-view[data-tab="${id}"]`;
+        try {
+          await bwc.loadURL(E.SMOKE_URL);
+          const up = await bwait(`!!window.__store && window.__store.getState().connected && window.__store.getState().metaLoaded && !!window.__cwBrowser && window.__cwBrowser.canHost()`, 30_000);
+          check('browser-b: a window that can host the browser is up (desktop bridge stand-in, <webview>)', up);
+          await bjs(`window.__store.getState().setSetting('onboarded', true)`);
+          await sleep(500);
+
+          // a link in a reply opens as a tab of the built-in browser (desktop), not in the system browser
+          await bjs(`window.__store.getState().loadHistory(${JSON.stringify(E.SMOKE_TOOLS_SID)})`);
+          const linkShown = await bwait(`[...document.querySelectorAll('.msg.assistant .md a')].some((a) => a.textContent === 'smoke-web-link')`, 15_000);
+          await bjs(`[...document.querySelectorAll('.msg.assistant .md a')].find((a) => a.textContent === 'smoke-web-link').click()`);
+          const linkTab = await bwait(`window.__cwBrowser.state.getState().tabs.some((t) => t.url === 'https://example.invalid/stage-b')`, 8000);
+          const ext = await bjs(`window.__smokeExternal.slice()`);
+          check('browser-b: a web link in a reply opens as a built-in browser tab (not the system browser)', linkShown && linkTab && ext.length === 0, `shown=${linkShown} tab=${linkTab} external=${JSON.stringify(ext)}`);
+
+          // an Agent's page, in front
+          const A = 'smoke-browser-b';
+          const opened = await op(A, 'open', { url: `${SITE}/page` });
+          const aid = await bjs(`window.__cwBrowser.state.getState().tabs.find((t) => t.agent === ${JSON.stringify(A)})?.id`);
+          await bjs(`window.__cwBrowser.state.setState({ active: ${JSON.stringify(aid)} })`);
+          await bwait(`!!document.querySelector('${tabSel(aid)}') && !document.querySelector('${tabSel(aid)}').hidden`, 5000);
+          check('browser-b: the Agent opens a page (carryOut open)', opened.ok && opened.a.page?.title === 'B Page', JSON.stringify(opened).slice(0, 200));
+
+          // ⋯ menu: every item
+          await openMore();
+          const acts = await bjs(`[...document.querySelectorAll('.cm-ref [data-act]')].map((b) => b.dataset.act)`);
+          const want = ['external', 'copy-url', 'screenshot', 'viewport', 'open-html', 'devtools', 'open-links', 'open-files', 'auto-verify', 'allowed-sites', 'import-cookies', 'cookies', 'clear-data'];
+          check('browser-b: the ⋯ menu has screenshot, local HTML, viewport, the three switches, allowed sites, the Cookie items and clear data', want.every((a) => acts.includes(a)), `missing=${want.filter((a) => !acts.includes(a)).join(',')} got=${acts.join(',')}`);
+          await bjs(`document.querySelector('.cm-ref [data-act=cookies]').click()`);
+          const cookieRows = await bwait(`document.querySelectorAll('[data-id=cookies-menu] [data-cookies]').length === 3`, 3000);
+          check('browser-b: 保留 Cookie lists its three choices', cookieRows, await bjs(`[...document.querySelectorAll('[data-id=cookies-menu] [data-cookies]')].map((b) => b.dataset.cookies).join(',')`));
+          await bkey('Escape');
+          await bkey('Escape');
+
+          // viewport: phone changes the page's size
+          const size = () => bjs(`(() => { const w = document.querySelector('${tabSel(aid)} webview'); if (!w) return null; return w.executeJavaScript('innerWidth + "x" + innerHeight').then((inner) => ({ css: w.offsetWidth + 'x' + w.offsetHeight, inner, vp: document.querySelector('${tabSel(aid)}').dataset.viewport || null })); })()`);
+          const before = await size();
+          await openMore();
+          await bjs(`document.querySelector('.cm-ref [data-act=viewport]').click()`);
+          await bwait(`!!document.querySelector('[data-id=viewport-menu] [data-vp=phone]')`, 3000);
+          await bjs(`document.querySelector('[data-id=viewport-menu] [data-vp=phone]').click()`);
+          await bwait(`document.querySelector('${tabSel(aid)}')?.dataset.viewport === 'phone'`, 4000);
+          await sleep(800);
+          const phone = await size();
+          check('browser-b: the phone viewport resizes the page (the webview 390×844, the page sees 390 wide)', !!before && !!phone && phone.css === '390x844' && /^390x/.test(phone.inner) && before.css !== phone.css, `${JSON.stringify(before)} → ${JSON.stringify(phone)}`);
+          await bjs(`window.__cwBrowser.state.setState((s) => ({ tabs: s.tabs.map((t) => (t.id === ${JSON.stringify(aid)} ? { ...t, viewport: undefined } : t)) }))`);
+          await sleep(600);
+
+          // the stop button while a page loads; reload once it stopped
+          await bjs(`(() => { const s = window.__cwBrowser.state; const t = s.getState().tabs.find((x) => x.id === ${JSON.stringify(aid)}); s.setState({ tabs: [...s.getState().tabs, { ...t, id: 'bslow', agent: undefined, src: ${JSON.stringify(`${SITE}/slow`)}, url: ${JSON.stringify(`${SITE}/slow`)}, title: '', loading: true, viewport: undefined }], active: 'bslow' }); })()`);
+          const stopShown = await bwait(`!!document.querySelector('.bw [data-id=stop]') && window.__cwBrowser.state.getState().tabs.find((t) => t.id === 'bslow')?.loading === true`, 8000);
+          await sleep(500);
+          const stillLoading = await bjs(`!!document.querySelector('.bw [data-id=stop]')`);
+          await bjs(`document.querySelector('.bw [data-id=stop]')?.click()`);
+          const stopped = await bwait(`!!document.querySelector('.bw [data-id=reload]') && !window.__cwBrowser.state.getState().tabs.find((t) => t.id === 'bslow')?.loading`, 5000);
+          check('browser-b: while a page loads the bar shows 停止加载; clicking it stops the load (重新加载 is back)', stopShown && stillLoading && stopped, `shown=${stopShown} still=${stillLoading} stopped=${stopped}`);
+          await bjs(`window.__cwBrowser.state.setState((s) => ({ tabs: s.tabs.filter((t) => t.id !== 'bslow'), active: ${JSON.stringify(aid)} }))`);
+          await sleep(600);
+
+          // annotate: the bar, a rectangle counts 1, closing with a mark asks first
+          await bjs(`document.querySelector('.bw [data-id=annotate-btn]').click()`);
+          const annOpen = await bwait(`(() => { const a = document.querySelector('.bw-ann[data-id=annotate]'); return !!a && !a.hidden; })()`, 4000);
+          await bjs(`document.querySelector('.bw-ann [data-act=ann-rect]').click()`);
+          await sleep(300);
+          const box = await bjs(`(() => { const c = document.querySelector('.bw-ann canvas') || document.querySelector('.bw-ann'); const r = c.getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) }; })()`);
+          const x0 = box.x + 60, y0 = box.y + 80;
+          bwc.sendInputEvent({ type: 'mouseMove', x: x0, y: y0 });
+          bwc.sendInputEvent({ type: 'mouseDown', x: x0, y: y0, button: 'left', clickCount: 1 });
+          for (let i = 1; i <= 6; i++) { bwc.sendInputEvent({ type: 'mouseMove', x: x0 + i * 25, y: y0 + i * 15, button: 'left', modifiers: ['leftButtonDown'] }); await sleep(30); }
+          bwc.sendInputEvent({ type: 'mouseUp', x: x0 + 150, y: y0 + 90, button: 'left', clickCount: 1 });
+          const counted = await bwait(`/1/.test(document.querySelector('.bw-ann [data-id=annotate-count]')?.textContent || '')`, 3000);
+          check('browser-b: 标注 — the bar appears, one rectangle makes the count 1', annOpen && counted, `open=${annOpen} count=${await bjs(`document.querySelector('.bw-ann [data-id=annotate-count]')?.textContent`)} box=${JSON.stringify(box)}`);
+          await bjs(`document.querySelector('.bw-ann [data-act=ann-close]').click()`);
+          const asked = await bwait(`!!document.querySelector('.modal.dialog')`, 3000);
+          await bjs(`document.querySelector('.modal.dialog .actions .btn').click()`); // 取消: it stays
+          await sleep(400);
+          const kept = await bjs(`(() => { const a = document.querySelector('.bw-ann[data-id=annotate]'); return !!a && !a.hidden; })()`);
+          await bjs(`document.querySelector('.bw-ann [data-act=ann-close]').click()`);
+          await bwait(`!!document.querySelector('.modal.dialog')`, 3000);
+          await bjs(`document.querySelector('.modal.dialog .actions .btn.danger, .modal.dialog .actions .btn:last-child').click()`);
+          const gone = await bwait(`(() => { const a = document.querySelector('.bw-ann[data-id=annotate]'); return !a || a.hidden; })()`, 3000);
+          check('browser-b: closing 标注 with a mark asks 丢掉标注？ — 取消 keeps it, 丢掉 closes it', asked && kept && gone, `asked=${asked} kept=${kept} gone=${gone}`);
+
+          // the Agent's cursor on a click; 接管 refuses the next click; 交还
+          const pressRef = (opened.a?.page?.elements ?? []).find((e) => /Press/.test(e.name))?.ref;
+          const clicked = await op(A, 'click', { ref: pressRef });
+          const cursor = await bwait(`!!document.querySelector('${tabSel(aid)} [data-id=agent-cursor][data-shown=true]')`, 3000);
+          check('browser-b: the Agent\'s cursor shows over the page when it clicks (carryOut click)', clicked.ok && cursor, `${JSON.stringify(clicked).slice(0, 160)} cursor=${cursor}`);
+          await bjs(`document.querySelector('.bw [data-id=agent-strip] [data-id=takeover]').click()`);
+          await bwait(`!!document.querySelector('.bw [data-id=agent-strip][data-taken=true]')`, 3000);
+          const refused = await op(A, 'click', { ref: pressRef });
+          await bjs(`document.querySelector('.bw [data-id=agent-strip] [data-id=giveback]').click()`);
+          const back = await op(A, 'click', { ref: pressRef });
+          check('browser-b: after 接管 a carryOut click is refused (用户接管了浏览器); after 交还 it works again', !refused.ok && /用户接管了浏览器/.test(refused.error) && back.ok, `${JSON.stringify(refused).slice(0, 160)} back=${back.ok}`);
+
+          // the owed security check: a file:// page the app let in starts a blob: Worker and a SharedWorker that
+          // fetch (and sync-XHR) a secret file — both must fail (desktop/src/file-guard.ts serves the page with a CSP)
+          const wkDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-smoke-wk-'));
+          const secret = path.join(wkDir, 'secret.txt');
+          fs.writeFileSync(secret, 'SMOKE-SECRET-B');
+          const secretUrl = require('node:url').pathToFileURL(secret).href;
+          const probe = `self.onconnect = (e) => { const p = e.ports[0]; go((m) => p.postMessage(m)); }; self.onmessage = () => go((m) => self.postMessage(m));
+function go(say) { fetch(${JSON.stringify(secretUrl)}).then((r) => r.text()).then((t) => say('READ:' + t), (e) => say('FAILED:' + e)); try { const x = new XMLHttpRequest(); x.open('GET', ${JSON.stringify(secretUrl)}, false); x.send(); say('XHR:' + x.responseText); } catch (e) { say('XHRFAILED:' + e); } }`;
+          const wkPage = path.join(wkDir, 'worker.html');
+          fs.writeFileSync(wkPage, `<!doctype html><html><head><title>Worker probe</title></head><body><script>
+window.__res = { dedicated: [], shared: [] };
+const src = ${JSON.stringify(probe)};
+try { const w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' }))); w.onmessage = (e) => window.__res.dedicated.push(String(e.data)); w.onerror = () => window.__res.dedicated.push('ERROR'); w.postMessage('go'); } catch (e) { window.__res.dedicated.push('START-FAILED:' + e); }
+try { const s = new SharedWorker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' }))); s.port.onmessage = (e) => window.__res.shared.push(String(e.data)); s.onerror = () => window.__res.shared.push('ERROR'); s.port.start(); } catch (e) { window.__res.shared.push('START-FAILED:' + e); }
+</script></body></html>`);
+          const wkUrl = require('node:url').pathToFileURL(wkPage).href;
+          const allowed = await bjs(`window.desktop.allowFileOnce(${JSON.stringify(wkUrl)})`);
+          await bjs(`(() => { const s = window.__cwBrowser.state; const t = s.getState().tabs[0]; s.setState({ tabs: [...s.getState().tabs, { ...t, id: 'bfile', agent: undefined, src: ${JSON.stringify(wkUrl)}, url: ${JSON.stringify(wkUrl)}, title: '', loading: true, viewport: undefined }], active: 'bfile' }); })()`);
+          const fileLoaded = await bwait(`(() => { const w = document.querySelector('${tabSel('bfile')} webview'); return !!w && w.getURL().startsWith('file:') && !w.isLoading(); })()`, 15_000);
+          await sleep(3000);
+          const wk = await bjs(`document.querySelector('${tabSel('bfile')} webview').executeJavaScript('JSON.stringify(window.__res)')`).then((s) => JSON.parse(s), (e) => ({ error: String(e) }));
+          const leaked = (a) => !Array.isArray(a) || a.some((m) => /SMOKE-SECRET-B/.test(m));
+          check('browser-b · security: in a file:// page the app opened, neither a blob: Worker nor a SharedWorker can read a local file', allowed === true && fileLoaded && !leaked(wk.dedicated) && !leaked(wk.shared) && wk.dedicated.length > 0 && wk.shared.length > 0, `allowed=${allowed} loaded=${fileLoaded} ${JSON.stringify(wk)}`);
+          try { fs.rmSync(wkDir, { recursive: true, force: true }); } catch { /* busy */ }
+        } catch (e) {
+          check('browser-b driver', false, e.stack || String(e));
+        } finally {
+          bw.destroy();
+          site.closeAllConnections?.();
+          site.close();
+          ipcMain.removeHandler('smoke:allowFile');
+          ipcMain.removeHandler('smoke:emulate');
+        }
+      }
 
       // ---- error boundary probe: a crash in one settings section stays in that section, 重试 recovers it
       if (E.SMOKE_READONLY !== '1') {

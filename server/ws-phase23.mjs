@@ -19,7 +19,11 @@
 //   · POST /api/web/tool refuses a wrong secret, and does not exist on the remote-access listener; a paired device
 //     cannot become the browser host;
 //   · a search engine's key is stored protected and read back as a mask; a CLI agent (mock ACP) is handed both the
-//     memory and the web server, and neither once `web.mcp` is off.
+//     memory and the web server, and neither once `web.mcp` is off;
+//   · 允许的网站 (stage B task 7): in an open conversation a page-changing tool on a site not on the list raises a card
+//     (permission.request, tool browser.site) before anything reaches the window; 总是允许 writes the host into
+//     web.browser.allowedSites and the next change there is not asked about; a script (browser_eval) is asked about
+//     every time, allowed site or not, and a 拒绝 never reaches the window.
 //   node server/ws-phase23.mjs   (starts its own server: it needs its own env; scripts/e2e.mjs' port/token are ignored)
 import WebSocket from 'ws';
 import http from 'node:http';
@@ -38,6 +42,10 @@ const proj = path.join(root, 'proj');
 const dataDir = path.join(home, '.claude-web');
 fs.mkdirSync(home, { recursive: true });
 fs.mkdirSync(proj, { recursive: true });
+// 允许的网站 (stage B task 7): the page the window part below works on (app.example) was allowed before — the
+// conversation 'phase23-conv' is not an open one, so nobody could be asked on a card (an open one is, below)
+fs.mkdirSync(dataDir, { recursive: true });
+fs.writeFileSync(path.join(dataDir, 'meta.json'), JSON.stringify({ settings: { 'web.browser.allowedSites': ['app.example'] } }));
 
 const results = [];
 const check = (name, ok, detail = '') => { results.push([name, !!ok]); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ` — ${detail}` : ''}`); };
@@ -196,8 +204,8 @@ async function main() {
   const init = await mcp.rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'phase23', version: '0' } });
   check('mcp initialize handshakes', init.result?.serverInfo?.name === 'claude-web-web' && !!init.result?.capabilities?.tools, JSON.stringify(init.result?.serverInfo ?? init.error));
   const tools = (await mcp.rpc('tools/list')).result?.tools ?? [];
-  check('mcp lists the eleven tools of 联网 (then the five character tools of 网吧 and the seven of 字符画主题)', tools.map((t) => t.name).join(',') === 'web_search,browser_open,browser_read,browser_find,browser_click,browser_type,browser_press_key,browser_scroll,browser_back,browser_screenshot,browser_computer,character_guide,character_draft,character_save,character_assign,character_list,theme_guide,theme_draft,theme_get,theme_save,theme_apply,theme_list,theme_delete', tools.map((t) => t.name).join(','));
-  check('… only searching and reading what is open (and the character / theme guides and lists) are marked read-only', tools.filter((t) => t.annotations?.readOnlyHint).map((t) => t.name).join(',') === 'web_search,browser_read,browser_find,browser_screenshot,character_guide,character_list,theme_guide,theme_get,theme_list');
+  check('mcp lists the tools of 联网 — stage B\'s console / network / snapshot / wait / tabs / viewport / hover / drag / select / eval among them (then the five character tools of 网吧 and the seven of 字符画主题)', tools.map((t) => t.name).join(',') === 'web_search,browser_open,browser_read,browser_find,browser_click,browser_type,browser_press_key,browser_scroll,browser_back,browser_screenshot,browser_computer,browser_console,browser_network,browser_snapshot,browser_wait,browser_tabs,browser_viewport,browser_hover,browser_drag,browser_select,browser_eval,character_guide,character_draft,character_save,character_assign,character_list,theme_guide,theme_draft,theme_get,theme_save,theme_apply,theme_list,theme_delete', tools.map((t) => t.name).join(','));
+  check('… only searching and reading what is open (and the character / theme guides and lists) are marked read-only', tools.filter((t) => t.annotations?.readOnlyHint).map((t) => t.name).join(',') === 'web_search,browser_read,browser_find,browser_screenshot,browser_console,browser_network,browser_snapshot,browser_wait,character_guide,character_list,theme_guide,theme_get,theme_list');
 
   const s1 = await mcp.call('web_search', { query: 'node backpressure', count: 5 });
   const s1t = textOf(s1);
@@ -279,7 +287,7 @@ async function main() {
   // the mouse by position: the checked arguments go over, a fresh picture with its size comes back
   const cuId = mcp.send('tools/call', { name: 'browser_computer', arguments: { action: 'left_click', coordinate: [640, 300], text: 'shift' } });
   const cmd4 = await until(() => a.commands()[3], 10_000);
-  check('browser_computer arrives as a `computer` command with the action and the position', cmd4?.op === 'computer' && cmd4?.sessionId === 'phase23-conv' && JSON.stringify(cmd4?.args) === JSON.stringify({ action: 'left_click', coordinate: [640, 300], modifiers: 'shift' }), JSON.stringify(cmd4));
+  check('browser_computer arrives as a `computer` command with the action and the position', cmd4?.op === 'computer' && cmd4?.sessionId === 'phase23-conv' && JSON.stringify(cmd4?.args) === JSON.stringify({ action: 'left_click', coordinate: [640, 300], modifiers: 'shift', site: 'app.example' }), JSON.stringify(cmd4));
   await a.req({ kind: 'browser.result', id: cmd4?.id, ok: true, answer: { note: '已点击。', image: { mime: 'image/jpeg', data: '/9j/4AAQ', width: 1280, height: 843 } } });
   const cu = (await mcp.wait(cuId)).result;
   check('… and comes back with the picture and its size', !cu?.isError && textOf(cu).includes('已点击。') && textOf(cu).includes('截图是 1280×843 像素') && cu?.content?.some((c) => c.type === 'image' && c.data === '/9j/4AAQ' && c.mimeType === 'image/jpeg'), textOf(cu));
@@ -356,6 +364,64 @@ async function main() {
   const withoutWeb = await handed();
   check('with web.mcp off a new conversation is not told about it', withoutWeb === '[mcp: claude-web-memory]' && (await a.req({ kind: 'web.status' })).enabled === false, withoutWeb);
   await a.req({ kind: 'settings.set', key: 'web.mcp', value: true });
+
+  // ---- 允许的网站 (stage B task 7): an open conversation (the mock agent's) asks on a card ----
+  {
+    const g = await a.req({ kind: 'session.open', params: { cwd: proj, agent: 'acp:p23', permissionMode: 'default' } });
+    await until(() => a.events.some((e) => e.kind === 'session.state' && e.sessionId === g.sessionId && (e.state === 'idle' || e.state === 'error')), 60_000);
+    const GS = g.sessionId;
+    const tool = (name, args) => post(port, { sessionId: GS, tool: name, args }, secret);
+    const cards = () => a.events.filter((e) => e.kind === 'permission.request' && e.request.sessionId === GS && e.request.toolName === 'browser.site').map((e) => e.request);
+    const mine = () => a.commands().filter((c) => c.sessionId === GS);
+    const answer = (c, ans) => a.req({ kind: 'browser.result', id: c.id, ok: true, answer: ans });
+    const shop = { page: { url: 'https://shop.example/cart', title: 'Cart', text: 'Your cart', elements: [{ ref: 'e1', role: 'button', name: 'Checkout' }] } };
+    // the page is opened (reading: never asked)
+    const pOpen = tool('browser_open', { url: 'https://shop.example/cart' });
+    const cOpen = await until(() => mine()[0], 10_000);
+    await answer(cOpen, shop);
+    const opened = await pOpen;
+    check('allowed sites: opening a page is not asked about', opened.status === 200 && !opened.json?.isError && cards().length === 0, `${opened.status} ${textOf(opened.json).slice(0, 120)}`);
+    // a click on a site nobody allowed: a card, and nothing at the window until it is answered
+    const pClick = tool('browser_click', { ref: 'e1' });
+    const card1 = await until(() => cards()[0], 10_000);
+    check('allowed sites: a click on a new site raises a card for that site — before the window is asked anything', card1?.input?.host === 'shop.example' && card1?.input?.op === 'click' && card1?.input?.tool === 'browser_click' && mine().length === 1, JSON.stringify(card1));
+    await a.req({ kind: 'permission.respond', requestId: card1.requestId, response: { behavior: 'allow', updatedInput: { allow: 'always' } } });
+    const cClick = await until(() => mine()[1], 10_000);
+    check('… 总是允许: the click reaches the window, with the site it was allowed for', cClick?.op === 'click' && cClick?.args?.ref === 'e1' && cClick?.args?.site === 'shop.example', JSON.stringify(cClick));
+    const resolved = await until(() => a.events.some((e) => e.kind === 'permission.resolved' && e.requestId === card1.requestId), 5000);
+    check('… and the card is withdrawn from every window (permission.resolved)', !!resolved);
+    await answer(cClick, shop);
+    const clicked = await pClick;
+    check('… the tool result is the window\'s answer', clicked.status === 200 && !clicked.json?.isError, textOf(clicked.json).slice(0, 160));
+    const listed = await until(async () => { const st = await a.req({ kind: 'settings.get' }); const v = (st.settings ?? st)['web.browser.allowedSites']; return Array.isArray(v) && v.includes('shop.example') ? v : null; }, 5000);
+    check('… 总是允许 wrote the host into web.browser.allowedSites (next to what was there)', JSON.stringify(listed) === JSON.stringify(['app.example', 'shop.example']), JSON.stringify(listed));
+    const pType = tool('browser_type', { ref: 'e1', text: 'x' });
+    const cType = await until(() => mine()[2], 10_000);
+    check('… the next change on that site is not asked about', cType?.op === 'type' && cards().length === 1, `${JSON.stringify(cType)} cards=${cards().length}`);
+    await answer(cType, shop);
+    await pType;
+    // a script: asked every time, on an allowed site too
+    const script = "return document.querySelectorAll('li').length";
+    const pEval = tool('browser_eval', { script });
+    const card2 = await until(() => cards()[1], 10_000);
+    check('a script on an allowed site is still asked about, with the script on the card', card2?.input?.eval === true && card2?.input?.host === 'shop.example' && card2?.input?.script === script && mine().length === 3, JSON.stringify(card2));
+    await a.req({ kind: 'permission.respond', requestId: card2.requestId, response: { behavior: 'allow', updatedInput: { allow: 'always' } } });
+    const cEval = await until(() => mine()[3], 10_000);
+    check('… allowed once: it reaches the window', cEval?.op === 'eval' && cEval?.args?.script === script, JSON.stringify(cEval));
+    await answer(cEval, { result: '7', page: { url: 'https://shop.example/cart', title: 'Cart', text: '' } });
+    const ran = await pEval;
+    check('… and its result comes back as page data', !ran.json?.isError && textOf(ran.json).includes('7') && textOf(ran.json).includes('WEB_CONTENT'), textOf(ran.json).slice(0, 200));
+    const pEval2 = tool('browser_eval', { script: 'document.title' });
+    const card3 = await until(() => cards()[2], 10_000);
+    check('… the same script again is asked about again (no 总是允许 for scripts)', card3?.input?.eval === true && card3?.input?.script === 'document.title', JSON.stringify(card3));
+    await a.req({ kind: 'permission.respond', requestId: card3.requestId, response: { behavior: 'deny', message: '' } });
+    const refused = await pEval2;
+    check('… 拒绝: the model is told so and the window is never asked', refused.json?.isError === true && textOf(refused.json).includes('没有允许') && mine().length === 4, textOf(refused.json).slice(0, 200));
+    const st3 = await a.req({ kind: 'settings.get' });
+    check('… and a script never wrote anything into the list', JSON.stringify((st3.settings ?? st3)['web.browser.allowedSites']) === JSON.stringify(['app.example', 'shop.example']));
+    await a.req({ kind: 'session.close', sessionId: GS }).catch(() => {});
+    await a.req({ kind: 'session.delete', sessionId: GS }).catch(() => {});
+  }
   await a.req({ kind: 'agents.set', agent: 'acp:p23', patch: null });
 
   // ---- the hosting window goes away ----

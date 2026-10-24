@@ -57,3 +57,21 @@
   - 换成手机 UA 会重新载入页面：之前点出来的状态（标题改了之类）会没。
   - 这台机器的 bash 工具里 heredoc 带 `\'` 或 `\\` 时整条命令会解析失败（不只是吃反斜杠）：脚本一律先用 Write 写成文件再跑。
 - **验证**：单测 `desktop/src/guest-debug.test.ts`（共用 / DevTools 抛错 / 记录 / 补资源计时 / 结构压缩 / 编号）、`web/src/features/browser/ops.test.ts`（截断、过滤、等待超时、标签只列自己的）、`server/src/web/{mcp,service}.test.ts`。真机：临时 HOME / `CLAUDE_WEB_DIR` / `--user-data-dir` 起桌面版，CDP 里调 `window.__cwBrowser.carryOut`，本机假页面（加载时 `console.error('boom')`、一张 404 的图、点了才 fetch 一个 500 并晚 0.8 s 出字、40 个 option 的 select），48 项全过；脚本没入库（scratchpad `t6check/check.cjs`）。
+
+## 允许的网站 / hover·drag·select·eval / Agent 的光标 / 接管（2026-10-24，阶段 B 任务 7）
+
+- **新工具**（`server/src/web/mcp.ts`，`web` 现在 21 个浏览器 / 搜索工具）：`browser_hover {ref}`（真鼠标移过去，`mouseenter` / `:hover` 菜单会出来）、`browser_drag {from, to}`（按下 → 按着走 10 步 → 松开；HTML5 原生拖放没单独验过）、`browser_select {ref, value}`（`<select>`：值、显示的字完全一样、再包含；触发 input + change）、`browser_eval {script}`（≤ 20 000 字；有 `return` 当函数体，否则先当表达式、解析不了再当函数体；promise 等 10 s；结果 JSON，函数 / DOM 节点 / 循环写成字，≤ 8 KB，当页面数据框起来）。page-agent 升到 `v: 5`（`point` / `select`）。
+- **闸在服务端**（`server/src/web/site-gate.ts` + `service.ts` 的 `gated()`）：会改页面的 op（click / type / key / scroll / computer〔截图和 wait 除外〕/ hover / drag / select / eval）先判网站：这个对话的标签现在在哪——上一次回答里的 `page.url`，不知道就先发一个 `read {probe: true}` 问。`file:` 页面一律拒（完全放开也拒）；没有主机的页（about:blank）只有脚本要问；不在 `web.browser.allowedSites` 里 → 在对话里挂一张卡（`permission.request`，`toolName: 'browser.site'`，input `{host, op, tool}`，脚本另带 `eval / script（前 400 字）/ scriptLength`）。总是允许 = `allow` + `updatedInput.allow = 'always'`（脚本的不认）→ 主机名追加进列表。权限模式「完全放开」不问网站，**脚本照样每次问**。卡的通道和操控电脑一样（`SiteAsk`：`permission` / `permissionResolved` 事件、`pendingFor`、`respond`、对话关了 `drop`、4 分钟没人答算拒绝；不是这台机器上打开的对话 → 直接拒）。
+- **判过的网站随 op 一起发**（`args.site`）：窗口那边标签已经去了别的网站就回 `cw-site-changed:<现在的地址>`，服务端按新网站再判一次（只重来一次）——用户在两次调用之间自己点走了也不会越权。
+- **列表规则**（`siteAllowed`）：`example.com` 只这一个主机；`*.example.com` 含它和所有子域；端口不算；IP 只等于它自己、通配符永远不配 IP；大小写、末尾的点不算；整条网址也认它的主机。
+- **卡**：`PermissionCards.tsx` 的 `SiteRequest`（`[data-id=site-card][data-host][data-op]`，`data-act=allow|always|deny`），脚本用代码块显示；空输入框按 Enter = 允许一次网站，**脚本只能点**。
+- **Agent 的光标**（`cursor.ts` 总线 + `AgentCursor.tsx`）：ops 在 hover / drag / select / click / type / computer 时报坐标（页面自己的像素 + 页面大小），光标按 webview 元素的框换算，所以手机视口缩小居中时也对得上；按下有涟漪；停 2.5 s 后淡出；只是画，不挡输入，截图里没有。钩子 `[data-id=agent-cursor][data-shown]`、`[data-id=agent-ripple]`。
+- **接管 / 交还**：Agent 条上的 `[data-id=takeover]` / `[data-id=giveback]`（`[data-taken=true]`），`state.ts` 的 `setTakenOver(sessionId, on)` 给这个对话的所有标签记 `takenOver`。接管期间 host.ts 对这个对话会改页面的 op（以及服务端的 probe）直接回「用户接管了浏览器……」，读页面照常。只在窗口内存里（窗口关了就没了），不进 meta.json。
+- **验证**：`site-gate.test.ts`、`service.test.ts`（probe、一次 / 总是、通配、脚本每次问、完全放开、拒绝、file:、网站变了、接管）、`ops.test.ts`（含在 Node 里真跑 `evalSource`）、`server.test.ts`（没打开的对话在新网站上点击被拒、窗口一个点击都没收到）；`scripts/browser-smoke.cjs` 的 `t7` 段（真 Electron）；e2e 第 23 期用 mock ACP 的真对话走卡片 / 总是允许写列表 / 脚本每次问。
+
+## 自动检查改动（2026-10-24，阶段 B 任务 8）
+
+- `web/src/features/browser/auto-verify.ts`：一轮结束（`onTurnEnd`，在自动打开之后）——设置 `web.browser.autoVerify` 不是 false（没设 = 开）、这一轮没出错、不是别的机器的对话、桌面版（`desktop.guestDebug`）、这一轮成功写过前端文件（`.html/.htm/.css/.scss/.less/.js/.mjs/.jsx/.ts/.tsx/.vue/.svelte`）、开着预览标签（localhost / 127.x / [::1] / `.claude/launch.json` 在跑的服务器的地址；这个对话自己的 Agent 标签优先，再前台的，再最新的）→ `checkPage`：先看一眼控制台（让记录开起来）、记下时间、`reload`（≤ 15 s）、再等 0.8 s、取这之后的 error（≤ 20 条），有才截图。
+- `Runtime.enable` 会把之前几次加载的 console 补发过来，带的是原来的时间戳——所以按「重新加载之后」的时间筛，不按条数。
+- 有报错 → 这一轮的改动文件卡下面一条 `VerifyChip`（`[data-id=verify-chip][data-state=checking|errors][data-count]`，「预览有 N 个报错」点开看列表，`data-act=verify-fix`「让 Claude 修」、`data-act=verify-dismiss`）；没报错什么都不留。「让 Claude 修」把截图 + 报错文字作为一个附件放进输入框（任务 5 的 inbox），输入框空着才填一句话——**从不自动发**。状态在窗口内存里（`useVerify`），不进 meta.json。
+- 真机：`window.__cwBrowser.checkPage(tabId)` 给脚本用。

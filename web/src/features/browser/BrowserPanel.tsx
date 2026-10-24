@@ -32,7 +32,10 @@ const tabName = (t: BrowserTab) => t.title || (t.url ? siteOf(t.url) : tr('新�
 
 /** Send the page in a tab somewhere else: back, forward, again — whatever the page element offers. */
 function drive(tabId: string, fn: 'goBack' | 'goForward' | 'reload' | 'stop') {
-  try { guestOf(tabId)?.[fn](); } catch { /* the page is being replaced */ }
+  // stop / reload: also a page that never got as far as dom-ready — a load that hangs is exactly what 停止加载 is for
+  // (found by stage B's ui-smoke: guestOf waits for dom-ready, so the button did nothing on a page still loading)
+  const el = fn === 'stop' || fn === 'reload' ? guestElOf(tabId) : guestOf(tabId);
+  try { el?.[fn](); } catch { /* not attached yet, or the page is being replaced */ }
 }
 
 /** Give a tab an address: a new tab gets its page, a tab with a page is told to load. */
@@ -320,8 +323,8 @@ function AddressBar({ tab, onAnnotate }: { tab: BrowserTab; onAnnotate: () => vo
       <button className="icon-btn xs" disabled={!tab.back} title={tr('后退')} aria-label={tr('后退')} onClick={() => drive(tab.id, 'goBack')}><Icon name="chevronLeft" size={15} /></button>
       <button className="icon-btn xs" disabled={!tab.fwd} title={tr('前进')} aria-label={tr('前进')} onClick={() => drive(tab.id, 'goForward')}><Icon name="chevronRight" size={15} /></button>
       {tab.loading
-        ? <button className="icon-btn xs" title={tr('停止加载')} aria-label={tr('停止加载')} onClick={() => drive(tab.id, 'stop')}><Icon name="close" size={14} /></button>
-        : <button className="icon-btn xs" disabled={!hasPage} title={tr('重新加载')} aria-label={tr('重新加载')} onClick={() => drive(tab.id, 'reload')}><Icon name="refresh" size={14} /></button>}
+        ? <button className="icon-btn xs" data-id="stop" title={tr('停止加载')} aria-label={tr('停止加载')} onClick={() => drive(tab.id, 'stop')}><Icon name="close" size={14} /></button>
+        : <button className="icon-btn xs" data-id="reload" disabled={!hasPage} title={tr('重新加载')} aria-label={tr('重新加载')} onClick={() => drive(tab.id, 'reload')}><Icon name="refresh" size={14} /></button>}
       <div className={clsx('bw-addr', editing && 'on')}>
         <Icon name={/^https:/i.test(tab.url) ? 'lock' : 'web'} size={13} />
         <input
