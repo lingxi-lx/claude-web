@@ -95,6 +95,34 @@
   以前在设置里改了窗口，正在跑的对话照旧。现在 `providers.upsert` 之后 `pool.providerSaved(id)` → 这个供应商上每个 Claude 对话 `runner.reprovide()`：
   设置有变（不算 `modelsAt`）就等这一轮跑完重开进程（resume），没变什么都不做。只有用户在设置里保存才触发，后台刷新模型列表不触发。
 
+## 自动压缩点 / Claude 账号的 200K · 1M（2026-10-24 用户：「有时候新对话还是 Opus 5.5 200k，很怪」，spec 2026-10-24 「A7」）
+
+- **现象**：账号上普通的 `claude-opus-5-5` 是 200K，只有 `[1m]` 才是 1M（runner `windowOf`），所以从菜单直接选 Opus 5.5 的新对话落在 200K；
+  另外用户 `~/.claude/settings.json` 的 env 有 `CLAUDE_CODE_AUTO_COMPACT_WINDOW=700000`，界面上看不出来压缩点是哪来的。
+- **做了什么**：① 「自动压缩」：每个供应商 `Provider.compactAt`、自己的登录设置键 `claude.compactAt`、「其它 Claude 账号」档案自己的 `compactAt`；
+  设了就写 `CLAUDE_CODE_AUTO_COMPACT_WINDOW`（和官方二进制自己算的提前压缩点取小：`effectiveCompact`），压过 settings.json（见 `engine-providers`
+  笔记「A7」那条）；不设 settings.json 照旧。输入 50K 起、不超过该模型窗口（`compactAtOk`，不合格的值 runner 直接不用）。
+  ② 账号的窗口：自己的登录设置键 `claude.contextWindows`（`opus` / `sonnet` / `fable` → `200000 | 1000000`，没写 = 1M），档案用自己的
+  `contextWindows`（同样的族键）；选 1M 的族在账号上一律带 `[1m]`（`accountModel`，子代理模型也一样），haiku 固定 200K，`default` 不动。
+  帮手在 `server/src/models/account-window.ts`（web 别名 `@account-window`）。③ 看得到：`info.contextWindow`（+ 原有的 `info.compactWindow`），
+  上下文卡标题行下面一行「窗口 1M · 700K 内压缩」（`.info-card[data-card="context"] > .ic-window`；spec 写的是放在标题行上，但和折叠时的百分比、
+  小条挤在 288px 的一行里，「上下文」被挤成一字一行、英文把小条挤出卡片，所以挪到下一行）、小环按 `min(窗口, 压缩点)`，模型菜单 Claude 行标 1M / 200K。
+  ④ 编辑：设置 → 账号与登录 → Claude 账号「编辑」（`AccountWindows.tsx`，档案行也有「编辑」），供应商编辑页的「自动压缩」（`CompactAt.tsx`）；
+  「现在：…」那一行来自 `config.compactSource`（settings.json / 环境 / 没有）。
+- **改了对在跑的对话**：自己登录的设置走 meta 的 `'changed'` → `pool.accountPrefsChanged` → `runner.setAccountPrefs`（等空闲重开进程；
+  窗口变小且用量超过新窗口 80% 先 `/compact`，同 `fitBeforeSwitch`）；档案 / 供应商走原来的 `providerSaved → reprovide`。
+- **坑**：
+  - 账号的 plain id 就是 200K——以前只有带 `[1m]` 的选项才是 1M，现在默认 1M 是我们加的后缀，不是 CLI 的。
+  - 自己的登录走用户自己的中转（settings.json / 环境里有 `ANTHROPIC_BASE_URL` / token）时**不改模型名**（那个中转可能不认 1M beta），
+    压缩点照样生效；但模型菜单的 1M / 200K 标记照设置显示，可能和实际（中转上 200K）不一致。小环和卡片标题用 server 报的窗口，是对的。
+  - server 报的窗口压过前端的猜测（`estimateContext` 有 `contextWindow` 就不再按用量涨到 1M）：窗口刚改小、还没压缩的对话、或钉在 200K 的不认识的模型，
+    小环会显示 100%，这是有意的。
+  - `info.compactWindow` 可能比窗口还大（200K 的 Opus + settings.json 的 700000），前端取小，别把它当真正的压缩点。
+- **测试**：单测 `account-window.test.ts`、`session-runner.test.ts` 的 A7 一组、`pool.test.ts`、`compact-model.test.ts`、`stats.test.ts` / `info-model.test.ts` / `menu.test.ts`；
+  e2e `server/ws-phase32.mjs`（假上游 + 真引擎，临时 HOME 的 settings.json 写 700000：账号 / 档案的 Opus 默认带 context-1m beta、设 200K 后不带、
+  开着的对话收到 200K；压缩点 500K / 150K / 供应商 400K 在引擎里 `echo` 出来压过 700000）；ui-smoke 的 `a7` 段（编辑框、供应商编辑页、卡片标题含英文宽度、菜单标记）。
+  e2e 里账号对话经对话自己的环境（`features.env` 的 `ANTHROPIC_BASE_URL`）接到假上游——不经 settings.json，所以不算「用户自己的中转」，走的是真账号那条路。
+
 ## 思考用的语言（2026-10-19，用户要求：照 DeepSeek Harness 插件 dsh-thinking-language）
 
 - 纯提示词：在系统提示的 `append` 后面加一节 `# Thinking language`（`server/src/runtime/thinking-language.ts` 的 `thinkingLanguagePrompt`），
