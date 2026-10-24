@@ -33,6 +33,8 @@ import { PREVIEW_ALLOWED, PREVIEW_SERVER, previewEnabled, previewMcpServer, veri
 
 /** A conversation above this share of the next model's window is compacted before the switch. */
 const FIT_SHARE = 0.8;
+/** the official binary's lowest CLAUDE_CODE_AUTO_COMPACT_WINDOW (it reads a smaller one as this: phase 27, measured) */
+const OFFICIAL_COMPACT_FLOOR = 100_000;
 
 const esc = (s: string) => s.replace(/"/g, '&quot;');
 
@@ -450,7 +452,9 @@ export class SessionRunner extends EventEmitter {
     // — a point the user set on the own login goes over settings.json through --settings too (`ownOverride` below)
     const cap = compactCap(fenv, this.cwd, !!(this.provider || this.account) || userCompact);
     const before = `${this.info.compactWindow}/${this.info.contextWindow}`;
-    if (cap) this.info.compactWindow = cap;
+    // the official binary will not go under 100K whatever the variable says (engine-providers: 50K set → 100K): the
+    // ring and the card say where it really compacts (final review M6); ccb takes the value as it is
+    if (cap) this.info.compactWindow = engine.kind === 'claude' ? Math.max(cap, OFFICIAL_COMPACT_FLOOR) : cap;
     else delete this.info.compactWindow;
     this.noteWindow(false);
     if (`${this.info.compactWindow}/${this.info.contextWindow}` !== before) this.emit('info', this.info);

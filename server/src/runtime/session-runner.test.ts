@@ -1354,6 +1354,26 @@ describe('SessionRunner: the account’s 200K / 1M picks and the 自动压缩 po
     });
   });
 
+  // final review M6: the official binary will not compact under 100K whatever the variable says (engine-providers:
+  // 50K set → 100K, 120K → 120K); the ring and the context card say where it really compacts. ccb takes the value as is
+  it('the official binary’s 100K floor goes on the info (60K set → 100K); ccb keeps 60K', async () => {
+    await withHome(null, async (dir) => {
+      const p = { id: 'p1', name: 'relay', type: 'anthropic', baseUrl: 'https://relay.invalid', apiKey: 'k', models: ['claude-opus-5-5'], compactAt: 60_000 } as any;
+      const seen: Record<string, { env?: string; info?: number }> = {};
+      for (const kind of ['claude', 'ccb'] as const) {
+        eng.kind = kind;
+        queries.length = 0;
+        // the provider says which engine (an Anthropic relay's Claude prefers the official binary otherwise)
+        const r = new SessionRunner({ sessionId: `a7-m6-${kind}`, cwd: dir, model: 'claude-opus-5-5' } as any, { ...p, runtime: kind });
+        await tick();
+        expect(r.info.runtime).toBe(kind);
+        seen[kind] = { env: queries[0].options.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, info: r.info.compactWindow };
+        await r.close();
+      }
+      expect(seen).toEqual({ claude: { env: '60000', info: 100_000 }, ccb: { env: '60000', info: 60_000 } });
+    });
+  });
+
   it('setAccountPrefs on a live conversation: a new compaction point changes the plan key → it restarts once idle; the same again restarts nothing', async () => {
     await withHome(null, async (dir) => {
       const r = new SessionRunner({ sessionId: 'a7-13', cwd: dir, model: 'claude-opus-5-5' } as any, undefined, { account: { windows: {} } });
