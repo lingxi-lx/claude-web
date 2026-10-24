@@ -48,7 +48,7 @@
 2. 主窗口：`will-navigate` 对任何非应用地址一律 `preventDefault`（外链交给第 1 步，不在这里打开）；
    `setWindowOpenHandler` 一律 `deny`（链接已在第 1 步处理，弹窗走内置浏览器标签）。
 3. 恢复：`did-fail-load`（主 frame）和 `render-process-gone` → 重新加载应用地址，恢复后 toast「页面出错，已恢复」；
-   60 秒内连续 3 次就停在一个说明页（带「重新加载」「打开日志」），不无限重载。在跑的对话在服务端，不受影响。
+   60 秒内连续 3 次就停在一个说明页（「页面连续出错」+「重新加载」），不无限重载。在跑的对话在服务端，不受影响。
 4. 测试：`link-route` 单测覆盖各类链接；ui-smoke 在 Windows 上模拟：点 `file://` 链接、强制 `webContents.forcefullyCrashRenderer()`，
    窗口能回到应用。**没有 Mac，mac 只能这样间接验证**，交付时写明。
 
@@ -57,10 +57,14 @@
 现状：`web/src/features/sidebar/place.ts:21-36` 的 `placeFixed` 先试下、再试上，都放不下时钉到顶端并给 `maxHeight`，
 但菜单容器没有 `overflow-y: auto`；侧栏行菜单（`session-actions.tsx:151`）没传 `prefer`。
 
-做法：`placeFixed` 改成「下 / 上都放不下时选空间大的一侧，`maxHeight` = 那一侧可用高度」，菜单容器加
-`overflow-y: auto` + `overscroll-behavior: contain`；水平方向同样夹在窗口内。所有用 `useAnchoredMenu` /
-`Popover` / `useDropdown` 的菜单都受益（顺手查一遍有没有自己算位置的菜单，改成用共用的）。
-测试：`place.ts` 单测（四边、矮窗口）；ui-smoke 把窗口设成 600px 高，打开侧栏第一行和最后一行的菜单，断言菜单矩形在窗口内。
+根因（查到的）：桌面上菜单是就地画在按钮旁的 `position: fixed` 元素，而侧栏列表 `.sb-list` 等滚动区有滚动渐隐的
+`mask-image`（`web/src/styles/scroll-fade.css`）；mask 会把所有后代（包括 fixed 的）裁到这个元素的框里，所以菜单在
+「新对话」下面被切掉。修：`scroll-fade.css` 里同一组选择器加 `:has(.menu)` 时 `mask-image: none`（菜单开着时不渐隐）。
+
+另外 `placeFixed` 上下都放不下时本来就钉到顶、给 `maxHeight`，但 `useAnchoredMenu`（`features/sidebar/menus.tsx:46`）
+只设了 `maxHeight` 没设滚动：补 `overflow-y: auto` + `overscroll-behavior: contain`，最后几项能滚到。
+测试：`place.test.ts` 加矮窗口的例子；ui-smoke 把窗口设成 600px 高，侧栏列表滚到一半后打开中间一行的菜单，
+用 `elementFromPoint` 断言第一项和最后一项都点得到（被 mask 裁掉的点不到）。
 
 ### A3. 网吧滚轮：缩放的同时页面也在滚（图 18–25）
 
@@ -78,9 +82,10 @@ D 部分的节点图用同一套规矩，规则写成共用函数 `web/src/ui/wh
 做法：助手正文里
 - 双击行内 `code` → 选中整个 code 段（`activation_status` 整个选中，不带两边的字）；
 - 双击普通文字 → 选中一个词，中文用 `Intl.Segmenter('zh', { granularity: 'word' })` 分词；
-- 选中后现有的选区菜单（`web/src/features/chat/SelectionMenu.tsx`）照常出现，菜单是「旁聊 · 回复」两项（和官方一样）。
+- 选中后现有的选区菜单（`web/src/features/chat/SelectionMenu.tsx`：复制 / 引用到输入框 / 钉住 / 分叉，10-20 用户要的）照常出现，
+  在「引用到输入框」旁边加官方的「旁聊」：打开旁聊卡，输入框里预先填好引用的这段，用户补一句再问（不自动发）。
 实现：在消息容器上监听 `dblclick`，用 `Selection.setBaseAndExtent` 改写浏览器默认选区；三击（整段）不改。
-先查清现在为什么会选中整段（CSS `user-select`、父元素的选区处理），修根因，不叠补丁。
+先在 ui-smoke 里复现现在双击选中了什么，再按复现结果修，不叠补丁。
 测试：ui-smoke 对种子消息里的行内 code 和中英文各双击一次，断言 `getSelection().toString()`。
 
 ### A5. 上下文卡：慢、颜色和数字不对（图 8–9）
@@ -93,21 +98,28 @@ D 部分的节点图用同一套规矩，规则写成共用函数 `web/src/ui/wh
 1. 颜色按类别固定（按 `kind` + 已知类名映射，不认识的类名一律灰）：Messages 蓝、System tools 橙、MCP tools 青、
    Skills 黄、其余灰；排序：已用的按大小从大到小，Autocompact buffer、Free space、deferred 固定在最后。条和行用同一套颜色。
    颜色用主题令牌（新加 `--ctx-messages` 等），浅色 / 深色 / 字符画主题都能看清（对比度测试覆盖）。
-2. 快：每个对话最近一次的结果存在服务端内存 + 会话 meta（`contextUsageCache`，只存数字），打开卡片先显示缓存，
-   后台再取新的，取的时候标题旁一个小转圈「更新中」。每轮结束时自动刷新一次（只在卡片展开时）。
-3. 卡片折叠时标题行显示「95%」+ 小进度条（官方图 10 的样子）。
-4. buffer：查清 333k 从哪来（候选：ccb fork 的 `getContextUsage` 按窗口比例算 buffer；或 `CLAUDE_WEB_CONTEXT_WINDOWS`
-   改了窗口后自动压缩阈值跟着按比例变）。目标：同一窗口大小下和官方二进制报的数字一致。要改引擎就按
-   「engine-providers」笔记的引擎发版流程走；前端不自己改数字。
+2. 快：每个对话最近一次的明细存在前端模块级缓存里（这次运行内有效，不进 localStorage），打开卡片先显示缓存，
+   后台再取新的，取的时候底部「更新中…」。每轮结束（对话从 running 回到 idle）时卡片展开着就自动再取一次。
+3. 卡片折叠时标题行的「95%」+ 小进度条已经有了（`CardSummary`），不用改。
+4. buffer 的根因（读引擎 fork 代码查到）：`C:\Users\YPY\claude-web-engine\src\utils\analyzeContext.ts` 第 947 行窗口用
+   `runtimeModel` 算，第 1015 行自动压缩阈值却用 `model` 算（`getEffectiveContextWindowSize(model) - 13_000`）；两个模型
+   的窗口不同时（档案表里 1M、另一个按默认）buffer = 两窗口之差 + 33k，于是 1M 显示 333k。真实的自动压缩
+   （`autoCompact.ts` 的 `autoCompactIfNeeded`）用的是 `toolUseContext.options.mainLoopModel`，也就是这里的 `model`。
+   修法：先写复现测试查清两个名字各解析出多大窗口；窗口和阈值都按真实自动压缩用的那个模型算（显示的就是实际会发生的）；
+   如果是 `CLAUDE_WEB_CONTEXT_WINDOWS` 的查表只认其中一种写法（例如带不带 `[1m]`、带不带供应商前缀），把查表修成两种都认，
+   这样档案里写 1M 的模型实际也按 1M 压缩。buffer 改用和真实压缩同一个函数 `getAutoCompactThreshold`
+   （它按窗口大小给 13k / 30k / 50k 余量），1M 窗口显示约 70k / 7%，700k 窗口约 50k。
+   引擎发新版本 `2.8.4-cw.7`，按「engine-providers」笔记的发版流程（预发布 Release）走；前端不自己改数字。
 测试：`info-model` 单测（固定颜色、排序、未知类名）；用官方二进制和我们的引擎在同一窗口下各取一次，对比 buffer。
 
 ### A6. 拿掉「新对话页的动态背景」设置（图 2）
 
 做法：删 `web/src/features/settings/catalog.ts` 里的 `ui.welcomeBackdrop`（第 22、109 行一带）和读它的地方；
 用户原话「就做动画或者无在外观里面设置就好」：外观 里加一个两档的「背景动画：开 / 关」（`ui.backdropMotion`），
-开 = 新对话页放当前字符画主题的背景（主题没有背景就是纯底），关 = 静止的纯底。旧的 `ui.welcomeBackdrop` 是「关」的
-迁移成 `ui.backdropMotion = 关`，其余迁移成「开」，然后删掉旧键。系统开了「减少动态效果」时照旧静止。
-`features/home/AsciiField.tsx` / `letter-flow.ts` 里不再被用到的代码删掉。wording / i18n 覆盖测试跟着改。
+开 = 新对话页放动画：字符画主题放它自己的背景，经典主题放字流；关 = 静止的纯底。「字场」这一档去掉。
+不写迁移：读的时候 `ui.backdropMotion` 没设过就看旧的 `ui.welcomeBackdrop`（是 `'off'` / `false` 就当关），设置表里只剩新键。
+系统开了「减少动态效果」时照旧静止。只给字场用的 `features/home/AsciiField.tsx` / `ascii-noise.ts` 删掉（先确认没有别处用）。
+wording / i18n 覆盖测试、`catalog.test.ts` 的「added」列表跟着改。
 
 ---
 
