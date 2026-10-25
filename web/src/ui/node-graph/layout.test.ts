@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeNodeGraph, type NgNode } from './schema';
 import { ACCESS_SAMPLE } from './sample';
-import { cardSize, edgeGeom, labelWidth, layers, layoutNodes, moveBoxes, rowAnchor, NG_BODY_PAD, NG_CARD_W, NG_GAP_X, NG_HEAD_H, NG_LIST_HEAD, NG_LIST_ITEM, NG_PAD, NG_ROW_H } from './layout';
+import { cardSize, edgeGeom, labelWidth, layers, layoutNodes, moveBoxes, placeLabels, rowAnchor, NG_BODY_PAD, NG_CARD_W, NG_GAP_X, NG_HEAD_H, NG_LIST_HEAD, NG_LIST_ITEM, NG_PAD, NG_ROW_H } from './layout';
 
 const g = (() => { const r = normalizeNodeGraph(ACCESS_SAMPLE); if (!r.ok) throw new Error(r.error); return r.graph; })();
 const card = (id: string, extra: Partial<NgNode> = {}): NgNode => ({ id, title: id, rows: [], ...extra });
@@ -75,8 +75,30 @@ describe('card sizes and edges', () => {
   it('a backwards edge bows out', () => {
     expect(edgeGeom('e', { x: 200, y: 0, w: 100, h: 52 }, { x: 0, y: 0, w: 100, h: 52 }, null).d).toBe('M300,26 C380,26 -80,26 0,26');
   });
+  it('labels of edges leaving the same card do not sit on each other (review D-minor)', () => {
+    const a = { x: 0, y: 0, w: 100, h: 120 }, b = { x: 300, y: 0, w: 100, h: 52 };
+    const g1 = edgeGeom('r', a, b, 0), g2 = edgeGeom('w', a, b, 1);
+    const at = placeLabels([{ id: 'r', p: g1.p, w: 50 }, { id: 'w', p: g2.p, w: 50 }]);
+    expect(at.r).toEqual(g1.mid);
+    const apart = Math.abs(at.r.x - at.w.x) * 2 >= 100 || Math.abs(at.r.y - at.w.y) >= 18;
+    expect(apart).toBe(true);
+    // far apart already: both in the middle
+    const g3 = edgeGeom('z', { x: 0, y: 400, w: 100, h: 52 }, { x: 300, y: 400, w: 100, h: 52 }, null);
+    expect(placeLabels([{ id: 'r', p: g1.p, w: 50 }, { id: 'z', p: g3.p, w: 50 }]).z).toEqual(g3.mid);
+  });
   it('label widths', () => {
     expect(labelWidth('ab', 10)).toBe(24);
     expect(labelWidth('读', 10)).toBe(22);
+  });
+  it('ids that are names on every object get boxes like any other (review D1)', () => {
+    const ids = ['constructor', '__proto__', 'toString'];
+    const p = layoutNodes(ids.map((id) => card(id)), [{ id: 'e', from: 'constructor', to: '__proto__', style: 'normal' }]);
+    expect(Object.keys(p.boxes).sort()).toEqual([...ids].sort());
+    const [C, P, T] = ids;   // (a variable key: TS reads `.constructor` as Object's own)
+    expect(p.boxes[P].x).toBeGreaterThan(p.boxes[C].x);
+    expect(Number.isFinite(p.width) && Number.isFinite(p.height)).toBe(true);
+    const moved = moveBoxes(p.boxes, { [T]: { dx: 5, dy: 0 } });
+    expect(moved[C]).toEqual(p.boxes[C]);
+    expect(moved[T].x).toBe(p.boxes[T].x + 5);
   });
 });
