@@ -12,9 +12,11 @@ export const MAX_LIST_ENTRIES = 16;
 /**
  * Signaling brokers, in order of preference (the settings' "more options" can replace the list). Only the ones marked
  * `relay` carry the slow relay: the emqx pair rate-limits bursts (in the field test about half of a 30-message burst
- * came back), which signaling survives and the relay would not.
+ * came back), which signaling survives and the relay would not. `cw` is the project's own mosquitto (Dedirock, Los
+ * Angeles; reachable from mainland China without a VPN, the public ones often are not): first, and it carries the relay.
  */
 export const DEFAULT_BROKERS: BrokerDef[] = [
+  { name: 'cw', url: 'wss://cw.y0p66y9.me/mqtt', relay: true },
   { name: 'emqx', url: 'wss://broker.emqx.io:8084/mqtt' },
   { name: 'emqx-cn', url: 'wss://broker-cn.emqx.io:8084/mqtt' },
   { name: 'mosquitto', url: 'wss://test.mosquitto.org:8081/mqtt', relay: true },

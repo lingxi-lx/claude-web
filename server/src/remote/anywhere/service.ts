@@ -34,10 +34,11 @@ import { tr } from '../../i18n/index.js';
 
 /**
  * The phone page the QR opens while `remote.anywhere.shellUrl` is not set (the settings page shows it from status()):
- * the only place the default is written. It is the site of its own organization (claude-web-shell, created 2026-10-02),
- * served at its root and deployed by that site repo from this repo's release tags (deploy/shell-site/).
+ * the only place the default is written. Since 2026-10-25 it is the project's own VPS (a host name of its own, so no
+ * other page shares the origin), deployed by hand with scripts/deploy-shell-vps.sh: claude-web-shell.github.io needs a
+ * VPN from mainland China. That GitHub site (deploy/shell-site/) still works for anyone who sets it in the settings.
  */
-export const DEFAULT_SHELL_URL = 'https://claude-web-shell.github.io/';
+export const DEFAULT_SHELL_URL = 'https://cw.y0p66y9.me/';
 export const RECENT_MAX = 20;
 /** The Acceptor's room id for the pairing code's room (device ids are 12 hex characters). */
 const PAIR_ROOM = 'pairing';

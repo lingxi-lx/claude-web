@@ -306,6 +306,7 @@ async function rawPhone(e: { phone: Brokers; room: Room }) {
 describe('defaults', () => {
   it('lists the brokers and STUN servers of the plan, in order', () => {
     expect(DEFAULT_BROKERS).toEqual([
+      { name: 'cw', url: 'wss://cw.y0p66y9.me/mqtt', relay: true },
       { name: 'emqx', url: 'wss://broker.emqx.io:8084/mqtt' },
       { name: 'emqx-cn', url: 'wss://broker-cn.emqx.io:8084/mqtt' },
       { name: 'mosquitto', url: 'wss://test.mosquitto.org:8081/mqtt', relay: true },
