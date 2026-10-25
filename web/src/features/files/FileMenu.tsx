@@ -33,6 +33,9 @@ export function fileMenuProps(path: string, sessionId?: string | null): { onCont
   };
 }
 
+/** Opens the menu for `path` at a point (ui-smoke uses it; everything else spreads fileMenuProps). */
+export const openFileMenuAt = (path: string, x: number, y: number, sessionId?: string) => useFileMenu.setState({ at: { path, sessionId, x, y } });
+
 export function FileMenu() {
   const at = useFileMenu((s) => s.at);
   const anchor = useRef<HTMLSpanElement>(null);

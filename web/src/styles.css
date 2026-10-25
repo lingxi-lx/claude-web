@@ -969,6 +969,7 @@ html[data-reduce-motion='1'] * { animation: none !important; transition: none !i
 /* stage F dialogs (features/cloud/): 交给常开机器继续 / 取回 / 派活 / 导入 claude.ai / 发布 */
 .cloud-dialog { width: min(560px, calc(100vw - 32px)); }
 .cloud-dialog.wide { width: min(760px, calc(100vw - 32px)); }
+.cloud-dialog:focus, .cloud-dialog:focus-visible { outline: none; } /* focused itself so Esc works with no field focused */
 .cloud-dialog .pj-label { display: block; margin: 12px 0 6px; font-size: 13px; color: var(--ink-3); }
 .cloud-dialog .pj-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .cloud-dialog .pj-tag { flex: none; font-size: 12px; color: var(--ink-4); }

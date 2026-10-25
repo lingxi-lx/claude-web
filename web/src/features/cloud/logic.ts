@@ -1,5 +1,6 @@
 // Stage F (local versions of claude.ai features): the pure parts of the screens — which conversations a project page
 // lists, the links a published file has, who may be handed to the always-on machine, an upload with the app's token.
+import { useEffect, useRef } from 'react';
 import type { PublishedItem, SessionMeta, SessionSummary, Workspace } from '@shared';
 import { authToken } from '@/ws/client';
 import { appUrl } from '@/util/app-url';
@@ -60,4 +61,14 @@ export function uploadTo<T = unknown>(apiPath: string, body: Blob, onProgress?: 
     xhr.onerror = () => rej(new Error(tr('上传失败：网络错误')));
     xhr.send(body);
   });
+}
+
+/** A dialog takes the focus when nothing inside it did (so Esc reaches its handler even with no field focused). */
+export function useDialogFocus() {
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const t = setTimeout(() => { if (box.current && !box.current.contains(document.activeElement)) box.current.focus(); }, 30);
+    return () => clearTimeout(t);
+  }, []);
+  return box;
 }

@@ -3775,6 +3775,72 @@ function driver() {
           try { fs.rmSync(extraDir, { recursive: true, force: true }); } catch { /* windows may hold it */ }
         }
 
+        // ---- stage F: 项目页 tabs (说明 / 资料 / 对话), 派活 / 已发布 / 导入 claude.ai from the palette, 发布 from a file —
+        // each opens, shows its parts and closes with Esc / 取消 without sending anything it should not
+        phase = 'stage-f-cloud';
+        if (E.SMOKE_READONLY !== '1') {
+          const wsF = await js(`window.__store.getState().workspaces[0]?.id ?? null`);
+          let tabs = null;
+          if (wsF) {
+            if (await exists('.rail .sb-reveal')) await click('.rail .sb-reveal');
+            await sleep(250);
+            await ctxMenuAt(`.sidebar [data-group="${wsF}"] > .sb-group-head`);
+            if (await waitFor('!!document.querySelector(".menu [data-id=\\"edit\\"]")', 2000)) await click('.menu [data-id="edit"]');
+            await waitFor('!!document.querySelector("[data-id=\\"project-page\\"]")', 2000);
+            tabs = {};
+            for (const t of ['instructions', 'files', 'conversations', 'settings']) {
+              await click(`[data-id="project-page"] [data-tab="${t}"]`);
+              await sleep(250);
+              tabs[t] = await js(`(() => { const d = document.querySelector('[data-id="project-page"]'); if (!d) return false; const sel = { instructions: '#pj-instr', files: '[data-id="project-files"] .pj-drop', conversations: '[data-id="project-conversations"]', settings: '#pj-name' }[${JSON.stringify(t)}]; const el = d.querySelector(sel); return !!el && !!el.offsetParent; })()`);
+            }
+            await js(`[...document.querySelectorAll('.project-dialog .actions .btn')].find((b) => b.textContent === '取消')?.click()`);
+            await sleep(250);
+          }
+          check('项目页: 说明 / 资料 / 对话 / 设置 tabs each show their part', !!tabs && Object.values(tabs).every(Boolean), JSON.stringify(tabs));
+          const viaPalette = async (q, label, sel) => {
+            await js('window.__store.setState({ paletteOpen: true })');
+            await waitFor('!!document.querySelector(".cmdk input")', 3000);
+            await js('document.querySelector(".cmdk input").focus()');
+            wc.insertText(`>${q}`);
+            await sleep(300);
+            const ok = await js(`(() => { const it = [...document.querySelectorAll('.cmdk .it')].find((x) => x.querySelector('.t')?.textContent === ${JSON.stringify(label)}); if (!it) return false; it.setAttribute('data-smoke-pick', 'f'); return true; })()`);
+            if (ok) await click('[data-smoke-pick="f"]');
+            const shown = ok && await waitFor(`!!document.querySelector(${JSON.stringify(sel)})`, 4000);
+            await key('Escape');
+            await sleep(250);
+            const closed = !(await exists(sel));
+            if (await js('window.__store.getState().paletteOpen')) await js('window.__store.setState({ paletteOpen: false })');
+            return { ok, shown, closed };
+          };
+          const disp = await viaPalette('派活', '派活…', '[data-id="dispatch-dialog"] textarea');
+          check('派活: from the palette, a task box, Esc closes it', disp.ok && disp.shown && disp.closed, JSON.stringify(disp));
+          const pubs = await viaPalette('已发布', '已发布的文件', '[data-id="published-dialog"]');
+          check('已发布: from the palette, Esc closes it', pubs.ok && pubs.shown && pubs.closed, JSON.stringify(pubs));
+          const imp = await viaPalette('claude.ai', '导入 claude.ai 数据…', '[data-id="claudeai-import"] [data-act="pick-zip"]');
+          check('导入 claude.ai 数据: from the palette, a zip picker, Esc closes it', imp.ok && imp.shown && imp.closed, JSON.stringify(imp));
+          // 发布 from a file's right-click menu: the dialog with the three expiries; closing it publishes nothing
+          const pubFile = path.join(E.SMOKE_REPO, 'README.md');
+          await js(`(() => { const el = document.createElement('span'); el.id = 'smoke-f-file'; el.textContent = 'x'; el.style.cssText = 'position:fixed;left:40px;top:40px;z-index:99999'; document.body.appendChild(el); })()`);
+          await js(`(() => { window.__fReq = []; const orig = WebSocket.prototype.send; const wrap = function (d) { try { const m = JSON.parse(d); if (m && m.request && m.request.req) window.__fReq.push(m.request.req.kind); } catch {} return orig.call(this, d); }; WebSocket.prototype.send = wrap; })()`);
+          // the file menu is opened the way fileMenuProps does it (a contextmenu with the path), on a throwaway element
+          await js(`window.__openFileMenu ? window.__openFileMenu(${JSON.stringify(pubFile)}) : null`);
+          const fm = await js(`!!window.__openFileMenu`);
+          let pubDlg = null;
+          if (fm && await waitFor('!!document.querySelector(".file-menu [data-act=\\"publish\\"]")', 2000)) {
+            await click('.file-menu [data-act="publish"]');
+            const shown = await waitFor('!!document.querySelector("[data-id=\\"publish-dialog\\"] [data-exp=\\"never\\"]")', 3000);
+            const exps = await js(`[...document.querySelectorAll('[data-id="publish-dialog"] [data-exp]')].map((b) => b.dataset.exp)`);
+            await key('Escape');
+            await sleep(250);
+            pubDlg = { shown, exps, closed: !(await exists('[data-id="publish-dialog"]')), sent: await js(`window.__fReq.filter((k) => k === 'publish.create').length`) };
+          }
+          await js(`document.getElementById('smoke-f-file')?.remove()`);
+          check('发布: from the file menu, 1 天 / 7 天 / 永久; closing publishes nothing', !fm || (!!pubDlg && pubDlg.shown && pubDlg.exps.join() === '1d,7d,never' && pubDlg.closed && pubDlg.sent === 0), JSON.stringify({ fm, pubDlg }));
+          // nothing of this section may stay open over the checks after it
+          await js(`[...document.querySelectorAll('.dialog-bg .cloud-dialog .actions .btn')].filter((b) => /^(关闭|取消|完成)$/.test(b.textContent.trim())).forEach((b) => b.click())`);
+          await sleep(200);
+        }
+
         // ---- re-review I-2: a provider picked on the chips of a conversation that is not running is recorded like
         // session.setProvider when the send reopens it — SessionMeta.providerId and the canonical 「switch」 line (usage
         // attribution, the hand-over briefing). The mock agent's conversation: the provider's endpoint is never called.

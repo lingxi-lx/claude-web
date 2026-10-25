@@ -11,7 +11,7 @@ import { Icon } from '@/ui/icons';
 import { imeComposing } from '@/ui/ime';
 import { tr } from '@/i18n';
 import { openExternal } from '@/features/chat/link-route';
-import { expiryText, publishLinks, uploadTo } from './logic';
+import { expiryText, publishLinks, uploadTo, useDialogFocus } from './logic';
 
 type Dialog = { kind: 'dispatch' } | { kind: 'claudeai' } | { kind: 'publish'; path: string } | { kind: 'published' };
 const useCloud = create<{ d: Dialog | null }>(() => ({ d: null }));
@@ -34,9 +34,10 @@ export function CloudDialogsHost() {
 }
 
 function Shell({ id, label, children, wide }: { id: string; label: string; children: React.ReactNode; wide?: boolean }) {
+  const box = useDialogFocus();
   return (
     <div className="modal-bg dialog-bg" data-id={id} onMouseDown={(e) => e.target === e.currentTarget && close()} onKeyDown={(e) => { if (e.key === 'Escape' && !imeComposing(e.nativeEvent)) { e.stopPropagation(); close(); } }}>
-      <div className={`modal dialog cloud-dialog${wide ? ' wide' : ''}`} role="dialog" aria-modal="true" aria-label={label}>
+      <div ref={box} tabIndex={-1} className={`modal dialog cloud-dialog${wide ? ' wide' : ''}`} role="dialog" aria-modal="true" aria-label={label}>
         <h3>{label}</h3>
         {children}
       </div>

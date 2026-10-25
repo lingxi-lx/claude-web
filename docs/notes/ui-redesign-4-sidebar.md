@@ -35,4 +35,4 @@ spec §5.1 / §4.2 / `mock-home.png`。全部在 `web/src/features/sidebar/`。
 ## 项目页（阶段 F2，2026-10-25）
 
 - 「编辑项目」对话框改成项目页（菜单文字「项目页…」，id 仍是 `edit`，`data-id="project-dialog"` 不变）：标签 设置 / 说明 / 资料 / 对话（`openProjectDialog(w, tab)`）。说明 = `Workspace.instructions`（≤ 20 000 字，runner 把 `instructionsSection` 加进 `systemPrompt.append`，项目里每个对话，正在跑的下次打开生效）+ `sessionsScope` + `permissionMode`，和名字 / 文件夹一起「保存」。资料 = `~/.claude-web/projects/<id>/`（上传 `POST /api/project-files`，20 MB，只收普通文件名），存在且非空时 pool 把它加进 `additionalDirectories`。对话 = `projectSessions()`（同服务端 projectOf 规则，不含其它机器的）。
-- 入口表：TOP 加 `dispatch`（手机抽屉的「派活」），ROW_MENU 加 `handoff-peer`（交给常开机器继续…，只给本机 Claude 对话），都进了 `ADDED`。
+- 入口表：ROW_MENU 加 `handoff-peer`（交给常开机器继续…，只给本机 Claude 对话），进了 `ADDED`。手机抽屉的「派活」按钮是 `data-act="dispatch"`，**不**进 PLACES（ui-smoke 只在桌面布局里收 PLACES，手机才有的按钮放进去会被当成丢失）；桌面从命令面板进。

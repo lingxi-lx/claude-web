@@ -11,6 +11,7 @@ import { ws } from '@/ws/client';
 import { Icon } from '@/ui/icons';
 import { imeComposing } from '@/ui/ime';
 import { tr } from '@/i18n';
+import { useDialogFocus } from './logic';
 
 type Target = Pick<SessionSummary, 'sessionId' | 'cwd' | 'title'>;
 const useHandoff = create<{ s: Target | null; back: { sessionId: string; cwd: string } | null }>(() => ({ s: null, back: null }));
@@ -26,9 +27,10 @@ export function HandoffDialogHost() {
 }
 
 function Shell({ id, label, children }: { id: string; label: string; children: React.ReactNode }) {
+  const box = useDialogFocus();
   return (
     <div className="modal-bg dialog-bg" data-id={id} onMouseDown={(e) => e.target === e.currentTarget && closeAll()} onKeyDown={(e) => { if (e.key === 'Escape' && !imeComposing(e.nativeEvent)) { e.stopPropagation(); closeAll(); } }}>
-      <div className="modal dialog cloud-dialog" role="dialog" aria-modal="true" aria-label={label}>
+      <div ref={box} tabIndex={-1} className="modal dialog cloud-dialog" role="dialog" aria-modal="true" aria-label={label}>
         <h3>{label}</h3>
         {children}
       </div>
