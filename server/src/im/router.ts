@@ -151,7 +151,7 @@ export class ImRouter {
         // on the session's own agent (a Codex session reopened without it would start Claude on that id); the pool
         // keeps the provider it was recorded with
         const agent = target.agent && target.agent !== 'claude' ? target.agent : undefined;
-        if (!r) r = this.d.pool.open({ sessionId: target.sessionId, cwd: target.cwd, permissionMode: (cfg.permissionMode as any) ?? 'default', agent });
+        if (!r) r = this.d.pool.open({ sessionId: target.sessionId, cwd: target.cwd, permissionMode: (cfg.permissionMode as any) ?? 'default', agent, drivenBy: 'im' });
         await this.d.meta.setImBinding({ gatewayId: gw, chatId: m.chatId, sessionId: r.sessionId, cwd: target.cwd, since: Date.now(), ...(agent ? { agent } : {}) });
         return reply(tr('已切换到 {title} ({sessionId})', { title: target.title.slice(0, 40), sessionId: r.sessionId.slice(0, 8) }));
       }
@@ -190,7 +190,7 @@ export class ImRouter {
     const agent = (cfg.agent as AgentKind) || undefined;
     const picked = cfg.providerId || undefined;
     const providerId = picked && !this.d.pool.providerFitError?.(picked, agent) ? picked : undefined;
-    return this.d.pool.open({ cwd, permissionMode: ((mode || cfg.permissionMode) as any) ?? 'default', agent, providerId });
+    return this.d.pool.open({ cwd, permissionMode: ((mode || cfg.permissionMode) as any) ?? 'default', agent, providerId, drivenBy: 'im' });
   }
 
   private async ensureSession(gw: string, chatId: string, cfg: ImGatewayConfig): Promise<ImBinding> {
@@ -199,7 +199,7 @@ export class ImRouter {
     if (b) {
       // re-open the previous session so context continues
       // on its own agent; the pool keeps the provider it was recorded with
-      try { this.d.pool.open({ sessionId: b.sessionId, cwd: b.cwd, permissionMode: (cfg.permissionMode as any) ?? 'default', agent: (b.agent as AgentKind) || undefined }); return b; } catch { /* fall through to a new one */ }
+      try { this.d.pool.open({ sessionId: b.sessionId, cwd: b.cwd, permissionMode: (cfg.permissionMode as any) ?? 'default', agent: (b.agent as AgentKind) || undefined, drivenBy: 'im' }); return b; } catch { /* fall through to a new one */ }
     }
     const cwd = cfg.defaultCwd || this.d.meta.workspaces()[0]?.path;
     if (!cwd) throw new Error(tr('没有工作区，先 /new <目录>'));

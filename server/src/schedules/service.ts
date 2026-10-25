@@ -80,7 +80,7 @@ export class ScheduleService extends EventEmitter {
       const next = manual ? s.nextRunAt ?? computeNext(s, started) : computeNext(s, started);
       // each run in its own worktree: only for a new conversation per run (a kept conversation stays where it is)
       const worktree = s.freshSession && s.worktree ? `sched-${s.id.replace(/[^\w-]/g, '').slice(0, 6)}-${runStamp(started)}` : undefined;
-      const runner = this.pool.open({ sessionId: s.freshSession ? undefined : s.sessionId, cwd: s.cwd, model: s.model, permissionMode: (s.permissionMode as PermissionMode) ?? 'acceptEdits', worktree });
+      const runner = this.pool.open({ sessionId: s.freshSession ? undefined : s.sessionId, cwd: s.cwd, model: s.model, permissionMode: (s.permissionMode as PermissionMode) ?? 'acceptEdits', worktree, drivenBy: 'schedule' });
       for (let i = 0; i < 60 && runner.state === 'starting'; i++) await new Promise((r) => setTimeout(r, 500));
       if (runner.state === 'running' || runner.state === 'waiting') {
         // 立即运行 leaves the schedule as it was (and a manual task has no timer to retry it): only say why

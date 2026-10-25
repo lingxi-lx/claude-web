@@ -234,6 +234,8 @@ export class SessionRunner extends EventEmitter {
 
   /** 项目页 (stage F2): the project's instructions, read once when the conversation opens (a respawn keeps them) */
   private projectInstructions = '';
+  /** IM / a scheduled task / the orchestra drives this run: its replies are read elsewhere first — no ```nodegraph hint */
+  private drivenBy: OpenSessionParams['drivenBy'];
   constructor(params: OpenSessionParams, provider?: SessionProvider, opts: { thinkingLanguage?: string; account?: AccountPrefs; additionalDirectories?: string[]; projectInstructions?: string } = {}) {
     super();
     this.projectInstructions = opts.projectInstructions ?? '';
@@ -245,6 +247,7 @@ export class SessionRunner extends EventEmitter {
     if (provider?.type === 'claude-account') this.account = provider;
     else this.provider = provider;
     this.features = params.features ?? {};
+    this.drivenBy = params.drivenBy;
     // a fork gets its own id from the CLI at init; until then use a placeholder so the pool
     // never clobbers the source session's runner
     const isFork = !!params.sessionId && (params.fork || !!params.resumeAt);
@@ -527,7 +530,7 @@ export class SessionRunner extends EventEmitter {
     // — only when the model is bound (`sub`): a pick that cannot be reached leaves the subagents on the main model, and
     // sending every piece of work to them would only cost more
     const delegate = bare || !sub ? '' : subagentPolicyPrompt(this.subagent);
-    const append = [verify, this.thinkingSection, delegate, this.projectInstructions, bare ? '' : nodegraphHintPrompt(nodegraphHintOn)].filter(Boolean).join('\n\n');
+    const append = [verify, this.thinkingSection, delegate, this.projectInstructions, bare || this.drivenBy ? '' : nodegraphHintPrompt(nodegraphHintOn)].filter(Boolean).join('\n\n');
     const allowed = bare ? [] : [...webAllowedTools(), ...(Object.keys(computer).length ? computerAllowedTools() : []), ...(Object.keys(sessionsMcp).length ? SESSIONS_ALLOWED : []), ...(Object.keys(previewMcp).length ? PREVIEW_ALLOWED : [])];
     this.preAllowed = new Set(allowed);
     const noEngineSearch = engineSearchOff({ engine: engine.kind, userChoice: 'WEB_SEARCH_ADAPTER' in fenv || userPickedSearchAdapter(this.cwd) });

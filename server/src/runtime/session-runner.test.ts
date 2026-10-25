@@ -497,6 +497,20 @@ describe('SessionRunner Stop (interrupt)', () => {
     await normal.close();
   });
 
+  it('the ```nodegraph hint only where a person reads the replies in Claude Web (review D-minor)', async () => {
+    const hintOf = async (p: Record<string, unknown>) => {
+      queries.length = 0;
+      const r = new SessionRunner({ cwd: '/x', ...p } as any);
+      await tick();
+      const t = String(queries[0].options.systemPrompt?.append ?? '');
+      await r.close();
+      return /```nodegraph/.test(t);
+    };
+    expect(await hintOf({ sessionId: 'ng-1' })).toBe(true);
+    expect(await hintOf({ sessionId: 'ng-2', features: { chatOnly: true } })).toBe(false);
+    for (const drivenBy of ['im', 'schedule', 'orchestra']) expect(await hintOf({ sessionId: `ng-${drivenBy}`, drivenBy }), drivenBy).toBe(false);
+  });
+
   // 2026-10-22: a fresh conversation on a Gemini-web / WorkBuddy group sent 177 KB on its first turn. Narrowing the
   // engine's tools also takes its tool search away, so every MCP tool (the account's claude.ai connectors, the user's
   // settings, ours) was inlined — more than the full set. No MCP and no plugins: 62 KB.
