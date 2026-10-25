@@ -591,6 +591,13 @@ input.field:focus-visible, select.field:focus-visible, textarea.field:focus-visi
 .att-chip .sz { color: var(--ink-4); }
 .att-chip .ic { font-size: 13px; }
 .att-chip button { background: none; border: 0; color: var(--ink-4); cursor: pointer; padding: 0 0 0 4px; }
+/* 录屏: the keyframes that go with it, previewed under the chip, each removable */
+.att-rec-wrap { display: inline-flex; flex-direction: column; gap: 4px; max-width: 100%; }
+.att-rec-note { font-size: 11px; color: var(--ink-4); display: inline-flex; align-items: center; gap: 4px; }
+.att-rec-frames { display: flex; flex-wrap: wrap; gap: 4px; }
+.att-rec-frame { position: relative; display: inline-block; }
+.att-rec-frame img { display: block; height: 40px; width: auto; max-width: 72px; object-fit: cover; border-radius: 4px; border: 1px solid var(--line); }
+.att-rec-frame button { position: absolute; top: -5px; right: -5px; width: 16px; height: 16px; padding: 0; border-radius: 50%; border: 0; background: var(--ink-2); color: var(--bg); cursor: pointer; display: grid; place-items: center; }
 .att-chip button:hover { color: var(--err); }
 .attach { flex-wrap: wrap; align-items: center; }
 .attach .att-chip { height: 28px; }
