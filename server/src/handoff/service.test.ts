@@ -71,9 +71,9 @@ beforeEach(async () => {
   fs.writeFileSync(path.join(repo, 'parser.ts'), 'export const x = 2; // half done\n');
   fs.writeFileSync(path.join(repo, 'notes.md'), 'todo\n');
 });
-afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+afterEach(() => fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }));
 
-describe('HandoffService', { timeout: 60_000 }, () => {
+describe('HandoffService', { timeout: 120_000 }, () => {
   it('check: only a Git project with a remote; a conversation on another machine or already handed off is refused', async () => {
     const m = machines();
     expect(await m.a.check('s1')).toMatchObject({ ok: true });

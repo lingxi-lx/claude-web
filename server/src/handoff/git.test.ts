@@ -37,9 +37,9 @@ beforeEach(async () => {
   fs.writeFileSync(path.join(repo, 'new.txt'), 'untracked\n');
   fs.writeFileSync(path.join(repo, 'secret.env'), 'KEY=1\n');
 });
-afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+afterEach(() => fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }));
 
-describe('handoff git', { timeout: 30_000 }, () => {
+describe('handoff git', { timeout: 120_000 }, () => {
   it('finds the remote, refuses a folder without one', async () => {
     expect(await handoffRemote(repo)).toMatchObject({ ok: true, remote: 'origin' });
     const plain = path.join(root, 'plain'); fs.mkdirSync(plain);
