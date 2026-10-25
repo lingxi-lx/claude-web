@@ -4,7 +4,9 @@
 //     exist is refused with 「找不到这个文件夹」;
 //   · a conversation opened in the project's main folder: the first request's system text / messages name `extra`
 //     (Claude Code writes its additional working directories into the environment section);
-//   · a conversation opened in `extra` itself (not a project's main folder) names no other folder.
+//   · a conversation opened in `extra` itself (not a project's main folder) names no other folder;
+//   · a conversation opened in a subfolder of the main folder does not get `extra` (fix wave C-S4);
+//   · workspaces.update with a `folders` that is not a list is refused and the list kept (C-S2).
 //   node server/ws-phase33.mjs   (starts its own server; scripts/e2e.mjs' port/token are ignored)
 import WebSocket from 'ws';
 import http from 'node:http';
@@ -112,6 +114,15 @@ async function main() {
   check('a conversation in the project folder: Claude Code is told about the extra folder', a.result === 'success' && named(a.text, extra), `${a.result}; ${a.text.length} chars; mentions extra: ${named(a.text, extra)}`);
   const b = await turnIn(extra);
   check('a conversation in the extra folder itself (not a project folder): no other folder is added', b.result === 'success' && !named(b.text, main), `${b.result}; mentions main: ${named(b.text, main)}`);
+  // C-S4: only the project's main folder itself gets them, not a folder inside it
+  const sub = path.join(main, 'sub');
+  fs.mkdirSync(sub, { recursive: true });
+  const c = await turnIn(sub);
+  check('a conversation in a subfolder of the main folder: the extra folder is not added', c.result === 'success' && named(c.text, sub) && !named(c.text, extra), `${c.result}; names sub: ${named(c.text, sub)}; mentions extra: ${named(c.text, extra)}`);
+  // C-S2: a folders that is not a list is refused and leaves the list alone
+  const bad = await req({ kind: 'workspaces.update', id: w.id, folders: 'x' }).then(() => 'accepted', (e) => e.message);
+  const after = (await req({ kind: 'workspaces.list' })).find((x) => x.id === w.id);
+  check('workspaces.update: folders that is not a list is refused, the list kept', bad !== 'accepted' && JSON.stringify(after?.folders) === JSON.stringify([extra]), `${bad}; ${JSON.stringify(after?.folders)}`);
 }
 
 try {
