@@ -51,6 +51,19 @@ describe('entryAssets', () => {
     }
   });
 
+  // review X1: web/dist/index.html is the phone shell's (build:shell runs second), so the check above never sees the app's
+  // own entry chunk — boot-*.js, loaded on every first screen. The newest one (a dirty dist may hold old ones)
+  const boots = fs.existsSync(path.join(DIST, 'assets')) ? fs.readdirSync(path.join(DIST, 'assets')).filter((f) => /^boot-[\w-]+\.js$/.test(f)) : [];
+  it.skipIf(!boots.length)('the app\'s boot chunk of the built app stays under 1 900 000 bytes (npm run build -w web)', () => {
+    const newest = boots.map((f) => path.join(DIST, 'assets', f)).sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0];
+    expect(fs.statSync(newest).size, path.basename(newest)).toBeLessThan(MAX_ENTRY_BYTES);
+  });
+  it('the app build fails when its boot chunk passes the limit (vite.config.ts)', () => {
+    const src = fs.readFileSync(path.resolve(__dirname, '../../vite.config.ts'), 'utf8');
+    expect(src).toMatch(/name: 'boot-chunk-size'/);
+    expect(src).toMatch(/bytes >= MAX_ENTRY_BYTES\) \(this as any\)\.error\(/);
+  });
+
   it('the shell build fails when a first-screen file passes the limit', () => {
     const big = oversizedEntries('<script type="module" src="./assets/a.js"></script><link rel="stylesheet" href="./assets/b.css">', (p) => (p === './assets/a.js' ? MAX_ENTRY_BYTES : 10));
     expect(big).toEqual([{ path: './assets/a.js', bytes: MAX_ENTRY_BYTES }]);

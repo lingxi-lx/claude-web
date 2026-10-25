@@ -21,7 +21,7 @@ import { Icon } from '@/ui/icons';
 import { installOrchestra } from '@/features/orchestra/state';
 import { ErrorBoundary } from '@/ui/ErrorBoundary';
 import { Toasts } from '@/ui/Toasts';
-import { SourcePicker } from '@/features/recording/SourcePicker';
+import { SourcePickerLazy } from '@/features/recording/SourcePickerLazy';
 import { RecordingIndicator } from '@/features/recording/RecordingIndicator';
 import { chromeVisibility, workbenchOn } from '@/model/layout';
 import { captionHeightAt, captionRow } from '@/features/workbench/tab-row';
@@ -57,9 +57,9 @@ import { fillComposer } from '@/features/composer/fill';
 import { quoteInComposer } from '@/features/composer/quote';
 import { WhatsNewModal, useWhatsNewOnUpdate } from '@/features/update/WhatsNew';
 import { startNavHistory } from '@/features/workbench/nav-history';
-import { ProjectDialogHost } from '@/features/sidebar/ProjectDialog';
+import { ProjectDialogLazy } from '@/features/sidebar/ProjectDialogLazy';
 import { HandoffDialogHost } from '@/features/cloud/HandoffDialog';
-import { CloudDialogsHost } from '@/features/cloud/CloudDialogs';
+import { CloudDialogsLazy } from '@/features/cloud/CloudDialogsLazy';
 
 /** Width of the right panel minimized to its icon rail. */
 const MIN_RAIL = 36;
@@ -318,7 +318,7 @@ export function App() {
         <ErrorBoundary area={tr('右侧面板')}><Dock /></ErrorBoundary>
       </div>
       <ErrorBoundary area={tr('通知')} floating><Toasts /></ErrorBoundary>
-      {isDesktop && <ErrorBoundary area={tr('录屏')} floating><SourcePicker /><RecordingIndicator /></ErrorBoundary>}
+      {isDesktop && <ErrorBoundary area={tr('录屏')} floating><SourcePickerLazy /><RecordingIndicator /></ErrorBoundary>}
       <ErrorBoundary area={tr('命令面板')} floating><CommandPalette /></ErrorBoundary>
       <ErrorBoundary area={tr('快捷键')} floating><ShortcutsModal /></ErrorBoundary>
       <ErrorBoundary area={tr('更新内容')} floating><WhatsNewModal /></ErrorBoundary>
@@ -329,9 +329,9 @@ export function App() {
       <ErrorBoundary area={tr('接一个模型')} floating><ConnectModelHost /></ErrorBoundary>
       <ErrorBoundary area={tr('应用更新')} floating><UpdatePrompt /></ErrorBoundary>
       <ErrorBoundary area={tr('角色库')} floating><CharacterLibrary /></ErrorBoundary>
-      <ErrorBoundary area={tr('编辑项目')} floating><ProjectDialogHost /></ErrorBoundary>
+      <ErrorBoundary area={tr('编辑项目')} floating><ProjectDialogLazy /></ErrorBoundary>
       <ErrorBoundary area={tr('交给常开机器继续')} floating><HandoffDialogHost /></ErrorBoundary>
-      <ErrorBoundary area={tr('派活')} floating><CloudDialogsHost /></ErrorBoundary>
+      <ErrorBoundary area={tr('派活')} floating><CloudDialogsLazy /></ErrorBoundary>
       <ErrorBoundary area={tr('对话框')} floating><DialogHost /></ErrorBoundary>
       <ErrorBoundary area={tr('添加 Claude 账号')} floating><AddAccountHost /></ErrorBoundary>
       <CustomCss />

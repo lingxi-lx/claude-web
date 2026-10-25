@@ -1,4 +1,4 @@
-import { cloneElement, isValidElement, useEffect, useMemo, useRef, useState } from 'react';
+import { cloneElement, isValidElement, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { ownClaudeName } from '@/store/auth';
 import { useScopedSession, useStore } from '@/store';
 import { ws } from '@/ws/client';
@@ -7,7 +7,6 @@ import { clsx, shortModel } from '@/util';
 import { parsePeerId, type AgentKind, type AttachmentRef, type EffortLevel, type PeerInfo, type PermissionMode, type PermissionRequestEvent, type SessionFeatures, type WslDistro, wslToWin } from '@shared';
 import { MachineChip } from './MachineChip';
 import { machineOf } from './machine';
-import { AddSshDialog } from '@/features/remote/AddSshDialog';
 import { installClaudeInWsl } from '@/features/remote/wsl-install';
 import { bundleParts, compressImage, expandDataTransfer, fmtSize, isLongPaste, pasteAsAttachment, uploadAttachment, type DroppedFile, type PendingBundle, type PendingImage } from '@/model/attachments';
 import { pickFolderFiles } from '@/model/attachment-filter';
@@ -68,6 +67,8 @@ import { ProcessGlyph } from '@/themes/ProcessGlyph';
 import { onRecorded, openPicker, type PendingRecording } from '@/features/recording/recorder';
 import { extractKeyframes } from '@/features/recording/extract';
 import { fmtDuration } from '@/features/recording/keyframes';
+// review X1: the SSH dialog loads when it is opened
+const AddSshDialog = lazy(() => import('@/features/remote/AddSshDialog').then((m) => ({ default: m.AddSshDialog })));
 
 // sessions on another machine: uploads land on this machine's disk, out of the remote agent's reach
 const REMOTE_ATTACH = tr('附件在本机，远端读不到，请粘贴内容（图片可以直接发）');
@@ -1318,7 +1319,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
         {!welcome && active?.info?.wsl && active.info.wsl.dropped.length > 0 && <div className="sub cmp-wsl-note">{tr('Windows 互通已关：记忆、联网、操控电脑在这个对话里不可用')}</div>}
         {under && <ComposerUnder lead={welcomeUnder ? <>{modeSwitch}{projectChips}{branchChip}</> : undefined} permission={permission} stats={!welcome && active ? <ConvStatsLine sessionId={active.sessionId} /> : undefined} status={status} model={model} subagent={subagent} effort={effort} meter={meter} />}
       </div>
-      {addSsh && <AddSshDialog onClose={() => setAddSsh(false)} onJoined={(id) => { ws.request<PeerInfo[]>({ kind: 'peers.list' }).then((l) => setPeers(Array.isArray(l) ? l : [])).catch(() => {}); pickMachine(id); }} />}
+      {addSsh && <Suspense fallback={null}><AddSshDialog onClose={() => setAddSsh(false)} onJoined={(id) => { ws.request<PeerInfo[]>({ kind: 'peers.list' }).then((l) => setPeers(Array.isArray(l) ? l : [])).catch(() => {}); pickMachine(id); }} /></Suspense>}
     </div>
   );
 }

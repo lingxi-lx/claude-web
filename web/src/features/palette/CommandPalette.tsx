@@ -1,4 +1,4 @@
-import { openClaudeAiImport, openDispatch, openPublished } from '@/features/cloud/CloudDialogs';
+import { openClaudeAiImport, openDispatch, openPublished } from '@/features/cloud/cloud-open';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { THEMES, forkCarry, useActive, useStore, type PanelId } from '@/store';
 import { ws } from '@/ws/client';

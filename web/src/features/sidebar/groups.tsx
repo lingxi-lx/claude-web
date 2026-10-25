@@ -11,7 +11,7 @@ import { pageRows } from './status';
 import type { ProjectMenuId, RowId } from './entries';
 import { moveTo } from './reorder';
 import { tr } from '@/i18n';
-import { openProjectDialog } from './ProjectDialog';
+import { openProjectDialog } from './project-dialog-open';
 
 /** A project's ··· / right-click menu (a project = a workspace folder; the data keeps calling it a workspace). */
 export function ProjectMenu({ w, onClose }: { w: Workspace; onClose: () => void }) {

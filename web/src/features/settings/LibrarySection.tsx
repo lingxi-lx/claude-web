@@ -1,4 +1,4 @@
-import { openClaudeAiImport } from '@/features/cloud/CloudDialogs';
+import { openClaudeAiImport } from '@/features/cloud/cloud-open';
 import { useEffect, useState } from 'react';
 import { ws } from '@/ws/client';
 import { useStore } from '@/store';

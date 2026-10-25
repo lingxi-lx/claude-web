@@ -1,7 +1,6 @@
 // Stage F dialogs, mounted once (App): 派活 (a task from the phone → a new conversation on a computer, in a project),
 // 导入 claude.ai 数据 (the export zip → the library + projects), 发布 (a file → a sandboxed /p/<id>/ link) and 已发布.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { create } from 'zustand';
 import type { ClaudeAiImportResult, ClaudeAiScan, PeerInfo, PublishedItem, PublishExpiry } from '@shared';
 import { useStore } from '@/store';
 import { ws } from '@/ws/client';
@@ -13,13 +12,9 @@ import { tr } from '@/i18n';
 import { openExternal } from '@/features/chat/link-route';
 import { expiryText, publishLinks, uploadTo, useDialogFocus } from './logic';
 
-type Dialog = { kind: 'dispatch' } | { kind: 'claudeai' } | { kind: 'publish'; path: string } | { kind: 'published' };
-const useCloud = create<{ d: Dialog | null }>(() => ({ d: null }));
-export const openDispatch = () => useCloud.setState({ d: { kind: 'dispatch' } });
-export const openClaudeAiImport = () => useCloud.setState({ d: { kind: 'claudeai' } });
-export const openPublish = (path: string) => useCloud.setState({ d: { kind: 'publish', path } });
-export const openPublished = () => useCloud.setState({ d: { kind: 'published' } });
-const close = () => useCloud.setState({ d: null });
+import { useCloud, closeCloud as close } from './cloud-open';
+// the open* functions live in cloud-open.ts (this module is loaded on first open — review X1)
+export { openDispatch, openClaudeAiImport, openPublish, openPublished } from './cloud-open';
 const toast = (t: string, ok = false) => useStore.getState().toast(t, ok);
 const copy = (s: string) => { void navigator.clipboard.writeText(s); toast(tr('已复制链接'), true); };
 type View = PublishedItem & { localUrl?: string; lanUrl?: string | null };

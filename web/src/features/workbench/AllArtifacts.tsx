@@ -8,7 +8,7 @@ import { basename, clsx } from '@/util';
 import { Icon } from '@/ui/icons';
 import { tr } from '@/i18n';
 import { fileMenuProps } from '@/features/files/FileMenu';
-import { openPublish, openPublished } from '@/features/cloud/CloudDialogs';
+import { openPublish, openPublished } from '@/features/cloud/cloud-open';
 
 export function AllArtifacts() {
   const [open, setOpen] = useState(false);

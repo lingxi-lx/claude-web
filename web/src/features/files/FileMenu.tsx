@@ -10,7 +10,7 @@ import { Icon } from '@/ui/icons';
 import { tr } from '@/i18n';
 import { Popover } from '@/features/composer/Popover';
 import { mentionInComposer } from '@/features/composer/fill';
-import { openPublish } from '@/features/cloud/CloudDialogs';
+import { openPublish } from '@/features/cloud/cloud-open';
 
 type Editor = 'code' | 'cursor' | 'zed';
 const EDITOR_NAME: Record<Editor, string> = { code: 'VS Code', cursor: 'Cursor', zed: 'Zed' };
