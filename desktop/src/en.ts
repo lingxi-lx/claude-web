@@ -64,6 +64,7 @@ export const EN_DESKTOP: Record<string, string> = {
   "新版本可能已经修好了这个问题。点「安装并重启」装上它。\n\n{failure}": "The new version may already fix this. Click \"Install and restart\" to install it.\n\n{failure}",
   "最小化到托盘": "Minimize to tray",
   "正在启动…": "Starting…",
+  "电脑比较忙，启动得比平时慢，请稍等…": "Your computer is busy, so starting takes longer than usual. Please wait…",
   "没找到 Chrome 或 Edge，可以改用粘贴 cookie": "Chrome or Edge was not found on this computer; you can paste cookies instead",
   "添加到字典": "Add to dictionary",
   "版本 {getVersion}": "Version {getVersion}",

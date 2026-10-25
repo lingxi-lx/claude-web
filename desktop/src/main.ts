@@ -192,15 +192,15 @@ function windowUrl(base: string, winId: string) {
  * scan of ~/.claude), and a window that only appears once the page has rendered reads as「打不开」— a second launch
  * from the Start menu in that time found no window to show either.
  */
-function splashUrl(dark: boolean): string {
+function splashUrl(dark: boolean, note = tr('正在启动…')): string {
   const [bg, fg, mut] = dark ? ['#12110f', '#c4c2be', '#868480'] : ['#f7f6f2', '#47433f', '#7f7b77'];
   const html = `<!doctype html><html lang="${getLocale() === 'zh' ? 'zh-CN' : 'en'}"><head><meta charset="utf-8"><title>${APP_NAME}</title><style>`
     + `html,body{height:100%;margin:0;background:${bg};color:${fg};font:14px "Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI",system-ui,sans-serif;-webkit-app-region:drag;user-select:none;cursor:default}`
     + `body{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}`
-    + `.n{font-size:17px;font-weight:600}.s{color:${mut}}`
+    + `.n{font-size:17px;font-weight:600}.s{color:${mut};max-width:420px;text-align:center;line-height:1.6}`
     + `.d{width:18px;height:18px;border:2px solid ${mut};border-top-color:transparent;border-radius:50%;animation:r .9s linear infinite}`
     + `@keyframes r{to{transform:rotate(360deg)}}@media (prefers-reduced-motion:reduce){.d{animation:none}}`
-    + `</style></head><body><div class="d"></div><div class="n">${APP_NAME}</div><div class="s">${tr('正在启动…')}</div></body></html>`;
+    + `</style></head><body><div class="d"></div><div class="n">${APP_NAME}</div><div class="s">${note}</div></body></html>`;
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
 }
 
@@ -1029,8 +1029,12 @@ if (gotLock) app.whenReady().then(async () => {
   // the window first (on the splash), then the server: see splashUrl
   const hidden = process.argv.includes('--hidden');
   const main = createWindow(null, 'main', undefined, hidden);
+  const slowSplash = () => {
+    if (!main.isDestroyed()) void main.loadURL(splashUrl(nativeTheme.shouldUseDarkColors, tr('电脑比较忙，启动得比平时慢，请稍等…')));
+  };
+  host.once('slow', slowSplash);
   try {
-    const info = await host.start();
+    const info = await host.start().finally(() => host.off('slow', slowSplash));
     buildMenu();
     buildTray();
     setupUpdater();

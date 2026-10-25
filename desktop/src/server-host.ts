@@ -7,9 +7,18 @@ import { EventEmitter } from 'node:events';
 export interface ServerInfo { port: number; host: string; token: string; url: string }
 
 /**
+ * A warm start is a few seconds, but a cold one (the first read of thousands of module files, each scanned by the
+ * antivirus) on a PC whose cores are all busy took 34 s and 41 s here and over 100 s in a test: a fixed 30 s limit
+ * quit the app on a server that was about to come up, again on every launch until the load was gone.
+ */
+export const SLOW_START_MS = 20_000;
+export const START_TIMEOUT_MS = 180_000;
+
+/**
  * Runs server/dist/index.js in an Electron utility process (Node runtime, same ABI as the
  * shell so node-pty just works). Restarts it if it dies.
- * Events: 'ready' (ServerInfo), 'crash' (exit code), 'keepAwake' (boolean: the server wants the PC kept awake).
+ * Events: 'ready' (ServerInfo), 'crash' (exit code), 'keepAwake' (boolean: the server wants the PC kept awake),
+ * 'slow' (a start is taking longer than SLOW_START_MS).
  */
 export class ServerHost extends EventEmitter {
   private proc: UtilityProcess | null = null;
@@ -53,11 +62,21 @@ export class ServerHost extends EventEmitter {
       proc.stdout?.on('data', (d) => this.log(String(d).trimEnd()));
       proc.stderr?.on('data', (d) => this.log('[err] ' + String(d).trimEnd()));
       let ready = false;
+      let gaveUp = false;
+      const slow = setTimeout(() => { this.log(`server not ready after ${SLOW_START_MS / 1000}s, still waiting`); this.emit('slow'); }, SLOW_START_MS);
+      const giveUp = setTimeout(() => {
+        gaveUp = true;
+        this.log(`server not ready after ${START_TIMEOUT_MS / 1000}s, stopping it`);
+        reject(new Error(`server did not become ready in ${START_TIMEOUT_MS / 1000}s; see ${path.join(app.getPath('userData'), 'server.log')}`));
+        proc.kill();
+      }, START_TIMEOUT_MS);
       proc.on('message', (m: any) => {
         // remote access on → keep the PC awake (keep-awake.ts); sent at the server's startup and on every change
         if (m?.type === 'keepAwake') this.emit('keepAwake', !!m.on);
-        if (m?.type === 'ready' && !ready) {
+        if (m?.type === 'ready' && !ready && !gaveUp) {
           ready = true;
+          clearTimeout(slow);
+          clearTimeout(giveUp);
           this.info = { port: m.port, host: m.host, token: this.token, url: `http://${m.host}:${m.port}/?token=${this.token}` };
           this.emit('ready', this.info);
           resolve(this.info);
@@ -65,7 +84,9 @@ export class ServerHost extends EventEmitter {
       });
       proc.on('exit', (code) => {
         this.log(`server exited with ${code}`);
-        this.proc = null;
+        if (this.proc === proc) this.proc = null;
+        clearTimeout(slow);
+        clearTimeout(giveUp);
         if (!ready) reject(new Error(`server exited early (code ${code}); see ${path.join(app.getPath('userData'), 'server.log')}`));
         else if (!this.stopping) {
           this.emit('crash', code);
@@ -74,7 +95,6 @@ export class ServerHost extends EventEmitter {
           setTimeout(() => void this.start().catch((e) => { this.log(String(e)); this.emit('keepAwake', false); }), 1500);
         }
       });
-      setTimeout(() => { if (!ready) reject(new Error('server did not become ready in 30s')); }, 30_000);
     });
   }
 
