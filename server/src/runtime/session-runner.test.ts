@@ -50,6 +50,20 @@ const { SessionRunner } = await import('./session-runner.js');
 const tick = () => new Promise((r) => setTimeout(r, 10));
 
 describe('SessionRunner', () => {
+  it('extra project folders go to the SDK as additionalDirectories; none → the option is absent', async () => {
+    queries.length = 0;
+    const a = new SessionRunner({ sessionId: 'dirs1', cwd: '/proj' } as any, undefined, { additionalDirectories: ['/lib', '/docs'] });
+    await tick();
+    expect(queries[0].options.additionalDirectories).toEqual(['/lib', '/docs']);
+    expect(queries[0].options.cwd).toBe('/proj');
+    await a.close();
+    queries.length = 0;
+    const b = new SessionRunner({ sessionId: 'dirs2', cwd: '/proj' } as any);
+    await tick();
+    expect('additionalDirectories' in queries[0].options).toBe(false);
+    await b.close();
+  });
+
   it('a claude.ai-login session on ccb resolves models like the official Claude Code; other sessions are untouched', async () => {
     eng.kind = 'ccb';
     try {

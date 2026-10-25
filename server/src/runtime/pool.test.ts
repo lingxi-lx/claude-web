@@ -59,6 +59,15 @@ const { RunnerPool, idleTtlFor, MAX_IDLE_CLAUDE, ACCOUNT_PREFS_DEBOUNCE_MS } = a
 const pool = () => new RunnerPool({ forSession: () => undefined } as any);
 
 describe('RunnerPool', () => {
+  it('a conversation opened in a project folder gets the project’s extra folders (stage C2); elsewhere none', () => {
+    const meta = { sessionMeta: () => ({}), settings: () => ({}), setSessionMeta: async () => {}, workspaces: () => [{ id: 'w', path: '/proj', name: 'p', addedAt: 0, order: 0, folders: ['/lib'] }] };
+    const p = new RunnerPool({ forSession: () => undefined, meta } as any);
+    const a: any = p.open({ cwd: '/proj' });
+    expect(a.opts.additionalDirectories).toEqual(['/lib']);
+    const b: any = p.open({ cwd: '/proj/sub' });
+    expect(b.opts.additionalDirectories ?? []).toEqual([]);
+  });
+
   it('a closing runner does not evict the runner that replaced it', async () => {
     const p = pool();
     const a: any = p.open({ sessionId: 's1', cwd: '/x' });

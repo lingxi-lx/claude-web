@@ -13,6 +13,7 @@ import { proxy } from '../net/proxy.js';
 import { withExplanation } from '../errors/explain.js';
 import { fullPick, providerKey, subagentModelFor } from '../models/subagent.js';
 import { tr } from '../i18n/index.js';
+import { projectFolders } from '../meta/workspace-folders.js';
 
 const MODES: readonly PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk', 'auto'];
 /** A permission mode, or undefined for anything else (a stored setting is not trusted to be one). */
@@ -58,6 +59,15 @@ export class RunnerPool extends EventEmitter {
     const meta = providers.meta as (ProviderService['meta'] & Partial<Pick<EventEmitter, 'on'>>) | undefined;
     if (meta) this.accountKey = JSON.stringify(this.accountPrefs());
     if (typeof meta?.on === 'function') meta.on('changed', () => this.accountPrefsSaved());
+  }
+
+  /**
+   * The extra folders of the project whose main folder `cwd` is (stage C2) — looked up here, so a conversation opened by
+   * IM, a schedule, a goal or a hand-over gets them too. Read when it opens: a running one keeps what it started with.
+   */
+  private extraFolders(cwd: string): string[] {
+    const meta = this.providers.meta;
+    return meta && typeof meta.workspaces === 'function' ? projectFolders(cwd, meta.workspaces()) : [];
   }
 
   /** What the own claude.ai login runs with (settings claude.contextWindows / claude.compactAt, A7). */
@@ -171,7 +181,9 @@ export class RunnerPool extends EventEmitter {
       // the own claude.ai login: its 200K / 1M picks and 自动压缩 point (A7); a provider / another account has its own
       let account: AccountPrefs | undefined;
       if (!sp) account = this.accountPrefs();
-      r = new SessionRunner(params, sp, { thinkingLanguage, ...(account ? { account } : {}) });
+      // a conversation in a project's main folder works in the project's extra folders too (stage C2)
+      const extra = this.extraFolders(params.cwd);
+      r = new SessionRunner(params, sp, { thinkingLanguage, ...(account ? { account } : {}), ...(extra.length ? { additionalDirectories: extra } : {}) });
       // a pick is the conversation's from then on (a new one: under the id it was given; a fork gets its id at init)
       if (explicit !== undefined && m && !params.fork && !params.resumeAt) {
         void m.setSessionMeta(r.sessionId, { subagent: { providerId: providerKey(params.providerId), model: explicit } }).catch(() => { /* in memory; the next save persists it */ });
@@ -199,7 +211,7 @@ export class RunnerPool extends EventEmitter {
       // on its own login, what Codex lists for the account is kept for the menus (not a provider's: that list is the provider's)
       const agents = this.agents;
       const onModels = params.providerId ? undefined : (m: ReportedModel[]) => agents.setReported(kind, m);
-      r = l.def.protocol === 'codex' ? new CodexDriver(kind, launch, params, this.transcripts, { beforeResume, onModels }) : new AcpDriver(kind, launch, params, this.transcripts, resumeHistory);
+      r = l.def.protocol === 'codex' ? new CodexDriver(kind, launch, params, this.transcripts, { beforeResume, onModels, extraDirs: this.extraFolders(params.cwd) }) : new AcpDriver(kind, launch, params, this.transcripts, resumeHistory);
       // an idle Codex holds its thread: `codex exec resume` in a terminal fails "already has an active writer" until it goes
       if (l.def.protocol === 'codex') this.ttl.set(r, CODEX_IDLE_TTL_MS);
       // the composer's model chip reads the profile off the info (`档案 / 模型`); Claude's runner sets it itself

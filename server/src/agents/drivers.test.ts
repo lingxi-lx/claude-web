@@ -184,6 +184,20 @@ describe('CodexDriver (mock app-server)', () => {
     await d.close();
   });
 
+  it('a project’s extra folders become writable roots of the workspace-write sandbox (stage C2); not in a read-only one', async () => {
+    const log = path.join(tmp, 'rpc-extra.log');
+    const start = async (permissionMode: 'default' | 'plan') => {
+      await fs.rm(log, { force: true });
+      const d = new CodexDriver('codex', { command: process.execPath, args: [path.join(here, '__mocks__', 'codex-server.mjs')], env: { CW_MOCK_RPC_LOG: log }, name: 'Mock' }, { cwd: tmp, permissionMode }, transcripts, { extraDirs: ['D:\\lib'] });
+      await waitFor(() => d.state === 'idle');
+      await d.close();
+      const lines = (await fs.readFile(log, 'utf8')).trim().split('\n').map((l) => JSON.parse(l));
+      return lines.find((l) => l.method === 'thread/start').params;
+    };
+    expect((await start('default')).config).toEqual({ 'sandbox_workspace_write.writable_roots': ['D:\\lib'] });
+    expect((await start('plan')).config).toBeUndefined();
+  });
+
   it('acceptEdits auto-approves file changes but still asks for commands; bypass approves everything', async () => {
     const d = new CodexDriver('codex', { command: process.execPath, args: [path.join(here, '__mocks__', 'codex-server.mjs')], env: {}, name: 'Mock' }, { cwd: tmp, permissionMode: 'bypassPermissions' }, transcripts);
     const msgs = collect(d);

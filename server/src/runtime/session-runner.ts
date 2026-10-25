@@ -219,8 +219,12 @@ export class SessionRunner extends EventEmitter {
   /** bumped by each setAccountPrefs / claude-account reprovide: an older one still waiting for its compaction gives way */
   private prefsSeq = 0;
 
-  constructor(params: OpenSessionParams, provider?: SessionProvider, opts: { thinkingLanguage?: string; account?: AccountPrefs } = {}) {
+  /** the project's extra folders (stage C2), read once when the conversation opens: the SDK's additionalDirectories (a respawn keeps them) */
+  private extraDirs: string[];
+
+  constructor(params: OpenSessionParams, provider?: SessionProvider, opts: { thinkingLanguage?: string; account?: AccountPrefs; additionalDirectories?: string[] } = {}) {
     super();
+    this.extraDirs = (opts.additionalDirectories ?? []).filter((d) => typeof d === 'string' && !!d);
     this.ownThinkingLanguage = opts.thinkingLanguage ?? '';
     if (opts.account) this.accountPrefs = { windows: familyWindows(opts.account.windows), ...(opts.account.compactAt !== undefined ? { compactAt: opts.account.compactAt } : {}) };
     this.cwd = params.cwd;
@@ -531,6 +535,8 @@ export class SessionRunner extends EventEmitter {
     }
     const options: Options = {
       cwd: this.cwd,
+      // a project's extra folders (stage C2): Claude Code may read and edit them like the main one
+      ...(this.extraDirs.length ? { additionalDirectories: this.extraDirs } : {}),
       env,
       model: this.engineModel(engine.kind, this.model),
       // `ultra` is Codex-only; the Claude SDK's ladder tops out at max
