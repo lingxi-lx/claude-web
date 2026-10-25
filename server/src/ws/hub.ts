@@ -560,6 +560,7 @@ export class Hub {
           outgoing = await expandSessionRefs(outgoing, (id) => s.library.readAll(id));
         }
         await afterSwitch(req.params.sessionId); // a switch in progress: the new process takes it
+        this.s.pool.assertWritable(req.params.sessionId); // handed to another machine (F4): read-only here
         this.runner(req.params.sessionId).send(outgoing, req.params.images, req.params.steer, req.params.uuid, req.params.attachments);
         // Neither path echoes the user's own message back through the pool (the SDK doesn't, and the
         // foreign drivers `record()` it without emitting), so the canonical mirror has to be told here

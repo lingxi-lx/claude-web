@@ -68,6 +68,34 @@ describe('RunnerPool', () => {
     expect(b.opts.additionalDirectories ?? []).toEqual([]);
   });
 
+  it('project instructions: a new conversation gets them and keeps them; a resumed one only what it recorded (F-minor)', () => {
+    const sm: Record<string, any> = {};
+    const ws = [{ id: 'w', path: '/proj', name: 'p', addedAt: 0, order: 0, instructions: 'Use pnpm.' }];
+    const meta = { sessionMeta: (id: string) => sm[id] ?? {}, settings: () => ({}), setSessionMeta: async (id: string, p: any) => { sm[id] = { ...sm[id], ...p }; }, workspaces: () => ws };
+    const p = new RunnerPool({ forSession: () => undefined, meta } as any);
+    const a: any = p.open({ cwd: '/proj' });
+    expect(a.opts.projectInstructions).toContain('Use pnpm.');
+    expect(sm[a.sessionId].projectInstructions).toBe(a.opts.projectInstructions);
+    // an older conversation in the project, resumed: none
+    const old: any = p.open({ sessionId: 'old', cwd: '/proj' });
+    expect(old.opts.projectInstructions).toBeUndefined();
+    // the instructions edited: the new one, resumed, keeps what it started with
+    ws[0].instructions = 'Use npm.';
+    a.setState('closed');
+    const again: any = p.open({ sessionId: a.sessionId, cwd: '/proj' });
+    expect(again.opts.projectInstructions).toContain('Use pnpm.');
+  });
+
+  it('F4: a conversation that is read-only here (handed off) is not reopened; a fork of it is', () => {
+    const p = pool();
+    p.readOnly = (id) => (id === 'gone' ? 'handed off' : null);
+    expect(() => p.open({ sessionId: 'gone', cwd: '/x' })).toThrow('handed off');
+    expect(() => p.open({ sessionId: 'gone', cwd: '/x', resumeAt: 'u1' } as any)).toThrow('handed off');
+    expect(() => p.assertWritable('gone')).toThrow('handed off');
+    expect(() => p.open({ sessionId: 'gone', cwd: '/x', fork: true } as any)).not.toThrow();
+    expect(() => p.open({ sessionId: 'ok', cwd: '/x' })).not.toThrow();
+  });
+
   it('a closing runner does not evict the runner that replaced it', async () => {
     const p = pool();
     const a: any = p.open({ sessionId: 's1', cwd: '/x' });

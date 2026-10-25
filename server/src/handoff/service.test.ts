@@ -85,12 +85,14 @@ describe('HandoffService', { timeout: 120_000 }, () => {
   it('hands the work and the conversation to the always-on machine without touching the user\'s branch / index / work tree', async () => {
     const m = machines();
     const before = await state();
-    const info = await m.a.start('s1', 'p1', 'carry on with the tests');
+    // fix wave F2: the new file notes.md goes only because the user ticked 「包括新文件」
+    const info = await m.a.start('s1', 'p1', 'carry on with the tests', { includeUntracked: true });
     expect(await state()).toEqual(before);
     expect(info).toMatchObject({ peerId: 'p1', peerName: 'Box', remote: 'origin', base: before.sha });
     expect(info.branch).toMatch(/^cw\/handoff-[0-9a-f]{8}$/);
     expect(await git(bare, ['rev-parse', `refs/heads/${info.branch}`])).toBe(info.commit);
-    expect(m.metaA.s1.handedOff).toEqual(info);
+    const { skipped: _skipped, ...stored } = info;
+    expect(m.metaA.s1.handedOff).toEqual(stored);
     expect(m.stopped).toEqual(['s1']);
     // the peer: its own worktree with the uncommitted work, a transcript replaying the conversation, started with the next step
     const t = m.transcripts[0];
@@ -125,6 +127,65 @@ describe('HandoffService', { timeout: 120_000 }, () => {
     (m.a as any).d.peers = () => [{ id: 'p1', name: 'Box', enabled: true, state: 'offline' }];
     await expect(m.a.start('s1', 'p1')).rejects.toThrow();
     expect(await git(bare, ['branch', '--list', 'cw/*'])).toBe('');
+  });
+
+  it('F2: without the tick the new files stay here; key files never go', async () => {
+    const m = machines();
+    fs.writeFileSync(path.join(repo, '.env'), 'KEY=1\n');
+    const chk: any = await m.a.check('s1');
+    expect(chk.untracked).toMatchObject({ count: 1, files: [{ path: 'notes.md' }], skipped: ['.env'] });
+    const info = await m.a.start('s1', 'p1');
+    await expect(git(repo, ['show', `${info.commit}:notes.md`])).rejects.toThrow();
+    const m2 = machines();
+    m2.metaA.s1 = {};
+    const info2 = await m2.a.start('s1', 'p1', undefined, { includeUntracked: true });
+    expect(await git(repo, ['show', `${info2.commit}:notes.md`])).toBe('todo');
+    await expect(git(repo, ['show', `${info2.commit}:.env`])).rejects.toThrow();
+    expect(info2.skipped).toEqual(['.env']);
+  });
+
+  it('F3: the peer failing after the push takes the branch off the remote again', async () => {
+    const m = machines();
+    (m.a as any).d.request = async () => { throw new Error('peer said no'); };
+    await expect(m.a.start('s1', 'p1')).rejects.toThrow(/peer said no/);
+    expect(await git(bare, ['branch', '--list', 'cw/*'])).toBe('');
+    expect(m.metaA.s1?.handedOff).toBeUndefined();
+    expect(m.stopped).toEqual([]);
+  });
+
+  it('F3: when the delete fails too, the error names the branch left on the remote', async () => {
+    const m = machines();
+    (m.a as any).d.request = async () => {
+      // the remote goes away between the push and the delete
+      fs.renameSync(bare, `${bare}-gone`);
+      throw new Error('peer said no');
+    };
+    await expect(m.a.start('s1', 'p1')).rejects.toThrow(/cw\/handoff-[0-9a-f]{8}/);
+    fs.renameSync(`${bare}-gone`, bare);
+  });
+
+  it('F4: a running turn is refused before any snapshot; one hand-off at a time; read-only while and after', async () => {
+    const m = machines();
+    (m.a as any).d.isRunning = (id: string) => id === 's1';
+    await expect(m.a.start('s1', 'p1')).rejects.toThrow(/运行/);
+    expect(await git(bare, ['branch', '--list', 'cw/*'])).toBe('');
+    (m.a as any).d.isRunning = () => false;
+    expect(m.a.isReadOnly('s1')).toBe(false);
+    const first = m.a.start('s1', 'p1');
+    expect(m.a.isReadOnly('s1')).toBe(true); // being handed: sends are refused already
+    await expect(m.a.start('s1', 'p1')).rejects.toThrow(/正在交接/);
+    await first;
+    expect(m.a.isReadOnly('s1')).toBe(true);
+    expect(await git(bare, ['branch', '--list', 'cw/*'])).not.toBe('');
+  });
+
+  it('取回 passes on why the machine could not save its work', async () => {
+    const m = machines();
+    await m.a.start('s1', 'p1');
+    const real = (m.a as any).d.request;
+    (m.a as any).d.request = async (peer: string, req: any) => { if (req.kind === 'handoff.publish') throw new Error('disk full'); return real(peer, req); };
+    const r = await m.a.fetchBack('s1');
+    expect(r).toMatchObject({ saved: false, saveError: 'disk full' });
   });
 
   it('receive refuses a bad branch name or remote', async () => {

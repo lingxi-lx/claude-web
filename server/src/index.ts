@@ -236,6 +236,8 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     request: (peerId, req) => federation.request(peerId, req),
   });
   setInterval(() => void publish.sweep().catch(() => {}), 3_600_000).unref();
+  // 撤回 a machine missed while it was offline (F6): tried again every few minutes (and whenever the list is read)
+  setInterval(() => void publish.retryPendingRevokes().catch(() => {}), 5 * 60_000).unref();
   const handler = (req: http.IncomingMessage, res: http.ServerResponse) => {
     const url = requestUrl(req, HOST);
     if (publish.handle(req, res, url)) return;
@@ -531,6 +533,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     deliver: async (id, text) => {
       const sum = (await library.list()).find((x) => x.sessionId === id);
       // a closed conversation opens again (its provider / mode come back from meta, runtime/pool.ts) and then hears it
+      pool.assertWritable(id); // handed to another machine (F4)
       const r = pool.get(id) ?? pool.open({ sessionId: id, cwd: sum?.cwd ?? '', agent: sum?.agent });
       sendWhenIdle(r as any, text, { onGiveUp: (why) => console.warn(`[sessions-mcp] message for ${id} not delivered: ${why}`) });
     },
@@ -558,11 +561,16 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     summaryOf: async (id) => { const x = (await library.list()).find((y) => y.sessionId === id); return x ? { cwd: x.cwd, title: x.customTitle || x.title } : undefined; },
     readAll: (id) => library.readAll(id),
     stop: (id) => pool.close(id),
+    isRunning: (id) => { const st = pool.stateOf(id); return st === 'running' || st === 'waiting'; },
     open: (p) => pool.open(p),
     rename: async (id, title, cwd) => { await renameSdkSession(id, title, { dir: cwd }); sessionsSvc.emit('changed'); },
     dataDir: dataDir(),
     serverName: () => os.hostname(),
   });
+  // F4: handed off (or being handed) = read-only here, whoever sends — window, IM, schedule, goal, another conversation
+  pool.readOnly = (id) => handoff.readOnlyReason(id);
+  // a machine back online hears the 撤回 it missed (F6)
+  federation.on('event', (e: { kind: string }) => { if (e.kind === 'peers.changed') void publish.retryPendingRevokes().catch(() => {}); });
   const claudeAi = new ClaudeAiImport({ root: path.join(dataDir(), 'claude-ai'), meta, library: { join: (k, on) => library.join(k, on), invalidate: (k) => library.invalidate(k) }, source: claudeAiSource });
   claudeAi.sweepUploads();
   setInterval(() => claudeAi.sweepUploads(), 3_600_000).unref();
