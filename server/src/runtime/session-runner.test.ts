@@ -70,7 +70,9 @@ describe('SessionRunner', () => {
     expect(spawned[0].opts.windowsHide).toBe(true);
     expect(r.info.wsl).toEqual({ distro: 'Ubuntu', dropped: [] });
     await r.close();
-  });
+    // the runner's real fs looks at the \\wsl.localhost cwd (it wakes WSL's file server: ~6 s alone, 40–80 s under the
+    // full parallel `npm test` after the stage D/E/F merge), so this one gets the long timeout the git tests have
+  }, 120_000);
 
   it('extra project folders go to the SDK as additionalDirectories; none → the option is absent', async () => {
     queries.length = 0;
