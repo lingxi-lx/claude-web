@@ -98,6 +98,8 @@ try {
   check("A: the conversation in the temp repo is in A's list", !!listed, listed?.cwd);
   const chk = await A.req({ kind: 'handoff.check', sessionId: sid });
   check('handoff.check: a Git project with a remote can be handed off', chk.ok === true && typeof chk.remote === 'string', JSON.stringify(chk));
+  // fix wave F2: the new untracked file is listed (carried only when ticked)
+  check('handoff.check: lists the new untracked files the user can tick in', chk.untracked?.files?.some((f) => f.path === 'notes.md'), JSON.stringify(chk.untracked ?? null));
   const plainDir = path.join(tmp, 'plain'); fs.mkdirSync(plainDir);
   const sidPlain = crypto.randomUUID();
   writeClaudeTranscript(plainDir, sidPlain, toClaudeEntries([{ t: 0, kind: 'user', text: 'not git' }], { cwd: plainDir, sessionId: sidPlain }));
@@ -107,7 +109,8 @@ try {
 
   // ---- hand off ----
   const before = state();
-  const info = await A.req({ kind: 'handoff.start', sessionId: sid, peerId: peer.id });
+  // the user ticked 「也带上 N 个新文件」 (fix wave F2: untracked files go only then)
+  const info = await A.req({ kind: 'handoff.start', sessionId: sid, peerId: peer.id, includeUntracked: true });
   const after = state();
   check("handoff.start: A's branch, index, work tree, stash and status are untouched", JSON.stringify(before) === JSON.stringify(after), JSON.stringify({ before: before.status, after: after.status }));
   check('handoff.start: a cw/handoff-<id> branch on the (temp, bare) remote', /^cw\/handoff-[0-9a-f]{8}$/.test(info.branch) && git(bare, 'rev-parse', `refs/heads/${info.branch}`) === info.commit, info.branch);
