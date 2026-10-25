@@ -2156,6 +2156,7 @@ export const EN_WEB: Record<string, string> = {
   "打开那个对话": "Open that conversation",
   "打开面板": "Open panel",
   "打开项目文件夹…": "Open project folder…",
+  "执行图": "Execution graph",
   "执行图 {v}": "Execution graph {v}",
   "执行图预览": "Execution graph preview",
   "扩展": "Extensions",
