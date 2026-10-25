@@ -87,7 +87,7 @@ export const BODY_INFO: Record<BodyId, { l: string; keywords: string }> = {
   peers: { l: tr('其它电脑'), keywords: tr('其它机器 其它电脑 跨机器 联邦 peer federation 加入 重新配对') },
   hosts: { l: tr('SSH 隧道'), keywords: tr('ssh 隧道 tunnel 远程主机 端口转发 免密') },
   im: { l: tr('机器人列表'), keywords: tr('telegram discord slack 飞书 feishu lark 钉钉 dingtalk 企业微信 wecom 微信 机器人 bot im 网关 配对') },
-  library: { l: tr('来源与索引'), keywords: tr('session library codex opencode 导入 索引 加入 移出 重建') },
+  library: { l: tr('来源与索引'), keywords: tr('session library codex opencode 导入 索引 加入 移出 重建 claude.ai 数据导出 export zip') },
   secrets: { l: tr('API Key 存储'), keywords: tr('secret keychain credential dpapi 钥匙串 加密 密钥') },
   hooks: { l: tr('Hooks 列表'), keywords: tr('hook 钩子 事件 matcher') },
   localEnv: { l: tr('本机环境变量（加密）'), keywords: tr('env 环境变量 加密 密钥 secret database token 本机 终端 terminal') },

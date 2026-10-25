@@ -8,6 +8,7 @@ import { basename, clsx } from '@/util';
 import { Icon } from '@/ui/icons';
 import { tr } from '@/i18n';
 import { fileMenuProps } from '@/features/files/FileMenu';
+import { openPublish, openPublished } from '@/features/cloud/CloudDialogs';
 
 export function AllArtifacts() {
   const [open, setOpen] = useState(false);
@@ -33,6 +34,7 @@ export function AllArtifacts() {
       </button>
       {open && (!items ? <div className="fv-empty">{tr('加载中…')}</div> : !items.length ? <div className="fv-empty">{tr('最近的对话里还没有生成网页、文档、图片这类文件。')}</div> : (
         <div className="list">
+          <button className="sub link-btn all-arts-published" data-act="published" onClick={() => openPublished()}><Icon name="share" size={12} /> {tr('已发布的文件')}</button>
           {items.map((a) => (
             <div key={a.path} className="row clickable" title={a.path} {...fileMenuProps(a.path)}
               onClick={() => openTile({ id: `d${Date.now()}`, kind: 'doc', path: a.path }, 'tab')}>
@@ -41,6 +43,7 @@ export function AllArtifacts() {
                 <div>{basename(a.path)}</div>
                 <button className="sub link-btn" onClick={(e) => { e.stopPropagation(); goTo(a.sessionId); }} title={tr('打开那个对话')}>{a.title || tr('另一个对话')}</button>
               </div>
+              <button className="icon-btn" data-act="publish" title={tr('发布…')} aria-label={tr('发布 {name}', { name: basename(a.path) })} onClick={(e) => { e.stopPropagation(); openPublish(a.path); }}><Icon name="share" size={13} /></button>
             </div>
           ))}
         </div>

@@ -5,7 +5,7 @@ import type { SessionService } from '../sessions/service.js';
 import type { ImAdapter, InboundMessage } from './types.js';
 import type { AgentKind, ImBinding, ImGatewayConfig, PermissionRequestEvent } from '../protocol.js';
 import { tr } from '../i18n/index.js';
-import { parseImDispatch } from '../dispatch/core.js';
+import { isDispatchCommand, parseImDispatch } from '../dispatch/core.js';
 
 const HELP = tr("Claude Web 命令：\n/new [目录] — 新会话（默认第一个工作区）\n/sessions — 最近会话\n/use <序号|id前缀> — 切换到某个会话\n/status — 当前会话状态\n/stop — 中断当前回合\n/allow · /deny — 处理最近的权限请求\n/mode <default|acceptEdits|bypassPermissions> — 权限模式\n/model <名字> — 切换模型\n/verbose on|off — 是否推送工具调用过程\n/help — 这份说明\n其它文字 = 直接发给当前会话");
 
@@ -112,10 +112,10 @@ export class ImRouter {
     const arg = rest.join(' ').trim();
     const b = this.bindingFor(gw, m.chatId);
     const runner = b ? this.d.pool.get(b.sessionId) : undefined;
-    switch (cmd.toLowerCase()) {
+    switch (isDispatchCommand(cmd) ? '/dispatch' : cmd.toLowerCase()) {
       case '/help': case '/start': return reply(`${HELP}\n${tr('/dispatch [项目名:] <任务> — 派活：在电脑上新开一个对话去做，做完在这里告诉你')}`);
       // 派活 (stage F3): a new conversation in the project (its own permission mode), bound to this chat, task sent
-      case '/dispatch': case '/派活': {
+      case '/dispatch': { // also its Chinese alias (isDispatchCommand)
         const ws = this.d.meta.workspaces() as { id: string; name: string; path: string; permissionMode?: string }[];
         const parsed = parseImDispatch(text, ws);
         if (!parsed) return reply(tr('用法：/dispatch [项目名:] <任务>'));

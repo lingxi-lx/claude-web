@@ -10,7 +10,7 @@ import { tr } from '@/i18n';
  * the sections (对话 · 后台 · 自动化 · 扩展) and ···; the sidebar keeps 新对话 and 搜索. A phone has them all in its drawer
  * (no 对话 / ··· there: the drawer is the conversation list, the panels are in each header's ···).
  */
-export const TOP = ['app-menu', 'collapse', 'back', 'forward', 'new', 'search', 'chat', 'background', 'automation', 'extensions', 'more'] as const;
+export const TOP = ['app-menu', 'collapse', 'back', 'forward', 'new', 'search', 'dispatch', 'chat', 'background', 'automation', 'extensions', 'more'] as const;
 /**
  * 自动化 opens the automation page (redesign phase 7, `features/automation/`): these are its tabs (定时任务 · 目标 ·
  * 编排), the same ids as `AUTOMATION_TABS` there. The phase-4 menu they used to be in is gone.
@@ -30,7 +30,7 @@ export const CUSTOM = ['custom-section', 'custom-rename', 'custom-delete', 'cust
 /** A project's ··· / right-click menu; `add-project` on a folder outside every project. */
 export const PROJECT_MENU = ['new-here', 'worktree', 'terminal', 'move-top', 'move-up', 'move-down', 'edit', 'rename', 'explorer', 'vscode', 'remove', 'make-project'] as const;
 /** A conversation row's ··· / right-click menu (shown by capability). */
-export const ROW_MENU = ['open-tab', 'open-split', 'resume', 'pin', 'explorer', 'vscode', 'stop', 'reference', 'rename', 'fork', 'archive', 'handoff', 'native-cli', 'copy-id', 'delete'] as const;
+export const ROW_MENU = ['open-tab', 'open-split', 'resume', 'pin', 'explorer', 'vscode', 'stop', 'reference', 'rename', 'fork', 'archive', 'handoff', 'handoff-peer', 'native-cli', 'copy-id', 'delete'] as const;
 /** On the rows themselves. */
 export const ROW = ['status', 'kids', 'more', 'less', 'select-bar'] as const;
 /** The account row at the bottom and its popover. */
@@ -115,7 +115,7 @@ export const LEGACY: { old: string; now: `${Place}:${string}`[] }[] = [
 ];
 
 /** Where the spec's new L0 / L1 entries live (§4.2 / §5.1), beyond the old ones. */
-export const ADDED: `${Place}:${string}`[] = ['top:app-menu', 'top:back', 'top:forward', 'top:chat', 'top:background', 'top:extensions', 'top:more', 'top:automation', 'automation:schedules', 'automation:goals', 'automation:orchestra', 'section:attention', 'section:projects', 'head:view', 'account:account', 'account:today', 'account:shortcuts', 'view:library', 'view:group-by', 'view:sort-by', 'view:other-agents', 'view:per-group', 'view:new-section', 'view:reset', 'view:all', 'section:custom', 'custom:custom-section', 'custom:custom-rename', 'custom:custom-delete', 'custom:custom-out', 'row:less', 'project:move-top', 'project:move-up', 'project:move-down', 'project:edit', 'account:ascii-themes'];
+export const ADDED: `${Place}:${string}`[] = ['top:app-menu', 'top:back', 'top:forward', 'top:chat', 'top:background', 'top:extensions', 'top:more', 'top:automation', 'automation:schedules', 'automation:goals', 'automation:orchestra', 'section:attention', 'section:projects', 'head:view', 'account:account', 'account:today', 'account:shortcuts', 'view:library', 'view:group-by', 'view:sort-by', 'view:other-agents', 'view:per-group', 'view:new-section', 'view:reset', 'view:all', 'section:custom', 'custom:custom-section', 'custom:custom-rename', 'custom:custom-delete', 'custom:custom-out', 'row:less', 'project:move-top', 'project:move-up', 'project:move-down', 'project:edit', 'account:ascii-themes', 'top:dispatch', 'rowMenu:handoff-peer'];
 
 export function resolves(ref: `${Place}:${string}`): boolean {
   const [place, id] = ref.split(':') as [Place, string];

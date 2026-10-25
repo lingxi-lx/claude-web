@@ -1,3 +1,4 @@
+import { openClaudeAiImport, openDispatch, openPublished } from '@/features/cloud/CloudDialogs';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { THEMES, forkCarry, useActive, useStore, type PanelId } from '@/store';
 import { ws } from '@/ws/client';
@@ -68,6 +69,10 @@ export function CommandPalette() {
     const panel = (p: (typeof PANELS)[number]): Cmd => ({ id: `panel.${p.id}`, label: panelCommandLabel(st.layout.dock, p, st.settings['ui.workbench'] === true), ic: p.icon, group: tr('面板'), run: () => st.togglePanel(p.id) });
     const c: Cmd[] = [
       { id: 'new', label: tr('新对话'), sub: keyLabel(SHORTCUTS[0]), ic: 'plus', group: tr('对话'), run: () => runCommand('new') },
+      // stage F (local versions of claude.ai features)
+      { id: 'dispatch', label: tr('派活…'), ic: 'send', group: tr('对话'), run: () => openDispatch() },
+      { id: 'published', label: tr('已发布的文件'), ic: 'share', group: tr('对话'), run: () => openPublished() },
+      { id: 'claudeai.import', label: tr('导入 claude.ai 数据…'), ic: 'cloud', group: tr('对话'), run: () => openClaudeAiImport() },
       { id: 'ws.add', label: tr('打开项目文件夹…'), ic: 'folder', group: tr('对话'), run: async () => { const p = await ws.request<string | null>({ kind: 'fs.pickDir' }); if (p) await st.addWorkspace(p); } },
       { id: 'sidebar', label: st.sidebarOpen ? tr('收起侧栏') : tr('展开侧栏'), sub: 'Ctrl+B', ic: 'sidebar', group: tr('视图'), run: () => useStore.setState((s) => ({ sidebarOpen: !s.sidebarOpen })) },
       { id: 'archived', label: st.showArchived ? tr('隐藏已归档的对话') : tr('显示已归档的对话'), ic: 'archive', group: tr('视图'), run: () => useStore.getState().setShowArchived(!useStore.getState().showArchived) },

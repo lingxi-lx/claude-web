@@ -27,6 +27,9 @@ export function dispatchDefaults(last: unknown, workspaces: readonly { id: strin
   return out;
 }
 
+/** The IM command word: `/dispatch` or its Chinese alias. */
+export const isDispatchCommand = (word: string) => /^\/(?:dispatch|派活)$/i.test(word.trim());
+
 /** `/dispatch <task>` or `/派活 <task>`; `<项目名>: <task>` (either colon) picks the project by name. */
 export function parseImDispatch(text: string, workspaces: readonly { id: string; name: string }[]): { prompt: string; workspaceId?: string } | null {
   const m = /^\/(?:dispatch|派活)(?:\s+([\s\S]*))?$/i.exec(text.trim());

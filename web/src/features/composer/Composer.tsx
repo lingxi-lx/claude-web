@@ -48,6 +48,7 @@ import { ConvStatsLine } from './ConvStatsLine';
 import { PlusMenu } from './PlusMenu';
 import { PermissionChip } from './PermissionChip';
 import { nextPermissionMode } from '@/ui/terms';
+import { HandedOffBar } from '@/features/cloud/HandoffDialog';
 import { BranchChip, ProjectChip } from './ProjectChip';
 import { ContextMeter } from './ContextMeter';
 import { BAR_ID } from './ids';
@@ -130,6 +131,8 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   const sessions = useStore((s) => s.sessions);
   const toast = useStore((s) => s.toast);
   const mobile = useStore((s) => s.mobile);
+  // 交给常开机器继续 (stage F1): handed to another machine, read-only here
+  const handedOff = useStore((s) => (active ? s.sessionMeta[active.sessionId]?.handedOff : undefined));
   const ta = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState(welcome ? '' : active?.draft ?? '');
   const [imgs, setImgs] = useState<PendingImage[]>([]);
@@ -1093,6 +1096,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     </span>
   ) : null;
 
+  if (!welcome && active && handedOff) return <div className="composer"><div className="composer-inner"><HandedOffBar sessionId={active.sessionId} cwd={active.cwd} info={handedOff} /></div></div>;
   return (
     // data-paused: something lies over the conversation — the looping animations in here (the light, the tab's dot
     // and sweep) hold still until it is back in view (UI refresh §4.5)

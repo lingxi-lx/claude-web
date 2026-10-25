@@ -154,7 +154,7 @@ interface State {
   /** Put the projects in this order (the sidebar's drag, 上移 / 下移): shown at once, saved on the server. */
   reorderWorkspaces(ids: string[]): Promise<void>;
   /** A project's name / extra folders (stage C2); throws the server's refusal (a folder that does not exist) after a toast. */
-  updateWorkspace(id: string, patch: { name?: string; folders?: string[] }): Promise<void>;
+  updateWorkspace(id: string, patch: { name?: string; folders?: string[]; instructions?: string | null; sessionsScope?: 'project' | null; permissionMode?: PermissionMode | null }): Promise<void>;
   setSessionMeta(sessionId: string, patch: SessionMeta): Promise<void>;
   // actions
   init(): void;
