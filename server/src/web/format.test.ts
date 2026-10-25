@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ACTION_CHARS, CONTENT_END, CONTENT_START, DEFAULT_CHARS, MAX_CHARS, UNTRUSTED_NOTE, clampChars, formatElement, formatElements, formatFind, formatPage, formatSearch } from './format.js';
+import { ACTION_CHARS, CONTENT_END, CONTENT_START, DEFAULT_CHARS, MAX_CHARS, UNTRUSTED_NOTE, clampChars, formatElement, formatElements, formatFind, formatPage, formatSearch, formatNetwork, redactUrl } from './format.js';
 
 describe('formatPage', () => {
   const page = { url: 'https://docs.example/a', title: 'A page', text: 'Hello world.', elements: [{ ref: '1', role: 'link', name: 'Next', href: 'https://docs.example/b' }, { ref: '2', role: 'textbox', name: 'Search', value: 'abc' }, { ref: '3', role: 'button', name: 'Go' }] };
@@ -107,5 +107,25 @@ describe('formatSearch / formatFind', () => {
     expect(out).toContain('[4] button "Sign in"');
     expect(out).toContain(`${CONTENT_START} find>>>\n第 120 个字符附近：…please sign in to continue…\n${CONTENT_END}`);
     expect(formatFind('zzz', { page: { url: 'https://e.example/', title: '', text: '' }, elements: [] })).toBe('在当前页面（https://e.example/）里没有找到「zzz」。');
+  });
+});
+
+// stage B fix wave (S9): browser_network shows addresses to the model — an OAuth code, a token, a signed URL's
+// signature are credentials, not information
+describe('browser_network keeps secrets in addresses out of what the model sees', () => {
+  it('redactUrl: values of secret-ish query parameters become …, the rest stay', () => {
+    expect(redactUrl('https://a.example/cb?code=abc123&state=xyz')).toBe('https://a.example/cb?code=…&state=xyz');
+    expect(redactUrl('https://a.example/x?Access_Token=t&id_token=i&refresh_token=r&page=2')).toBe('https://a.example/x?Access_Token=…&id_token=…&refresh_token=…&page=2');
+    expect(redactUrl('https://s3.example/o?X-Amz-Signature=deadbeef&X-Amz-Credential=AKIA%2F1&X-Amz-Date=20261025')).toBe('https://s3.example/o?X-Amz-Signature=…&X-Amz-Credential=…&X-Amz-Date=20261025');
+    expect(redactUrl('https://a.example/?key=k&api_key=k&apikey=k&sig=s&signature=s&X-Goog-Signature=g&password=p&secret=s&session=s&auth=a&token=t')).toBe('https://a.example/?key=…&api_key=…&apikey=…&sig=…&signature=…&X-Goog-Signature=…&password=…&secret=…&session=…&auth=…&token=…');
+    // a fragment carries tokens too (implicit OAuth)
+    expect(redactUrl('https://a.example/cb#access_token=t&expires_in=3600')).toBe('https://a.example/cb#access_token=…&expires_in=3600');
+    expect(redactUrl('https://a.example/plain?q=hello')).toBe('https://a.example/plain?q=hello');
+    expect(redactUrl('not a url ?code=1')).toBe('not a url ?code=…');
+  });
+  it('formatNetwork uses it on every request', () => {
+    const out = formatNetwork({ page: { url: 'https://a.example/', title: 'A', text: '' }, network: [{ method: 'GET', url: 'https://idp.example/token?code=SECRET1&client_id=app', status: 200 }] });
+    expect(out).not.toContain('SECRET1');
+    expect(out).toContain('code=…&client_id=app');
   });
 });

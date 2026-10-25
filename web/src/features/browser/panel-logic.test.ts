@@ -66,6 +66,13 @@ describe('downloads', () => {
     expect(list).toHaveLength(5);
     expect(list[0].id).toBe('d11');
   });
+  it('keeps the shell\'s marks: a program (risky — no 打开) and a download it held back (blocked) (S6)', () => {
+    let list = applyDownload([], row({ id: 'x', name: 'setup.exe', state: 'done', path: 'C:\\D\\setup.exe', risky: true }));
+    expect(list[0]).toMatchObject({ risky: true });
+    list = applyDownload(list, row({ id: 'y', state: 'cancelled', blocked: true }));
+    expect(list[0]).toMatchObject({ blocked: true });
+    expect(applyDownload([], row({ risky: 'yes' as never }))[0].risky).toBeUndefined();
+  });
   it('ignores what is not a download event', () => {
     expect(applyDownload([], { id: 1 } as never)).toEqual([]);
     expect(applyDownload([], null as never)).toEqual([]);

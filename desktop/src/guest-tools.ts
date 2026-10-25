@@ -182,7 +182,15 @@ export function uniqueIn(dir: string, name: string, taken: (p: string) => boolea
   return p;
 }
 
-export interface DownloadEvent { id: string; name: string; state: 'progress' | 'done' | 'failed' | 'cancelled'; received: number; total: number; path?: string }
+/** `risky`: a program or script (isRisky) — the bar only shows it in its folder. `blocked`: cancelled for coming too fast (DOWNLOAD_BURST). */
+export interface DownloadEvent { id: string; name: string; state: 'progress' | 'done' | 'failed' | 'cancelled'; received: number; total: number; path?: string; risky?: true; blocked?: true }
+
+/** What Windows (or macOS / Linux) runs when it is opened: never opened from the downloads bar, only shown in its folder. */
+const RISKY_EXT = /.(exe|com|bat|cmd|ps1|psm1|psd1|vbs|vbe|js|jse|wsf|wsh|hta|lnk|url|msi|msp|mst|scr|pif|cpl|reg|jar|appref-ms|application|gadget|msc|scf|inf|iso|img|vhd|vhdx|chm|website|settingcontent-ms|dmg|pkg|app|command|sh)$/i;
+export const isRisky = (name: string): boolean => RISKY_EXT.test(String(name).trim());
+/** A page may start at most this many downloads in DOWNLOAD_WINDOW_MS; the rest are cancelled. */
+export const DOWNLOAD_BURST = 5;
+export const DOWNLOAD_WINDOW_MS = 10_000;
 type Host = { isDestroyed(): boolean; send(channel: string, ev: DownloadEvent): void };
 
 /**
@@ -195,18 +203,39 @@ export class Downloads {
   private done = new Set<string>();
   private busy = new Set<string>();
   private seq = 0;
+  /** each page's recent download starts (rate limit) */
+  private starts = new WeakMap<object, number[]>();
   constructor(private dir: () => string, private exists: (p: string) => boolean, private throttleMs = 250) {}
 
   /** Once per browser profile (the user's, the Agent's — whichever a tab uses). */
   watch(session: Session): void {
     if (this.watched.has(session)) return;
     this.watched.add(session);
-    session.on('will-download', (_e, item, wc) => this.take(item, (wc as WebContents | undefined)?.hostWebContents as Host | null | undefined));
+    session.on('will-download', (_e, item, wc) => this.take(item, (wc as WebContents | undefined)?.hostWebContents as Host | null | undefined, wc as object | undefined));
   }
 
   owns(p: unknown): boolean { return typeof p === 'string' && this.done.has(p); }
+  /** 打开: one of these downloads, and not a program or script. */
+  openable(p: unknown): boolean { return this.owns(p) && !isRisky(path.basename(p as string)); }
 
-  private take(item: DownloadItem, host: Host | null | undefined): void {
+  /** Whether `page` may start one more download now (and counts it). */
+  private allow(page: object | undefined, now = Date.now()): boolean {
+    if (!page) return true;
+    const recent = (this.starts.get(page) ?? []).filter((t) => now - t < DOWNLOAD_WINDOW_MS);
+    if (recent.length >= DOWNLOAD_BURST) { this.starts.set(page, recent); return false; }
+    recent.push(now);
+    this.starts.set(page, recent);
+    return true;
+  }
+
+  private take(item: DownloadItem, host: Host | null | undefined, page?: object): void {
+    if (!this.allow(page)) {
+      // a page downloading in a burst: the rest are not saved at all, and the bar says why
+      const name = safeName(item.getFilename());
+      try { item.cancel(); } catch { /* already gone */ }
+      if (host && !host.isDestroyed()) host.send('desktop:guestDownload', { id: `dl${++this.seq}`, name, state: 'cancelled', received: 0, total: 0, blocked: true });
+      return;
+    }
     let file: string;
     // no folder to put it in: Electron's own handling (it asks where), untracked
     try { file = uniqueIn(this.dir(), item.getFilename(), (p) => this.busy.has(p) || this.done.has(p) || this.exists(p)); } catch { return; }
@@ -214,8 +243,9 @@ export class Downloads {
     this.busy.add(file);
     item.setSavePath(file);
     const name = path.basename(file);
+    const risky = isRisky(name) ? { risky: true as const } : {};
     const send = (state: DownloadEvent['state'], extra: Partial<DownloadEvent> = {}) => {
-      if (host && !host.isDestroyed()) host.send('desktop:guestDownload', { id, name, state, received: item.getReceivedBytes(), total: item.getTotalBytes(), ...extra });
+      if (host && !host.isDestroyed()) host.send('desktop:guestDownload', { id, name, state, received: item.getReceivedBytes(), total: item.getTotalBytes(), ...risky, ...extra });
     };
     let last = 0;
     send('progress');

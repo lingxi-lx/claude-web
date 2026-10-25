@@ -69,6 +69,7 @@
 .bw-dl-row.failed .ic { color: var(--err); }
 .bw-dl-row .tx { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .bw-dl-row .n { color: var(--ink-1); font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bw-dl-row .n[data-risky] { white-space: pre-wrap; overflow-wrap: anywhere; text-overflow: clip; }
 .bw-dl-row .s { color: var(--ink-3); font-size: var(--fs-meta); font-variant-numeric: tabular-nums; }
 .bw-dl-row .bar { height: 3px; border-radius: 2px; background: var(--fill-subtle); overflow: hidden; }
 .bw-dl-row .bar > i { display: block; height: 100%; background: var(--accent); transform-origin: left center; transition: transform 0.25s var(--ease-out); }

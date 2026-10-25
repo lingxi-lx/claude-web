@@ -26,8 +26,10 @@ export function useDownloadEvents(): void {
 }
 
 function status(d: DownloadRow): string {
+  if (d.state === 'done' && d.risky) return tr('已下载 · {size} · 程序文件，只能在文件夹中查看', { size: fmtBytes(d.received || d.total) });
   if (d.state === 'done') return tr('已下载 · {size}', { size: fmtBytes(d.received || d.total) });
   if (d.state === 'failed') return tr('下载失败');
+  if (d.state === 'cancelled' && d.blocked) return tr('网页一下要下载太多文件，已拦下');
   if (d.state === 'cancelled') return tr('已取消');
   const pct = downloadPercent(d);
   return pct === null ? fmtBytes(d.received) : `${pct}% · ${fmtBytes(d.received)} / ${fmtBytes(d.total)}`;
@@ -51,13 +53,14 @@ export function DownloadsBar() {
           <div key={d.id} className={clsx('bw-dl-row', d.state)} data-dl={d.id} data-state={d.state}>
             <span className="ic"><Icon name={d.state === 'failed' ? 'alert' : d.state === 'done' ? 'check' : 'arrowDown'} size={14} /></span>
             <span className="tx">
-              <span className="n" title={d.path ?? d.name}>{d.name}</span>
+              {/* a program shows its whole name (wrapping, CSS), so `report.pdf      .exe` cannot pass for a PDF */}
+              <span className="n" title={d.path ?? d.name} data-risky={d.risky ? '' : undefined}>{d.name}</span>
               <span className="s">{status(d)}</span>
               {d.state === 'progress' && <span className="bar" aria-hidden><i style={{ transform: `scaleX(${pct === null ? 0.3 : pct / 100})` }} className={clsx(pct === null && 'unknown')} /></span>}
             </span>
             {d.state === 'done' && d.path && (
               <>
-                <button className="btn sm" data-act="open" onClick={() => open(d)}>{tr('打开')}</button>
+                {!d.risky && <button className="btn sm" data-act="open" onClick={() => open(d)}>{tr('打开')}</button>}
                 <button className="btn sm ghost" data-act="show" onClick={() => show(d)}>{tr('在文件夹中显示')}</button>
               </>
             )}

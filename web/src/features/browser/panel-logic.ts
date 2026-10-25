@@ -41,6 +41,10 @@ export interface DownloadRow {
   total: number;
   /** where it was saved (only once done): what 打开 / 在文件夹中显示 hand back to the shell */
   path?: string;
+  /** a program or script (guest-tools.ts isRisky): the shell will not open it, only show it in its folder */
+  risky?: boolean;
+  /** cancelled by the shell: the page started too many downloads at once */
+  blocked?: boolean;
 }
 const STATES = new Set(['progress', 'done', 'failed', 'cancelled']);
 export const MAX_DOWNLOADS = 5;
@@ -48,7 +52,7 @@ export const MAX_DOWNLOADS = 5;
 /** A download event into the bar's list: a new one first, a known one updated in place; the latest few kept. */
 export function applyDownload(list: readonly DownloadRow[], ev: DownloadRow): DownloadRow[] {
   if (!ev || typeof ev.id !== 'string' || typeof ev.name !== 'string' || !STATES.has(ev.state)) return [...list];
-  const row: DownloadRow = { id: ev.id, name: ev.name, state: ev.state, received: Number(ev.received) || 0, total: Number(ev.total) || 0, ...(typeof ev.path === 'string' ? { path: ev.path } : {}) };
+  const row: DownloadRow = { id: ev.id, name: ev.name, state: ev.state, received: Number(ev.received) || 0, total: Number(ev.total) || 0, ...(typeof ev.path === 'string' ? { path: ev.path } : {}), ...(ev.risky === true ? { risky: true } : {}), ...(ev.blocked === true ? { blocked: true } : {}) };
   const i = list.findIndex((d) => d.id === row.id);
   if (i >= 0) return list.map((d, j) => (j === i ? { ...d, ...row } : d));
   return [row, ...list].slice(0, MAX_DOWNLOADS);

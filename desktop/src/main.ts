@@ -917,7 +917,8 @@ ipcMain.handle('desktop:browser:clearData', async (e, partition: unknown) => {
 });
 // the downloads bar's 打开 / 在文件夹中显示: only a file a download of the built-in browser saved
 ipcMain.handle('desktop:download:open', async (e, p: unknown) => {
-  if (!ours(e) || !downloads.owns(p)) return false;
+  // a program or script that came down is never run from here (only shown in its folder): guest-tools.ts isRisky
+  if (!ours(e) || !downloads.openable(p)) return false;
   return (await shell.openPath(p as string)) === '';
 });
 ipcMain.handle('desktop:download:show', (e, p: unknown) => {

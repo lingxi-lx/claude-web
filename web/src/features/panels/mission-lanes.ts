@@ -21,3 +21,12 @@ export function resolved<T extends { sessionId: string; lastModified: number }>(
   const since = now - RESOLVED_DAYS * 24 * 3600_000;
   return all.filter((s) => archived(s.sessionId) && s.lastModified >= since).sort((a, b) => b.lastModified - a.lastModified).slice(0, max);
 }
+
+/**
+ * Whether a waiting request can be answered from the overview card (允许 / 拒绝). Not one that has to be read to be
+ * judged — a question, a plan, which apps to control (操控电脑), which site to change or which script to run (允许的网站,
+ * server/src/web/site-gate.ts SITE_TOOL): for those the card opens the conversation, where the whole request is shown.
+ */
+export function quickAnswer(toolName: string): boolean {
+  return !['AskUserQuestion', 'ExitPlanMode', 'browser.site', 'mcp__computer__request_access'].includes(toolName);
+}

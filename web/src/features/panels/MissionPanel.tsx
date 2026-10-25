@@ -8,7 +8,7 @@ import { orchAct, useOrch, useOrchBusy, waitingOf } from '@/features/orchestra/s
 import { accessAsk, isAccessRequest } from '@/features/computer/computer-tools';
 import { tr } from '@/i18n';
 import { usePrs } from '@/features/vcs/PrBar';
-import { laneOf, resolved, type Lane } from './mission-lanes';
+import { laneOf, quickAnswer, resolved, type Lane } from './mission-lanes';
 
 /**
  * Mission Control: every session across workspaces at a glance — what needs you, what is running (with the
@@ -97,9 +97,11 @@ export function MissionPanel() {
                     // 操控电脑 asking for applications: which ones and why is on the conversation's own card, and that is
                     // where it is answered (a click on this card opens it) — no 允许 here, where neither can be read
                     isAccessRequest(p.toolName) ? <div key={p.requestId} className="perm" data-kind="access" title={tr('打开对话，看它要操控哪些应用再决定')}>{tr('想操控这台电脑上的应用：{apps}（打开对话再决定）', { apps: accessAsk(p.input as Record<string, unknown>).apps.join('、') })}</div> :
+                    // 允许的网站: which site, and the script it wants to run, are read on the conversation's card
+                    p.toolName === 'browser.site' ? <div key={p.requestId} className="perm" data-kind="site" title={tr('打开对话，看它要在网页上做什么再决定')}>{tr('想在网站 {host} 上操作网页（打开对话再决定）', { host: String((p.input as { host?: unknown }).host ?? '').slice(0, 80) })}</div> :
                     <div key={p.requestId} className="perm">
                       <span className="mono">{p.toolName}</span> {String((p.input as any).command ?? (p.input as any).file_path ?? (p.input as any).question ?? '').slice(0, 60)}
-                      {p.toolName !== 'AskUserQuestion' && p.toolName !== 'ExitPlanMode' && (
+                      {quickAnswer(p.toolName) && (
                         <span className="acts"><button className="btn sm primary" onClick={(e) => { e.stopPropagation(); void respond(p.requestId, { behavior: 'allow' }); }}>{tr('允许')}</button><button className="btn sm" onClick={(e) => { e.stopPropagation(); void respond(p.requestId, { behavior: 'deny', message: tr('用户拒绝') }); }}>{tr('拒绝')}</button></span>
                       )}
                     </div>

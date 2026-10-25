@@ -164,7 +164,19 @@ export function formatConsole(a: BrowserAnswer, opts: { errorsOnly?: boolean } =
   ].join('\n');
 }
 
-/** `browser_network`: `METHOD STATUS address（type，time）`, a failure with its reason, `…` for one still on its way. */
+/** Query / fragment parameters whose value is a credential (an OAuth code, a token, a signed URL's signature). */
+const SECRET_PARAMS = new Set(['code', 'token', 'access_token', 'id_token', 'refresh_token', 'key', 'api_key', 'apikey', 'sig', 'signature', 'x-amz-signature', 'x-amz-credential', 'x-amz-security-token', 'x-goog-signature', 'x-goog-credential', 'password', 'secret', 'client_secret', 'session', 'auth']);
+
+/** An address as the model may see it: the value of each secret-ish parameter (SECRET_PARAMS) in the query or fragment is `…`. */
+export function redactUrl(url: string): string {
+  return String(url).replace(/([?&#])([^=&#?]+)=([^&#]*)/g, (m, sep: string, name: string) => {
+    let n = name;
+    try { n = decodeURIComponent(name); } catch { /* as written */ }
+    return SECRET_PARAMS.has(n.toLowerCase()) ? `${sep}${name}=…` : m;
+  });
+}
+
+/** `browser_network`: `METHOD STATUS address（type，time）`, a failure with its reason, `…` for one still on its way. Secrets in addresses are redacted (redactUrl). */
 export function formatNetwork(a: BrowserAnswer, opts: { failedOnly?: boolean } = {}): string {
   const list = a.network ?? [];
   const head = sourceLines(a.page, a.note);
@@ -172,7 +184,7 @@ export function formatNetwork(a: BrowserAnswer, opts: { failedOnly?: boolean } =
   const lines = list.map((e) => {
     const state = e.failed ? tr('失败') : e.status !== undefined ? String(e.status) : e.ms !== undefined ? '—' : '…'; // —: done, status not known
     const extra = [e.type ? oneLine(e.type, 30) : '', e.ms !== undefined ? `${e.ms} ms` : '', e.failed ? oneLine(defuse(e.failed), 200) : ''].filter(Boolean);
-    return `${oneLine(e.method, 12)} ${state} ${oneLine(defuse(e.url), 300)}${extra.length ? `（${extra.join('，')}）` : ''}`;
+    return `${oneLine(e.method, 12)} ${state} ${oneLine(defuse(redactUrl(e.url)), 300)}${extra.length ? `（${extra.join('，')}）` : ''}`;
   });
   const { kept, dropped } = newestThatFit(lines, LOG_CHARS);
   return [

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BranchPr } from '@shared';
-import { laneOf, resolved } from './mission-lanes';
+import { laneOf, quickAnswer, resolved } from './mission-lanes';
 
 const pr = (p: Partial<BranchPr> = {}): BranchPr => ({ id: 'x', number: 1, title: 't', url: 'u', state: 'open', draft: false, autoMerge: false, sha: 's', checks: { total: 0, passed: 0, failed: 0, pending: 0, failures: [] }, ...p });
 
@@ -27,5 +27,18 @@ describe('总览 lanes', () => {
     const day = 24 * 3600_000;
     const all = [{ sessionId: 'a', lastModified: now - day }, { sessionId: 'b', lastModified: now - 9 * day }, { sessionId: 'c', lastModified: now - 2 * 3600_000 }, { sessionId: 'd', lastModified: now }];
     expect(resolved(all, (id) => id !== 'd', now).map((s) => s.sessionId)).toEqual(['c', 'a']);
+  });
+});
+
+// stage B fix wave (S2): a request that can only be judged by reading it (which site, which script; which apps)
+// gets no one-click 允许 on the overview card — the card opens the conversation
+describe('总览 quick answers', () => {
+  it('only plain tool permissions can be allowed from the card', () => {
+    expect(quickAnswer('Bash')).toBe(true);
+    expect(quickAnswer('Edit')).toBe(true);
+    expect(quickAnswer('browser.site')).toBe(false);
+    expect(quickAnswer('mcp__computer__request_access')).toBe(false);
+    expect(quickAnswer('AskUserQuestion')).toBe(false);
+    expect(quickAnswer('ExitPlanMode')).toBe(false);
   });
 });

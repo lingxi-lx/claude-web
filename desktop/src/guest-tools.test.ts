@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BROWSER_PARTITIONS, Downloads, browserPartition, cleanCookie, cleanVp, clearBrowsingData, guestKeyOf, importCookies, metricsParams, mobileUserAgent, safeName, uniqueIn } from './guest-tools';
+import { BROWSER_PARTITIONS, DOWNLOAD_BURST, Downloads, isRisky, browserPartition, cleanCookie, cleanVp, clearBrowsingData, guestKeyOf, importCookies, metricsParams, mobileUserAgent, safeName, uniqueIn } from './guest-tools';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
 
@@ -91,6 +91,8 @@ class FakeItem extends EventEmitter {
   getSavePath() { return this.savePath; }
   getReceivedBytes() { return this.received; }
   getTotalBytes() { return this.total; }
+  cancelled = false;
+  cancel() { this.cancelled = true; }
 }
 
 describe('the downloads tracker', () => {
@@ -141,6 +143,39 @@ describe('the downloads tracker', () => {
     item2.emit('done', {}, 'cancelled');
     expect(sent.at(-1)!.ev.state).toBe('cancelled');
     expect(d.owns(item.savePath)).toBe(false);
+  });
+  // stage B fix wave (S6): a page could download silently and without limit, and 打开 ran whatever came down
+  it('a program or script is never opened from the bar (only shown in its folder); the event says so', () => {
+    const { session, sent, guest, d } = setup();
+    for (const name of ['setup.exe', 'run.BAT', 'x.cmd', 'x.ps1', 'x.lnk', 'x.hta', 'x.url', 'x.vbs', 'x.js', 'x.msi', 'x.scr']) {
+      expect(isRisky(name), name).toBe(true);
+      const item = new FakeItem(name);
+      // a page of its own each (one page is held to DOWNLOAD_BURST)
+      session.emit('will-download', {}, item, { hostWebContents: guest.hostWebContents });
+      item.emit('done', {}, 'completed');
+      expect(sent.at(-1)!.ev).toMatchObject({ state: 'done', risky: true });
+      expect(d.owns(item.savePath)).toBe(true);
+      expect(d.openable(item.savePath)).toBe(false);
+    }
+    for (const name of ['a.zip', 'b.pdf', 'c.png', 'README']) expect(isRisky(name), name).toBe(false);
+    const ok = new FakeItem('report.pdf');
+    session.emit('will-download', {}, ok, guest);
+    ok.emit('done', {}, 'completed');
+    expect(sent.at(-1)!.ev.risky).toBeUndefined();
+    expect(d.openable(ok.savePath)).toBe(true);
+    expect(d.openable('C:\elsewhere\report.pdf')).toBe(false);
+  });
+  it('at most DOWNLOAD_BURST downloads per page in DOWNLOAD_WINDOW_MS: the rest are cancelled and said so', () => {
+    const { session, sent, guest } = setup();
+    const items = Array.from({ length: DOWNLOAD_BURST + 2 }, (_, i) => new FakeItem(`f${i}.bin`));
+    for (const it of items) session.emit('will-download', {}, it, guest);
+    expect(items.slice(0, DOWNLOAD_BURST).every((i) => !i.cancelled)).toBe(true);
+    expect(items.slice(DOWNLOAD_BURST).every((i) => i.cancelled)).toBe(true);
+    expect(sent.filter((s) => s.ev.blocked === true).map((s) => s.ev.state)).toEqual(['cancelled', 'cancelled']);
+    // another page is counted on its own
+    const other = new FakeItem('o.bin');
+    session.emit('will-download', {}, other, { hostWebContents: guest.hostWebContents });
+    expect(other.cancelled).toBe(false);
   });
   it('no Downloads folder to be had: left to Electron (it asks), nothing reported, nothing thrown', () => {
     const session = new EventEmitter();
