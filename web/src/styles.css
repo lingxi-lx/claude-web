@@ -1489,16 +1489,25 @@ html[data-density='compact'] .sb-row.sess { height: 28px; padding: 0 10px 0 var(
 .menu.tab-add-menu { position: fixed; z-index: 1000; overflow-y: auto; }
 .menu.sb-menu button .n, .menu.sb-menu button .k { margin-left: auto; padding-left: 8px; font-size: 12px; color: var(--ink-4); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .menu.sb-menu button .n.need { color: var(--warn); }
-.menu.sb-filter { width: 252px; }
+.menu.sb-view { width: 252px; }
 .sb-filter-q { display: flex; align-items: center; gap: 6px; height: 30px; margin: 2px 2px 4px; padding: 0 4px 0 8px; border-radius: var(--r-row); background: var(--fill-subtle); color: var(--ink-4); }
 .sb-filter-q:focus-within { box-shadow: 0 0 0 1.5px var(--focus-ring); }
 .sb-filter-q input { flex: 1; min-width: 0; border: 0; background: none; padding: 0; font-size: 14px; color: var(--ink-1); }
 .sb-filter-q input:focus-visible { outline: none; }
-.menu.sb-filter button > svg.ck { visibility: hidden; color: var(--ink-1); }
-.menu.sb-filter button.on > svg.ck { visibility: visible; }
-.menu.sb-filter button.off { color: var(--ink-3); }
-.menu.sb-filter .warn-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--warn); flex: none; }
-.menu.sb-filter .spinner { width: 10px; height: 10px; border-width: 1.5px; margin-left: auto; }
+.menu.sb-view button > svg.ck { visibility: hidden; color: var(--ink-1); }
+.menu.sb-view button.on > svg.ck { visibility: visible; }
+.menu.sb-view button.off { color: var(--ink-3); }
+.menu.sb-view .warn-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--warn); flex: none; }
+.menu.sb-view .spinner { width: 10px; height: 10px; border-width: 1.5px; margin-left: auto; }
+.menu.sb-view { max-height: min(640px, calc(100vh - 24px)); overflow-y: auto; }
+.menu.sb-view .sb-view-chev { flex: none; margin-left: 4px; color: var(--ink-4); }
+.menu.sb-view .sb-view-sub { padding-left: 14px; }
+/* the user's own sections (stage C3): a drop target header, a × on each row */
+.sb-custom .sb-custom-out { visibility: hidden; flex: none; }
+.sb-custom .sb-row-wrap:hover .sb-custom-out, .sb-custom .sb-custom-out:focus-visible { visibility: visible; }
+.sb-custom .sb-row-wrap.with-out { display: flex; align-items: center; }
+.sb-custom .sb-row-wrap.with-out > :first-child { flex: 1; min-width: 0; }
+.sb-custom.drop-on > .sb-sec-h { background: var(--layer-selected); }
 
 /* account row: avatar · name · plan + quota ring · settings */
 .sb-foot.sb-account { height: 58px; padding: 0 var(--sp-2); gap: 4px; flex: none; }

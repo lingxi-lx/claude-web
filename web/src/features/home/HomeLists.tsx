@@ -58,7 +58,7 @@ export function HomeLists({ onOpen }: { onOpen: (sessionId: string) => void }) {
   const byId = useMemo(() => new Map(sessions.map((s) => [s.sessionId, s])), [sessions]);
   const all = () => {
     if (tab === 'schedules') openAutomation('schedules');
-    else if (tab === 'archived') useStore.setState({ showArchived: true, sidebarOpen: true });
+    else if (tab === 'archived') { useStore.getState().setShowArchived(true); useStore.setState({ sidebarOpen: true }); }
     else useStore.setState({ paletteOpen: true });
   };
   const showAll = tab === 'schedules' || more > 0;

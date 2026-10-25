@@ -17,11 +17,16 @@ export const TOP = ['app-menu', 'collapse', 'back', 'forward', 'new', 'search', 
  */
 export const AUTOMATION = ['schedules', 'goals', 'orchestra'] as const;
 /** Sections of the list, in order. */
-export const SECTIONS = ['attention', 'pinned', 'projects', 'other', 'peers'] as const;
-/** The 项目 header row. */
-export const PROJECTS_HEAD = ['filter', 'add-project'] as const;
-/** The funnel menu: everything that used to be chips, the filter box and 选择 above the list. */
-export const FILTER = ['query', 'source', 'machine', 'archived', 'select', 'library'] as const;
+export const SECTIONS = ['attention', 'pinned', 'custom', 'projects', 'other', 'peers'] as const;
+/** The 项目 / 对话 header row. */
+export const PROJECTS_HEAD = ['view', 'add-project'] as const;
+/**
+ * The 显示 menu (stage C3): the old funnel's filters (the box, 来源, 机器, 显示已归档, 选择) plus how the list is grouped,
+ * ordered and how much of each group shows; the user's own sections; 恢复默认 / 查看全部.
+ */
+export const VIEW = ['query', 'source', 'machine', 'group-by', 'sort-by', 'archived', 'other-agents', 'per-group', 'select', 'new-section', 'reset', 'all', 'library'] as const;
+/** A section of the user's own: its header (a drop target), its menu, the × on its rows. */
+export const CUSTOM = ['custom-section', 'custom-rename', 'custom-delete', 'custom-out'] as const;
 /** A project's ··· / right-click menu; `add-project` on a folder outside every project. */
 export const PROJECT_MENU = ['new-here', 'worktree', 'terminal', 'move-top', 'move-up', 'move-down', 'edit', 'rename', 'explorer', 'vscode', 'remove', 'make-project'] as const;
 /** A conversation row's ··· / right-click menu (shown by capability). */
@@ -37,7 +42,8 @@ export type TopId = (typeof TOP)[number];
 export type AutomationId = (typeof AUTOMATION)[number];
 export type SectionId = (typeof SECTIONS)[number];
 export type ProjectsHeadId = (typeof PROJECTS_HEAD)[number];
-export type FilterId = (typeof FILTER)[number];
+export type ViewId = (typeof VIEW)[number];
+export type CustomId = (typeof CUSTOM)[number];
 export type ProjectMenuId = (typeof PROJECT_MENU)[number];
 export type RowMenuId = (typeof ROW_MENU)[number];
 export type RowId = (typeof ROW)[number];
@@ -54,7 +60,7 @@ export const AUTOMATION_PANELS = { goals: 'goals', orchestra: 'orchestra' } as c
 export const ACCOUNT_PANELS = { usage: 'usage', config: 'config' } as const satisfies Partial<Record<AccountId, PanelId>>;
 
 export const PLACES = {
-  top: TOP, automation: AUTOMATION, section: SECTIONS, head: PROJECTS_HEAD, filter: FILTER,
+  top: TOP, automation: AUTOMATION, section: SECTIONS, head: PROJECTS_HEAD, view: VIEW, custom: CUSTOM,
   project: PROJECT_MENU, row: ROW, rowMenu: ROW_MENU, account: ACCOUNT, hint: HINT,
 } as const;
 export type Place = keyof typeof PLACES;
@@ -69,14 +75,14 @@ export const LEGACY: { old: string; now: `${Place}:${string}`[] }[] = [
   { old: tr('用量（右侧面板）'), now: ['account:usage'] },
   { old: tr('额度环 + 明细'), now: ['account:quota'] },
   { old: tr('连接状态点 / 重连中…'), now: ['account:connection'] },
-  { old: tr('显示已归档（底部开关）'), now: ['filter:archived'] },
+  { old: tr('显示已归档（底部开关）'), now: ['view:archived'] },
   { old: tr('主题 / 设置（底部月亮 → 命令面板）'), now: ['account:theme', 'account:appearance', 'account:palette'] },
   { old: tr('会话库发现横幅：加入 X'), now: ['hint:library-join'] },
   { old: tr('会话库发现横幅：以后再说'), now: ['hint:library-later'] },
-  { old: tr('来源 chip 行'), now: ['filter:source'] },
-  { old: tr('机器 chip 行'), now: ['filter:machine'] },
-  { old: tr('筛选会话…（输入框）'), now: ['filter:query'] },
-  { old: tr('选择（多选）/ 全选 / 批量归档 / 批量删除'), now: ['filter:select', 'row:select-bar'] },
+  { old: tr('来源 chip 行'), now: ['view:source'] },
+  { old: tr('机器 chip 行'), now: ['view:machine'] },
+  { old: tr('筛选会话…（输入框）'), now: ['view:query'] },
+  { old: tr('选择（多选）/ 全选 / 批量归档 / 批量删除'), now: ['view:select', 'row:select-bar'] },
   { old: tr('「运行中」分组'), now: ['row:status'] },
   { old: tr('置顶分组'), now: ['section:pinned'] },
   { old: tr('工作区 · 添加工作区'), now: ['head:add-project'] },
@@ -109,7 +115,7 @@ export const LEGACY: { old: string; now: `${Place}:${string}`[] }[] = [
 ];
 
 /** Where the spec's new L0 / L1 entries live (§4.2 / §5.1), beyond the old ones. */
-export const ADDED: `${Place}:${string}`[] = ['top:app-menu', 'top:back', 'top:forward', 'top:chat', 'top:background', 'top:extensions', 'top:more', 'top:automation', 'automation:schedules', 'automation:goals', 'automation:orchestra', 'section:attention', 'section:projects', 'head:filter', 'account:account', 'account:today', 'account:shortcuts', 'filter:library', 'row:less', 'project:move-top', 'project:move-up', 'project:move-down', 'project:edit', 'account:ascii-themes'];
+export const ADDED: `${Place}:${string}`[] = ['top:app-menu', 'top:back', 'top:forward', 'top:chat', 'top:background', 'top:extensions', 'top:more', 'top:automation', 'automation:schedules', 'automation:goals', 'automation:orchestra', 'section:attention', 'section:projects', 'head:view', 'account:account', 'account:today', 'account:shortcuts', 'view:library', 'view:group-by', 'view:sort-by', 'view:other-agents', 'view:per-group', 'view:new-section', 'view:reset', 'view:all', 'section:custom', 'custom:custom-section', 'custom:custom-rename', 'custom:custom-delete', 'custom:custom-out', 'row:less', 'project:move-top', 'project:move-up', 'project:move-down', 'project:edit', 'account:ascii-themes'];
 
 export function resolves(ref: `${Place}:${string}`): boolean {
   const [place, id] = ref.split(':') as [Place, string];

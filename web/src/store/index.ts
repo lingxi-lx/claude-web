@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { readView, VIEW_KEY } from '@/features/sidebar/view';
 import type { AgentInfo, AgentKind, AttachmentRef, EffortLevel, EngineInfo, Limits, MessageFeedback, PermissionMode, Provider, SessionFeatures, PermissionRequestEvent, RunnerState, Schedule, ServerEvent, SessionInfoSnapshot, SessionMeta, SessionSummary, SourceStatus, Workspace } from '@shared';
 import { withDefaultMode } from './default-mode';
 import { decodeAttachments, findChainUuidBefore } from '@/model/conversation';
@@ -126,6 +127,8 @@ interface State {
   attnDismissed: Record<string, true>;
   paletteOpen: boolean;
   showArchived: boolean;
+  /** 显示已归档的对话 (the 显示 menu, the palette, the home page): kept in meta.json with the sidebar's view (stage C3) */
+  setShowArchived(v: boolean): void;
   shortcutsOpen: boolean;
   configTab: string | null; // tab the config panel should open on next mount (one-shot)
   settingsOpen: { section?: string; query?: string; reveal?: string } | null;
@@ -510,7 +513,7 @@ export const useStore = create<State>((set, get) => ({
         get().toast(SIMPLIFIED_NOTICE, true, 12_000);
       }
     }
-    set({ workspaces, sessionMeta, schedules, settings, metaLoaded: true });
+    set({ workspaces, sessionMeta, schedules, settings, metaLoaded: true, showArchived: readView(settings[VIEW_KEY]).show.archived });
     reconcileLanguage(settings[LANGUAGE_KEY]);
     applyUiSettings(settings);
     get().setTheme(resolveTheme((settings['ui.theme'] as any) ?? DEFAULT_THEME), true);
@@ -520,6 +523,11 @@ export const useStore = create<State>((set, get) => ({
     const next = ids.map((id, i) => by.get(id) && { ...by.get(id)!, order: i }).filter((w): w is Workspace => !!w);
     if (next.length === by.size) set({ workspaces: next });
     await ws.request({ kind: 'workspaces.reorder', ids }).catch((e) => { get().toast(e.message); void get().loadMeta(); });
+  },
+  setShowArchived(v) {
+    set({ showArchived: v });
+    const cur = readView(get().settings[VIEW_KEY]);
+    void get().setSetting(VIEW_KEY, { ...cur, show: { ...cur.show, archived: v } });
   },
   async updateWorkspace(id, patch) {
     try {

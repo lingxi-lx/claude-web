@@ -69,6 +69,8 @@ export interface GroupProps {
   menu?: React.ReactNode;
   className?: string;
   emptyText?: string;
+  /** rows shown before 「再显示 N 个」 (the 显示 menu's 每组; Infinity = all, no 收起) */
+  first?: number;
   /** a section of its own (置顶): the header is a section label, the rows are not indented under a folder */
   section?: boolean;
   /** entry id (entries.ts) for a group that is itself a sidebar entry (置顶) */
@@ -83,7 +85,8 @@ export interface GroupProps {
  * row and running ones stay in view past the cut.
  */
 export function Group(p: GroupProps) {
-  const limit = p.shown ?? PAGE_FIRST;
+  const first = p.first ?? PAGE_FIRST;
+  const limit = p.shown ?? first;
   const { rows, hidden } = pageRows(p.items, limit, p.keep);
   const more: RowId = 'more', less: RowId = 'less';
   return (
@@ -106,10 +109,10 @@ export function Group(p: GroupProps) {
             </div>
           ))}
           {!p.items.length && p.emptyText && <div className="sb-empty-row">{p.emptyText}</div>}
-          {(hidden > 0 || limit > PAGE_FIRST) && (
+          {(hidden > 0 || limit > first) && (
             <div className="sb-more">
               {hidden > 0 && <button className="link" data-id={more} title={tr('还有 {hidden} 个对话', { hidden })} onClick={() => p.setShown(limit + PAGE_MORE)}>{tr('再显示 {hidden} 个', { hidden: Math.min(hidden, PAGE_MORE) })}</button>}
-              {limit > PAGE_FIRST && <button className="link" data-id={less} onClick={() => p.setShown(undefined)}>{tr('收起')}</button>}
+              {limit > first && <button className="link" data-id={less} onClick={() => p.setShown(undefined)}>{tr('收起')}</button>}
             </div>
           )}
         </div>
