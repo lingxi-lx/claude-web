@@ -122,7 +122,8 @@ export class MetaStore extends EventEmitter {
     const w = this.data.workspaces.find((x) => x.id === id);
     if (!w) return null;
     if (typeof patch.name === 'string' && patch.name.trim()) w.name = patch.name.trim();
-    if (patch.folders) w.folders = normFolders(w.path, patch.folders);
+    // only a list replaces them: anything else (a string from a confused client) leaves them as they are (C-S2)
+    if (Array.isArray(patch.folders)) w.folders = normFolders(w.path, patch.folders);
     await this.queueSave();
     return { ...w, folders: w.folders ?? [] };
   }

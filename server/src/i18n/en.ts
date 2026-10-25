@@ -558,6 +558,7 @@ export const EN_SERVER: Record<string, string> = {
   "找不到这个对话的记录：它还没发过消息，或者记录文件被移动 / 删除了。新开一个对话再试。": "Can't find the record of this conversation: it hasn't had any messages yet, or the record file was moved / deleted. Start a new conversation and try again.",
   "找不到这个对话的项目文件夹：{cwd}（可能被移动、改名或删除了）。在输入框左下角换一个存在的项目文件夹，新开对话；或者把文件夹放回原处。": "Can't find this conversation's project folder: {cwd} (it may have been moved, renamed or deleted). Pick a project folder that exists at the bottom left of the input box and start a new conversation, or put the folder back where it was.",
   "找不到这个文件夹：{f}": "Folder not found: {f}",
+  "文件夹列表不对": "The folder list is not valid",
   "找不到这个文件夹：{p}": "Can't find this folder: {p}",
   "找到了 {shown}，但「{shown2} --version」{VERSION_TIMEOUT_MS} 秒没有回答（第一次启动或杀毒软件扫描时常见，点「重新检测」再试）": "Found {shown}, but “{shown2} --version” gave no answer in {VERSION_TIMEOUT_MS} seconds (common on first launch or during an antivirus scan; click “Detect again” to retry)",
   "找到了 {shown}，但「{shown2} --version」失败：{last}": "Found {shown}, but “{shown2} --version” failed: {last}",

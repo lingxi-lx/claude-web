@@ -72,5 +72,9 @@ describe('MetaStore', () => {
     await m.updateWorkspace('w1', { name: '新名字', folders: [] });
     expect(m.workspaces()[0]).toMatchObject({ name: '新名字', folders: [] });
     expect(await m.updateWorkspace('nope', { name: 'x' })).toBeNull();
+    // C-S2: a folders that is not a list changes nothing (it used to wipe them)
+    await m.updateWorkspace('w1', { folders: [extra] });
+    await m.updateWorkspace('w1', { folders: 'x' as any });
+    expect(m.workspaces()[0].folders).toEqual([extra]);
   });
 });

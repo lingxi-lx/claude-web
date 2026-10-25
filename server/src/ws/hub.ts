@@ -22,6 +22,7 @@ import { UsageService } from '../usage/service.js';
 import { FilesService } from '../files/service.js';
 import { TerminalService } from '../terminal/service.js';
 import { MetaStore } from '../meta/store.js';
+import { checkExtraFolders, refusePeerUnc } from '../meta/folder-check.js';
 import { LimitsService } from '../usage/limits.js';
 import { ScheduleService } from '../schedules/service.js';
 import { installedEditors, openPath } from '../runtime/open-path.js';
@@ -545,6 +546,8 @@ export class Hub {
       case 'workspaces.list':
         return s.meta.workspaces();
       case 'workspaces.add': {
+        // a project folder is a trust root (network paths inside it are let through): never a share another machine names
+        refusePeerUnc(req.path, this.peerConns.has(ws));
         const w = await s.meta.addWorkspace(req.path);
         return s.meta.workspaces().find((x) => x.id === w.id) ?? w;
       }
@@ -558,13 +561,9 @@ export class Hub {
         await s.meta.reorderWorkspaces(req.ids);
         return null;
       case 'workspaces.update': {
-        // the folders must exist and be folders: checked here (the page cannot), one sentence naming the first that is not
-        if (Array.isArray(req.folders)) {
-          for (const f of req.folders) {
-            const ok = typeof f === 'string' && path.isAbsolute(f) && (await fs.promises.stat(f).then((st) => st.isDirectory(), () => false));
-            if (!ok) throw new Error(tr('找不到这个文件夹：{f}', { f: String(f) }));
-          }
-        }
+        // the folders must be a list of existing folders: checked here (the page cannot), one sentence naming the first
+        // that is not; a network folder only from this user's own windows, and its stat bounded (folder-check.ts)
+        await checkExtraFolders(req.folders, { fromPeer: this.peerConns.has(ws) });
         const w = await s.meta.updateWorkspace(req.id, { name: req.name, folders: req.folders });
         if (!w) throw new Error(tr('这个项目已经不在了'));
         return w;
