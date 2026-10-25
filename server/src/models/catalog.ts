@@ -281,7 +281,12 @@ export interface ModelCaps { levels: ClaudeEffort[]; default?: ClaudeEffort; rea
 const baseName = (model: string) => { const m = model.toLowerCase(); return m.slice(m.lastIndexOf('/') + 1); };
 /** OpenAI's own reasoning models: o1 / o3 / o4, gpt-5 and every later gpt (the engine's effortPlan.ts / requestBody.ts have the same rule). */
 export const OPENAI_REASONING = /^(o[134]|gpt-(?:[5-9]|[1-9]\d))/;
-const openAIReasons = (model: string) => { const b = baseName(model); return OPENAI_REASONING.test(b) || b.includes('deepseek') || b.includes('qwq') || b.includes('reasoner'); };
+/**
+ * Kimi's thinking models: k2-thinking, k2.5 and later, k3 and later (k2-instruct does not reason). 2026-10-26 user report:
+ * kimi-k3.1-pro through a NewAPI relay never got `reasoning_effort`, so its strength was only ever in the prompt.
+ */
+const KIMI_REASONING = /kimi-k(?:2[.-]?(?:[5-9]|thinking)|[3-9])/;
+const openAIReasons = (model: string) => { const b = baseName(model); return OPENAI_REASONING.test(b) || KIMI_REASONING.test(b) || b.includes('deepseek') || b.includes('qwq') || b.includes('reasoner'); };
 
 /** What the table knows about a model by name (nothing = undefined). */
 function tableCaps(model: string): { levels: ClaudeEffort[]; default?: ClaudeEffort } | undefined {
@@ -291,6 +296,7 @@ function tableCaps(model: string): { levels: ClaudeEffort[]; default?: ClaudeEff
   if (m.includes('deepseek')) return { levels: ['low', 'high', 'max'], default: 'high' };
   if (OPENAI_REASONING.test(baseName(model))) return { levels: ['low', 'medium', 'high'] };
   if (m.includes('qwq') || m.includes('reasoner')) return { levels: ['low', 'medium', 'high'] };
+  if (KIMI_REASONING.test(baseName(model))) return { levels: ['low', 'medium', 'high'] };
   if (m.includes('gemini-3')) return { levels: ['low', 'high'] };
   if (m.includes('gemini-2.5')) return { levels: CLAUDE_ORDER };
   if (m.includes('grok-3-mini')) return { levels: ['low', 'high'] };

@@ -134,6 +134,10 @@ describe('what each model can do (same rules as the engine: claude-web-engine ef
     expect(modelCaps({ type: 'openai' }, 'gpt-10')).toMatchObject({ native: true });
     expect(modelCaps({ type: 'openai' }, 'gpt-4o')).toMatchObject({ native: false, reasoning: false });
     expect(modelCaps({ type: 'openai' }, 'deepseek-v4-pro')).toMatchObject({ levels: ['low', 'high', 'max'], default: 'high', native: true });
+    // 2026-10-26: kimi-k3.1-pro through a NewAPI relay never got reasoning_effort
+    for (const m of ['kimi-k3.1-pro', 'moonshot/kimi-k2.5', 'kimi-k2-thinking', 'kimi-k2.6-turbo']) expect(modelCaps({ type: 'openai' }, m)).toMatchObject({ levels: ['low', 'medium', 'high'], native: true, reasoning: true });
+    expect(modelCaps({ type: 'openai' }, 'kimi-k2-0905-preview')).toMatchObject({ native: false, reasoning: false });
+    expect(JSON.parse(webCapsEnv({ type: 'openai' }, ['kimi-k3.1-pro']))['kimi-k3.1-pro']).toEqual({ levels: ['low', 'medium', 'high'], reasoning: true });
     expect(modelCaps({ type: 'gemini' }, 'gemini-3-pro')).toMatchObject({ levels: ['low', 'high'], native: true });
     expect(modelCaps({ type: 'gemini' }, 'gemini-2.5-flash')).toMatchObject({ levels: ['low', 'medium', 'high', 'xhigh', 'max'], native: true });
     expect(modelCaps({ type: 'grok' }, 'grok-3-mini')).toMatchObject({ levels: ['low', 'high'], native: true });
