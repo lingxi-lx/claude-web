@@ -186,9 +186,12 @@ describe('CodexDriver (mock app-server)', () => {
 
   it('a project’s extra folders become writable roots of the workspace-write sandbox (stage C2); not in a read-only one', async () => {
     const log = path.join(tmp, 'rpc-extra.log');
+    // an empty CODEX_HOME: the machine's own ~/.codex/config.toml must not leak into the expectation
+    const codexHome = path.join(tmp, 'codex-home-empty');
+    await fs.mkdir(codexHome, { recursive: true });
     const start = async (permissionMode: 'default' | 'plan') => {
       await fs.rm(log, { force: true });
-      const d = new CodexDriver('codex', { command: process.execPath, args: [path.join(here, '__mocks__', 'codex-server.mjs')], env: { CW_MOCK_RPC_LOG: log }, name: 'Mock' }, { cwd: tmp, permissionMode }, transcripts, { extraDirs: ['D:\\lib'] });
+      const d = new CodexDriver('codex', { command: process.execPath, args: [path.join(here, '__mocks__', 'codex-server.mjs')], env: { CW_MOCK_RPC_LOG: log, CODEX_HOME: codexHome }, name: 'Mock' }, { cwd: tmp, permissionMode }, transcripts, { extraDirs: ['D:\\lib'] });
       await waitFor(() => d.state === 'idle');
       await d.close();
       const lines = (await fs.readFile(log, 'utf8')).trim().split('\n').map((l) => JSON.parse(l));
@@ -196,6 +199,29 @@ describe('CodexDriver (mock app-server)', () => {
     };
     expect((await start('default')).config).toEqual({ 'sandbox_workspace_write.writable_roots': ['D:\\lib'] });
     expect((await start('plan')).config).toBeUndefined();
+  });
+
+  it('the user’s own writable_roots (CODEX_HOME/config.toml) are kept: the override is the union, deduped (C-S1); thread/resume carries it too', async () => {
+    const log = path.join(tmp, 'rpc-union.log');
+    const codexHome = path.join(tmp, 'codex-home-user');
+    await fs.mkdir(codexHome, { recursive: true });
+    const mine = process.platform === 'win32' ? 'C:\\Mine' : '/mine';
+    const lib = process.platform === 'win32' ? 'D:\\Lib' : '/lib';
+    const libAgain = process.platform === 'win32' ? 'd:\\lib\\' : '/lib/';
+    await fs.writeFile(path.join(codexHome, 'config.toml'), `model = "gpt-5"\n[sandbox_workspace_write]\nwritable_roots = [${JSON.stringify(mine)}, ${JSON.stringify(lib)}]\n`);
+    const env = { CW_MOCK_RPC_LOG: log, CODEX_HOME: codexHome };
+    const args = [path.join(here, '__mocks__', 'codex-server.mjs')];
+    const d = new CodexDriver('codex', { command: process.execPath, args, env, name: 'Mock' }, { cwd: tmp, permissionMode: 'default' }, transcripts, { extraDirs: [libAgain, 'E:\\extra'] });
+    await waitFor(() => d.state === 'idle');
+    const sid = d.sessionId;
+    await d.close();
+    const lines = () => fs.readFile(log, 'utf8').then((t) => t.trim().split('\n').map((l) => JSON.parse(l)));
+    const want = { 'sandbox_workspace_write.writable_roots': [mine, lib, 'E:\\extra'] };
+    expect((await lines()).find((l) => l.method === 'thread/start').params.config).toEqual(want);
+    const r = new CodexDriver('codex', { command: process.execPath, args, env, name: 'Mock' }, { cwd: tmp, permissionMode: 'default', sessionId: sid }, transcripts, { extraDirs: [libAgain, 'E:\\extra'] });
+    await waitFor(() => r.state === 'idle');
+    await r.close();
+    expect((await lines()).find((l) => l.method === 'thread/resume').params.config).toEqual(want);
   });
 
   it('acceptEdits auto-approves file changes but still asks for commands; bypass approves everything', async () => {

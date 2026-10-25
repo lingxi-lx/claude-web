@@ -25,4 +25,6 @@
 ## 项目的额外文件夹给其它 agent（阶段 C，2026-10-25）
 
 - Codex：本机 `codex-cli 0.163.0` 的 `codex app-server generate-ts` 里，`ThreadStartParams` / `ThreadResumeParams` 都有 `config?: { [key: string]: JsonValue }`（`-c key=value` 那套配置覆盖），`turn/start` 的 `sandboxPolicy` 里也有 `writableRoots`（我们传 `sandboxPolicy: null`，没用这条）。实现：`CodexDriver` 的 hooks 带 `extraDirs`，只有沙箱是 `workspace-write` 时 `thread/start` / `thread/resume` 带 `config: { 'sandbox_workspace_write.writable_roots': extraDirs }`；只读（计划模式）和 `danger-full-access` 不带。`drivers.test.ts` 用 mock 的 `CW_MOCK_RPC_LOG` 断言参数；没有真 Codex 的 e2e。
+- 配置覆盖是**替换**不是合并：只传 `extraDirs` 会把用户自己在 `$CODEX_HOME/config.toml`（没设就 `~/.codex/config.toml`）里写的 `[sandbox_workspace_write] writable_roots` 顶掉。所以 `codex-roots.ts` 先读用户的那份（有 `profile = "x"` 且 `[profiles.x.sandbox_workspace_write]` 写了就用它的），和项目的额外文件夹取并集（按顺序、留第一次的写法；Windows 上不分大小写、去掉末尾斜杠后算同一个），再一起发（阶段 C 修复 C-S1）。
+- 沙箱在**开线程时**就定了：对话进行中切权限模式（比如从计划模式切到默认）只改之后 `turn/start` 的 `approvalPolicy`（`sandboxPolicy: null`），不会重新带 `sandbox` / `config`，沙箱种类和可写根目录都不变（`setPermissionMode` 只记下模式）；要让额外文件夹在切过之后生效，得重开这条对话（`thread/resume` 会按当时的模式重新带上）。
 - ACP 等其它 agent：没有对应参数，只用主文件夹（编辑项目对话框里写明了）。

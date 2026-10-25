@@ -12,6 +12,7 @@ import { codexItemMessages, type CodexItemState } from './codex-items.js';
 import type { AgentTranscripts } from './transcript.js';
 import { CODEX_KEY_ENV } from '../gateway/agents.js';
 import { CodexUsageMeter } from './codex-usage.js';
+import { unionRoots, userWritableRoots } from './codex-roots.js';
 import type { AgentDriver } from './types.js';
 import { tr } from '../i18n/index.js';
 
@@ -99,9 +100,12 @@ export class CodexDriver extends EventEmitter implements AgentDriver {
    * override (`thread/start` / `thread/resume` take `config`, dotted keys; checked against `codex app-server
    * generate-ts`, codex-cli 0.163). Read-only and full-access sandboxes need nothing.
    */
-  private dirsConfig(pol: { sandbox: string }): { config?: Record<string, unknown> } {
+  private async dirsConfig(pol: { sandbox: string }): Promise<{ config?: Record<string, unknown> }> {
     const dirs = this.hooks.extraDirs ?? [];
-    return dirs.length && pol.sandbox === 'workspace-write' ? { config: { 'sandbox_workspace_write.writable_roots': dirs } } : {};
+    if (!dirs.length || pol.sandbox !== 'workspace-write') return {};
+    // the override replaces the user's own writable_roots from config.toml: send their list and ours together (C-S1)
+    const mine = await userWritableRoots({ ...process.env, ...this.launch.env });
+    return { config: { 'sandbox_workspace_write.writable_roots': unionRoots([mine, dirs]) } };
   }
 
   private async start(params: OpenSessionParams) {
@@ -134,7 +138,7 @@ export class CodexDriver extends EventEmitter implements AgentDriver {
       if (params.sessionId && head?.nativeSessionId) {
         await synced;
         let resumed: any = null;
-        try { resumed = await rpc.request('thread/resume', { threadId: head.nativeSessionId, cwd: this.cwd, model: this.model ?? null, approvalPolicy: pol.approvalPolicy, sandbox: pol.sandbox, ...this.dirsConfig(pol) }, 120_000); thread = resumed.thread; } catch { thread = null; }
+        try { resumed = await rpc.request('thread/resume', { threadId: head.nativeSessionId, cwd: this.cwd, model: this.model ?? null, approvalPolicy: pol.approvalPolicy, sandbox: pol.sandbox, ...(await this.dirsConfig(pol)) }, 120_000); thread = resumed.thread; } catch { thread = null; }
         if (!thread) this.push(this.synth.systemNote(tr('Codex 线程无法恢复，已新开线程；上面的历史仅供查看。'), 'warning'));
         // reopened without a model: the one the thread runs on (the chip and the ledger had none — model "")
         else if (!this.model) {
@@ -143,7 +147,7 @@ export class CodexDriver extends EventEmitter implements AgentDriver {
         }
       }
       if (!thread) {
-        const r = await rpc.request('thread/start', { cwd: this.cwd, model: this.model ?? null, approvalPolicy: pol.approvalPolicy, sandbox: pol.sandbox, sessionStartSource: null, ...this.dirsConfig(pol) }, 120_000);
+        const r = await rpc.request('thread/start', { cwd: this.cwd, model: this.model ?? null, approvalPolicy: pol.approvalPolicy, sandbox: pol.sandbox, sessionStartSource: null, ...(await this.dirsConfig(pol)) }, 120_000);
         thread = r.thread;
         if (!this.model && r.model) { this.model = r.model; this.synth.setModel(r.model); this.info.model = r.model; }
         await this.transcripts.patchHead(this.sessionId, { nativeSessionId: thread.id, model: this.model });
