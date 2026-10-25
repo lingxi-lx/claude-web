@@ -1082,6 +1082,7 @@ export class GatewayService extends EventEmitter {
     let retryBody: Buffer | null = null; // the same request without prompt_cache_key, for an upstream that rejects it
     let noThinkingBody: Buffer | null = null; // the same request with thinking off, for a model that refuses a forced tool call
     let noEffortBody: Buffer | null = null; // the same request without the strength parameter, for a model that refuses it
+    let bareBody: Buffer | null = null; // without the strength parameter and without prompt_cache_key
     let errText: string | undefined; // an error body already read
     try {
       if (pass) {
@@ -1120,6 +1121,8 @@ export class GatewayService extends EventEmitter {
         if (ir.effort) {
           const plain = buildOutbound(outbound, { ...ir, effort: undefined }, opts).body;
           if (JSON.stringify(plain) !== JSON.stringify(out.body)) noEffortBody = Buffer.from(JSON.stringify(plain));
+          // a strict upstream naming both extra fields in one 400: the single retry drops both
+          if (noEffortBody && retryBody) bareBody = Buffer.from(JSON.stringify(buildOutbound(outbound, { ...ir, effort: undefined }, { ...opts, promptCacheKey: false }).body));
         }
         // a forced tool call (自动判断's safety check): a thinking model that refuses it gets it with thinking off
         if (outbound === 'openai' && forcesTool(out.body) && out.body.thinking?.type !== 'disabled') {
@@ -1161,9 +1164,12 @@ export class GatewayService extends EventEmitter {
         if (noThinkingBody && refusesForcedTool(text)) {
           up = await sendUpstream(url, { method: 'POST', headers, body: noThinkingBody, signal: ctx.signal, headerTimeoutMs: waitMs, agentFor });
         } else if (noEffortBody && mentionsEffort(text)) {
-          // remembered for this member and model until the server restarts; the client never sees the failure
+          // remembered for this member and model until the server restarts; the client never sees the failure. The
+          // one retry also leaves out prompt_cache_key (a strict upstream may name only the first field it disliked);
+          // the profile drops the key for good only when the error named it.
           this.effortRefused.add(`${p.id} ${model}`);
-          up = await sendUpstream(url, { method: 'POST', headers, body: noEffortBody, signal: ctx.signal, headerTimeoutMs: waitMs, agentFor });
+          if (bareBody && mentionsCacheKey(text)) void this.deps.meta.upsertProvider({ id: p.id, noPromptCacheKey: true }, { mustExist: true }).catch(() => { /* next request tries again */ });
+          up = await sendUpstream(url, { method: 'POST', headers, body: bareBody ?? noEffortBody, signal: ctx.signal, headerTimeoutMs: waitMs, agentFor });
         } else if (retryBody) {
           if (mentionsCacheKey(text)) void this.deps.meta.upsertProvider({ id: p.id, noPromptCacheKey: true }, { mustExist: true }).catch(() => { /* next request tries again */ });
           up = await sendUpstream(url, { method: 'POST', headers, body: retryBody, signal: ctx.signal, headerTimeoutMs: waitMs, agentFor });

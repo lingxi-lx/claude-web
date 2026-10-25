@@ -250,18 +250,23 @@ describe('translation through the service', () => {
   });
   it('2026-10-26: the thinking strength carries over (a Claude thinking budget → reasoning_effort); a member that refuses it gets the request again without, and is remembered', async () => {
     const ok = JSON.stringify({ id: 'c1', object: 'chat.completion', model: 'gpt-4.1', choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }], usage: { prompt_tokens: 4, completion_tokens: 1 } });
-    let refuse = true;
+    // a strict upstream: one 400 naming every extra field it got (the single retry has to drop both)
     O.handler.fn = (_q, res, body) => {
-      if (refuse && /reasoning_effort/.test(body)) { refuse = false; return res.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: { message: 'Unrecognized request argument supplied: reasoning_effort' } })); }
+      const j = JSON.parse(body);
+      const extra = ['reasoning_effort', 'prompt_cache_key'].filter((k) => k in j);
+      if (extra.length) return res.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: { message: `Unrecognized request arguments supplied: ${extra.join(', ')}` } }));
       res.writeHead(200, { 'content-type': 'application/json' }).end(ok);
     };
     const thinking = { ...msg, max_tokens: 20000, thinking: { type: 'enabled', budget_tokens: 16384 } };
-    const r = await call('/mixed/v1/messages', thinking);
+    const sess = { 'x-claude-code-session-id': 'sess-effort' };
+    const r = await call('/mixed/v1/messages', thinking, sess);
     expect(r.status).toBe(200);
-    expect(O.hits.map((h) => JSON.parse(h.body).reasoning_effort)).toEqual(['high', undefined]);
+    expect(O.hits.map((h) => { const j = JSON.parse(h.body); return `${j.reasoning_effort ?? '-'}/${j.prompt_cache_key ?? '-'}`; })).toEqual(['high/sess-effort', '-/-']);
+    expect(meta.provider('o')!.noPromptCacheKey).toBe(true);
     O.hits.length = 0;
-    await call('/mixed/v1/messages', thinking);
+    expect((await call('/mixed/v1/messages', thinking, sess)).status).toBe(200);
     expect(O.hits.map((h) => JSON.parse(h.body).reasoning_effort)).toEqual([undefined]);
+    delete meta.provider('o')!.noPromptCacheKey;
   });
   it('unsupported direction → 400 naming it', async () => {
     // OpenAI Responses in, a Gemini member: no such direction

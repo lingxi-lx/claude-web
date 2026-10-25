@@ -38,7 +38,7 @@ import * as R from './openai-responses.js';
 import { DEFAULT_BASE, joinUrl, upstreamErrorMessage } from './convert.js';
 import { SseParser } from './sse.js';
 import type { IrEvent, IrUsage } from './ir.js';
-import { CACHE_KEY_MAX, SseLines, addMissing, affinityHeaders, dropEmptyReasoning, fixChatUsage, forcesTool, insertTopLevelField, isParamRejection, mentionsCacheKey, refusesForcedTool, thinkingOff } from './cache.js';
+import { CACHE_KEY_MAX, SseLines, addMissing, affinityHeaders, dropEmptyReasoning, fixChatUsage, forcesTool, insertTopLevelField, isParamRejection, mentionsCacheKey, mentionsEffort, refusesForcedTool, thinkingOff } from './cache.js';
 import { UpstreamError, decoded, errorHeaders, passthroughHeaders, readText, responseHeaders, sendUpstream, waitDrain, withTimeout, type UpstreamResponse } from './upstream.js';
 import { tr } from '../i18n/index.js';
 
@@ -108,6 +108,8 @@ export class CacheShim {
   private secret = crypto.randomBytes(32);
   /** Profiles whose model refused a forced tool call while thinking: those requests now go with thinking off. */
   private forcedToolsNoThinking = new Set<string>();
+  /** profile id + model whose chat upstream refused reasoning_effort (in-process, like the gateway's) */
+  private effortRefused = new Set<string>();
   constructor(private deps: ShimDeps) {}
 
   /** The credential a session of this profile gets in OPENAI_API_KEY / GROK_API_KEY. */
@@ -185,7 +187,7 @@ export class CacheShim {
    * refuses with 400 / 422 is sent once more undecorated; the profile stops getting a field only when the
    * error named it — a retry that happens to work proves nothing (the 400 may have been about anything).
    */
-  private async send(ctx: Ctx, url: string, body: Buffer, bare: Buffer | null, stream: boolean): Promise<UpstreamResponse | null> {
+  private async send(ctx: Ctx, url: string, body: Buffer, bare: Buffer | null, stream: boolean, effortKey?: string): Promise<UpstreamResponse | null> {
     try {
       let up = await sendUpstream(url, { method: 'POST', headers: ctx.headers, body, signal: ctx.signal, headerTimeoutMs: TIMEOUT_MS });
       if (bare && isParamRejection(up.status)) {
@@ -194,6 +196,7 @@ export class CacheShim {
         const learned: Partial<Provider> = {};
         if (mentionsCacheKey(text)) learned.noPromptCacheKey = true;
         if (mentionsRetention(text)) learned.noCacheRetention = true;
+        if (effortKey && mentionsEffort(text)) this.effortRefused.add(effortKey);
         if (Object.keys(learned).length) await this.remember(ctx.p, learned);
         up = await sendUpstream(url, { method: 'POST', headers: ctx.headers, body: bare, signal: ctx.signal, headerTimeoutMs: TIMEOUT_MS });
       }
@@ -465,11 +468,12 @@ export class CacheShim {
     const key = typeof json.prompt_cache_key === 'string' && json.prompt_cache_key ? json.prompt_cache_key : ctx.cacheKey;
     // the effort Codex asked for, in chat's field, for every model that takes it natively (the undecorated retry drops it)
     const caps = modelCaps(ctx.p, model);
-    const effort = ir.effort && caps.native ? nearestLevel(ir.effort, caps.levels) : undefined;
+    const effortKey = `${ctx.p.id} ${model}`;
+    const effort = ir.effort && caps.native && !this.effortRefused.has(effortKey) ? nearestLevel(ir.effort, caps.levels) : undefined;
     ctx.keyed = !!key && !ctx.p.noPromptCacheKey;
     const build = (decorate: boolean) =>
       Buffer.from(JSON.stringify(C.renderRequest({ ...ir, model, stream, cacheKey: key, effort: decorate ? effort : undefined }, { promptCacheKey: decorate && ctx.keyed })));
-    const up = await this.send(ctx, joinUrl(ctx.base, '/v1/chat/completions') + ctx.search, build(true), ctx.keyed || effort ? build(false) : null, stream);
+    const up = await this.send(ctx, joinUrl(ctx.base, '/v1/chat/completions') + ctx.search, build(true), ctx.keyed || effort ? build(false) : null, stream, effort ? effortKey : undefined);
     if (!up) return;
     if (up.status < 200 || up.status >= 300) {
       if (original) {
