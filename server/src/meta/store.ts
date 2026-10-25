@@ -7,9 +7,10 @@ import type { MaintenanceRun, MaintenanceTask, UpstreamAccount, UpstreamGroup } 
 import type { DeviceRecord } from '../remote/service.js';
 import type { PeerRecord } from '../federation/types.js';
 import { randomBytes } from 'node:crypto';
+import { normFolders } from './workspace-folders.js';
 export type { Schedule } from '../protocol.js';
 
-export interface Workspace { id: string; path: string; name: string; addedAt: number; order: number }
+export interface Workspace { id: string; path: string; name: string; addedAt: number; order: number; /** extra folders (stage C2), never the main path; absent in old files */ folders?: string[] }
 export interface SessionMeta { /** replies pinned under them (protocol.ts) */ pinnedMsgs?: { id: string; text: string }[]; /** a rename made while the conversation's process ran: shown over the transcript's title, written into it again when the process ends */ pendingTitle?: string; /** 只聊天: a resume stays without tools (protocol.ts has the same field) */ chatOnly?: boolean; /** 保持电脑唤醒 while this conversation is busy (phase 6) */ keepAwake?: boolean; pinned?: boolean; archived?: boolean; workspaceId?: string; tags?: string[]; providerId?: string; /** sidebar grouping directory when it differs from the cwd (orchestration worktrees) */ groupCwd?: string; /** prompt-cache route key when it is not the session's own id (forks keep their root's) */ cacheKey?: string; /** the model its subagents run on, picked for this provider ('' = the main model) */ subagent?: { providerId: string; model: string }; /** the permission mode it last ran with: a resume without a pick comes back in it (the SDK never says it) */ permissionMode?: PermissionMode; /** 思考用的语言 of this conversation (protocol.ts has the same field) */ thinkingLanguage?: string; /** a `continueInClaude` source's conversation: the Claude conversation it goes on in (protocol.ts) */ continuedAs?: string; /** that Claude conversation: what it goes on from, how many of its messages are in it (protocol.ts) */ continuedFrom?: string; replayed?: number }
 
 interface Data {
@@ -95,7 +96,7 @@ export class MetaStore extends EventEmitter {
   }
 
   workspaces() {
-    return [...this.data.workspaces].sort((a, b) => a.order - b.order);
+    return [...this.data.workspaces].sort((a, b) => a.order - b.order).map((w) => ({ ...w, folders: normFolders(w.path, w.folders, { resolve: (p) => p }) }));
   }
   async addWorkspace(p: string) {
     const norm = path.resolve(p);
@@ -115,6 +116,15 @@ export class MetaStore extends EventEmitter {
   async renameWorkspace(id: string, name: string) {
     const w = this.data.workspaces.find((x) => x.id === id);
     if (w) { w.name = name; await this.queueSave(); }
+  }
+  /** 编辑项目 (stage C2): the name and the extra folders (normalised: never the main folder, no duplicates) */
+  async updateWorkspace(id: string, patch: { name?: string; folders?: string[] }) {
+    const w = this.data.workspaces.find((x) => x.id === id);
+    if (!w) return null;
+    if (typeof patch.name === 'string' && patch.name.trim()) w.name = patch.name.trim();
+    if (patch.folders) w.folders = normFolders(w.path, patch.folders);
+    await this.queueSave();
+    return { ...w, folders: w.folders ?? [] };
   }
   async reorderWorkspaces(ids: string[]) {
     ids.forEach((id, i) => { const w = this.data.workspaces.find((x) => x.id === id); if (w) w.order = i; });

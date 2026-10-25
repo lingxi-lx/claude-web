@@ -544,8 +544,10 @@ export class Hub {
 
       case 'workspaces.list':
         return s.meta.workspaces();
-      case 'workspaces.add':
-        return s.meta.addWorkspace(req.path);
+      case 'workspaces.add': {
+        const w = await s.meta.addWorkspace(req.path);
+        return s.meta.workspaces().find((x) => x.id === w.id) ?? w;
+      }
       case 'workspaces.remove':
         await s.meta.removeWorkspace(req.id);
         return null;
@@ -555,6 +557,18 @@ export class Hub {
       case 'workspaces.reorder':
         await s.meta.reorderWorkspaces(req.ids);
         return null;
+      case 'workspaces.update': {
+        // the folders must exist and be folders: checked here (the page cannot), one sentence naming the first that is not
+        if (Array.isArray(req.folders)) {
+          for (const f of req.folders) {
+            const ok = typeof f === 'string' && path.isAbsolute(f) && (await fs.promises.stat(f).then((st) => st.isDirectory(), () => false));
+            if (!ok) throw new Error(tr('找不到这个文件夹：{f}', { f: String(f) }));
+          }
+        }
+        const w = await s.meta.updateWorkspace(req.id, { name: req.name, folders: req.folders });
+        if (!w) throw new Error(tr('这个项目已经不在了'));
+        return w;
+      }
       case 'sessions.meta':
         return s.meta.allSessionMeta();
       case 'session.setMeta':

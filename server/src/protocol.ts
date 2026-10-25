@@ -372,7 +372,7 @@ export interface AttachmentRef { kind: 'image' | 'text' | 'file' | 'folder'; nam
 
 export interface MessageFeedback { rating: 'up' | 'down' | null; note?: string; at: number }
 
-export interface Workspace { id: string; path: string; name: string; addedAt: number; order: number }
+export interface Workspace { id: string; path: string; name: string; addedAt: number; order: number; /** extra folders (stage C2): never the main path; [] for old data */ folders: string[] }
 export interface SessionMeta {
   /** replies pinned with 📌 under them (the info column's 钉住 card): their item id and first words */
   pinnedMsgs?: { id: string; text: string }[];
@@ -542,6 +542,8 @@ export type ClientRequest =
   | { kind: 'workspaces.remove'; id: string }
   | { kind: 'workspaces.rename'; id: string; name: string }
   | { kind: 'workspaces.reorder'; ids: string[] }
+  /** 编辑项目 (stage C2): the name and / or the extra folders (absolute, existing folders) → the updated Workspace */
+  | { kind: 'workspaces.update'; id: string; name?: string; folders?: string[] }
   | { kind: 'sessions.meta' }
   | { kind: 'session.setMeta'; sessionId: string; patch: SessionMeta }
   | { kind: 'schedules.list' }

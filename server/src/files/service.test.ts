@@ -129,6 +129,12 @@ describe('network paths', () => {
       ])).toEqual(['C:\\a', '\\\\nas\\proj', '\\\\nas\\more', 'D:\\x']);
     });
 
+    it('an extra project folder on a share is trusted like the main one', () => {
+      const roots = workspaceRoots([{ path: 'C:\\proj', folders: ['\\\\nas\\more'] }]);
+      expect(uncAllowed('\\\\nas\\more\\a.txt', roots, true)).toBe(true);
+      expect(uncAllowed('\\\\nas\\other\\a.txt', roots, true)).toBe(false);
+    });
+
     it('the service opens a file under a trusted share (fs is reached) and still refuses everything else', async () => {
       const touched = fsTouched();
       let roots = ['\\\\nas\\proj'];

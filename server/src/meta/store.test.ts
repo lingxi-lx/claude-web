@@ -57,4 +57,20 @@ describe('MetaStore', () => {
     expect(b.workspaces()).toHaveLength(1);
     expect((await fs.readdir(path.dirname(file))).filter((f) => f.endsWith('.tmp'))).toEqual([]);
   });
+
+  it('workspaces: old data has no folders → [] on read; updateWorkspace adds and removes them', async () => {
+    const file = await tmpFile();
+    const main = path.join(path.dirname(file), 'proj');
+    const extra = path.join(path.dirname(file), 'lib');
+    await fs.writeFile(file, JSON.stringify({ version: 1, workspaces: [{ id: 'w1', path: main, name: 'proj', addedAt: 1, order: 0 }], sessions: {}, schedules: [], scheduleRuns: [], settings: {}, providers: [], feedback: {}, drafts: {}, devices: [], remoteHosts: [], imGateways: [], imBindings: [], goals: [] }), 'utf8');
+    const m = new MetaStore(file);
+    await m.load();
+    expect(m.workspaces()[0].folders).toEqual([]);
+    const w = await m.updateWorkspace('w1', { folders: [extra, main, extra] });
+    expect(w?.folders).toEqual([extra]);
+    expect(JSON.parse(await fs.readFile(file, 'utf8')).workspaces[0].folders).toEqual([extra]);
+    await m.updateWorkspace('w1', { name: '新名字', folders: [] });
+    expect(m.workspaces()[0]).toMatchObject({ name: '新名字', folders: [] });
+    expect(await m.updateWorkspace('nope', { name: 'x' })).toBeNull();
+  });
 });
