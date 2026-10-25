@@ -12,8 +12,8 @@ export function href(base: string, locale: Locale, page: Page, hash = ''): strin
 /**
  * Where a visit to the English home page goes when the browser reads Chinese; null = stay. Only visits that arrive
  * from outside the site are redirected: internal navigation (a same-origin referrer) never is, so a visitor who chose
- * English stays there, and a link that chose a language carries ?lang= and is never redirected either. The #anchor
- * is kept. Base.astro writes this function's text into the page, so it must not use anything from outside its own
+ * English stays there, and a link that chose a language carries ?lang= and is never redirected either. The query
+ * (?theme=…) and the #anchor are kept. Base.astro writes this function's text into the page, so it must not use anything from outside its own
  * body (no imports, no helpers).
  */
 export function langRedirect(
@@ -26,5 +26,5 @@ export function langRedirect(
   if (loc.pathname !== root && loc.pathname + '/' !== root) return null;
   if (/(^|[?&])lang=/.test(loc.search)) return null;
   if (referrer === loc.origin || referrer.indexOf(loc.origin + '/') === 0) return null;
-  return /^zh(?![a-z])/i.test(navLang.trim()) ? root + 'zh/' + loc.hash : null;
+  return /^zh(?![a-z])/i.test(navLang.trim()) ? root + 'zh/' + loc.search + loc.hash : null;
 }

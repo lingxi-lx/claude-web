@@ -1,6 +1,7 @@
 import { defineConfig } from 'astro/config';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { engineAlias, engineI18n } from './engine.config.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -12,6 +13,7 @@ export default defineConfig({
   output: 'static',
   build: { format: 'directory' },
   vite: {
-    resolve: { alias: { '@i18n': path.resolve(here, '../server/src/i18n/core.ts') } },
+    resolve: { alias: engineAlias(here) },
+    plugins: [engineI18n(here)],
   },
 });

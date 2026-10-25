@@ -40,6 +40,15 @@ const TEXT = {
     schedules: [['Daily summary', 'Summarize today’s git commits, grouped by feature / fix / chore.']],
     goal: 'Move the whole test suite to Vitest, keeping every test green',
     sys: 'Claude Web',
+    recIntro: 'Take a look at the cart module first',
+    recIntroSay: 'The cart module is `src/cart.ts`: `subtotal`, `applyCoupon` and `total`, with one test in `tests/cart.test.ts`.',
+    rec: 'Round the coupon discount to whole cents, then run the tests',
+    recSay: ['Let me read how the discount is applied.', 'The discount is a float. I’ll round it to whole cents.', 'Now the tests.'],
+    recTestDesc: 'Run the tests',
+    recDone: 'All tests pass.',
+    themeAsk: 'A metro station late at night, green signal lights blinking',
+    themeSay: ['A late-night metro: a dark platform and green signal lights. I’ll draft it and look at the trial run.', 'The trial run looks right. Saving it.', 'Switching to it now.'],
+    themeDone: 'Done: the Metro theme is on.',
   },
   zh: {
     ask: '结算页的总价在用了优惠券之后会差一分钱，帮我找一下原因并修好。',
@@ -68,6 +77,15 @@ const TEXT = {
     schedules: [['每日总结', '总结今天这个仓库的 git 提交，按功能 / 修复 / 杂项分组。']],
     goal: '把整个测试套件迁到 Vitest，每个测试都要保持通过',
     sys: 'Claude Web',
+    recIntro: '先看一下购物车模块',
+    recIntroSay: '购物车模块在 `src/cart.ts`：`subtotal`、`applyCoupon` 和 `total`，测试在 `tests/cart.test.ts`，目前只有一个。',
+    rec: '把优惠券的折扣取整到分，然后跑一下测试',
+    recSay: ['我先看一下折扣是怎么减的。', '折扣是浮点数，我把它取整到分。', '跑一下测试。'],
+    recTestDesc: '跑测试',
+    recDone: '测试全部通过。',
+    themeAsk: '深夜的地铁站，绿色的指示灯在闪',
+    themeSay: ['深夜的地铁站：暗下来的站台、绿色的信号灯。我先起个草稿，看看试跑。', '试跑看着没问题，存下来。', '现在换上。'],
+    themeDone: '好了，换上了「地铁站」。',
   },
 };
 
@@ -156,7 +174,7 @@ function workRoot(home) {
   return path.join(home, 'work');
 }
 
-function seedDemo(home, lang) {
+function seedDemo(home, lang, opts = {}) {
   const T = TEXT[lang];
   // a short, neutral place: the paths show in the pictures (permission cards, the Files panel)
   const work = workRoot(home);
@@ -164,8 +182,10 @@ function seedDemo(home, lang) {
   const notes = path.join(work, 'notes-app');
   const blog = path.join(work, 'blog-site');
   const git = mkRepo(shop, { 'package.json': '{ "name": "acme-shop", "scripts": { "test": "vitest run" } }\n', 'src/cart.ts': CART_OLD, 'tests/cart.test.ts': TEST_OLD, 'README.md': '# Acme shop\n' }, 'Add cart totals');
-  fs.writeFileSync(path.join(shop, 'src/cart.ts'), CART_NEW); // what the conversation below did: real uncommitted changes
-  fs.writeFileSync(path.join(shop, 'tests/cart.test.ts'), TEST_NEW);
+  if (!opts.clean) { // what the conversation below did: real uncommitted changes (a recording starts clean: its Edit needs the old text)
+    fs.writeFileSync(path.join(shop, 'src/cart.ts'), CART_NEW);
+    fs.writeFileSync(path.join(shop, 'tests/cart.test.ts'), TEST_NEW);
+  }
   mkRepo(notes, { 'README.md': '# notes-app\n', 'src/App.tsx': 'export const App = () => null;\n' }, 'Initial commit');
   mkRepo(blog, { 'README.md': '# blog-site\n', 'posts/hello.md': '# Hello\n' }, 'Initial commit');
   void git;
@@ -205,8 +225,67 @@ function seedDemo(home, lang) {
 }
 
 // ---- the fake Anthropic upstream -------------------------------------------------------------------------------
-function startUpstream(lang) {
+// The recordings' scripts (scripts/record-themes.cjs): the same turn, paced the same way, every time. A step is one
+// model response; which step comes next = how many tool results follow the user's words. Text and tool arguments
+// stream in chunks so the app shows each step running (with the theme's process animation) for a moment.
+const sse = (type, o) => `event: ${type}\ndata: ${JSON.stringify({ type, ...o })}\n\n`;
+const pieces = (s, n) => { const cps = Array.from(s); const k = Math.max(1, Math.ceil(cps.length / n)); const out = []; for (let i = 0; i < cps.length; i += k) out.push(cps.slice(i, i + k).join('')); return out; };
+const streamText = (i, text, n, gap) => [[0, sse('content_block_start', { index: i, content_block: { type: 'text', text: '' } })], ...pieces(text, n).map((c) => [gap, sse('content_block_delta', { index: i, delta: { type: 'text_delta', text: c } })]), [0, sse('content_block_stop', { index: i })]];
+const streamTool = (i, id, name, input, n, gap) => [[0, sse('content_block_start', { index: i, content_block: { type: 'tool_use', id, name, input: {} } })], ...pieces(JSON.stringify(input), n).map((c) => [gap, sse('content_block_delta', { index: i, delta: { type: 'input_json_delta', partial_json: c } })]), [0, sse('content_block_stop', { index: i })]];
+const finish = (reason) => [[0, sse('message_delta', { delta: { stop_reason: reason, stop_sequence: null }, usage: { output_tokens: 40 } })], [0, sse('message_stop', {})]];
+
+function metroFixture() {
+  const d = path.join(__dirname, 'fixtures', 'theme-metro');
+  const read = (f) => fs.readFileSync(path.join(d, f), 'utf8');
+  return { json: JSON.parse(read('theme.json')), backdrop: read('backdrop.js'), css: read('theme.css') };
+}
+
+/** [script, its name] for this request, or null: only main-loop requests (they carry tools) follow a script */
+function scriptFor(T, ask, tools, shop) {
+  if (!tools.length) return null;
+  if (ask.includes(T.recIntro)) return [() => [...streamText(0, T.recIntroSay, 8, 40), ...finish('end_turn')]];
+  if (ask.includes(T.rec) && tools.includes('Read')) {
+    const cart = path.join(shop, 'src', 'cart.ts');
+    return [
+      // paced so that, from Enter at 5.8 s, the npm test card shows at 9–10 s (the CLI's own round trips take ~2 s)
+      () => [...streamText(0, T.recSay[0], 6, 40), ...streamTool(1, 'toolu_rec_read', 'Read', { file_path: cart }, 6, 40), ...finish('tool_use')],
+      () => [[100, ''], ...streamText(0, T.recSay[1], 6, 40), ...streamTool(1, 'toolu_rec_edit', 'Edit', { file_path: cart, old_string: '  return total - total * (percent / 100);', new_string: '  const discount = Math.round(total * percent) / 100;\n  return Math.round((total - discount) * 100) / 100;' }, 8, 40), ...finish('tool_use')],
+      () => [[100, ''], ...streamText(0, T.recSay[2], 4, 40), ...streamTool(1, 'toolu_rec_test', 'Bash', { command: 'npm test', description: T.recTestDesc }, 4, 40), ...finish('tool_use')],
+      () => [...streamText(0, T.recDone, 6, 40), ...finish('end_turn')],
+    ];
+  }
+  if (ask.includes(T.themeAsk)) {
+    // ccb hides MCP tools behind ExecuteExtraTool { tool_name, params }; the official client lists them by name
+    const call = (i, id, name, input, n, gap) => (tools.includes(name) || !tools.includes('ExecuteExtraTool')
+      ? streamTool(i, id, name, input, n, gap)
+      : streamTool(i, id, 'ExecuteExtraTool', { tool_name: name, params: input }, n, gap));
+    return [
+      // short: the draft's try-out (~4 s) and the runtime's own round trips take most of the 8 s to the apply card
+      () => [...streamText(0, T.themeSay[0], 4, 30), ...call(1, 'toolu_th_draft', 'mcp__web__theme_draft', metroFixture(), 6, 30), ...finish('tool_use')],
+      () => [...streamText(0, T.themeSay[1], 4, 30), ...call(1, 'toolu_th_save', 'mcp__web__theme_save', { id: 'metro' }, 2, 30), ...finish('tool_use')],
+      () => [...streamText(0, T.themeSay[2], 4, 30), ...call(1, 'toolu_th_apply', 'mcp__web__theme_apply', { id: 'metro' }, 2, 30), ...finish('tool_use')],
+      () => [...streamText(0, T.themeDone, 6, 40), ...finish('end_turn')],
+    ];
+  }
+  return null;
+}
+
+function startUpstream(lang, opts = {}) {
   const T = TEXT[lang];
+  const pace = opts.pace ?? 1;
+  const isResult = (m) => m?.role === 'user' && Array.isArray(m.content) && m.content.some((b) => b?.type === 'tool_result');
+  /** the user's last words (system reminders, which start with "<", are not words) and where they are */
+  const lastAsk = (msgs) => {
+    for (let k = msgs.length - 1; k >= 0; k--) {
+      const m = msgs[k];
+      if (m?.role !== 'user') continue;
+      if (typeof m.content === 'string') return { text: m.content, at: k };
+      const words = (Array.isArray(m.content) ? m.content : []).filter((b) => b?.type === 'text' && !String(b.text).startsWith('<'));
+      if (words.length) return { text: words.map((b) => b.text).join('\n'), at: k };
+    }
+    return { text: '', at: -1 };
+  };
+  const paced = async (s, parts) => { for (const [ms, chunk] of parts) { if (ms && pace) await new Promise((r) => setTimeout(r, ms * pace)); if (chunk) s.write(chunk); } s.end(); };
   const textOf = (c) => (typeof c === 'string' ? c : Array.isArray(c) ? c.map((p) => (typeof p === 'string' ? p : p?.text ?? (typeof p?.content === 'string' ? p.content : textOf(p?.content)))).join('\n') : '');
   let n = 0;
   const json = (s, status, o) => s.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(o));
@@ -228,6 +307,15 @@ function startUpstream(lang) {
       const last = msgs.at(-1);
       const hasResult = last?.role === 'user' && Array.isArray(last.content) && last.content.some((b) => b?.type === 'tool_result');
       const first = textOf(msgs.find((m) => m.role === 'user')?.content);
+      const ask = lastAsk(msgs);
+      const script = scriptFor(T, ask.text, Array.isArray(j.tools) ? j.tools.map((t) => t?.name) : [], opts.shop ?? '');
+      if (script) {
+        const step = msgs.slice(ask.at + 1).filter(isResult).length;
+        // which step each request got, when (debugging a recording's timing: CW_DEMO_UPSTREAM_LOG=1)
+        if (process.env.CW_DEMO_UPSTREAM_LOG) console.error(`[upstream] ${new Date().toISOString().slice(11, 23)} step ${step} ask=${JSON.stringify(ask.text.slice(0, 40))}`);
+        void paced(s, [[0, head(j)], ...script[Math.min(step, script.length - 1)]()]);
+        return;
+      }
       if (hasResult) {
         s.end(head(j) + textBlock(0, lang === 'zh' ? '好了。' : 'Done.') + ev('content_block_stop', { index: 0 }) + ev('message_delta', { delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: 3 } }) + ev('message_stop', {}));
       } else if (first.includes(T.gitignore)) {
@@ -246,12 +334,25 @@ function startUpstream(lang) {
 // ---- the server and a client for it ----------------------------------------------------------------------------
 async function startServer(home, opts) {
   const token = require('node:crypto').randomBytes(12).toString('hex');
-  const env = { ...process.env, HOME: home, USERPROFILE: home, PORT: '0', CLAUDE_WEB_TOKEN: token, CLAUDE_WEB_DIR: path.join(home, '.claude-web'), CW_NO_MODEL_REFRESH: '1', CW_NO_PUBLIC_BROKERS: '1', CLAUDE_WEB_SYSTEM_LANG: opts.lang === 'zh' ? 'zh-CN' : 'en-US', CW_DEMO_SHOP: opts.shop ?? '' };
-  for (const k of Object.keys(env)) if (/^(ANTHROPIC_|CLAUDE_CODE_|OPENAI_|CLAUDE_WEB_DIST$)/.test(k) || /^(no_proxy|https?_proxy|all_proxy)$/i.test(k)) delete env[k];
+  // Nothing of this machine's own setup may reach the pictures: every Claude / Claude Web / provider variable of the
+  // shell that started us goes (a dev shell carries the desktop app's CLAUDE_WEB_SIDECARS, CLAUDE_WEB_STANDALONE,
+  // CLAUDE_CODE_PLUGIN_DIRS, CLAUDECODE…), and the per-user folders Windows apps read besides HOME (%APPDATA%: the
+  // official app's skills, other tools' configs and conversations; %LOCALAPPDATA%: Codex / OpenCode) are in the
+  // throwaway HOME too.
+  const env = { ...process.env };
+  for (const k of Object.keys(env)) if (/^(ANTHROPIC_|CLAUDE|OPENAI_|GEMINI_|CODEX_|XDG_)/.test(k) || /^(no_proxy|https?_proxy|all_proxy)$/i.test(k)) delete env[k];
+  Object.assign(env, { HOME: home, USERPROFILE: home, PORT: '0', CLAUDE_WEB_TOKEN: token, CLAUDE_WEB_DIR: path.join(home, '.claude-web'), CW_NO_MODEL_REFRESH: '1', CW_NO_PUBLIC_BROKERS: '1', CLAUDE_WEB_SYSTEM_LANG: opts.lang === 'zh' ? 'zh-CN' : 'en-US', CW_DEMO_SHOP: opts.shop ?? '' });
+  if (process.platform === 'win32') {
+    env.APPDATA = path.join(home, 'AppData', 'Roaming');
+    env.LOCALAPPDATA = path.join(home, 'AppData', 'Local');
+    for (const d of [env.APPDATA, env.LOCALAPPDATA]) fs.mkdirSync(d, { recursive: true });
+  }
+  // a web build somewhere else than web/dist (the recorder builds its own: a running dev app serves web/dist)
+  if (opts.dist) env.CLAUDE_WEB_DIST = opts.dist;
   fs.mkdirSync(env.CLAUDE_WEB_DIR, { recursive: true });
   const metaFile = path.join(env.CLAUDE_WEB_DIR, 'meta.json');
   if (!fs.existsSync(metaFile)) fs.writeFileSync(metaFile, JSON.stringify({ version: 1, settings: { 'ui.language': opts.lang, 'ui.theme': opts.theme ?? 'dark', 'ui.sidebarFolded': false, ...(opts.settings ?? {}) } }));
-  const server = spawn(process.execPath, [path.join(ROOT, 'server', 'dist', 'index.js')], { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  const server = spawn(process.execPath, opts.fromSource ? ['--import', 'tsx', path.join(ROOT, 'server', 'src', 'index.ts')] : [path.join(ROOT, 'server', 'dist', 'index.js')], { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   let log = '';
   server.stderr.on('data', (d) => { log += d; });
   const port = await new Promise((res, rej) => {

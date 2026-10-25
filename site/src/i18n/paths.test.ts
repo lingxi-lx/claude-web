@@ -54,6 +54,10 @@ describe('langRedirect', () => {
     expect(langRedirect(loc('/', '', '#install'), 'zh-CN', '', '/')).toBe('/zh/#install');
     expect(langRedirect(loc('/claude-web/', '', '#features'), 'zh-CN', '', BASE)).toBe('/claude-web/zh/#features');
   });
+  it('keeps the query too (a shared ?theme= link)', () => {
+    expect(langRedirect(loc('/', '?theme=koi', '#themes'), 'zh-CN', '', '/')).toBe('/zh/?theme=koi#themes');
+    expect(langRedirect(loc('/claude-web/', '?theme=koi'), 'zh-CN', '', BASE)).toBe('/claude-web/zh/?theme=koi');
+  });
   it('reads a language tag the way the app does (localeOf)', () => {
     for (const tag of ['zh', 'zh-CN', 'ZH-tw', 'zhx', 'en', 'fr-FR', 'zh_CN']) {
       expect(langRedirect(loc(BASE), tag, '', BASE) !== null, tag).toBe(localeOf(tag) === 'zh');

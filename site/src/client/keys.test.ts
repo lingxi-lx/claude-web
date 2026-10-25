@@ -12,6 +12,10 @@ describe('keyAction', () => {
     expect(key('c')).toBe('changelog');
     expect(key('g')).toBe('github');
   });
+  it('S toggles the sound', () => {
+    expect(key('s')).toBe('sound');
+    expect(key('S')).toBe('sound');
+  });
   it('nothing else', () => {
     expect(key('x')).toBeNull();
     expect(key('Enter')).toBeNull();

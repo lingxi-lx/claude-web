@@ -18,6 +18,9 @@ on:
       - 'scripts/i18n/**'
       - 'package-lock.json'
       - '.github/workflows/site.yml'
+      - 'web/src/themes/**'
+      - 'server/src/themes/core/**'
+      - 'scripts/lib/fixtures/theme-metro/**'
   release:
     types: [published]
   workflow_dispatch:
@@ -60,8 +63,15 @@ jobs:
       - run: node site/scripts/releases.ts
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/cache@v4
+        with:
+          path: site/.media-cache
+          key: site-media-${{ hashFiles('site/media.json') }}
       - run: npm test --prefix site
+      # a recording that cannot be downloaded (after retries) fails the deploy instead of shipping a poster-only showcase
       - run: npm run build --prefix site
+        env:
+          SITE_MEDIA_STRICT: '1'
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site/dist

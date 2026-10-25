@@ -1,6 +1,7 @@
 ---
 import '../styles/tokens.css';
 import '../styles/site.css';
+import '../styles/neon.css';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 import { copy } from '../copy';
@@ -30,6 +31,7 @@ const redirect = locale === 'en' && page === 'home'
     <meta name="description" content={c.meta.description} />
     <meta name="theme-color" content="#12110f" />
     <link rel="icon" type="image/svg+xml" href={`${base}icon.svg`} />
+    {page === 'home' && <link rel="preload" href={`${base}fonts/pixel-${locale}.woff2`} as="font" type="font/woff2" crossorigin />}
     <link rel="canonical" href={canonical} />
     <link rel="alternate" hreflang="en" href={enUrl} />
     <link rel="alternate" hreflang="zh" href={new URL(href(base, 'zh', page), site).href} />

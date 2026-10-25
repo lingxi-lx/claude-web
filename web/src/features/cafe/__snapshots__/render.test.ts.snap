@@ -1,0 +1,8 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`render > draws the same frame as before the split 1`] = `
+{
+  "calls": 7364,
+  "hash": "d47e4b69",
+}
+`;
