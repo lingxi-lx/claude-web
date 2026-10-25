@@ -13,7 +13,7 @@ import { AllowedSites } from './AllowedSites';
 import { dlg } from '@/ui/dialog';
 import { RECENT_KEY, addressToUrl, frameSandbox, loadable, pushRecent, readRecent, siteHue, siteLetter, siteOf } from './url';
 import { VIEWPORT_IDS, fitScale, viewportLabel, viewportOf, type ViewportId } from './viewport';
-import { nextPageZoom, progressOn, screenshotName, type LoadEvent } from './panel-logic';
+import { loadFailure, nextPageZoom, progressOn, screenshotName, type LoadEvent } from './panel-logic';
 import { fileUrl } from './auto-open';
 import { FindBar } from './FindBar';
 import { DownloadsBar, useDownloadEvents } from './Downloads';
@@ -135,11 +135,12 @@ function TabView({ tab, front }: { tab: BrowserTab; front: boolean }) {
       // the user's own browsing is what 最近打开 lists (not what an Agent looked up)
       try { if (!tab.agent) recordVisit(el.getURL(), el.getTitle()); } catch { /* not attached */ }
       // a local page the shell refused (file-guard.ts: only a file the app itself opened shows) ends with no page at
-      // all: said in the tab instead of a blank one
+      // all: said in the tab instead of a blank one (unless the load's failure already said what happened)
       try {
-        const want = tabOf(id)?.src ?? '';
+        const t = tabOf(id);
+        const want = t?.src ?? '';
         const now = el.getURL() || '';
-        if (/^file:/i.test(want) && (now === '' || now === 'about:blank')) patchTab(id, { error: LOCAL_REFUSED() });
+        if (/^file:/i.test(want) && !t?.error && (now === '' || now === 'about:blank')) patchTab(id, { error: LOCAL_REFUSED() });
       } catch { /* not attached */ }
     };
     // a page that arrives after all is no failure: the shell cancels a load and starts it again with another user
@@ -150,10 +151,11 @@ function TabView({ tab, front }: { tab: BrowserTab; front: boolean }) {
     const onFail = (e: Event) => {
       const f = e as unknown as { errorCode?: number; errorDescription?: string; isMainFrame?: boolean; validatedURL?: string };
       if (f.isMainFrame === false) return;
-      // a local file the shell would not load (file-guard.ts)
-      if (/^file:/i.test(f.validatedURL ?? '')) { patchTab(id, { loading: false, progress: undefined, error: LOCAL_REFUSED() }); return; }
-      // -3: the load was replaced by another (a redirect in script, a download) — not a failure to show
-      if (f.errorCode === -3) return;
+      // -3 first: the load was replaced by another (a redirect in script, a download) — not a failure to show; then a
+      // local file the shell's guard refused (file-guard.ts); any other failure says what failed (loadFailure)
+      const what = loadFailure(f);
+      if (what === 'none') return;
+      if (what === 'local-refused') { patchTab(id, { loading: false, progress: undefined, error: LOCAL_REFUSED() }); return; }
       patchTab(id, { loading: false, progress: undefined, error: `${f.errorDescription || tr('加载失败')}（${f.errorCode ?? '?'}）` });
     };
     el.addEventListener('dom-ready', onReady);

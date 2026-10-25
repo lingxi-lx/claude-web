@@ -158,12 +158,15 @@ describe('the downloads tracker', () => {
       expect(d.openable(item.savePath)).toBe(false);
     }
     for (const name of ['a.zip', 'b.pdf', 'c.png', 'README']) expect(isRisky(name), name).toBe(false);
+    // round 2: more kinds Windows runs or installs on a double click; the dot is a real dot (`notes-exe` is no program)
+    for (const name of ['x.xll', 'x.msix', 'x.MSIXBUNDLE', 'x.appx', 'x.appxbundle', 'x.appinstaller', 'x.wsc', 'x.sct']) expect(isRisky(name), name).toBe(true);
+    for (const name of ['notes-exe', 'readme_bat', 'recipe-js', 'mysh']) expect(isRisky(name), name).toBe(false);
     const ok = new FakeItem('report.pdf');
     session.emit('will-download', {}, ok, guest);
     ok.emit('done', {}, 'completed');
     expect(sent.at(-1)!.ev.risky).toBeUndefined();
     expect(d.openable(ok.savePath)).toBe(true);
-    expect(d.openable('C:\elsewhere\report.pdf')).toBe(false);
+    expect(d.openable(String.raw`C:\elsewhere\report.pdf`)).toBe(false);
   });
   it('at most DOWNLOAD_BURST downloads per page in DOWNLOAD_WINDOW_MS: the rest are cancelled and said so', () => {
     const { session, sent, guest } = setup();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PAGE_ZOOMS, applyDownload, downloadPercent, fmtBytes, nextPageZoom, progressOn, screenshotName, type DownloadRow } from './panel-logic';
+import { PAGE_ZOOMS, applyDownload, downloadPercent, fmtBytes, loadFailure, nextPageZoom, progressOn, screenshotName, type DownloadRow } from './panel-logic';
 
 describe('the loading bar', () => {
   it('a load starts low, grows as the page arrives, and fills when it stops', () => {
@@ -87,5 +87,18 @@ describe('downloads', () => {
     expect(fmtBytes(2048)).toBe('2.0 KB');
     expect(fmtBytes(5.5 * 1024 * 1024)).toBe('5.5 MB');
     expect(fmtBytes(3 * 1024 ** 3)).toBe('3.0 GB');
+  });
+});
+
+describe('what a failed load says (round 2)', () => {
+  it('-3 (replaced by another load) says nothing, a local page or not', () => {
+    expect(loadFailure({ errorCode: -3, validatedURL: 'file:///C:/w/a.html' })).toBe('none');
+    expect(loadFailure({ errorCode: -3, validatedURL: 'https://a.test/' })).toBe('none');
+  });
+  it('a local page the guard refused says so; any other failure of a local page is a normal load failure', () => {
+    for (const errorCode of [-20, -10, -379]) expect(loadFailure({ errorCode, validatedURL: 'file:///C:/w/a.html' }), String(errorCode)).toBe('local-refused');
+    expect(loadFailure({ errorCode: -6, validatedURL: 'file:///C:/w/missing.html' })).toBe('failed');
+    expect(loadFailure({ errorCode: -20, validatedURL: 'https://a.test/' })).toBe('failed');
+    expect(loadFailure({ errorCode: -105, validatedURL: 'https://nowhere.test/' })).toBe('failed');
   });
 });

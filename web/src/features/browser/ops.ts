@@ -104,12 +104,30 @@ export function withLimit<T>(p: Promise<T>, ms: number, onLate: () => void): Pro
 /**
  * browser_eval: whether the script runs as a function body (true) or an expression (false) — decided here, once,
  * by parsing (never running) it, so a script with side effects is never run twice. A script with its own `return`
- * is a body; one that parses as an expression is one; else a body (if that does not parse either, the page says so).
+ * is a body; one that parses as an expression is one; else a body (if that does not parse either, evalSyntaxError
+ * has already said so and nothing ran).
  */
 export function evalForm(script: string): boolean {
   if (looksLikeBody(script)) return true;
   const AsyncFn = Object.getPrototypeOf(async () => {}).constructor as new (body: string) => unknown;
   try { new AsyncFn(`return (\n${script}\n);`); return false; } catch { return true; }
+}
+
+/**
+ * Round 2: the script parses as neither an expression nor a function body — the syntax error, so the tool says it
+ * before anything runs; null when either form parses. Only a SyntaxError counts (a page policy that forbids
+ * compiling here throws something else, and the page then decides).
+ */
+export function evalSyntaxError(script: string): string | null {
+  const AsyncFn = Object.getPrototypeOf(async () => {}).constructor as new (body: string) => unknown;
+  let why = '';
+  for (const body of [`return (\n${script}\n);`, script]) {
+    try { new AsyncFn(body); return null; } catch (e) {
+      if (!(e instanceof SyntaxError)) return null;
+      why = why || `SyntaxError: ${e.message}`;
+    }
+  }
+  return why.slice(0, 300);
 }
 
 /**

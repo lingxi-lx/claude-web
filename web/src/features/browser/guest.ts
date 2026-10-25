@@ -3,7 +3,7 @@
 // server reads pages itself.
 import { desktop } from '@/desktop';
 import agentSrc from './page-agent.js?raw';
-import { evalForm, evalSource, parseKey, type MouseAct, type PageHandle, type Picture } from './ops';
+import { evalForm, evalSource, evalSyntaxError, parseKey, type MouseAct, type PageHandle, type Picture } from './ops';
 import { markCursor } from './cursor';
 import { viewportOf, type ViewportId } from './viewport';
 import { guestOf, patchTab, tabOf, waitGuest, type WebviewEl } from './state';
@@ -143,6 +143,9 @@ export function pageOf(tabId: string): PageHandle {
     },
     call: call as PageHandle['call'],
     async evaluate(script) {
+      // neither an expression nor a function body: said before the page is touched (round 2)
+      const bad = evalSyntaxError(script);
+      if (bad) throw new Error(tr('脚本有语法错误：{why}', { why: bad }));
       const el = await need();
       await askable(el);
       // expression or function body is decided before it runs (evalForm parses, never runs): the script runs once —

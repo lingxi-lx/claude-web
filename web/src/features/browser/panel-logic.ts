@@ -71,3 +71,20 @@ export function fmtBytes(n: number): string {
   while (v >= 1024 && u < units.length - 1) { v /= 1024; u++; }
   return `${v.toFixed(1)} ${units[u]}`;
 }
+
+/**
+ * Chromium's codes for a load the shell's file guard stopped (desktop/src/file-guard.ts): webRequest's cancel
+ * (ERR_BLOCKED_BY_CLIENT), access denied, and the file: handler's empty 403 (ERR_HTTP_RESPONSE_CODE_FAILURE).
+ */
+const GUARD_CODES = new Set([-20, -10, -379]);
+
+/**
+ * What a failed top-frame load says (round 2): -3 (aborted — replaced by another load, a download) nothing; a local
+ * page the guard refused 「这个本地页面没有打开」; anything else, a local page that is missing included, the normal
+ * load-failure message.
+ */
+export function loadFailure(f: { errorCode?: number; validatedURL?: string }): 'none' | 'local-refused' | 'failed' {
+  if (f.errorCode === -3) return 'none';
+  if (/^file:/i.test(f.validatedURL ?? '') && GUARD_CODES.has(f.errorCode ?? 0)) return 'local-refused';
+  return 'failed';
+}

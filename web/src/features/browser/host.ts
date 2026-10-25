@@ -107,6 +107,9 @@ async function carryOutNow(c: BrowserCommand, signal: AbortSignal): Promise<Brow
   let tab = agentTab(c.sessionId);
   if (!tab) {
     if (c.op !== 'open') throw new Error(tr('这个对话还没有打开网页：先用 browser_open 打开一个网址。'));
+    // 接管 refuses before a tab is made (round 2): a refused open leaves no blank tab and does not bring the browser forward
+    const first = refusal(c.op, c.args ?? {}, { takenOver: isTakenOver(c.sessionId), url: '' });
+    if (first) throw new Error(first);
     const id = newTab({ agent: c.sessionId, partition: agentPartition });
     // the Agent's own tab is new: the browser comes to the front once, so what it does is seen
     showPanel('browser');

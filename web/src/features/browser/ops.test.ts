@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BrowserPage } from '@shared';
-import { CONSOLE_MAX, GLANCE_CHARS, NETWORK_MAX, OPEN_CHARS, SNAPSHOT_CHARS, WAIT_MAX_MS, WHEEL_NOTCH, agentTabsOf, outlineText, parseKey, parseModifiers, runOp, toView, refusal, redactUrl, TAKEN_OVER, NOT_CHECKED, SITE_CHANGED, hostOf, evalSource, evalForm, looksLikeBody, withLimit, EVAL_MAX_CHARS, type MouseAct, type PageHandle } from './ops';
+import { CONSOLE_MAX, GLANCE_CHARS, NETWORK_MAX, OPEN_CHARS, SNAPSHOT_CHARS, WAIT_MAX_MS, WHEEL_NOTCH, agentTabsOf, outlineText, parseKey, parseModifiers, runOp, toView, refusal, redactUrl, TAKEN_OVER, NOT_CHECKED, SITE_CHANGED, hostOf, evalSource, evalForm, evalSyntaxError, looksLikeBody, withLimit, EVAL_MAX_CHARS, type MouseAct, type PageHandle } from './ops';
 
 /** A page that records what it was asked, in order. */
 function fakePage(o: { text?: string; url?: string; idle?: boolean; canBack?: boolean; onClick?: (p: Fake) => void; typed?: { submitted?: boolean; enter?: boolean }; scroll?: { moved: number; top: number; max: number; length: number }; picture?: { width: number; height: number } | null; view?: { width: number; height: number } } = {}) {
@@ -585,8 +585,16 @@ describe('hover / drag / select / eval, the cursor, 接管 (stage B task 7)', ()
     expect(evalForm('const a = 1; a + 1')).toBe(true);
     expect(evalForm('location.href = "/x"; 1')).toBe(true);
     expect(evalForm('if (x) { y() }')).toBe(true);
-    // neither parses: run once as written, the page reports the syntax error
+    // neither parses: evalSyntaxError says so before anything runs (round 2)
     expect(evalForm('a = ;')).toBe(true);
+  });
+
+  it('evalSyntaxError: a script that is neither an expression nor a function body is a syntax error, said before it runs (round 2)', () => {
+    expect(evalSyntaxError('a = ;')).toMatch(/SyntaxError|Unexpected/i);
+    expect(evalSyntaxError('function (')).toMatch(/SyntaxError|Unexpected/i);
+    for (const ok of ['document.title', 'return 1', 'const a = 1; a + 1', 'await fetch("/x").then((r) => r.status)', 'if (x) { y() }']) {
+      expect(evalSyntaxError(ok), ok).toBeNull();
+    }
   });
 
   it('a file: page is never driven; an op checked for another site says where the tab is now', () => {

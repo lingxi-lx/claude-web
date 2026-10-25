@@ -186,7 +186,7 @@ export function uniqueIn(dir: string, name: string, taken: (p: string) => boolea
 export interface DownloadEvent { id: string; name: string; state: 'progress' | 'done' | 'failed' | 'cancelled'; received: number; total: number; path?: string; risky?: true; blocked?: true }
 
 /** What Windows (or macOS / Linux) runs when it is opened: never opened from the downloads bar, only shown in its folder. */
-const RISKY_EXT = /.(exe|com|bat|cmd|ps1|psm1|psd1|vbs|vbe|js|jse|wsf|wsh|hta|lnk|url|msi|msp|mst|scr|pif|cpl|reg|jar|appref-ms|application|gadget|msc|scf|inf|iso|img|vhd|vhdx|chm|website|settingcontent-ms|dmg|pkg|app|command|sh)$/i;
+const RISKY_EXT = /\.(exe|com|bat|cmd|ps1|psm1|psd1|vbs|vbe|js|jse|wsf|wsh|wsc|sct|hta|lnk|url|msi|msp|mst|msix|msixbundle|appx|appxbundle|appinstaller|xll|scr|pif|cpl|reg|jar|appref-ms|application|gadget|msc|scf|inf|iso|img|vhd|vhdx|chm|website|settingcontent-ms|dmg|pkg|app|command|sh)$/i;
 export const isRisky = (name: string): boolean => RISKY_EXT.test(String(name).trim());
 /** A page may start at most this many downloads in DOWNLOAD_WINDOW_MS; the rest are cancelled. */
 export const DOWNLOAD_BURST = 5;
