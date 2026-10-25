@@ -61,7 +61,8 @@ export function githubComments(data: any): CommentCandidate[] {
   return out;
 }
 
-const GL_BOT = /(^project_\d+_bot\d*$)|(^group_\d+_bot\d*$)|bot$/i;
+// service accounts (seen live on gitlab.com: GitLab Dependency Management, `service_account_project_…`) are bots too
+const GL_BOT = /(^project_\d+_bot\d*$)|(^group_\d+_bot\d*$)|(^service_account_)|bot$/i;
 
 /** MR discussions → open ones by their last note. */
 export function gitlabComments(discussions: any[], mrUrl: string): CommentCandidate[] {
