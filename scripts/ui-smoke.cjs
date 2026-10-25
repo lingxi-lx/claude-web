@@ -2270,10 +2270,10 @@ function driver() {
             const menusNow = () => js('[...document.querySelectorAll(".menu")].map((m) => m.className)');
             await click('.pane.focused .sess-head .sh-more > button');
             const headerOpen = await waitFor('!!document.querySelector(".menu.sess-menu")', 3000);
-            await click('.sidebar [data-id="filter"]');
+            await click('.sidebar [data-id="view"]');
             await sleep(250);
             const m1 = await menusNow();
-            check('one menu app-wide: opening the sidebar funnel closes the header ···', headerOpen && m1.length === 1 && /sb-filter/.test(m1[0]), JSON.stringify({ headerOpen, m1 }));
+            check('one menu app-wide: opening the sidebar funnel closes the header ···', headerOpen && m1.length === 1 && /sb-view/.test(m1[0]), JSON.stringify({ headerOpen, m1 }));
             await click('.pane.focused .sess-head .sh-more > button');
             await sleep(250);
             const m2 = await menusNow();
@@ -2289,10 +2289,10 @@ function driver() {
               const rightClick = () => js(`(() => { const el = document.querySelector(${JSON.stringify(ftRow)}); if (!el) return false; const b = el.getBoundingClientRect(); el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: b.left + 30, clientY: b.top + 8, button: 2 })); el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: b.left + 30, clientY: b.top + 8, button: 2 })); return true; })()`);
               await rightClick();
               const ftOpen = await waitFor('!!document.querySelector(".menu.ft-menu")', 2000);
-              await click('.sidebar [data-id="filter"]');
+              await click('.sidebar [data-id="view"]');
               await sleep(250);
               const m3 = await menusNow();
-              check('one menu app-wide: the 文件 right-click menu, then the sidebar funnel → only the funnel is open (polish P2)', ftOpen && m3.length === 1 && /sb-filter/.test(m3[0]), JSON.stringify({ ftOpen, m3 }));
+              check('one menu app-wide: the 文件 right-click menu, then the sidebar funnel → only the funnel is open (polish P2)', ftOpen && m3.length === 1 && /sb-view/.test(m3[0]), JSON.stringify({ ftOpen, m3 }));
               await closeMenus();
               await rightClick();
               await waitFor('!!document.querySelector(".menu.ft-menu")', 2000);
@@ -2321,7 +2321,8 @@ function driver() {
             automation: ':is(.auto-page .auto-tabs, .sb-sect:not([hidden]) .auto-side .sect-nav) [data-id]',
             section: '.sidebar .sb-sec[data-id], .sidebar .sb-group[data-id]',
             head: '.sidebar [data-id="projects"] > .sb-sec-h [data-id]',
-            filter: '.menu.sb-filter [data-id]',
+            view: '.menu.sb-view [data-id]',
+            custom: '.sidebar [data-id="custom-section"], .sidebar .sb-custom [data-id], .menu.sb-custom-menu [data-id]',
             project: '.menu.sb-menu[aria-label^="项目"] [data-id], .sidebar .sb-group-head .acts [data-id]',
             row: '.sidebar .sb-list [data-id], .sidebar .sb-attn [data-id]',
             rowMenu: '.menu.sess-menu [data-id]',
@@ -2335,10 +2336,10 @@ function driver() {
           };
           const sb = await js(`({ chipRows: !!document.querySelector('.sidebar .sb-sources, .sidebar .src-chip, .sidebar .sb-search, .sidebar .lib-banner'), top: [...document.querySelectorAll('.sidebar .sb-top [data-id], .sidebar .sb-nav [data-id]')].map((e) => e.dataset.id), rail: [...document.querySelectorAll('.rail .rail-top > [data-id], .rail .rail-main > [data-id], .rail .rail-main > .rail-anchor > [data-id]')].map((e) => e.dataset.id), head: [...document.querySelectorAll('.sidebar [data-id="projects"] > .sb-sec-h [data-id]')].map((e) => e.dataset.id), account: [...document.querySelectorAll('.rail .rail-foot [data-id]')].map((e) => e.dataset.id), inSidebar: document.querySelectorAll('.sidebar .sb-account, .sidebar .sb-nav [data-id="automation"]').length, row: !!document.querySelector('.sidebar .sb-list [data-sid=' + ${JSON.stringify(SID)} + '] [data-id="status"]') })`);
           check('sidebar: no chip / filter-box rows; 新对话 · 搜索; the rail: the switch · 对话 · 后台 · 自动化 · 扩展 · 更多, at its foot 设置 and the account (connection); funnel + 打开文件夹 on 项目; the row ends in one status',
-            !sb.chipRows && has(sb.top, ['new', 'search']) && has(sb.rail, ['collapse', 'chat', 'background', 'automation', 'extensions', 'more']) && has(sb.head, ['filter', 'add-project']) && has(sb.account, ['account', 'connection', 'settings']) && sb.inSidebar === 0 && sb.row, JSON.stringify(sb));
+            !sb.chipRows && has(sb.top, ['new', 'search']) && has(sb.rail, ['collapse', 'chat', 'background', 'automation', 'extensions', 'more']) && has(sb.head, ['view', 'add-project']) && has(sb.account, ['account', 'connection', 'settings']) && sb.inSidebar === 0 && sb.row, JSON.stringify(sb));
           // final review I3: 收起侧栏 shows with the pointer over the sidebar or the key focus on it, not at rest
           // (and the 项目 header's funnel and +, the same way)
-          const collapseOp = () => js(`['.sb-sec-h [data-id="filter"]', '.sb-sec-h [data-id="add-project"]'].map((s) => getComputedStyle(document.querySelector('.sidebar ' + s)).opacity).join(',')`);
+          const collapseOp = () => js(`['.sb-sec-h [data-id="view"]', '.sb-sec-h [data-id="add-project"]'].map((s) => getComputedStyle(document.querySelector('.sidebar ' + s)).opacity).join(',')`);
           wc.sendInputEvent({ type: 'mouseMove', x: 900, y: 400 });
           await sleep(400);
           const opRest = await collapseOp();
@@ -2368,10 +2369,10 @@ function driver() {
           await harvest();
           await shot('sidebar');
           // the funnel: sources, machines (when there are other machines), archived, multi-select, the filter box
-          await click('.sidebar [data-id="filter"]');
-          const fm = await ids('.menu.sb-filter [data-id]');
-          const fmIn = await js('(() => { const m = document.querySelector(".menu.sb-filter"); if (!m) return false; const r = m.getBoundingClientRect(); return r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight; })()');
-          check('funnel menu: filter box, sources, 显示已归档, 选择多个, 管理对话来源 — inside the window', has(fm, ['query', 'source', 'archived', 'select', 'library']) && fmIn, JSON.stringify({ fm, fmIn }));
+          await click('.sidebar [data-id="view"]');
+          const fm = await ids('.menu.sb-view [data-id]');
+          const fmIn = await js('(() => { const m = document.querySelector(".menu.sb-view"); if (!m) return false; const r = m.getBoundingClientRect(); return r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight; })()');
+          check('显示 menu (stage C3, was the funnel): filter box, 分组方式, 排序, 显示已归档, 其它 agent, 每组, sources, 选择多个, 新建分区, 恢复默认, 查看全部, 管理对话来源 — inside the window', has(fm, ['query', 'source', 'group-by', 'sort-by', 'archived', 'other-agents', 'per-group', 'select', 'new-section', 'reset', 'all', 'library']) && fmIn, JSON.stringify({ fm, fmIn }));
           await harvest();
           await shot('sidebar-filter');
           if (E.SMOKE_READONLY !== '1') {
@@ -2380,7 +2381,7 @@ function driver() {
             const filtered = await js('({ summary: document.querySelector(".sidebar .sb-filtered .what")?.textContent || "", rows: document.querySelectorAll(".sidebar .sb-list .sb-row").length })');
             check('the filter box filters the list and the list says it is filtered', filtered.rows === 0 && filtered.summary.includes('zzz-no-such'), JSON.stringify(filtered));
             // the 已筛选 row pushed the funnel down: the menu follows its anchor instead of covering it
-            const follow = await js('(() => { const b = document.querySelector(".sidebar [data-id=filter]")?.getBoundingClientRect(); const m = document.querySelector(".menu.sb-filter")?.getBoundingClientRect(); return !!b && !!m && (m.top >= b.bottom - 1 || m.bottom <= b.top + 1); })()');
+            const follow = await js('(() => { const b = document.querySelector(".sidebar [data-id=view]")?.getBoundingClientRect(); const m = document.querySelector(".menu.sb-view")?.getBoundingClientRect(); return !!b && !!m && (m.top >= b.bottom - 1 || m.bottom <= b.top + 1); })()');
             check('the funnel menu follows its button when the list above it changes', follow);
             await closeMenus();
             await click('.sidebar .sb-filtered .link');
@@ -2391,11 +2392,11 @@ function driver() {
           // top right. Opening it closes whatever sidebar menu was open (here: the funnel)
           const dockClosed = `window.__store.getState().dispatchLayout({ t: 'dock.set', patch: { open: false } })`;
           const autoTab = (tab) => `(() => { const p = document.querySelector('.auto-page'); const b = p && p.querySelector('.auto-body[data-body="${tab}"]:not([hidden])'); return !!p && !p.hidden && p.dataset.tab === '${tab}' && !!b && b.getBoundingClientRect().height > 0; })()`;
-          await click('.sidebar [data-id="filter"]');
+          await click('.sidebar [data-id="view"]');
           await click(':is(.rail, .sidebar) [data-id="automation"]');
           // a closed menu leaves an inert fading copy (.leaving, ui/ghost.ts) for ~120ms: not a menu
           await waitFor('!document.querySelector(".menu.sb-menu:not(.leaving), .menu.sess-menu:not(.leaving)")', 1000);
-          const one = { menus: await count('.menu.sb-menu:not(.leaving), .menu.sess-menu:not(.leaving)'), page: await waitFor(`(() => { const p = document.querySelector('.auto-page'); return !!p && !p.hidden; })()`, 3000), funnel: await exists('.menu.sb-filter:not(.leaving)'), inert: await exists('.pane-layer[inert]'), active: await exists('.rail [data-id="automation"].on') };
+          const one = { menus: await count('.menu.sb-menu:not(.leaving), .menu.sess-menu:not(.leaving)'), page: await waitFor(`(() => { const p = document.querySelector('.auto-page'); return !!p && !p.hidden; })()`, 3000), funnel: await exists('.menu.sb-view:not(.leaving)'), inert: await exists('.pane-layer[inert]'), active: await exists('.rail [data-id="automation"].on') };
           check('自动化 opens the automation page (panes underneath inert, the entry marked) and closes the funnel', !one.menus && one.page && !one.funnel && one.inert && one.active, JSON.stringify(one));
           const am = await ids(':is(.auto-page .auto-tabs, .sb-sect:not([hidden]) .auto-side .sect-nav) [data-id]');
           const newBtn = await js(`document.querySelector('.auto-page .auto-head [data-new]')?.textContent ?? null`);
@@ -2800,17 +2801,17 @@ function driver() {
             await click('.sidebar [data-group="peer:smokepeer"] [data-id="less"]');
             // the funnel lists the machines once there is another one (the list just shrank: let it settle first)
             await sleep(300);
-            await click('.sidebar [data-id="filter"]');
-            await waitFor('!!document.querySelector(".menu.sb-filter")', 2000);
+            await click('.sidebar [data-id="view"]');
+            await waitFor('!!document.querySelector(".menu.sb-view")', 2000);
             await harvest();
-            check('funnel menu: 机器 once another machine has conversations', await exists('.menu.sb-filter [data-id="machine"]'));
+            check('funnel menu: 机器 once another machine has conversations', await exists('.menu.sb-view [data-id="machine"]'));
             await closeMenus();
             // 显示已归档 widens the list, it is not a filter: no 已筛选 row, empty projects stay, the funnel shows it is on
             await js(`window.__store.getState().addWorkspace(${JSON.stringify(E.SMOKE_REPO + sep + 'src')})`);
             await waitFor('window.__store.getState().workspaces.length >= 2', 4000);
             await js('window.__store.setState({ showArchived: true })');
             await sleep(300);
-            const arch = { row: await exists('.sidebar .sb-filtered'), dot: await exists('.sidebar [data-id="filter"] .fdot'), groups: await count('.sidebar [data-id="projects"] .sb-group'), projects: await js('window.__store.getState().workspaces.length') };
+            const arch = { row: await exists('.sidebar .sb-filtered'), dot: await exists('.sidebar [data-id="view"] .fdot'), groups: await count('.sidebar [data-id="projects"] .sb-group'), projects: await js('window.__store.getState().workspaces.length') };
             check('显示已归档 is not a filter: no 已筛选 row, empty projects stay listed, the funnel is marked', !arch.row && arch.dot && arch.groups === arch.projects, JSON.stringify(arch));
             await js('window.__store.setState({ showArchived: false })');
             // two projects now: the lower one's menu moves it up / to the top, the upper one's down (2026-10-14)
@@ -2832,6 +2833,110 @@ function driver() {
               const back = await order();
               const draggable = await js(`document.querySelector('${heads}')?.getAttribute('draggable')`);
               check('projects reorder: 移到最上面 puts the last first, 下移 puts it back; the headers can be dragged', moved.split('|')[0] === before.split('|').at(-1) && back === before && draggable === 'true', JSON.stringify({ before, moved, back, draggable }));
+            }
+            // stage C3: the 显示 menu — 分组方式 / 排序 / 每组 / 其它 agent / 显示已归档 change the list at once (the menu
+            // stays open), 新建分区 + a row dragged in (still in its own group too) + × takes it out, 恢复默认 keeps the
+            // sections, 查看全部 opens the palette
+            {
+              const viewKey = 'ui.sidebar.view';
+              const viewNow = () => js(`JSON.stringify(window.__store.getState().settings[${JSON.stringify(viewKey)}] ?? null)`);
+              const openView = async () => { if (!(await exists('.menu.sb-view:not(.leaving)'))) await click('.sidebar [data-id="view"]'); await waitFor('!!document.querySelector(".menu.sb-view:not(.leaving)")', 2000); };
+              const pickIn = async (row, label) => {
+                await openView();
+                if (!(await js(`document.querySelector('.menu.sb-view [data-id="${row}"]')?.getAttribute('aria-expanded') === 'true'`))) await click(`.menu.sb-view [data-id="${row}"]`);
+                await js(`[...document.querySelectorAll('.menu.sb-view .sb-view-sub [role="menuitemradio"]')].find((b) => b.textContent.trim() === ${JSON.stringify(label)})?.click()`);
+                await sleep(350);
+              };
+              const projSec = '.sidebar [data-id="projects"]';
+              await pickIn('group-by', '文件夹');
+              const byFolder = { other: await exists('.sidebar [data-id="other"]'), title: await js(`document.querySelector('${projSec} > .sb-sec-h > span')?.textContent`), groups: await count(`${projSec} .sb-group`), view: JSON.parse(await viewNow())?.groupBy, menu: await exists('.menu.sb-view:not(.leaving)') };
+              await harvest();
+              await pickIn('group-by', '日期');
+              const dateNames = await js(`[...document.querySelectorAll('${projSec} .sb-group.date > .sb-group-head .name')].map((e) => e.textContent)`);
+              await pickIn('group-by', '不分组');
+              const flat = { heads: await count(`${projSec} .sb-group-head`), flat: await exists(`${projSec} .sb-group.flat`), rows: await count(`${projSec} .sb-group.flat .sb-row`) };
+              await pickIn('sort-by', '名称');
+              const titles = await js(`[...document.querySelectorAll('${projSec} .sb-group.flat .sb-row:not(.kid) .t')].map((e) => e.textContent)`);
+              const sortedOk = titles.length > 1 && titles.every((t, i) => i === 0 || titles[i - 1].toLocaleLowerCase().localeCompare(t.toLocaleLowerCase(), undefined, { numeric: true }) <= 0);
+              await pickIn('sort-by', '最近更新');
+              await pickIn('group-by', '项目');
+              check('显示 → 分组方式: 文件夹 (no 项目 / 文件夹 split, the head says 对话), 日期 (今天 …), 不分组 (one flat list, no group heads); 排序 名称 orders the rows; the menu stays open',
+                !byFolder.other && byFolder.title === '对话' && byFolder.groups > 0 && byFolder.view === 'folder' && byFolder.menu && dateNames.length > 0 && dateNames.every((n) => ['今天', '昨天', '最近 7 天', '最近 30 天', '更早'].includes(n)) && flat.heads === 0 && flat.flat && flat.rows > 0 && sortedOk,
+                JSON.stringify({ byFolder, dateNames, flat, titles, sortedOk }));
+              // 每组: the other machine's 7 conversations — 5, then all 7 with 10
+              const peerRows = () => count('.sidebar [data-group="peer:smokepeer"] .sb-row');
+              const five = await peerRows();
+              await pickIn('per-group', '10');
+              const ten = await peerRows();
+              const lessShown = await exists('.sidebar [data-group="peer:smokepeer"] [data-id="less"]');
+              await pickIn('per-group', '5');
+              check('显示 → 每组 10 shows more rows of a group (5 → 7), no 收起 at its own limit', five === 5 && ten === 7 && !lessShown, JSON.stringify({ five, ten, lessShown }));
+              // 其它 agent 的对话: a Codex conversation leaves the list and comes back
+              await js(`window.__store.setState((s) => ({ sessions: [...s.sessions.filter((x) => x.sessionId !== 'smoke-codex-row'), { sessionId: 'smoke-codex-row', title: 'a codex conversation', cwd: ${JSON.stringify(E.SMOKE_REPO)}, lastModified: Date.now() - 200, agent: 'codex' }] }))`);
+              await sleep(300);
+              const codexRow = '.sidebar .sb-list [data-sid="smoke-codex-row"]';
+              await pickIn('group-by', '不分组'); // one open list: the row is on screen whatever folder it is in
+              const codexOn = await exists(codexRow);
+              await openView();
+              await click('.menu.sb-view [data-id="other-agents"]');
+              await sleep(300);
+              const codexOff = !(await exists(codexRow));
+              const otherFlag = JSON.parse(await viewNow())?.show?.otherAgents;
+              await click('.menu.sb-view [data-id="other-agents"]');
+              await sleep(300);
+              const codexBack = await exists(codexRow);
+              await js(`window.__store.setState((s) => ({ sessions: s.sessions.filter((x) => x.sessionId !== 'smoke-codex-row') }))`);
+              await pickIn('group-by', '项目');
+              check('显示 → 其它 agent 的对话 off hides a Codex conversation, on brings it back (kept in ui.sidebar.view)', codexOn && codexOff && otherFlag === false && codexBack, JSON.stringify({ codexOn, codexOff, otherFlag, codexBack }));
+              // 显示已归档: the store and meta.json
+              await openView();
+              await click('.menu.sb-view [data-id="archived"]');
+              await sleep(300);
+              const archOn = { store: await js('window.__store.getState().showArchived'), saved: JSON.parse(await viewNow())?.show?.archived, checked: await js(`document.querySelector('.menu.sb-view [data-id="archived"]')?.getAttribute('aria-checked')`) };
+              await click('.menu.sb-view [data-id="archived"]');
+              await sleep(300);
+              const archOff = { store: await js('window.__store.getState().showArchived'), saved: JSON.parse(await viewNow())?.show?.archived };
+              check('显示 → 显示已归档 sets the store and is kept in ui.sidebar.view; off again', archOn.store === true && archOn.saved === true && archOn.checked === 'true' && archOff.store === false && archOff.saved === false, JSON.stringify({ archOn, archOff }));
+              // 新建分区: named in the dialog, a row dropped on its header, × takes it out
+              await openView();
+              await click('.menu.sb-view [data-id="new-section"]');
+              const asked = await waitFor('!!document.querySelector(".dialog-bg .dialog input.field")', 3000);
+              wc.insertText('本周要交');
+              await sleep(150);
+              await js(`document.querySelector('.dialog-bg .dialog .actions .btn.primary')?.click()`);
+              const made = await waitFor(`[...document.querySelectorAll('.sidebar .sb-custom > .sb-sec-h .name')].some((e) => e.textContent === '本周要交')`, 3000);
+              const sid0 = await js(`(() => { const r = document.querySelector('${projSec} .sb-row[data-sid]') || document.querySelector('.sidebar .sb-list .sb-row[data-sid]'); return r ? r.dataset.sid : null; })()`);
+              const dropped = await js(`(() => { const h = document.querySelector('.sidebar .sb-custom [data-id="custom-section"]'); if (!h) return false; const dt = new DataTransfer(); dt.setData('application/x-cw-session', ${JSON.stringify(sid0)}); h.dispatchEvent(new DragEvent('dragover', { dataTransfer: dt, bubbles: true, cancelable: true })); h.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true })); return true; })()`);
+              const inBoth = await waitFor(`!!document.querySelector('.sidebar .sb-custom [data-sid="${sid0}"]') && document.querySelectorAll('.sidebar .sb-list [data-sid="${sid0}"]').length >= 2`, 3000);
+              await harvest();
+              const secMenu = await js(`(() => { const b = document.querySelector('.sidebar .sb-custom [aria-label="分区菜单"]'); if (!b) return false; b.click(); return true; })()`) && await waitFor('!!document.querySelector(".menu.sb-custom-menu [data-id=\\"custom-rename\\"]")', 2000);
+              await harvest();
+              await closeMenus();
+              await js(`document.querySelector('.sidebar .sb-custom [data-sid="${sid0}"]')?.closest('.sb-row-wrap')?.querySelector('[data-id="custom-out"]')?.click()`);
+              const out = await waitFor(`!document.querySelector('.sidebar .sb-custom [data-sid="${sid0}"]') && !!document.querySelector('.sidebar .sb-list [data-sid="${sid0}"]')`, 3000);
+              const sections = JSON.parse(await js(`JSON.stringify(window.__store.getState().settings['ui.sidebar.sections'] ?? null)`));
+              check('新建分区 (named in the dialog) sits above the groups; a row dropped on it is there and in its own group too; × takes it out; kept in ui.sidebar.sections', asked && made && !!sid0 && dropped && inBoth && secMenu && out && Array.isArray(sections) && sections.some((x) => x.name === '本周要交' && Array.isArray(x.ids) && x.ids.length === 0), JSON.stringify({ asked, made, sid0, dropped, inBoth, secMenu, out, sections }));
+              // 恢复默认: back to the defaults (and 显示已归档 off), the section stays; 查看全部 opens the palette
+              await pickIn('group-by', '日期');
+              await openView();
+              await click('.menu.sb-view [data-id="reset"]');
+              await sleep(300);
+              const reset = { view: JSON.parse(await viewNow()), archived: await js('window.__store.getState().showArchived'), section: await exists('.sidebar .sb-custom'), other: await exists('.sidebar [data-id="other"]') || await exists(`${projSec} .sb-group`) };
+              await openView();
+              await click('.menu.sb-view [data-id="all"]');
+              const palette = await waitFor('window.__store.getState().paletteOpen === true', 2000);
+              await js('window.__store.setState({ paletteOpen: false })');
+              await sleep(200);
+              check('显示 → 恢复默认: 项目 / 最近更新 / 5, archived off, own sections kept; 查看全部 opens the command palette',
+                !!reset.view && reset.view.groupBy === 'project' && reset.view.sortBy === 'updated' && reset.view.show.perGroup === 5 && reset.view.show.otherAgents === true && reset.archived === false && reset.section && palette, JSON.stringify({ reset, palette }));
+              // remove the section again (its menu → 删除分区 → confirm)
+              await js(`document.querySelector('.sidebar .sb-custom [aria-label="分区菜单"]')?.click()`);
+              await waitFor('!!document.querySelector(".menu.sb-custom-menu [data-id=\\"custom-delete\\"]")', 2000);
+              await click('.menu.sb-custom-menu [data-id="custom-delete"]');
+              await waitFor('!!document.querySelector(".dialog-bg .dialog .actions .btn.danger")', 2000);
+              await js(`document.querySelector('.dialog-bg .dialog .actions .btn.danger')?.click()`);
+              check('删除分区 (after a confirm) removes the section, the conversations stay', await waitFor('!document.querySelector(".sidebar .sb-custom")', 3000) && !!(await exists('.sidebar .sb-list .sb-row')));
+              await closeMenus();
             }
             // the account popover with the account's limits: the quota windows
             await click(':is(.rail, .sidebar) [data-id="account"]');
@@ -3534,6 +3639,141 @@ function driver() {
         await waitFor('innerWidth === 1360', 4000);
         await click('.pane.focused .composer .pdock [data-act="deny"]');
         await waitFor(`!document.querySelector('.pane.focused .composer .pdock')`, 6000);
+        // ---- stage C1: the question card is in the conversation (not docked over the box) — one question a page,
+        // paging keeps the answers, keys, 其它, preview, IME, the answer the CLI expects, 跳过 / all skipped = deny,
+        // 需要你 in the sidebar, the box's empty Enter only moves the focus into the card
+        phase = 'stage-c-ask';
+        const count = (sel) => js(`document.querySelectorAll(${JSON.stringify(sel)}).length`);
+        const exists = (sel) => js(`!!document.querySelector(${JSON.stringify(sel)})`);
+        const ctxMenuAt = (sel) => js(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); if (!el) return false; el.scrollIntoView({ block: 'nearest' }); const b = el.getBoundingClientRect(); el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: b.left + 40, clientY: b.top + 8, button: 2 })); return true; })()`);
+        {
+          const askInput = (two) => `{ questions: [{ question: '用哪个库？', header: '库', multiSelect: false, options: [{ label: 'zod', description: '新一点' }, { label: 'yup' }] }${two ? `, { question: '要哪些检查？', multiSelect: true, options: [{ label: 'lint', preview: 'npm run lint' }, { label: 'test' }, { label: 'build' }] }` : ''}] }`;
+          const putAsk = (id) => js(`(async () => { const st = window.__store; const o = st.getState().open[${pj}]; st.setState({ open: { ...st.getState().open, [${pj}]: { ...o, pending: [${stageReq(id, 'AskUserQuestion', askInput(true))}], version: o.version + 1 } } }); await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 60))); return true; })()`);
+          const clearAsk = () => js(`(() => { const st = window.__store; const o = st.getState().open[${pj}]; st.setState({ open: { ...st.getState().open, [${pj}]: { ...o, pending: [], version: o.version + 1 } } }); })()`);
+          const card = '.pane.focused .chat-inner .ask-card';
+          const keyOn = (k, o = {}) => js(`(() => { const t = document.activeElement && document.activeElement.closest('.ask-card') ? document.activeElement : document.querySelector('${card} .ask-opt'); t.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true, cancelable: true, ctrlKey: ${!!o.ctrl}, isComposing: ${!!o.composing} })); return true; })()`);
+          const page = () => js(`document.querySelector('${card} .ask-page')?.textContent ?? null`);
+          if (await exists('.rail .sb-reveal')) await click('.rail .sb-reveal');
+          await sleep(300);
+          const attnBefore = await count('.sidebar .sb-attn .sb-attn-item');
+          await putAsk('smoke-ask-1');
+          await waitFor(`document.querySelectorAll('.sidebar .sb-attn .sb-attn-item').length > ${attnBefore}`, 3000);
+          const placed = await js(`(() => { const c = document.querySelector('${card}'); if (!c) return null; const pd = document.querySelector('.pane.focused .chat-inner .plan-dock'); return { inDock: !!c.closest('.pdock'), dock: !!document.querySelector('.pane.focused .composer .pdock'), box: !!document.querySelector('.pane.focused .composer textarea'), beforePlan: !pd || !!(c.compareDocumentPosition(pd) & Node.DOCUMENT_POSITION_FOLLOWING), focusTaken: !!document.activeElement?.closest('.ask-card'), need: document.querySelector('${card} .ask-need')?.textContent ?? null }; })()`);
+          const attnDuring = await count('.sidebar .sb-attn .sb-attn-item');
+          check('question card: in the conversation (above the plan), not docked; the box stays; it does not take the focus; 需要你回答; the sidebar lists it under 需要你',
+            !!placed && !placed.inDock && !placed.dock && placed.box && placed.beforePlan && !placed.focusTaken && placed.need === '需要你回答' && attnDuring > attnBefore, JSON.stringify({ placed, attnBefore, attnDuring }));
+          // the box's empty Enter (after the card's 600 ms): the focus goes into the card, nothing is sent
+          await sleep(700);
+          const enterInto = await js(`(async () => { const ta = document.querySelector('.pane.focused .composer textarea'); ta.focus(); ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await new Promise((r) => setTimeout(r, 200)); return { inCard: !!document.activeElement?.closest('.ask-card'), sent: window.__permSent.filter((r) => r.requestId === 'smoke-ask-1').length }; })()`);
+          check('question card: an empty Enter in the box moves the focus into the card and sends nothing', enterInto.inCard && enterInto.sent === 0, JSON.stringify(enterInto));
+          // 1 picks the first option, Enter goes to 2 / 2, ‹ back keeps the pick
+          const p1 = await page();
+          await keyOn('1');
+          const picked1 = await js(`document.querySelector('${card} .ask-opt[data-index="0"]')?.getAttribute('aria-checked')`);
+          await keyOn('Enter');
+          await sleep(150);
+          const p2 = await page();
+          await click(`${card} [data-act="prev"]`);
+          const back = { page: await page(), kept: await js(`document.querySelector('${card} .ask-opt[data-index="0"]')?.getAttribute('aria-checked')`) };
+          await click(`${card} [data-act="next-page"]`);
+          check('question card: 1 / 2, the key 1 picks the first option, Enter goes on to 2 / 2, ‹ goes back with the pick kept', p1 === '1 / 2' && picked1 === 'true' && p2 === '2 / 2' && back.page === '1 / 2' && back.kept === 'true', JSON.stringify({ p1, picked1, p2, back }));
+          // the preview of a focused option; 1 and 3 tick (multi), 其它 opens its box with the focus
+          await js(`document.querySelector('${card} .ask-opt[data-index="0"]')?.focus()`);
+          await sleep(150);
+          const preview = await js(`document.querySelector('${card} .ask-preview')?.textContent ?? null`);
+          await keyOn('1');
+          await keyOn('3');
+          await click(`${card} [data-act="other"]`);
+          const otherBox = await waitFor(`document.activeElement === document.querySelector('${card} .ask-other')`, 2000);
+          wc.insertText('e2e');
+          await sleep(150);
+          check('question card: a focused option shows its preview; 其它 opens a box that gets the focus', preview === 'npm run lint' && otherBox, JSON.stringify({ preview, otherBox }));
+          await sleep(300);
+          await shot('stage-c-ask');
+          // IME: an Enter while composing does nothing
+          await keyOn('Enter', { composing: true });
+          await sleep(150);
+          const ime = { page: await page(), sent: (JSON.parse(await sentFor('smoke-ask-1'))).length };
+          check('question card: an Enter while the IME composes does nothing', ime.page === '2 / 2' && ime.sent === 0, JSON.stringify(ime));
+          // Ctrl+Enter on the last page sends what the CLI expects
+          await keyOn('Enter', { ctrl: true });
+          await waitFor(`window.__permSent.some((r) => r.requestId === 'smoke-ask-1')`, 3000);
+          const sent1 = JSON.parse(await sentFor('smoke-ask-1'));
+          const ans1 = sent1[0]?.updatedInput?.answers;
+          check('question card: Ctrl+Enter on the last page answers — { 用哪个库？: zod, 要哪些检查？: "lint, build, e2e" }', sent1.length === 1 && sent1[0].behavior === 'allow' && ans1?.['用哪个库？'] === 'zod' && ans1?.['要哪些检查？'] === 'lint, build, e2e', JSON.stringify(sent1));
+          await clearAsk();
+          await waitFor(`document.querySelectorAll('.sidebar .sb-attn .sb-attn-item').length < ${attnDuring}`, 3000);
+          const attnAfter = await count('.sidebar .sb-attn .sb-attn-item');
+          check('question card: answered → gone from the conversation and from 需要你', !(await exists(card)) && attnAfter < attnDuring, JSON.stringify({ attnDuring, attnAfter }));
+          // one skipped, one answered → the skipped one says so; both skipped → deny
+          await putAsk('smoke-ask-2');
+          await click(`${card} [data-act="skip"]`);
+          await sleep(150);
+          await click(`${card} .ask-opt[data-index="1"]`);
+          await click(`${card} [data-act="submit"]`);
+          await waitFor(`window.__permSent.some((r) => r.requestId === 'smoke-ask-2')`, 3000);
+          const sent2 = JSON.parse(await sentFor('smoke-ask-2'));
+          await clearAsk();
+          await putAsk('smoke-ask-3');
+          await click(`${card} [data-act="skip"]`);
+          await sleep(150);
+          await click(`${card} [data-act="skip"]`);
+          await waitFor(`window.__permSent.some((r) => r.requestId === 'smoke-ask-3')`, 3000);
+          const sent3 = JSON.parse(await sentFor('smoke-ask-3'));
+          await clearAsk();
+          check('question card: 跳过 one → 「（用户跳过）」 for it; 跳过 both → deny', sent2[0]?.behavior === 'allow' && sent2[0]?.updatedInput?.answers?.['用哪个库？'] === '（用户跳过）' && sent2[0]?.updatedInput?.answers?.['要哪些检查？'] === 'test' && sent3[0]?.behavior === 'deny', JSON.stringify({ sent2, sent3 }));
+        }
+
+        // ---- stage C2: 编辑项目 — the main folder (no ×), an extra folder → the files panel lists a group per folder,
+        // 取消 sends nothing, 从侧栏移除项目 asks first (cancelled: the project stays)
+        phase = 'stage-c-project';
+        if (E.SMOKE_READONLY !== '1') {
+          const extraDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'cw-smoke-extra-'));
+          fs.writeFileSync(path.join(extraDir, 'extra-file.txt'), 'extra');
+          await js(`(async () => { const st = window.__store.getState(); if (!st.workspaces.some((w) => w.path.toLowerCase() === ${JSON.stringify(E.SMOKE_REPO.toLowerCase())})) await st.addWorkspace(${JSON.stringify(E.SMOKE_REPO)}); })()`);
+          if (await exists('.rail .sb-reveal')) await click('.rail .sb-reveal');
+          await sleep(300);
+          const wsId = await js(`window.__store.getState().workspaces.find((w) => w.path.toLowerCase() === ${JSON.stringify(E.SMOKE_REPO.toLowerCase())})?.id ?? null`);
+          await js(`(() => { window.__reqKinds = []; const orig = WebSocket.prototype.send; const wrap = function (d) { try { const m = JSON.parse(d); if (m && m.request && m.request.req) window.__reqKinds.push(m.request.req.kind); } catch {} return orig.call(this, d); }; wrap.__smoke = true; WebSocket.prototype.send = wrap; })()`);
+          await ctxMenuAt(`.sidebar [data-group="${wsId}"] > .sb-group-head`);
+          const menuEdit = await waitFor('!!document.querySelector(".menu [data-id=\\"edit\\"]")', 2000);
+          if (menuEdit) await click('.menu [data-id="edit"]');
+          const dlgShown = await waitFor('!!document.querySelector("[data-id=\\"project-dialog\\"] .project-dialog")', 2000);
+          const rows = await js(`(() => { const d = document.querySelector('.project-dialog'); if (!d) return null; return { main: !!d.querySelector('.pj-folder.main'), mainX: !!d.querySelector('.pj-folder.main [data-act="remove-folder"]'), path: d.querySelector('.pj-folder.main .pj-path')?.textContent ?? null, name: d.querySelector('#pj-name')?.value ?? null }; })()`);
+          await js(`[...document.querySelectorAll('.project-dialog .actions .btn')].find((b) => b.textContent === '取消')?.click()`);
+          await sleep(300);
+          const cancelled = { closed: !(await exists('.project-dialog')), sent: await js(`window.__reqKinds.filter((k) => k === 'workspaces.update').length`) };
+          check('编辑项目: from the project menu; the main folder row has no ×; 取消 closes it and sends nothing', menuEdit && dlgShown && !!rows && rows.main && !rows.mainX && cancelled.closed && cancelled.sent === 0, JSON.stringify({ menuEdit, dlgShown, rows, cancelled }));
+          // an extra folder: the files panel shows a group per folder
+          await js(`window.__store.getState().updateWorkspace(${JSON.stringify(wsId)}, { folders: [${JSON.stringify(extraDir)}] })`);
+          await waitFor(`(window.__store.getState().workspaces.find((w) => w.id === ${JSON.stringify(wsId)})?.folders ?? []).length === 1`, 3000);
+          await js(`window.__store.getState().dispatchLayout({ t: 'dock.set', patch: { open: false } })`);
+          await sleep(350);
+          if (!(await js('!!document.querySelector(".menu.sess-menu")'))) await click('.sess-head .sh-more > button');
+          await waitFor('!!document.querySelector(".menu.sess-menu [data-view]")', 3000);
+          await sleep(250);
+          await click('.menu.sess-menu [data-view="files"]');
+          const groups = await waitFor('document.querySelectorAll(".dock .files-view .fv-body:not([hidden]) .root-group").length === 2', 6000);
+          const groupNames = await js(`[...document.querySelectorAll('.dock .files-view .fv-body:not([hidden]) .root-group-head')].map((h) => h.getAttribute('title'))`);
+          check('a project with an extra folder: the files panel has a group per folder (main first)', groups && String(groupNames[1]).toLowerCase() === extraDir.toLowerCase(), JSON.stringify({ groups, groupNames }));
+          // 从侧栏移除项目 asks first; cancelled, the project stays
+          await ctxMenuAt(`.sidebar [data-group="${wsId}"] > .sb-group-head`);
+          await waitFor('!!document.querySelector(".menu [data-id=\\"edit\\"]")', 2000);
+          await click('.menu [data-id="edit"]');
+          await waitFor('!!document.querySelector(".project-dialog [data-act=\\"remove-project\\"]")', 2000);
+          const extraRow = await exists('.project-dialog .pj-folder:not(.main) [data-act="remove-folder"]');
+          await click('.project-dialog [data-act="remove-project"]');
+          const confirmShown = await waitFor('document.querySelectorAll(".dialog-bg .dialog").length >= 2', 2000);
+          await js(`[...document.querySelectorAll('.dialog-bg .dialog:not(.project-dialog) .actions .btn')].find((b) => !b.classList.contains('danger') && !b.classList.contains('primary'))?.click()`);
+          await sleep(300);
+          const stays = await js(`window.__store.getState().workspaces.some((w) => w.id === ${JSON.stringify(wsId)})`);
+          await js(`[...document.querySelectorAll('.project-dialog .actions .btn')].find((b) => b.textContent === '取消')?.click()`);
+          check('编辑项目: the extra folder is listed with ×; 从侧栏移除项目 asks first — cancelled, the project stays', extraRow && confirmShown && stays, JSON.stringify({ extraRow, confirmShown, stays }));
+          await js(`window.__store.getState().updateWorkspace(${JSON.stringify(wsId)}, { folders: [] })`);
+          await js(`window.__store.getState().dispatchLayout({ t: 'dock.set', patch: { open: false } })`);
+          await sleep(300);
+          try { fs.rmSync(extraDir, { recursive: true, force: true }); } catch { /* windows may hold it */ }
+        }
 
         // ---- re-review I-2: a provider picked on the chips of a conversation that is not running is recorded like
         // session.setProvider when the send reopens it — SessionMeta.providerId and the canonical 「switch」 line (usage

@@ -20,3 +20,14 @@ spec §5.1 / §4.2 / `mock-home.png`。全部在 `web/src/features/sidebar/`。
 - **项目只收自己文件夹里的对话**（2026-10-14 用户报告：把用户目录设为项目后，所有子文件夹的对话都挤在它下面，Claude 官方应用是每个文件夹一组）：`features/paths.ts` 的 `projectFor()`（同一目录，`samePath`），侧栏和首页都用它；以前是「最长前缀」。子文件夹的对话在「文件夹」里各自一组。编排 worktree 仍靠 `groupCwd` 归回运行目录。
 - **「其它文件夹」→「文件夹」**（同一天，用户选的「每个文件夹平铺」）：区（`data-id="other"`）的标题不再是折叠按钮；`sidebar/folders.ts` 的 `splitFolders()` 取最近的 `FOLDERS_SHOWN`（10）个直接列出（每组单独折叠，`sections[cwd]`），其余在「更早的文件夹」行（`data-id="older"`，折叠键 `sections.__older`，默认折叠；折着时转圈 + 当前 / 在跑的行照旧留在下面，即原来 `__other` 的规则）。`folderLabels()`：和别的文件夹或项目同名时带上一级目录名。文件夹组上有「在这里新建对话」和「设为项目」（钉的图标；没有项目时仍写成文字）。
 - **项目排序**（2026-10-14 用户报告：移不了，新建的在最下面）：服务端早就有 `workspaces.reorder`，前端从没用。现在 `sidebar/reorder.ts`（`moveTo` / `dropOrder`，纯函数）+ store 的 `reorderWorkspaces()`（先本地改、再请求）；项目头 `draggable`（自己的 dataTransfer 类型 `application/x-cw-project`，对话行拖不进来；手机、多选、筛选中、只有一个项目时不能拖），落点画在目标头的上沿 / 下沿（`.drop-before` / `.drop-after`）；项目菜单「移到最上面 / 上移 / 下移」（`move-top` / `move-up` / `move-down`，按位置显示）。`MetaStore.addWorkspace()` 新项目 order 0、其它 +1。Electron 实窗验证：新加的在最上、拖最下的到第一个上半 → 到最上、菜单下移、刷新后顺序还在。
+
+## 一个「显示」菜单（阶段 C，2026-10-25）
+
+- 项目标题行的漏斗换成「显示」按钮（`data-id="view"`，图标照旧），菜单 `sidebar/view-menu.tsx`（旧的 `filter-menu.tsx` 删了）：筛选框、分组方式（文件夹 / 项目 / 日期 / 不分组）、排序（最近更新 / 创建时间 / 名称）、显示已归档、其它 agent 的对话、每组（5 / 10 / 全部）、来源、机器、选择多个、新建分区、恢复默认、查看全部、管理对话来源。
+- **子选项在同一个菜单里原地展开**（`.sb-view-sub`），不开二级菜单：全局只能有一个锚定菜单（`useAnchoredMenu`），开第二个会关掉第一个。选了立即生效、菜单不关；选择多个 / 新建分区 / 查看全部 / 管理对话来源会关。
+- 存储：`ui.sidebar.view`（`{ groupBy, sortBy, show: { archived, otherAgents, perGroup } }`，`view.ts` 的 `readView` 容错读）、`ui.sidebar.sections`（`[{ id, name, ids }]`）。`showArchived` 现在会持久化（`setShowArchived` 写进 `ui.sidebar.view.show.archived`，`loadMeta` 读回来）。恢复默认只动视图（和显示已归档），不动自建分区。
+- 分组 / 排序是纯函数 `view.ts` 的 `groupSessions` / `sortSessions` / `dateBucket`（`view.test.ts`）。按项目：和以前一样（项目 + 「文件夹」区）；按文件夹：没有项目 / 文件夹之分，项目的主文件夹那组用项目名和项目菜单，标题写「对话」；按日期：今天 / 昨天 / 最近 7 天 / 最近 30 天 / 更早，默认展开；不分组：一个平的列表（`Group section`，没有 `.sb-group-head`）。其它机器的组在所有模式下都按机器分。每组 N 是 `Group` 的 `first`（原来写死的 `PAGE_FIRST`），`renderedRows` 用同一个数。
+- 「其它 agent 的对话」关掉时只在来源选「全部」时生效（`filterSessions` 的 `otherAgents`）；来源计数不受它影响，不然别家的 chip 会变成 0。
+- 自建分区：在「已固定」下面，行拖到分区标题上加入（`MIME_SESSION`，对话同时还在原分组里），行上的 × 移出，分区的 ··· / 右键菜单可重命名、删除（删除前确认）。
+- 入口表（`entries.ts`）：`filter` 改名 `view`；`view` place 新增 `group-by` / `sort-by` / `other-agents` / `per-group` / `new-section` / `reset` / `all`；新 place `custom`（`custom-section` / `custom-rename` / `custom-delete` / `custom-out`）、新 section `custom`；项目菜单加 `edit`（编辑项目，见 `phase03-files-git` 的多根面板）。外框控件计数仍是 16（一个按钮换一个按钮）。
+- ui-smoke：旧选择器 `data-id="filter"` / `.menu.sb-filter` 全部迁到 `data-id="view"` / `.menu.sb-view`（断言没删、只换选择器），`SCOPES` 加 `custom`；侧栏段里新增「显示」菜单的整套检查。

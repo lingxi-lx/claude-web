@@ -393,7 +393,7 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
           const shut = !!collapsed[k];
           const menuOpen = toggleMenu(k);
           return (
-            <div key={c.id} className={clsx('sb-group sb-sec sb-custom', shut && 'collapsed', dropOn === c.id && 'drop-on')} data-group={k} data-section={c.id}>
+            <div key={c.id} className={clsx('sb-group sb-sec sb-custom', shut && 'collapsed', dropOn === c.id && 'drop-on')} data-group={k} data-section={c.id} data-id={sec('custom')}>
               <div className="sb-sec-h fold" data-id={cu('custom-section')} role="button" tabIndex={0} aria-expanded={!shut} title={tr('把对话拖到这里放进这个分区')}
                 onClick={() => toggleGroup(k, shut)} onContextMenu={menuOpen}
                 onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggleGroup(k, shut); } }}

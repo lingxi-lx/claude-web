@@ -25,3 +25,12 @@ spec §5.3、§5.11（权限卡）、`mock-session.png`。
 - **等你回答时不转圈**：Claude 在问问题 / 等确认（`state === 'waiting'` 或有 `pending`）时，计划卡加 `data-waiting`，进行中那一项的转圈停住、变成等待色，悬停提示「等你回答后继续」。
 - **问题卡 Enter**（`PermissionCards.tsx` 的 `enter`）：「其它」输入框里按 Enter = 提交回答；焦点在单选项上按 Enter = 选它并提交；多选项上 Enter 只是勾选。输入法组字时的 Enter 不算（`imeComposing`）。
 - **思考框跟到底**（`useFollowEnd`）：思考正文限高 360px、框内滚动，流式输出时新字长在框底下，得一直手动往下滑。现在流式时框保持在末尾；用户往上滚了就不跟，滚回末尾又开始跟。
+
+## 问答卡在对话里（阶段 C，2026-10-25）
+
+- AskUserQuestion 不再停靠在输入框上方：`chat/AskCard.tsx` 画在对话末尾（`TurnList` 之后、计划卡 `PlanDock` 之前），输入框上方照旧是 RunCard；别的权限卡照旧停靠（`permission-dock.ts` 的 `splitPending()` 把一个对话的 pending 分成 `dock` / `ask`，Composer 和 PermissionDock 都用它）。逻辑是纯函数 `chat/ask-card.ts`（`askQuestions` / `pick` / `answerOf` / `assemble` / `step` / `askKey`），测试在 `ask-card.test.ts`。
+- 一页一题（`‹ 1 / 3 ›`），翻页不丢答案；↑↓ 移动、1–9 直接选（最后一个数字是「其它」）、Enter（单选行上：选中并翻页；多选行上：勾选）、Ctrl+Enter 下一题 / 最后一题提交；IME 组字时什么都不做；「其它」的输入框里只认 Enter。带 `preview` 的选项获得焦点（或被选中）时旁边显示预览。
+- 答案格式不变：`updatedInput.answers[question] = 标签用 ", " 连接`（多选按选项顺序，「其它」的文字在最后）；跳过的题是 `（用户跳过）`；**全部跳过 = 拒绝**（`denyResponse`，等同原来的「跳过」）。
+- 防误触：卡片出现时不抢焦点（用户可能在打字）。输入框空着按 Enter（等过 600 ms 冷却，同停靠卡）只把焦点移进卡片（`usePrimary` 注册的是 `focusCard`），不发任何帧；输入框里有字按 Enter 照旧是「用这段话拒绝」（Composer 的 `dockAction`）。
+- 没做的：停靠卡上的「改用排队的这段话回复」和 `dockNote` 提示只在 `PermissionDock` 里画，问答卡没有这两样（排队的那段话在问答卡在场时不会被自动用掉，只是没有那个按钮）。
+- ui-smoke 段 `stage-c-ask`：注入两题的 pending，断言位置、不抢焦点、空 Enter 进卡片、键盘 / 翻页 / 预览 / 其它 / IME、发出的 `permission.respond`、跳过一题 / 全部跳过、侧栏「需要你」。mock 对话不在跑，所以断言的是「输入框还在」而不是 RunCard。

@@ -1378,11 +1378,11 @@ html.desktop.mac .app.no-sidebar .over-head .sb-reveal { margin-left: 0; }
 @media (hover: none) { .sb-top [data-id="collapse"] { opacity: 1; } }
 /* the same for the 项目 header's funnel and + (打开文件夹): shown with the pointer over the sidebar, on key focus, and
    the funnel whenever it has something to say (a filter on, 显示已归档, its menu open → .on) */
-.sb-sec-h [data-id="filter"]:not(.on), .sb-sec-h [data-id="add-project"] { opacity: 0; transition: opacity var(--dur-2) var(--ease-out); }
-.sidebar:hover .sb-sec-h [data-id="filter"], .sidebar:hover .sb-sec-h [data-id="add-project"],
-.sb-sec-h [data-id="filter"]:focus-visible, .sb-sec-h [data-id="add-project"]:focus-visible,
-.app.mobile .sb-sec-h [data-id="filter"], .app.mobile .sb-sec-h [data-id="add-project"] { opacity: 1; }
-@media (hover: none) { .sb-sec-h [data-id="filter"], .sb-sec-h [data-id="add-project"] { opacity: 1; } }
+.sb-sec-h [data-id="view"]:not(.on), .sb-sec-h [data-id="add-project"] { opacity: 0; transition: opacity var(--dur-2) var(--ease-out); }
+.sidebar:hover .sb-sec-h [data-id="view"], .sidebar:hover .sb-sec-h [data-id="add-project"],
+.sb-sec-h [data-id="view"]:focus-visible, .sb-sec-h [data-id="add-project"]:focus-visible,
+.app.mobile .sb-sec-h [data-id="view"], .app.mobile .sb-sec-h [data-id="add-project"] { opacity: 1; }
+@media (hover: none) { .sb-sec-h [data-id="view"], .sb-sec-h [data-id="add-project"] { opacity: 1; } }
 .sb-nav { padding: 2px var(--sp-2) 6px; flex: none; }
 .sb-nav .nav { height: 34px; padding: 0 10px; gap: 10px; }
 .sb-nav .nav > svg { color: var(--ink-3); flex: none; }

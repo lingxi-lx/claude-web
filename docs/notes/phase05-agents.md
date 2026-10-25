@@ -21,3 +21,8 @@
   `model_catalog_json` 是用户的 **codexmate（AiMaMi 路由）开路由时自己写进 `~/.codex/config.toml`** 的（它的日志 `~/.codex/codexmate/logs/aimami-debug.log` 里有 RouterOn / NativeOff 改这一项的记录），
   它生成的目录文件比现在装的 Codex 少字段，Codex 自己的命令行也一样起不来。这个文件是用户 / 那个工具的，我们不改：`agents/codex-config-hint.ts` 把这类错误说成人话（哪个设置、哪个文件、
   谁写的、怎么修：关 codexmate 路由 / 更新它 / 删那一行，然后点重试），其它配置错误给通用建议。顺带 `JsonRpcProcess.stderrTail` 去掉了颜色码（以前错误信息里是 `‖[2m…` 一堆乱码）。
+
+## 项目的额外文件夹给其它 agent（阶段 C，2026-10-25）
+
+- Codex：本机 `codex-cli 0.163.0` 的 `codex app-server generate-ts` 里，`ThreadStartParams` / `ThreadResumeParams` 都有 `config?: { [key: string]: JsonValue }`（`-c key=value` 那套配置覆盖），`turn/start` 的 `sandboxPolicy` 里也有 `writableRoots`（我们传 `sandboxPolicy: null`，没用这条）。实现：`CodexDriver` 的 hooks 带 `extraDirs`，只有沙箱是 `workspace-write` 时 `thread/start` / `thread/resume` 带 `config: { 'sandbox_workspace_write.writable_roots': extraDirs }`；只读（计划模式）和 `danger-full-access` 不带。`drivers.test.ts` 用 mock 的 `CW_MOCK_RPC_LOG` 断言参数；没有真 Codex 的 e2e。
+- ACP 等其它 agent：没有对应参数，只用主文件夹（编辑项目对话框里写明了）。
