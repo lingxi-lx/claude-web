@@ -45,6 +45,7 @@ export class WslService {
   known(distro: string): boolean { return typeof distro === 'string' && this.names.includes(distro); }
 
   private async ensureKnown(distro: string) {
+    if (!this.available()) throw new Error(tr('WSL 只在 Windows 上可用'));
     if (!this.known(distro)) await this.list();
     if (!this.known(distro)) throw new Error(tr('没有这个 WSL 发行版：{d}', { d: String(distro).slice(0, 80) }));
   }

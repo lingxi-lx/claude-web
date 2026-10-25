@@ -100,6 +100,7 @@ export const EN_SERVER: Record<string, string> = {
   "The application, by a name it was granted under (\"Notepad\", \"记事本\", \"msedge\").": "The application, by a name it was granted under (\"Notepad\", \"记事本\", \"msedge\").",
   "URL / 参数里有打码值，请填写真实值": "The URL / arguments contain a masked value. Enter the real value",
   "URL 必须以 http:// 或 https:// 开头": "The URL must start with http:// or https://",
+  "WSL 只在 Windows 上可用": "WSL is only available on Windows",
   "WSL 对话只能开在本机": "A WSL conversation can only open on this computer",
   "WSL 里只能跑 Claude Code": "Only Claude Code can run in WSL",
   "Windows 电脑": "Windows computer",
