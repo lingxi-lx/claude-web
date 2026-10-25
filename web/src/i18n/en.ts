@@ -4136,4 +4136,7 @@ export const EN_WEB: Record<string, string> = {
   "不认识这一行：{line}": "Cannot read this line: {line}",
   "不是 flowchart / graph": "Not a flowchart / graph",
   "图里没有节点": "The chart has no nodes",
+  "让 Claude 画可交互的节点图": "Let Claude draw interactive node graphs",
+  "告诉 Claude 这里能把 nodegraph 代码块显示成能拖、能改的节点图，适合画流程、依赖、权限和架构。改了之后新开的对话生效。": "Tells Claude that nodegraph code blocks show here as node graphs you can drag and change — good for flows, dependencies, permissions and architecture. Applies to new conversations.",
+  "node graph diagram flowchart mermaid 节点图 流程图 架构图": "node graph diagram flowchart mermaid architecture",
 };

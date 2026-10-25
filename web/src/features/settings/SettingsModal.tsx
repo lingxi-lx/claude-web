@@ -64,6 +64,7 @@ const CONTROLS: Record<EntryId, (e: EntryMeta) => ReactNode> = {
   'ui.backdropInChat': (e) => <Toggle k={e.id} label={e.label} def />,
   'ui.welcomeLayout': (e) => <Seg k={e.id} def="under" label={e.label} options={[{ id: 'under', l: tr('框下一行') }, { id: 'inbox', l: tr('框里') }]} />,
   'sessions.mcp': (e) => <Toggle k={e.id} label={e.label} def />,
+  'ui.nodegraphHint': (e) => <Toggle k={e.id} label={e.label} def />,
   'claude.desktopSkills': (e) => <Toggle k={e.id} label={e.label} def />,
   'worktree.dir': (e) => <TextSetting k={e.id} label={e.label} placeholder=".claude/worktrees/" mono />,
   'worktree.prefix': (e) => <TextSetting k={e.id} label={e.label} placeholder="worktree-" mono />,

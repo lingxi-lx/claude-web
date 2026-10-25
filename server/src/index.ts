@@ -36,7 +36,8 @@ import { AgentTranscripts } from './agents/transcript.js';
 import { CanonicalLog } from './session/canonical.js';
 import { MemoryService } from './memory/service.js';
 import { setMemoryMcpEnabled } from './memory/launcher.js';
-import { setPromptSuggestions, setThinkingLanguageSetting } from './runtime/session-runner.js';
+import { setNodegraphHint, setPromptSuggestions, setThinkingLanguageSetting } from './runtime/session-runner.js';
+import { NODEGRAPH_HINT_KEY } from './runtime/nodegraph-hint.js';
 import { THINKING_LANGUAGE_KEY } from './runtime/thinking-language.js';
 import { LocalEnvStore } from './runtime/local-env.js';
 import { setSessionsDeps, setSessionsMcpEnabled } from './sessions-mcp/tools.js';
@@ -338,6 +339,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   const memory = new MemoryService();
   setMemoryMcpEnabled(meta.settings()['memory.mcp'] !== false);
   setPromptSuggestions(meta.settings()['ui.promptSuggestions'] !== false);
+  setNodegraphHint(meta.settings()[NODEGRAPH_HINT_KEY] !== false);
   setThinkingLanguageSetting(meta.settings()[THINKING_LANGUAGE_KEY]);
   setSessionsMcpEnabled(meta.settings()['sessions.mcp'] !== false);
   setDesktopSkillsEnabled(meta.settings()['claude.desktopSkills'] !== false);

@@ -1,4 +1,5 @@
 import { query, type Query, type SDKMessage, type SDKUserMessage, type Options, type PermissionResult, type McpServerConfig } from '@anthropic-ai/claude-agent-sdk';
+import { nodegraphHintPrompt } from './nodegraph-hint.js';
 import type { ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
@@ -117,6 +118,9 @@ interface PendingPermission {
 let promptSuggestionsOn = true;
 /** Settings → 下一句提示 (`ui.promptSuggestions`); a query started from now on asks for them or not. */
 export function setPromptSuggestions(on: boolean) { promptSuggestionsOn = on; }
+let nodegraphHintOn = true;
+/** spec D4: the ```nodegraph hint in the appended system prompt (setting ui.nodegraphHint); read when a process starts. */
+export function setNodegraphHint(on: boolean): void { nodegraphHintOn = on; }
 
 let thinkingLanguageSetting: unknown = '';
 /** Settings → 思考用的语言 (`ai.thinkingLanguage`); conversations pick it up through refreshThinkingLanguage(). */
@@ -505,7 +509,7 @@ export class SessionRunner extends EventEmitter {
     // — only when the model is bound (`sub`): a pick that cannot be reached leaves the subagents on the main model, and
     // sending every piece of work to them would only cost more
     const delegate = bare || !sub ? '' : subagentPolicyPrompt(this.subagent);
-    const append = [verify, this.thinkingSection, delegate].filter(Boolean).join('\n\n');
+    const append = [verify, this.thinkingSection, delegate, bare ? '' : nodegraphHintPrompt(nodegraphHintOn)].filter(Boolean).join('\n\n');
     const allowed = bare ? [] : [...webAllowedTools(), ...(Object.keys(computer).length ? computerAllowedTools() : []), ...(Object.keys(sessionsMcp).length ? SESSIONS_ALLOWED : []), ...(Object.keys(previewMcp).length ? PREVIEW_ALLOWED : [])];
     this.preAllowed = new Set(allowed);
     const noEngineSearch = engineSearchOff({ engine: engine.kind, userChoice: 'WEB_SEARCH_ADAPTER' in fenv || userPickedSearchAdapter(this.cwd) });
