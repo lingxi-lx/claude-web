@@ -170,11 +170,14 @@ function seedHome(home) {
   pu = null; un = 60;
   const gb = { ...base, sessionId: graphSid };
   const gline = (o, s) => { const uuid = `00000000-0000-4000-8000-0000000c0f${String(++un).padStart(2, '0')}`; const l = { ...gb, parentUuid: pu, uuid, timestamp: at(s), ...o }; pu = uuid; return l; };
-  fs.writeFileSync(path.join(proj, `${graphSid}.jsonl`), [
+  // staged outside the projects folder and copied in by the node-graph phase: one more sidebar row earlier makes the
+  // list overflow, and the 显示 → 分组方式 check (its menu closes when the list it sits in scrolls) would trip on it
+  const graphStage = path.join(home, `${graphSid}.jsonl`);
+  fs.writeFileSync(graphStage, [
     gline({ type: 'user', message: { role: 'user', content: 'smoke: draw who can read the bucket' } }, 0),
     gline({ type: 'assistant', message: { id: 'msg_g1', type: 'message', role: 'assistant', model: 'claude-smoke', content: [{ type: 'text', text: graphText }], stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 } } }, 4),
   ].map((x) => JSON.stringify(x)).join('\n') + '\n');
-  return { repo, sid, toolsSid, reviewSid, graphSid, transcript: path.join(proj, `${sid}.jsonl`) };
+  return { repo, sid, toolsSid, reviewSid, graphSid, graphStage, graphDest: path.join(proj, `${graphSid}.jsonl`), transcript: path.join(proj, `${sid}.jsonl`) };
 }
 
 async function startServer(home, out, extraEnv) {
@@ -268,13 +271,15 @@ async function runner() {
     SMOKE_TOOLS_SID: seed?.toolsSid ?? '',
     SMOKE_REVIEW_SID: seed?.reviewSid ?? '',
     SMOKE_GRAPH_SID: seed?.graphSid ?? '',
+    SMOKE_GRAPH_STAGE: seed?.graphStage ?? '',
+    SMOKE_GRAPH_DEST: seed?.graphDest ?? '',
     // the server's data dir (the temp HOME's): checks that read what the server wrote (the canonical mirror)
     SMOKE_DATA: home ? path.join(home, '.claude-web') : '',
     // the mock ACP agent (phase 5: a real permission request) runs under this node, not Electron
     SMOKE_NODE: process.execPath,
     SMOKE_SHOW: arg('--show', false) ? '1' : '',
     SMOKE_INVENTORY: JSON.stringify(inv),
-  }, (idle + 520) * 1000);
+  }, (idle + 600) * 1000); // (+80 s: the node-graph phase of stage D)
   let r = null;
   try { r = JSON.parse(fs.readFileSync(result, 'utf8')); } catch { /* electron died */ }
   let failed = !r || code !== 0;
@@ -3258,6 +3263,8 @@ function driver() {
         const gsid = JSON.stringify(E.SMOKE_GRAPH_SID);
         const G = '.pane.focused .ng-chat';
         await js(`window.__store.getState().dispatchLayout({ t: 'dock.set', patch: { open: false } })`);
+        fs.copyFileSync(E.SMOKE_GRAPH_STAGE, E.SMOKE_GRAPH_DEST);
+        await waitFor(`!!document.querySelector('.sidebar [data-sid=' + ${JSON.stringify(JSON.stringify(E.SMOKE_GRAPH_SID))} + ']')`, 15000);
         await js(`window.__store.getState().loadHistory(${gsid})`);
         const drawn = await waitFor(`document.querySelectorAll('${G} .ng-card').length === 5`, 10000);
         await js(`document.querySelector('${G}')?.scrollIntoView({ block: 'center' })`);
