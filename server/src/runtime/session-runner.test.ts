@@ -2201,3 +2201,18 @@ describe('the subagents model (the composer 子代理 chip)', () => {
     }
   });
 });
+
+describe('SessionRunner: 项目说明 (stage F2)', () => {
+  it("the project's instructions are appended to the system prompt; none, nothing", async () => {
+    queries.length = 0;
+    const r = new SessionRunner({ sessionId: 'pi-1', cwd: '/x' } as any, undefined, { projectInstructions: '# Project instructions (App)\nUse pnpm.' });
+    await tick();
+    expect(queries[0].options.systemPrompt.append ?? '').toContain('Use pnpm.');
+    await r.close();
+    queries.length = 0;
+    const plain = new SessionRunner({ sessionId: 'pi-2', cwd: '/x' } as any);
+    await tick();
+    expect(queries[0].options.systemPrompt.append ?? '').not.toContain('Project instructions');
+    await plain.close();
+  });
+});

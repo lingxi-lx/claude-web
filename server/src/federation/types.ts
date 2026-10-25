@@ -56,6 +56,8 @@ export interface PeerInfo {
   /** the remote claude-web's own serverId (from its hello) */
   serverId?: string;
   version?: string;
+  /** 常开机器 (stage F1): listed first in 选机器, offered by 交给常开机器继续 */
+  alwaysOn?: boolean;
 }
 
 /** Stored in meta.json (`peers`). `token` is `enc:` (SecretService) — empty for ssh peers, which use the host's token. */
@@ -69,6 +71,8 @@ export interface PeerRecord {
   enabled: boolean;
   addedAt: number;
   serverId?: string;
+  /** 常开机器 (stage F1) */
+  alwaysOn?: boolean;
 }
 
 /** Marks a SessionSummary that lives on another machine. `offline`: from the last cached list (read-only). */
@@ -77,7 +81,7 @@ export interface SessionPeer { id: string; name: string; offline?: boolean }
 export type PeerRequest =
   | { kind: 'peers.list' }
   | { kind: 'peers.add'; url?: string; code?: string; name?: string; hostId?: string }
-  | { kind: 'peers.update'; id: string; patch: { name?: string; enabled?: boolean } }
+  | { kind: 'peers.update'; id: string; patch: { name?: string; enabled?: boolean; alwaysOn?: boolean } }
   | { kind: 'peers.repair'; id: string; code: string }
   /** reconnect now (an ssh peer after its host's token was fixed, or any peer after an error) */
   | { kind: 'peers.retry'; id: string }

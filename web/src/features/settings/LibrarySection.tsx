@@ -1,3 +1,4 @@
+import { openClaudeAiImport } from '@/features/cloud/CloudDialogs';
 import { useEffect, useState } from 'react';
 import { ws } from '@/ws/client';
 import { useStore } from '@/store';
@@ -136,6 +137,11 @@ export function LibrarySection() {
           {indexing ? <span className="spinner" /> : <Icon name="refresh" size={12} />} {indexing ? tr('正在重建索引…') : tr('重建索引')}
         </button>
         <span className="sub">{last ? tr('上次索引 {since}', { since: since(last) }) : tr('索引在后台自动更新；搜索不到时可以手动重建')}</span>
+      </div>
+      {/* 导入 claude.ai 数据 (stage F4): the export zip → the claude.ai source here + projects */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+        <button className="btn sm" data-act="claudeai-import" onClick={() => openClaudeAiImport()}><Icon name="cloud" size={12} /> {tr('导入 claude.ai 数据…')}</button>
+        <span className="sub">{tr('claude.ai 的数据导出包：对话进对话库，项目变成这里的项目')}</span>
       </div>
     </div>
   );

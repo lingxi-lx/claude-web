@@ -23,7 +23,8 @@ export function MachineChip({ peers, wsl, value, onPick, onAddSsh, onInstall, on
 }) {
   const [open, setOpen] = useState(false);
   const chip = useRef<HTMLButtonElement>(null);
-  const usable = peers.filter((p) => p.enabled);
+  // 常开机器 (stage F1) first: 合上电脑也继续
+  const usable = peers.filter((p) => p.enabled).sort((a, b) => Number(!!b.alwaysOn) - Number(!!a.alwaysOn));
   useEffect(() => { if (open) onOpen?.(); }, [open]);
   if (hideWhenAlone && !usable.length) return null;
   const m = machineOf(value);
@@ -70,7 +71,7 @@ export function MachineChip({ peers, wsl, value, onPick, onAddSsh, onInstall, on
                 <span className="cm-ck">{p.id === value && <Icon name="check" size={13} />}</span>
                 <span className="cm-tx">
                   <span className="cm-l">{p.name}</span>
-                  <span className="cm-d">{online ? tr('已连接') : tr('现在连不上')}</span>
+                  <span className="cm-d">{online ? (p.alwaysOn ? tr('常开 · 合上电脑也继续') : tr('已连接')) : tr('现在连不上')}</span>
                 </span>
               </button>
             );

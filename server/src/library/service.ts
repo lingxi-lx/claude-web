@@ -757,7 +757,7 @@ export class LibraryService extends EventEmitter {
       // a read-only source has no official way to continue: say so instead of handing it to a driver that cannot
       const src = this.source(route.kind);
       if (!src?.caps.resume) {
-        const name = this.opts.agents?.defs().find((d) => d.kind === route.kind)?.name ?? (route.kind === 'cursor' ? 'Cursor' : route.kind);
+        const name = this.opts.agents?.defs().find((d) => d.kind === route.kind)?.name ?? (route.kind === 'cursor' ? 'Cursor' : route.kind === 'claudeai' ? 'claude.ai' : route.kind);
         throw new Error(src ? tr('{name} 的历史对话是只读的，不能接着聊；可以在对话库里查看和搜索', { name }) : tr('这个对话的来源没有加入对话库'));
       }
       await this.transcripts.create({ sessionId: id, agent: route.kind, cwd: s.cwd, title: s.title, createdAt: s.createdAt ?? s.lastModified ?? Date.now(), nativeSessionId: route.nativeId, imported: true });

@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { EventEmitter } from 'node:events';
-import type { GatewayAuditConfig, GatewayGroup, GatewayKey, GatewayKeyGroup, GatewayLanConfig, Goal, ImBinding, ImGatewayConfig, MessageFeedback, PermissionMode, Provider, RemoteHost, Schedule, ScheduleRun, Workflow } from '../protocol.js';
+import type { GatewayAuditConfig, GatewayGroup, GatewayKey, GatewayKeyGroup, GatewayLanConfig, Goal, ImBinding, ImGatewayConfig, MessageFeedback, PermissionMode, DispatchFrom, HandoffInfo, HandoffFrom, Provider, RemoteHost, Schedule, ScheduleRun, Workflow } from '../protocol.js';
 import type { MaintenanceRun, MaintenanceTask, UpstreamAccount, UpstreamGroup } from '../upstreams/types.js';
 import type { DeviceRecord } from '../remote/service.js';
 import type { PeerRecord } from '../federation/types.js';
@@ -10,8 +10,8 @@ import { randomBytes } from 'node:crypto';
 import { normFolders } from './workspace-folders.js';
 export type { Schedule } from '../protocol.js';
 
-export interface Workspace { id: string; path: string; name: string; addedAt: number; order: number; /** extra folders (stage C2), never the main path; absent in old files */ folders?: string[] }
-export interface SessionMeta { /** replies pinned under them (protocol.ts) */ pinnedMsgs?: { id: string; text: string }[]; /** a rename made while the conversation's process ran: shown over the transcript's title, written into it again when the process ends */ pendingTitle?: string; /** 只聊天: a resume stays without tools (protocol.ts has the same field) */ chatOnly?: boolean; /** 保持电脑唤醒 while this conversation is busy (phase 6) */ keepAwake?: boolean; pinned?: boolean; archived?: boolean; workspaceId?: string; tags?: string[]; providerId?: string; /** sidebar grouping directory when it differs from the cwd (orchestration worktrees) */ groupCwd?: string; /** prompt-cache route key when it is not the session's own id (forks keep their root's) */ cacheKey?: string; /** the model its subagents run on, picked for this provider ('' = the main model) */ subagent?: { providerId: string; model: string }; /** the permission mode it last ran with: a resume without a pick comes back in it (the SDK never says it) */ permissionMode?: PermissionMode; /** 思考用的语言 of this conversation (protocol.ts has the same field) */ thinkingLanguage?: string; /** a `continueInClaude` source's conversation: the Claude conversation it goes on in (protocol.ts) */ continuedAs?: string; /** that Claude conversation: what it goes on from, how many of its messages are in it (protocol.ts) */ continuedFrom?: string; replayed?: number; /** stage E (protocol.ts has the same fields): 自动处理评论, the WSL distro it runs in, the built-in browser's recordings */ prAutoComments?: number; prCommentsDone?: string[]; prCommentsSent?: { ids: string[]; sha: string; at: number }; env?: { kind: 'local' } | { kind: 'wsl'; distro: string }; browserRecordings?: { path: string; start: number; end: number }[] }
+export interface Workspace { id: string; path: string; name: string; addedAt: number; order: number; /** extra folders (stage C2), never the main path; absent in old files */ folders?: string[]; /** stage F (protocol.ts has the same fields) */ instructions?: string; sessionsScope?: 'project'; permissionMode?: PermissionMode; claudeAiUuid?: string }
+export interface SessionMeta { /** replies pinned under them (protocol.ts) */ pinnedMsgs?: { id: string; text: string }[]; /** a rename made while the conversation's process ran: shown over the transcript's title, written into it again when the process ends */ pendingTitle?: string; /** 只聊天: a resume stays without tools (protocol.ts has the same field) */ chatOnly?: boolean; /** 保持电脑唤醒 while this conversation is busy (phase 6) */ keepAwake?: boolean; pinned?: boolean; archived?: boolean; workspaceId?: string; tags?: string[]; providerId?: string; /** sidebar grouping directory when it differs from the cwd (orchestration worktrees) */ groupCwd?: string; /** prompt-cache route key when it is not the session's own id (forks keep their root's) */ cacheKey?: string; /** the model its subagents run on, picked for this provider ('' = the main model) */ subagent?: { providerId: string; model: string }; /** the permission mode it last ran with: a resume without a pick comes back in it (the SDK never says it) */ permissionMode?: PermissionMode; /** 思考用的语言 of this conversation (protocol.ts has the same field) */ thinkingLanguage?: string; /** a `continueInClaude` source's conversation: the Claude conversation it goes on in (protocol.ts) */ continuedAs?: string; /** that Claude conversation: what it goes on from, how many of its messages are in it (protocol.ts) */ continuedFrom?: string; replayed?: number; /** stage E (protocol.ts has the same fields): 自动处理评论, the WSL distro it runs in, the built-in browser's recordings */ prAutoComments?: number; prCommentsDone?: string[]; prCommentsSent?: { ids: string[]; sha: string; at: number }; env?: { kind: 'local' } | { kind: 'wsl'; distro: string }; browserRecordings?: { path: string; start: number; end: number }[]; /** stage F (protocol.ts has the same fields) */ origin?: 'dispatch'; dispatchFrom?: DispatchFrom; handedOff?: HandoffInfo; handoffFrom?: HandoffFrom }
 
 interface Data {
   version: 1;
@@ -118,12 +118,17 @@ export class MetaStore extends EventEmitter {
     if (w) { w.name = name; await this.queueSave(); }
   }
   /** 编辑项目 (stage C2): the name and the extra folders (normalised: never the main folder, no duplicates) */
-  async updateWorkspace(id: string, patch: { name?: string; folders?: string[] }) {
+  async updateWorkspace(id: string, patch: { name?: string; folders?: string[]; instructions?: string | null; sessionsScope?: 'project' | null; permissionMode?: PermissionMode | null; claudeAiUuid?: string }) {
     const w = this.data.workspaces.find((x) => x.id === id);
     if (!w) return null;
     if (typeof patch.name === 'string' && patch.name.trim()) w.name = patch.name.trim();
     // only a list replaces them: anything else (a string from a confused client) leaves them as they are (C-S2)
     if (Array.isArray(patch.folders)) w.folders = normFolders(w.path, patch.folders);
+    // 项目页 (stage F2): null / '' clears
+    if (patch.instructions !== undefined) { const t = (patch.instructions ?? '').slice(0, 20_000); if (t.trim()) w.instructions = t; else delete w.instructions; }
+    if (patch.sessionsScope !== undefined) { if (patch.sessionsScope === 'project') w.sessionsScope = 'project'; else delete w.sessionsScope; }
+    if (patch.permissionMode !== undefined) { if (patch.permissionMode) w.permissionMode = patch.permissionMode; else delete w.permissionMode; }
+    if (typeof patch.claudeAiUuid === 'string' && patch.claudeAiUuid) w.claudeAiUuid = patch.claudeAiUuid;
     await this.queueSave();
     return { ...w, folders: w.folders ?? [] };
   }

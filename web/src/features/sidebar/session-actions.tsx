@@ -14,6 +14,8 @@ import type { RowMenuId } from './entries';
 import { TERMS } from '@/ui/terms';
 import { tr } from '@/i18n';
 import { SECTIONS_KEY, pruneSections, type CustomSection } from './view';
+import { canHandOffToPeer } from '@/features/cloud/logic';
+import { openHandoffDialog } from '@/features/cloud/HandoffDialog';
 
 export { effectiveCaps, capsIntersection, nativeCliCommand, type EffectiveCaps } from './caps';
 
@@ -206,6 +208,7 @@ export function SessionMenu({ s, onClose, style, extra, handoffInline, deleted }
           )}
         </>
       )}
+      {canHandOffToPeer(s, meta) && <button data-id={id('handoff-peer')} onClick={act(() => openHandoffDialog(s))}><Icon name="monitor" size={14} /> {tr('交给常开机器继续…')}</button>}
       {cli && <button data-id={id('native-cli')} onClick={act(() => openNativeCli(s))} title={cli}><Icon name="terminal" size={14} /> {tr('在原生 CLI 打开')}</button>}
       </>}
       <button data-id={id('copy-id')} onClick={act(() => { void navigator.clipboard.writeText(s.sessionId); useStore.getState().toast(tr('已复制 session id'), true); })}><Icon name="copy" size={14} /> {tr('复制 ID')}</button>

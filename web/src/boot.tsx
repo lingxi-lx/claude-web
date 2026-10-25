@@ -1,5 +1,6 @@
 // The application proper, loaded after main.tsx has settled the interface language (the English catalogs are a
 // separate chunk, see i18n/index.ts `loadEnglish`). Everything from here on may call `tr()` at module level.
+import { openFileMenuAt } from '@/features/files/FileMenu';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './app/App';
@@ -24,6 +25,7 @@ export function boot(): void {
   // Gemini web sessions die if the sidecar cannot renew its cookie: keep them alive while the app runs
   startGeminiKeepalive();
   (window as any).__store = useStore; // debugging aid
+  (window as any).__openFileMenu = (p: string) => openFileMenuAt(p, 40, 40); // ui-smoke: the file menu without a file row on screen
   // where every control of the old composer went (the table reach.test.ts checks): ui-smoke opens each place
   (window as any).__cwComposerReach = { reach: COMPOSER_REACH, container: PLACE_CONTAINER, opener: PLACE_OPENER };
   // installable on phones (LAN access); the desktop shell and dev server skip it, and so does the app inside the

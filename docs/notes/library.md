@@ -63,3 +63,11 @@
 - **续聊（2026-10-21 用户要求「像 Codex 那样」；10-22 起库里的 dsh 对话不再走这条，见上）**：dsh 的 ACP 服务端（`dsh --profile acp`）在 `initialize` 里声明 `sessionCapabilities: { list, resume, close }`，**没有标准 `loadSession`**。所以 `agents/acp-driver.ts` 续聊时先发 `session/resume`（`{ sessionId, cwd, mcpServers }`，要求 cwd 与创建时一致），再退回 `session/load`；`library/acp-source.ts` 的 `caps.resume` 也认 `sessionCapabilities.resume`。`DshSource` 继续负责列会话和读正文（ACP 没有 transcript replay），续聊由 ACP 驱动完成，新轮次由 dsh 写回同一份日志，下次读文件就能看到。`AGENT_DEFS` 里 dsh 默认命令是 `dsh --profile acp`（需 `npm i -g @deepseek-ai/dsh`；本机实测 npx 缓存那份依赖不全，`execa` / `zod` 解析失败，所以不用 npx）。
 - **resume 不能带我们的 MCP 列表**（2026-10-21 真机）：带上 `claude-web-memory` 的 stdio MCP 时 dsh 回 `Internal error`，去掉就成功。AcpDriver 现在先按完整 MCP 列表 resume，失败再不带 MCP 重试一次，并推一条「本次续聊没有挂载共享记忆 / 联网」的提示。
 - **真机实测**（`dsh` 0.2.1-rc.2）：`initialize` 12.8 s（`deepseek-harness-acp` 0.0.1）、`session/list` 4 个、`session/resume` 15.3 s、`session/close` 正常；用用户的 `session-86ce…` 跑完整 AcpDriver，`head.nativeSessionId` 保持原 id，未回退新会话。测试时创建的 3 个空会话目录已删除。限制：dsh 不支持 fork / 删除 / `session/load`，一次只允许一个进行中的 prompt。
+
+## claude.ai 的数据导出（阶段 F4，2026-10-25）
+
+- 一次性导入，不是同步；不碰 claude.ai 的任何接口。入口：设置 → 对话库 的「导入 claude.ai 数据…」、命令面板。上传 `POST /api/import/claude-ai`（要令牌，2 GB 上限）存到 `~/.claude-web/claude-ai/uploads/<随机>.zip`；`claudeai.scan` / `claudeai.import` 只认这个目录里的 zip，导完删掉。
+- zip 自己读（`server/src/import/zip.ts`，stored / deflate / zip64；`unzipper` 只是传递依赖，打包后不一定在）。解析 `server/src/import/claude-ai.ts`：按文件名在 zip 任意目录里找 `conversations.json` / `projects.json` / `users.json`；坏的一条跳过（`skipped`），整份坏才报错；`is_starter_project` 的示例项目不导。消息：content 为空用 `text`；artifacts 工具调用变成文字（标题 + 代码块）；其它工具调用是 `tool_use` + 紧跟的 user 行 `tool_result`（同 id）；附件的 `extracted_content` 变成「［附件 名］」文字块；`files` 只剩名字。行 uuid 稳定（再读一样）。
+- 存储：每个对话一个 `~/.claude-web/claude-ai/conversations/<uuid>.json`（`{ conv, cwd?, importedAt }`）；再导入按 uuid 去重，`updated_at` 更新的覆盖。来源 `ClaudeAiSource`（`AgentKind` 'claudeai'，id `claudeai-<uuid>`，只读：caps 只有 `resume` + `continueInClaude`）；「接着聊」走现成的 `continuation()`（同 dsh）。导入后自动 `library.join('claudeai')`，索引照常建（能搜）。
+- 项目：用户选了文件夹才导；每个项目建 `<文件夹>/<safeName(项目名)>/`，加成项目（`claudeAiUuid` 记来源，再导入就更新同一个），`prompt_template` → 项目说明，docs 写进去（**已有的文件不覆盖**，计 `filesKept`）。导出包里的对话一般不带项目 uuid，带了（`project_uuid` / `project.uuid`）就把 cwd 设成那个项目的文件夹，否则是主目录。
+- 调试：`node server/ws-phase39.mjs [port] [token]`（fixture 在 `server/fixtures/claude-ai-export/`）。

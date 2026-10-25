@@ -15,3 +15,17 @@
 - **peer 连接的判定**：`fromPeer = via 非空 || 连接带 ?peer=`；来自 peer 的请求不能碰 `peers.*`、只拿本机列表、不多跳。SSH 方式 peer 令牌失效后不会自己好：`remote.hosts.set` 会对骑在这个主机上的 peer `hostChanged()` 重连，界面也有「重试」（`peers.retry`）。
 - 已知限制：附件存本机（`/api/attachments`），发给远端会话时对方读不到路径（composer 已拦）；远端的文件 / Git / 搜索不做（ChatTile 对远端会话只留 对话 / 产物 标签）；`sessions.search` 合并时一个慢 peer 会把整次搜索拖到 5s 上限；SSH peer 每次重连都会 `TunnelManager.open()`，主机配了 `startCommand` 就会在远端重跑一次。
 - 调试：`node server/ws-phase15.mjs [port] [token]` 自己用临时 HOME 起第二个 server B（开远程监听、mock ACP 造会话），A 配对加入后测列表合并 / 打开发送 / 权限往返 / 交接 / 防环 / 吊销→令牌失效→重新配对 / B 下线；`CW_DEBUG=1` 打印两边收到的帧；失败时脚本自己打印 B 的日志尾部，`scripts/e2e.mjs` 对失败 / 超时（默认 300s，`E2E_PHASE_TIMEOUT_MS`）的 phase 重印完整输出和 A 的日志尾部。add / repair 之后用 `onlineIn()` 轮询 `peers.list` 到 online，别信单个等待窗口。单测：`federation/*.test.ts`（`peer-client.test.ts` 用进程内假服务器）。
+
+## 常开机器 + 交给常开机器继续 / 取回（阶段 F1，2026-10-25）
+
+- `PeerRecord.alwaysOn`（`peers.update { patch: { alwaysOn } }`，设置 → 其它电脑 每行一个「常开」勾）。`list()` 常开排前；MachineChip 里常开排前、副标题「常开 · 合上电脑也继续」。新的公开方法 `FederationService.request(peerId, req)`（派活 / 交接 / 发布到常开机器都走它）、`peerUrl(peerId)`。
+- 交接只给**本机的 Claude 对话**、**有远端的 Git 项目**（`handoff.check` 给原因）。流程在 `server/src/handoff/`：`git.ts` 纯 Git，`service.ts` 编排。
+  - 快照：把 `.git/index` **复制**到临时文件，`GIT_INDEX_FILE=<副本>` 跑 `git stash create`（只写对象，不写 `refs/stash`）；未跟踪文件（`ls-files --others --exclude-standard`，忽略的不带）也只 `git add` 进这份副本；`write-tree` + `commit-tree -p HEAD`。用户的分支 / 暂存区 / 工作区 / stash 逐字节不变（`git.test.ts` 和 e2e 37 都比对 index 文件的哈希）。`GIT_OPTIONAL_LOCKS=0`。
+  - 推送：`git push <remote> <commit>:refs/heads/cw/handoff-<8 位 hex>`，不带 `+`；`ls-remote` 先看名字被占没有，占了 / 被拒就换 id（最多 5 次）。用户的 pre-push hook 照常跑（没加 `--no-verify`）。
+  - 对方（`handoff.receive`，请求从 A 的 peer 连接进来，B 本地处理）：`<B 数据目录>/handoff/repos/<url 哈希>.git` 是 bare 缓存，`fetch <url> +refs/heads/<branch>:…`（只在缓存里强制），`worktree add <B 数据目录>/handoff/worktrees/<id>`；历史用 `replayEvents` → `toClaudeEntries` → `writeClaudeTranscript` 写成新的 Claude 对话（改名「<标题>（从 <机器> 交接）」，meta `handoffFrom`）；给了「接着做什么」才 `pool.open` + `send`。`received.json` 记 branch → worktree / url，取回时用。来自 peer 的 events 只留 user / assistant 文字和 tool 名（`cleanEvents`）。
+  - A 这边：`stop` 本机进程，meta `handedOff`（`HandoffInfo`）→ 输入框换成 `HandedOffBar`（已交给 <机器>，打开那边的对话 / 取回），侧栏行标「已交给 <机器>」。
+  - 取回（`handoff.fetchBack`）：先请对方 `handoff.publish`（它在自己的 worktree 里 `add -A` + commit + fast-forward push，失败也继续），再 `git fetch <remote> refs/heads/<branch>:refs/heads/<空名>`（已有就 `-2`、`-3`…），给 `diff HEAD...<新分支>`（截 400 KB）。**从不合并、不 checkout**；对话框里只有「复制合并命令」。
+- 路由：`handoff.check / start / fetchBack` 带 sessionId 但**故意不进 FORWARD**——其它机器上的对话由 planRoute 拒绝（rewrite.test 锁住）。
+- 坑：Windows 上 `core.autocrlf=true` 时对方 worktree 里的文件是 CRLF，比较内容先去掉 `\r`。`git push` 按远端名推会顺手更新 `refs/remotes/<remote>/cw/handoff-*`（不算用户的东西）。
+- 调试：`node server/ws-phase37.mjs [port] [token]` 自己起 B（临时 HOME）、临时仓库 + 临时 bare 远端，走完整交接 / 取回。
+- 没做：完成通知只在 A 打开了那边的对话时随 peer 事件来（没有单独的「那边做完了」推送）；外网上的常开机器没验（只验了本机第二个实例）。

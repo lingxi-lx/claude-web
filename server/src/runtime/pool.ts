@@ -14,6 +14,9 @@ import { withExplanation } from '../errors/explain.js';
 import { fullPick, providerKey, subagentModelFor } from '../models/subagent.js';
 import { tr } from '../i18n/index.js';
 import { projectFolders } from '../meta/workspace-folders.js';
+import { instructionsSection, projectFilesDir, projectOf } from '../meta/project.js';
+import { dataDir } from '../files/service.js';
+import fs from 'node:fs';
 
 const MODES: readonly PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk', 'auto'];
 /** A permission mode, or undefined for anything else (a stored setting is not trusted to be one). */
@@ -68,6 +71,24 @@ export class RunnerPool extends EventEmitter {
   private extraFolders(cwd: string): string[] {
     const meta = this.providers.meta;
     return meta && typeof meta.workspaces === 'function' ? projectFolders(cwd, meta.workspaces()) : [];
+  }
+
+  /**
+   * 项目页 (stage F2): the project a conversation opens in (meta.workspaceId, else its main folder) — its instructions
+   * (appended to the system prompt) and its project files folder (one more additional directory, when it has files).
+   */
+  private projectExtras(params: OpenSessionParams): { instructions: string; filesDir?: string } {
+    const meta = this.providers.meta;
+    if (!meta || typeof meta.workspaces !== 'function') return { instructions: '' };
+    const sm = params.sessionId ? meta.sessionMeta(params.sessionId) : undefined;
+    const w = projectOf({ cwd: params.cwd, workspaceId: sm?.workspaceId, groupCwd: sm?.groupCwd }, meta.workspaces());
+    if (!w) return { instructions: '' };
+    let filesDir: string | undefined;
+    try {
+      const d = projectFilesDir(dataDir(), w.id);
+      if (fs.existsSync(d) && fs.readdirSync(d).length) filesDir = d;
+    } catch { /* no files */ }
+    return { instructions: instructionsSection(w), ...(filesDir ? { filesDir } : {}) };
   }
 
   /** What the own claude.ai login runs with (settings claude.contextWindows / claude.compactAt, A7). */
@@ -190,8 +211,9 @@ export class RunnerPool extends EventEmitter {
       let account: AccountPrefs | undefined;
       if (!sp && params.env?.kind !== 'wsl') account = this.accountPrefs();
       // a conversation in a project's main folder works in the project's extra folders too (stage C2)
-      const extra = this.extraFolders(params.cwd);
-      r = new SessionRunner(params, sp, { thinkingLanguage, ...(account ? { account } : {}), ...(extra.length ? { additionalDirectories: extra } : {}) });
+      const proj = this.projectExtras(params);
+      const extra = [...this.extraFolders(params.cwd), ...(proj.filesDir ? [proj.filesDir] : [])];
+      r = new SessionRunner(params, sp, { thinkingLanguage, ...(account ? { account } : {}), ...(extra.length ? { additionalDirectories: extra } : {}), ...(proj.instructions ? { projectInstructions: proj.instructions } : {}) });
       // a pick is the conversation's from then on (a new one: under the id it was given; a fork gets its id at init)
       if (explicit !== undefined && m && !params.fork && !params.resumeAt) {
         void m.setSessionMeta(r.sessionId, { subagent: { providerId: providerKey(params.providerId), model: explicit } }).catch(() => { /* in memory; the next save persists it */ });

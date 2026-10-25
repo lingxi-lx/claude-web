@@ -954,6 +954,49 @@ html[data-reduce-motion='1'] * { animation: none !important; transition: none !i
 .project-dialog .pj-note { margin-top: 12px; font-size: 13px; color: var(--ink-3); word-break: normal; }
 .project-dialog .actions .grow { flex: 1; }
 .project-dialog .pj-remove { color: var(--err); }
+/* 项目页 (stage F2): tabs, instructions, files, conversations */
+.project-dialog .pj-tabs { display: flex; gap: 4px; margin: 4px 0 8px; border-bottom: var(--hairline) solid var(--edge-subtle); }
+.project-dialog .pj-tab { background: none; border: 0; padding: 6px 10px; font-size: 13px; color: var(--ink-3); border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; }
+.project-dialog .pj-tab.on { color: var(--ink-1); border-bottom-color: var(--accent); }
+.project-dialog .pj-instructions { width: 100%; min-height: 140px; resize: vertical; font: inherit; font-size: 13px; }
+.project-dialog .pj-check { display: flex; align-items: center; gap: 8px; margin: 12px 0 0; font-size: 13px; color: var(--ink-2); }
+.project-dialog .pj-drop { display: flex; align-items: center; gap: 8px; padding: 14px 12px; margin-bottom: 10px; border: 1px dashed var(--edge-subtle); border-radius: var(--r-md); color: var(--ink-3); font-size: 13px; }
+.project-dialog .pj-drop.over { border-color: var(--accent); color: var(--ink-1); }
+.project-dialog .pj-drop span { flex: 1; }
+.project-dialog .pj-convs { list-style: none; margin: 0; padding: 0; max-height: 50vh; overflow: auto; }
+.project-dialog .pj-conv { display: flex; width: 100%; gap: 8px; align-items: center; padding: 6px 8px; background: none; border: 0; border-radius: var(--r-sm); color: var(--ink-2); text-align: left; cursor: pointer; }
+.project-dialog .pj-conv:hover { background: var(--layer-hover); }
+/* stage F dialogs (features/cloud/): 交给常开机器继续 / 取回 / 派活 / 导入 claude.ai / 发布 */
+.cloud-dialog { width: min(560px, calc(100vw - 32px)); }
+.cloud-dialog.wide { width: min(760px, calc(100vw - 32px)); }
+.cloud-dialog:focus, .cloud-dialog:focus-visible { outline: none; } /* focused itself so Esc works with no field focused */
+.cloud-dialog .pj-label { display: block; margin: 12px 0 6px; font-size: 13px; color: var(--ink-3); }
+.cloud-dialog .pj-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.cloud-dialog .pj-tag { flex: none; font-size: 12px; color: var(--ink-4); }
+.cloud-dialog .pj-note { margin-top: 8px; font-size: 13px; color: var(--ink-3); word-break: normal; }
+.cloud-dialog textarea.field { width: 100%; resize: vertical; font: inherit; font-size: 13px; }
+.cloud-dialog .actions .grow, .cloud-dialog .grow { flex: 1; }
+.cloud-dialog .cloud-warn { color: var(--warn, var(--err)); display: flex; gap: 6px; align-items: center; }
+.cloud-dialog .cloud-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.cloud-dialog .cloud-row .pj-label { margin: 0; min-width: 48px; }
+.cloud-dialog .cloud-row select.field { flex: 1; }
+.cloud-peers { display: flex; flex-direction: column; border: var(--hairline) solid var(--edge-subtle); border-radius: var(--r-md); margin-top: 8px; }
+.cloud-peer { display: flex; align-items: center; gap: 8px; padding: 8px 10px; font-size: 13px; color: var(--ink-2); cursor: pointer; }
+.cloud-peer + .cloud-peer { border-top: var(--hairline) solid var(--edge-subtle); }
+.cloud-peer.off { opacity: .55; cursor: default; }
+.cloud-diff { max-height: 50vh; overflow: auto; padding: 10px; margin: 8px 0 0; border: var(--hairline) solid var(--edge-subtle); border-radius: var(--r-md); font-size: 12px; white-space: pre; }
+.cloud-exp { margin: 10px 0 4px; }
+.cloud-links { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.cloud-link { display: flex; align-items: center; gap: 8px; }
+.cloud-link code { font-size: 12px; }
+.cloud-published { list-style: none; margin: 0; padding: 0; max-height: 60vh; overflow: auto; }
+.cloud-published li { padding: 8px 0; }
+.cloud-published li + li { border-top: var(--hairline) solid var(--edge-subtle); }
+.cloud-pub-head { display: flex; align-items: center; gap: 8px; }
+.handed-off-bar { display: flex; align-items: center; gap: 8px; padding: 10px 12px; font-size: 13px; color: var(--ink-2); border: var(--hairline) solid var(--edge-subtle); border-radius: var(--r-lg, 12px); background: var(--layer-1, transparent); }
+.handed-off-bar .grow { flex: 1; min-width: 0; }
+.peer-always { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ink-3); }
+.all-arts-published { display: flex; align-items: center; gap: 4px; margin: 2px 8px 6px; }
 .modal.dialog .field { width: 100%; margin-bottom: 10px; }
 .btn.danger.solid { background: var(--err); color: #fff; border-color: transparent; }
 .btn.danger.solid:hover { filter: brightness(1.1); background: var(--err); }

@@ -79,6 +79,7 @@ import type { IncomingMessage } from 'node:http';
 import type { OrchestraService } from '../orchestra/service.js';
 import { parseProxySetting, proxy } from '../net/proxy.js';
 import { CharacterService, handleCharacters, isCharactersRequest } from '../characters/service.js';
+import { handleCloud, isCloudRequest, type CloudServices } from '../cloud/handlers.js';
 import type { ThemeService } from '../themes/service.js';
 import { usable } from '../themes/tools.js';
 import { handleOrchestra, isOrchestraRequest } from '../orchestra/handlers.js';
@@ -111,6 +112,8 @@ export interface Services {
   /** 后台: every conversation's running sub-agents / workflows / commands (background/service.ts). */
   background: BackgroundService;
   characters: CharacterService;
+  /** stage F: project files, 派活, 交接, 发布, 导入 claude.ai (cloud/handlers.ts) */
+  cloud?: CloudServices;
   themes: ThemeService;
   git: GitService;
   search: SearchService;
@@ -185,6 +188,16 @@ export class Hub {
     s.pool.on('state', (sessionId, state, error) => this.broadcast({ kind: 'session.state', sessionId, state, error }));
     s.pool.on('info', (info) => this.broadcast({ kind: 'session.info', info }));
     s.pool.on('permission', (request) => this.broadcast({ kind: 'permission.request', request }));
+    // 派活 (stage F3): a dispatched conversation says when it is done or needs an answer — a notice every window and the
+    // phone get (notify: a system notification when the window is not in front); IM chats are told by the IM router
+    s.pool.on('message', (sessionId, message: any) => {
+      if (message?.type !== 'result' || s.meta.sessionMeta(sessionId).origin !== 'dispatch') return;
+      this.broadcast({ kind: 'notice', text: message.is_error ? tr('派来的活出错了') : tr('派来的活做完了'), notify: true, sessionId });
+    });
+    s.pool.on('permission', (request: any) => {
+      if (!request?.sessionId || s.meta.sessionMeta(request.sessionId).origin !== 'dispatch') return;
+      this.broadcast({ kind: 'notice', text: tr('派来的活需要你回答'), notify: true, sessionId: request.sessionId });
+    });
     s.pool.on('permissionResolved', (_sid, requestId) => this.broadcast({ kind: 'permission.resolved', requestId }));
     // 操控电脑: which applications an agent may control is asked here, as a permission card of its conversation —
     // by this server, whatever the conversation's own permission mode lets through (computer/access.ts)
@@ -430,6 +443,7 @@ export class Hub {
     if (isOrchestraRequest(req)) return handleOrchestra(s.orchestra, req);
     if (isBackgroundRequest(req)) return handleBackground(s.background, req);
     if (isCharactersRequest(req)) return handleCharacters(s.characters, req, this.peerConns.has(ws) || this.remoteConns.has(ws));
+    if (isCloudRequest(req)) return handleCloud(s.cloud, req, { peer: this.peerConns.has(ws), remote: this.remoteConns.has(ws) });
     switch (req.kind) {
       case 'sessions.list': {
         const all = await s.library.list();
@@ -578,7 +592,7 @@ export class Hub {
         // the folders must be a list of existing folders: checked here (the page cannot), one sentence naming the first
         // that is not; a network folder only from this user's own windows, and its stat bounded (folder-check.ts)
         await checkExtraFolders(req.folders, { fromPeer: this.peerConns.has(ws) });
-        const w = await s.meta.updateWorkspace(req.id, { name: req.name, folders: req.folders });
+        const w = await s.meta.updateWorkspace(req.id, { name: req.name, folders: req.folders, instructions: req.instructions, sessionsScope: req.sessionsScope, permissionMode: req.permissionMode });
         if (!w) throw new Error(tr('这个项目已经不在了'));
         return w;
       }

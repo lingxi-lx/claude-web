@@ -197,4 +197,20 @@ describe('ImRouter: agent and provider of the sessions a bot opens', () => {
     a.inbound_({ text: '/use 2' }); await tick();
     expect(pool.opened.at(-1).agent).toBeUndefined();
   });
+
+  it('/dispatch (派活, stage F3): a new conversation in the named project with its mode, bound here, the task sent, marked', async () => {
+    router.updateConfig({ ...cfg, allowUsers: ['u1'] });
+    meta.ws = [{ path: 'C:/proj' }, { id: 'w2', name: 'Site', path: 'C:/site', permissionMode: 'acceptEdits' }] as any;
+    const metas: Record<string, any> = {};
+    (meta as any).setSessionMeta = async (id: string, p: any) => { metas[id] = p; };
+    a.inbound_({ text: '/dispatch site: 更新首页' }); await tick();
+    expect(pool.opened[0]).toMatchObject({ cwd: 'C:/site', permissionMode: 'acceptEdits' });
+    const r = pool.runners.get('s1')!;
+    expect(r.sent).toEqual(['更新首页']);
+    expect(metas.s1).toEqual({ origin: 'dispatch', dispatchFrom: 'im', workspaceId: 'w2' });
+    expect(meta.binds[0]).toMatchObject({ chatId: 'c1', sessionId: 's1' });
+    expect(a.sent.at(-1)!.text).toContain('已派出');
+    a.inbound_({ text: '/派活' }); await tick();
+    expect(a.sent.at(-1)!.text).toContain('/dispatch');
+  });
 });

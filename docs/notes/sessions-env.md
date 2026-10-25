@@ -19,6 +19,8 @@
   { tool_name, params }` 里**，`allowedTools` 认的是里面的名字，于是每次都问——runner 的 `onCanUseTool` 对
   `ExecuteExtraTool` 看 `tool_name` 是否在本 query 的 `allowedTools`（`preAllowed`）里，在就放行（web 搜索在 ccb 上也因此不再每次问）。
 
+- **项目范围（阶段 F2）**：项目页「跨对话工具只看见本项目的对话」= `Workspace.sessionsScope: 'project'`。`SessionsDeps.projectOf(id)` / `restricted(selfId)`（index.ts 用 `meta/project.ts` 的 `projectOf`：meta.workspaceId，否则主文件夹 == cwd / groupCwd）；`scopeSessions()` 过滤 list 和 `find`（读 / 发 / 改名 / 归档别的项目的对话都报「找不到」）；`list_sessions` 也可以自己传 `scope: 'project'`。不在任何项目里的对话只看得见同样不在项目里的。
+
 ## 任务 chip
 
 - `suggest_task { title, prompt, worktree? }` 立刻返回；卡片 `features/chat/tools/TaskChip.tsx`（注册表 standalone）。

@@ -1,3 +1,4 @@
+import { openDispatch } from '@/features/cloud/CloudDialogs';
 import { modKey } from '@/features/workbench/shortcuts';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useStore } from '@/store';
@@ -366,6 +367,8 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
         <button className={clsx('nav', !activeId && section === 'chat' && 'active')} data-id={top('new')} onClick={() => { onNew(); closeDrawer(); }}><Icon name="edit" size={16} />{tr('新对话')}<span className="k">{desktop ? `${modKey} N` : 'Alt N'}</span></button>
         {mobile && <>
           <button className="nav" data-id={top('search')} title={tr('搜索对话、命令和设置')} onClick={() => { useStore.setState({ paletteOpen: true }); closeDrawer(); }}><Icon name="search" size={16} />{tr('搜索')}<span className="k">{modKey} K</span></button>
+          {/* 派活 (stage F3): a task from the phone → a new conversation on a computer (phone only: not an entries.ts place) */}
+          <button className="nav" data-act="dispatch" title={tr('一句话交代任务，电脑上开一个新对话去做')} onClick={() => { setMenu(null); closeDrawer(); openDispatch(); }}><Icon name="send" size={16} />{tr('派活')}</button>
           {/* 自动化 → the automation page (定时任务 · 目标 · 编排, spec §5.9) over the main area, on the tab shown last */}
           {/* 后台 → what runs besides the turns (sub-agents, workflows, background commands), spec 2026-10-12 */}
           <button className={clsx('nav', section === 'background' && 'active')} data-id={top('background')} title={tr('在跑的子代理、工作流和后台命令')} aria-pressed={section === 'background'} onClick={() => { setMenu(null); openBackground(); }}><Icon name="office" size={16} />{tr('后台')}</button>

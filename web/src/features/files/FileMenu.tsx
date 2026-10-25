@@ -10,6 +10,7 @@ import { Icon } from '@/ui/icons';
 import { tr } from '@/i18n';
 import { Popover } from '@/features/composer/Popover';
 import { mentionInComposer } from '@/features/composer/fill';
+import { openPublish } from '@/features/cloud/CloudDialogs';
 
 type Editor = 'code' | 'cursor' | 'zed';
 const EDITOR_NAME: Record<Editor, string> = { code: 'VS Code', cursor: 'Cursor', zed: 'Zed' };
@@ -31,6 +32,9 @@ export function fileMenuProps(path: string, sessionId?: string | null): { onCont
     },
   };
 }
+
+/** Opens the menu for `path` at a point (ui-smoke uses it; everything else spreads fileMenuProps). */
+export const openFileMenuAt = (path: string, x: number, y: number, sessionId?: string) => useFileMenu.setState({ at: { path, sessionId, x, y } });
 
 export function FileMenu() {
   const at = useFileMenu((s) => s.at);
@@ -54,6 +58,7 @@ export function FileMenu() {
           <button key={e} data-mi data-act={`open-${e}`} onClick={act(() => open(e))}><Icon name="external" size={14} /> {tr('用 {app} 打开', { app: EDITOR_NAME[e] })}</button>
         ))}
         {!remote && <button data-mi data-act="reveal" onClick={act(() => open('reveal'))}><Icon name="folder" size={14} /> {/Mac/i.test(navigator.platform) ? tr('在访达中显示') : tr('在资源管理器中显示')}</button>}
+        {!remote && <button data-mi data-act="publish" onClick={act(() => openPublish(at.path))}><Icon name="share" size={14} /> {tr('发布…')}</button>}
         <button data-mi data-act="copy" onClick={act(async () => { await navigator.clipboard.writeText(at.path); useStore.getState().toast(tr('已复制路径'), true); })}><Icon name="copy" size={14} /> {tr('复制路径')}</button>
       </Popover>
     </>
