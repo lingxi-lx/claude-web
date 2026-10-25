@@ -18,4 +18,7 @@ describe('parseWslCheck', () => {
     expect(parseWslCheck('/root\nCW_NO_CLAUDE\n')).toEqual({ home: '/root', claude: false, interop: null });
     expect(parseWslCheck('')).toEqual({ home: null, claude: null, interop: null });
   });
+  it('a claude found through the Windows PATH (/mnt/…, the npm shim of the Windows install) is not the distro\'s own (seen on the real machine, 2026-10-25)', () => {
+    expect(parseWslCheck('/home/ypy\n/mnt/c/nvm4w/nodejs/claude\nenabled\n')).toEqual({ home: '/home/ypy', claude: false, interop: true });
+  });
 });

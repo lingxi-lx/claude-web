@@ -19,7 +19,9 @@ export function parseWslCheck(stdout: string): { home: string | null; claude: bo
   const lines = String(stdout ?? '').split(/\r?\n/).map((l) => l.trim());
   const home = lines[0] ? lines[0] : null;
   const c = lines[1];
-  const claude = !c ? null : c === 'CW_NO_CLAUDE' ? false : true;
+  // a claude under /mnt/… is the Windows install's npm shim, reached through the Windows PATH WSL appends — not one
+  // the distro can run (seen on the real machine, 2026-10-25)
+  const claude = !c ? null : c === 'CW_NO_CLAUDE' || c.startsWith('/mnt/') ? false : true;
   const i = lines[2];
   const interop = i === 'enabled' ? true : i === 'disabled' ? false : null;
   return { home, claude, interop };
