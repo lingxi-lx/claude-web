@@ -2181,6 +2181,7 @@ export const EN_WEB: Record<string, string> = {
   "抓取中…": "Fetching…",
   "抓网页转 markdown": "Fetch web pages as markdown",
   "报错和截图已放进输入框": "The errors and a screenshot are in the input box",
+  "报错已放进输入框": "The errors are in the input box",
   "抽奖": "Lottery",
   "拉取": "Pull",
   "拉取中…": "Pulling…",

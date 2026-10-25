@@ -25,9 +25,10 @@ import { SIMPLIFIED_NOTICE } from '@/ui/terms';
 import { MOBILE_QUERY } from '@/ui/viewport';
 import type { SheetDetent } from '@/ui/sheet-snap';
 import { haptic } from '@/ui/haptics';
-import { onTurnEndAutoOpen } from '@/features/browser/auto-open';
+import { onTurnEndAutoOpen, paneShowing } from '@/features/browser/auto-open';
 import { onTurnEndAutoVerify } from '@/features/browser/auto-verify';
 import { pageOf } from '@/features/browser/guest';
+import { guestElOf } from '@/features/browser/state';
 import type { PendingBundle } from '@/model/attachments';
 import { LANGUAGE_KEY, reconcileLanguage, tr } from '@/i18n';
 
@@ -764,9 +765,10 @@ export const useStore = create<State>((set, get) => ({
     try { onTurnEndAutoOpen(sessionId, get(), desktop); } catch { /* opening a preview never breaks the turn's end */ }
     // a turn that changed front-end files: the open preview reloads and its errors show under the turn (never sent)
     try {
-      void onTurnEndAutoVerify(sessionId, get(), {
+      void onTurnEndAutoVerify(sessionId, { ...get(), shown: !!paneShowing(get().layout, sessionId) }, {
         canDebug: !!desktop?.guestDebug,
         pageOf,
+        hasFocus: (tabId) => { const el = guestElOf(tabId); return !!el && document.activeElement === (el as unknown as Element) && document.hasFocus(); },
         launchUrls: async (cwd) => {
           const r = await ws.request<{ configs: { url?: string }[] } | null>({ kind: 'preview.list', cwd });
           return (r?.configs ?? []).map((c) => c.url ?? '').filter(Boolean);

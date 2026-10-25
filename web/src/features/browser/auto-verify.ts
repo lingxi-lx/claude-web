@@ -68,9 +68,17 @@ const originOf = (url: string): string => { try { return new URL(url).origin; } 
  */
 export function previewTabFor(cwd: string | undefined, tabs: readonly BrowserTab[], o: { launch?: readonly string[]; sessionId?: string; active?: string | null } = {}): BrowserTab | undefined {
   const launch = new Set((cwd ? o.launch ?? [] : []).map(originOf).filter(Boolean));
-  const ok = tabs.filter((t) => t.src && !t.error && (isLocalPreview(t.url) || launch.has(originOf(t.url))));
-  if (!ok.length) return undefined;
-  return (o.sessionId ? ok.find((t) => t.agent === o.sessionId) : undefined) ?? ok.find((t) => t.id === o.active) ?? ok[ok.length - 1];
+  const live = tabs.filter((t) => t.src && !t.error);
+  const pick = (list: BrowserTab[]) => list.find((t) => t.id === o.active) ?? list[list.length - 1];
+  // 1. the conversation's own Agent tab on a preview address
+  const mine = o.sessionId ? live.find((t) => t.agent === o.sessionId && (isLocalPreview(t.url) || launch.has(originOf(t.url)))) : undefined;
+  if (mine) return mine;
+  // 2. a tab at one of this project's launch.json addresses
+  const proj = live.filter((t) => launch.has(originOf(t.url)));
+  if (proj.length) return pick(proj);
+  // 3. a bare localhost tab: only one no other conversation's Agent works in, and not loading
+  const bare = live.filter((t) => isLocalPreview(t.url) && (!t.agent || t.agent === o.sessionId) && t.progress === undefined);
+  return bare.length ? pick(bare) : undefined;
 }
 
 /**
@@ -119,6 +127,8 @@ export type VerifyPage = Pick<PageHandle, 'debug' | 'capture' | 'url' | 'reload'
 
 /** What of the store this needs (passed in by the store itself). */
 export interface AutoVerifyStore {
+  /** the conversation is on screen in this window (auto-open.ts paneShowing); false: nothing is reloaded */
+  shown?: boolean;
   open: Record<string, { cwd?: string; conv: { items: Item[]; lastResult?: { isError: boolean } } } | undefined>;
   settings: Record<string, unknown>;
 }
@@ -128,6 +138,8 @@ export interface AutoVerifyShell {
   pageOf(tabId: string): VerifyPage;
   /** the addresses of the project's running launch.json servers (preview.list) */
   launchUrls?(cwd: string): Promise<string[]>;
+  /** the page has the keyboard focus (the user is typing in it): it is not reloaded under them */
+  hasFocus?(tabId: string): boolean;
 }
 
 const running = new Set<string>();
@@ -158,7 +170,7 @@ export async function checkPage(page: VerifyPage): Promise<{ errors: BrowserCons
  */
 export async function onTurnEndAutoVerify(sessionId: string, st: AutoVerifyStore, shell: AutoVerifyShell): Promise<VerifyState | null> {
   const o = st.open[sessionId];
-  if (!o || !shell.canDebug || running.has(sessionId)) return null;
+  if (!o || !shell.canDebug || running.has(sessionId) || st.shown === false) return null;
   const files = planAutoVerify({ sessionId, items: o.conv.items, isError: !!o.conv.lastResult?.isError, setting: st.settings?.[AUTO_VERIFY_KEY] });
   if (!files) return null;
   const turn = groupTurns(o.conv.items).at(-1)?.id;
@@ -166,12 +178,14 @@ export async function onTurnEndAutoVerify(sessionId: string, st: AutoVerifyStore
   let launch: string[] = [];
   const b = useBrowser.getState();
   let tab = previewTabFor(o.cwd, b.tabs, { sessionId, active: b.active });
-  if (!tab && o.cwd && shell.launchUrls) {
+  // the project's launch.json servers come before a bare localhost tab: asked unless the conversation's own tab was found
+  if ((!tab || tab.agent !== sessionId) && o.cwd && shell.launchUrls) {
     try { launch = await shell.launchUrls(o.cwd); } catch { /* none known */ }
     const now = useBrowser.getState();
     tab = previewTabFor(o.cwd, now.tabs, { launch, sessionId, active: now.active });
   }
   if (!tab) return null;
+  if (shell.hasFocus?.(tab.id)) return null;
   running.add(sessionId);
   setVerify(sessionId, { status: 'checking', turn, url: tab.url });
   try {
@@ -190,12 +204,16 @@ export async function onTurnEndAutoVerify(sessionId: string, st: AutoVerifyStore
   }
 }
 
-/** 「让 Claude 修」: the errors and the picture into the conversation's input box (a bundle), and a line to send if the box is empty. */
+/**
+ * 「让 Claude 修」: the errors and the picture into the conversation's input box (a bundle), and a line to send if the
+ * box is empty. With no picture the errors are the text itself — after what is typed, if anything (never dropped).
+ * Says what it did: 'bundle' (a picture and the errors attached) or 'draft' (the errors in the box's text).
+ */
 export function fixWithClaude(sessionId: string, v: Extract<VerifyState, { status: 'errors' }>, st: {
   addComposerAttachment(sessionId: string, b: PendingBundle): void;
   setDraft(sessionId: string, d: string): void;
   open: Record<string, { draft?: string } | undefined>;
-}): void {
+}): 'bundle' | 'draft' {
   const text = fixNote(v);
   const name = tr('预览报错');
   if (v.image) {
@@ -204,4 +222,6 @@ export function fixWithClaude(sessionId: string, v: Extract<VerifyState, { statu
   }
   const draft = st.open[sessionId]?.draft ?? '';
   if (!draft.trim()) st.setDraft(sessionId, v.image ? tr('预览有 {n} 个报错（附件里是报错和截图），请修好。', { n: v.errors.length }) : text);
+  else if (!v.image) st.setDraft(sessionId, [draft.trimEnd(), text].join('\n\n'));
+  return v.image ? 'bundle' : 'draft';
 }

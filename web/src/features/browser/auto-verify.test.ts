@@ -82,6 +82,20 @@ describe('previewTabFor: the tab that shows the preview', () => {
     expect(previewTabFor('C:/p', [a, b, bad], { active: 'zz' })?.id).toBe('b');
     expect(previewTabFor('C:/p', [bad, empty])).toBeUndefined();
   });
+
+  it('another conversation\'s Agent tab, or a page still loading, is never taken for this project\'s preview (U3)', () => {
+    const theirs = tab({ id: 'o', url: 'http://localhost:3000/', agent: 's2' });
+    const loading = tab({ id: 'l', url: 'http://localhost:5173/', progress: 0.4 });
+    expect(previewTabFor('C:/p', [theirs, loading], { sessionId: 's1', active: 'o' })).toBeUndefined();
+    // the project's launch.json address counts even in another conversation's tab — it is this project's server
+    expect(previewTabFor('C:/p', [theirs], { sessionId: 's1', launch: ['http://localhost:3000'] })?.id).toBe('o');
+    // a launch.json match comes before a bare localhost tab
+    const bare = tab({ id: 'b', url: 'http://localhost:8080/' });
+    const proj = tab({ id: 'p', url: 'http://localhost:4000/' });
+    expect(previewTabFor('C:/p', [proj, bare], { sessionId: 's1', active: 'b', launch: ['http://localhost:4000'] })?.id).toBe('p');
+    // the conversation's own tab, even while loading
+    expect(previewTabFor('C:/p', [bare, { ...loading, agent: 's1' }], { sessionId: 's1' })?.id).toBe('l');
+  });
 });
 
 describe('planAutoVerify: when the check runs', () => {
@@ -186,6 +200,19 @@ describe('onTurnEndAutoVerify: reload, look, keep only errors', () => {
     expect(log[1]).toBe('reload');
   });
 
+  it('a conversation not on screen, or a page the user is typing in, is not reloaded (U3)', async () => {
+    const errs = (since: number) => [{ level: 'error', text: 'x', at: since + 1 }];
+    let s = shell(errs);
+    expect(await onTurnEndAutoVerify('s1', { ...st(conv()), shown: false }, s.sh)).toBeNull();
+    expect(s.log).toEqual([]);
+    s = shell(errs);
+    s.sh.hasFocus = (id) => id === 't1';
+    expect(await onTurnEndAutoVerify('s1', st(conv()), s.sh)).toBeNull();
+    expect(s.log).toEqual([]);
+    s = shell(errs);
+    expect((await onTurnEndAutoVerify('s1', { ...st(conv()), shown: true }, s.sh))?.status).toBe('errors');
+  });
+
   it('the console cannot be read (DevTools open): no strip, no throw', async () => {
     const { sh } = shell(() => [], { fail: true });
     expect(await onTurnEndAutoVerify('s1', st(conv()), sh)).toBeNull();
@@ -211,5 +238,16 @@ describe('fixWithClaude: fills the box, never sends', () => {
     // no picture: the errors go in as the text itself
     fixWithClaude('s1', { ...v, image: undefined }, { ...st, open: { s1: {} } });
     expect(drafts[1]).toContain('boom');
+  });
+  it('no picture and words already typed: the errors go after them — never dropped; it says what it did (U4)', () => {
+    const drafts: string[] = [];
+    const v = { status: 'errors' as const, turn: 't', url: 'http://localhost:3000/', errors: [{ level: 'error', text: 'boom', at: 1 }], files: [], at: 1 };
+    const st = { addComposerAttachment: () => { throw new Error('no bundle without a picture'); }, setDraft: (_s: string, d: string) => drafts.push(d), open: { s1: { draft: 'my words' } } };
+    expect(fixWithClaude('s1', v, st)).toBe('draft');
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0].startsWith('my words\n\n')).toBe(true);
+    expect(drafts[0]).toContain('boom');
+    const got: PendingBundle[] = [];
+    expect(fixWithClaude('s1', { ...v, image: { mime: 'image/png' as const, data: 'QUJD' } }, { ...st, addComposerAttachment: (_s: string, b: PendingBundle) => got.push(b) })).toBe('bundle');
   });
 });

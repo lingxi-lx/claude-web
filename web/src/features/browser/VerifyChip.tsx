@@ -22,9 +22,9 @@ export function VerifyChip({ sessionId, turnId }: { sessionId: string; turnId: s
   const n = v.errors.length;
   const fix = () => {
     const st = useStore.getState();
-    fixWithClaude(sessionId, v, st);
+    const did = fixWithClaude(sessionId, v, st);
     dismissVerify(sessionId);
-    st.toast(tr('报错和截图已放进输入框'), true);
+    st.toast(did === 'bundle' ? tr('报错和截图已放进输入框') : tr('报错已放进输入框'), true);
   };
   return (
     <div className="verify-chip" data-id="verify-chip" data-state="errors" data-count={n}>
