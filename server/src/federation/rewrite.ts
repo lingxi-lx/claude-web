@@ -41,6 +41,8 @@ const OWN_WINDOW_ONLY = new Set<ClientRequest['kind']>(['browser.host', 'browser
 export function refusedFromPeer(req: ClientRequest): string | null {
   if (req.kind.startsWith('peers.')) return tr('其它机器不能管理本机的机器列表');
   if (OWN_WINDOW_ONLY.has(req.kind)) return tr('只有本机的桌面窗口才能提供内置浏览器');
+  // stage E: GitHub / GitLab tokens stay on the machine that has them
+  if (req.kind.startsWith('vcs.tokens.')) return tr('其它机器不能查看或修改本机的 GitHub / GitLab 令牌');
   return null;
 }
 

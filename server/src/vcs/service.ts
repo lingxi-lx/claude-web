@@ -2,25 +2,46 @@ import { execFile } from 'node:child_process';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import type { GitService } from '../git/service.js';
-import type { BranchPr, VcsDetail, VcsItem, VcsRepo } from '../protocol.js';
-import { summarizeChecks } from './pr-status.js';
+import type { BranchPr, PrComment, PrCommentRef, VcsDetail, VcsItem, VcsRepo } from '../protocol.js';
 import { tr } from '../i18n/index.js';
+import { hunkAround, PermissionCache, REPLY_MARK } from './comments.js';
+import { fakeForgeOn, fakeOrigin } from './fake-forge.js';
+import type { Forge, ForgeApi, Target } from './forge.js';
+import { forgeOf } from './forge-map.js';
+import { GithubForge } from './github-forge.js';
+import { GitlabForge } from './gitlab-forge.js';
+import type { VcsTokenStore } from './token-store.js';
 
 const execFileAsync = promisify(execFile);
 const isWin = process.platform === 'win32';
+const GLAB = isWin ? 'glab.exe' : 'glab';
+/** `api()` sees this instead of a token when glab is logged in to the host: the call goes through `glab api`. */
+const VIA_GLAB = 'glab';
 
-interface Target { provider: 'github' | 'gitlab'; host: string; owner: string; repo: string }
+export type { Target } from './forge.js';
 
 /**
- * GitHub / GitLab issues and PR/MR boards. Auth: `gh auth token` / GH_TOKEN for GitHub, `glab` config or GITLAB_TOKEN
- * for GitLab; all data calls go over REST/GraphQL with fetch (one process per token lookup, not per request).
+ * GitHub / GitLab issues and PR/MR boards, and the PR bar (spec E2: one Forge interface for both). Auth, in order:
+ * GH_TOKEN / GITHUB_TOKEN / GITLAB_TOKEN → a token saved in settings (VcsTokenStore, never on the wire) → GitLab: a
+ * logged-in `glab` (calls go through `glab api`, so glab refreshes its own OAuth) → GitHub: `gh auth token`.
  */
 export class VcsService {
   private tokens = new Map<string, { token: string; at: number }>();
   /** hosts with no login, for a minute: the PR bar asks every minute per conversation and `gh auth token` is a process */
   private noToken = new Map<string, number>();
   private users = new Map<string, string>();
-  constructor(private git: GitService) {}
+  private glab = new Map<string, { ok: boolean; at: number }>();
+  private perms = new PermissionCache();
+  private forges: { github: Forge; gitlab: Forge };
+  constructor(private git: GitService, private o: { gitlabHosts?: () => string[]; tokens?: VcsTokenStore } = {}) {
+    const api: ForgeApi = { rest: (t, p, init) => this.api(t, p, init), graphql: (t, q, v) => this.graphql(t, q, v) };
+    this.forges = { github: new GithubForge(api, this.perms), gitlab: new GitlabForge(api, this.perms) };
+  }
+
+  private forge(t: Target): Forge { return this.forges[t.provider]; }
+  private listedGitlab(): string[] {
+    try { const h = this.o.gitlabHosts?.(); return Array.isArray(h) ? h.filter((x): x is string => typeof x === 'string') : []; } catch { return []; /* settings not ready */ }
+  }
 
   /** Parse the repo from `origin` (or an explicit `owner/repo[@host]`). */
   async target(cwd: string, explicit?: string): Promise<Target> {
@@ -28,7 +49,7 @@ export class VcsService {
       const m = /^(?:https?:\/\/([^/]+)\/)?([^/@\s]+)\/([^/@\s]+?)(?:\.git)?(?:@([^\s]+))?$/.exec(explicit.trim());
       if (!m) throw new Error(tr('仓库格式：owner/repo 或 https://host/owner/repo'));
       const host = m[4] ?? m[1] ?? 'github.com';
-      return { provider: /gitlab/i.test(host) ? 'gitlab' : 'github', host, owner: m[2], repo: m[3] };
+      return { provider: forgeOf(host, this.listedGitlab()), host, owner: m[2], repo: m[3] };
     }
     const remotes = await this.git.remotes(cwd);
     const url = (remotes.find((r) => r.name === 'origin') ?? remotes[0])?.url;
@@ -37,7 +58,7 @@ export class VcsService {
     if (!m) throw new Error(tr('看不懂 remote：{url}', { url }));
     const host = m[1] ?? m[2] ?? m[3];
     const parts = m[5].split('/');
-    return { provider: /gitlab/i.test(host) ? 'gitlab' : 'github', host, owner: m[4] + (parts.length > 1 ? `/${parts.slice(0, -1).join('/')}` : ''), repo: parts[parts.length - 1] };
+    return { provider: forgeOf(host, this.listedGitlab()), host, owner: m[4] + (parts.length > 1 ? `/${parts.slice(0, -1).join('/')}` : ''), repo: parts[parts.length - 1] };
   }
 
   private async token(t: Target): Promise<string> {
@@ -53,33 +74,85 @@ export class VcsService {
   }
 
   private async lookupToken(t: Target): Promise<string> {
-    const env = t.provider === 'github' ? process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN : process.env.GITLAB_TOKEN;
+    // the fake forge of e2e / ui-smoke: only what the test saved, never this machine's own logins
+    const fake = fakeForgeOn();
+    const env = fake ? '' : t.provider === 'github' ? process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN : process.env.GITLAB_TOKEN;
     if (env) return env;
-    const [cmd, args] = t.provider === 'github' ? [isWin ? 'gh.exe' : 'gh', ['auth', 'token', '-h', t.host]] : [isWin ? 'glab.exe' : 'glab', ['config', 'get', 'token', '-h', t.host]];
-    try { return (await execFileAsync(cmd, args, { windowsHide: true, timeout: 15_000 })).stdout.trim(); } catch { return ''; /* not logged in */ }
+    const saved = this.o.tokens ? await this.o.tokens.get(t.host).catch(() => '') : '';
+    if (saved) return saved;
+    if (fake) return '';
+    if (t.provider === 'gitlab') return (await this.glabReady(t.host)) ? VIA_GLAB : '';
+    try { return (await execFileAsync(isWin ? 'gh.exe' : 'gh', ['auth', 'token', '-h', t.host], { windowsHide: true, timeout: 15_000 })).stdout.trim(); } catch { return ''; /* not logged in */ }
   }
 
+  /** `glab auth status --hostname <host>` exits 0: logged in (cached 10 minutes; never with the fake forge). */
+  async glabReady(host: string): Promise<boolean> {
+    if (fakeForgeOn()) return false;
+    const hit = this.glab.get(host);
+    if (hit && Date.now() - hit.at < 10 * 60_000) return hit.ok;
+    let ok = false;
+    try { await execFileAsync(GLAB, ['auth', 'status', '--hostname', host], { windowsHide: true, timeout: 15_000 }); ok = true; } catch { ok = false; }
+    this.glab.set(host, { ok, at: Date.now() });
+    return ok;
+  }
+
+  /** Settings → PR 与 MR: the hosts we know and how each is logged in. Never a token value. */
+  async tokenHosts(): Promise<{ hosts: { host: string; saved: boolean; glab: boolean }[] }> {
+    const listed = this.listedGitlab().map((x) => x.trim().toLowerCase()).filter(Boolean);
+    const saved = this.o.tokens?.hosts() ?? [];
+    const hosts: { host: string; saved: boolean; glab: boolean }[] = [];
+    for (const h of [...new Set([...listed, ...saved])]) hosts.push({ host: h, saved: saved.includes(h), glab: await this.glabReady(h) });
+    return { hosts };
+  }
+
+  /** A token was saved or removed for this host: look it up again next time. */
+  forgetToken(host: string) {
+    const h = String(host ?? '').trim().toLowerCase();
+    for (const k of [...this.tokens.keys()]) if (k.endsWith(`:${h}`)) this.tokens.delete(k);
+    for (const k of [...this.noToken.keys()]) if (k.endsWith(`:${h}`)) this.noToken.delete(k);
+    this.users.delete(`github:${h}`);
+    this.users.delete(`gitlab:${h}`);
+  }
+
+  private origin(t: Target) { return fakeOrigin(t.host) ?? `https://${t.host}`; }
   private base(t: Target) {
-    if (t.provider === 'github') return t.host === 'github.com' ? 'https://api.github.com' : `https://${t.host}/api/v3`;
-    return `https://${t.host}/api/v4`;
+    if (t.provider === 'github') return t.host === 'github.com' && !fakeOrigin(t.host) ? 'https://api.github.com' : `${this.origin(t)}/api/v3`;
+    return `${this.origin(t)}/api/v4`;
   }
   private pid(t: Target) { return encodeURIComponent(`${t.owner}/${t.repo}`); }
 
-  private async api<T = any>(t: Target, path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+  private async api<T = any>(t: Target, path: string, init: { method?: string; body?: unknown; text?: boolean } = {}): Promise<T> {
     const token = await this.token(t);
+    if (t.provider === 'gitlab' && token === VIA_GLAB) return this.glabApi<T>(t, path, init);
     const headers: Record<string, string> = t.provider === 'github' ? { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json', 'x-github-api-version': '2022-11-28', 'user-agent': 'claude-web' } : { 'private-token': token, 'user-agent': 'claude-web' };
     if (init.body !== undefined) headers['content-type'] = 'application/json';
     const r = await fetch(`${this.base(t)}${path}`, { method: init.method ?? 'GET', headers, body: init.body !== undefined ? JSON.stringify(init.body) : undefined, signal: AbortSignal.timeout(30_000) });
     const text = await r.text();
+    if (init.text && r.ok) return text as T;
     let json: any = null;
     try { json = text ? JSON.parse(text) : null; } catch { json = { raw: text }; }
     if (!r.ok) throw new Error(`${r.status} ${json?.message ?? json?.error ?? text.slice(0, 200)}`);
     return json as T;
   }
 
+  /** GitLab through a logged-in glab: `glab api` keeps its own OAuth fresh. */
+  private glabApi<T>(t: Target, p: string, init: { method?: string; body?: unknown; text?: boolean }): Promise<T> {
+    const args = ['api', '--hostname', t.host, '-X', init.method ?? 'GET', p.replace(/^\//, '')];
+    if (init.body !== undefined) args.push('-H', 'Content-Type: application/json', '--input', '-');
+    return new Promise<T>((resolve, reject) => {
+      const child = execFile(GLAB, args, { windowsHide: true, timeout: 30_000, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
+        if (err) { reject(new Error(String(stderr || err.message).trim().split(/\r?\n/).pop() || 'glab api failed')); return; }
+        const text = String(stdout);
+        if (init.text) { resolve(text as T); return; }
+        try { resolve((text ? JSON.parse(text) : null) as T); } catch { resolve({ raw: text } as T); }
+      });
+      if (init.body !== undefined) child.stdin?.end(JSON.stringify(init.body));
+    });
+  }
+
   private async graphql<T = any>(t: Target, query: string, variables: Record<string, unknown>): Promise<T> {
     const token = await this.token(t);
-    const url = t.host === 'github.com' ? 'https://api.github.com/graphql' : `https://${t.host}/api/graphql`;
+    const url = t.host === 'github.com' && !fakeOrigin(t.host) ? 'https://api.github.com/graphql' : `${this.origin(t)}/api/graphql`;
     const r = await fetch(url, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'user-agent': 'claude-web' }, body: JSON.stringify({ query, variables }), signal: AbortSignal.timeout(30_000) });
     const text = await r.text();
     let j: any = null;
@@ -211,9 +284,9 @@ export class VcsService {
     return this.api(t, `/projects/${this.pid(t)}/${isPr ? 'merge_requests' : 'issues'}/${number}`, { method: 'PUT', body: { labels: labels.join(',') } });
   }
   /**
-   * PR 监控条 (spec 2026-10-16 review-pr §3): the newest pull request of this folder's current branch, with its checks.
-   * GitHub only; anything that stops it (no repo / remote / login, a GitLab remote, a detached HEAD) is a `why`, not
-   * an error — the bar simply does not show.
+   * PR 监控条 (spec 2026-10-16 review-pr §3, E2): the newest PR / MR of this folder's current branch, with its checks.
+   * Anything that stops it (no repo / remote / login, a detached HEAD) is a `why`, not an error — the bar simply does
+   * not show.
    */
   async prForBranch(cwd: string): Promise<{ pr?: BranchPr; why?: string }> {
     if (!cwd || !path.isAbsolute(cwd)) return { why: 'not-a-repo' };
@@ -222,24 +295,56 @@ export class VcsService {
     if (!branch || branch === 'HEAD') return { why: 'detached' };
     let t: Target;
     try { t = await this.target(cwd); } catch { return { why: 'no-remote' }; }
-    if (t.provider !== 'github') return { why: 'not-github' };
     try { if (!(await this.token(t))) return { why: 'not-logged-in' }; } catch { return { why: 'not-logged-in' }; }
-    // `headRefName` alone also matches strangers' forks (hundreds of fork PRs from their `main` on a busy repo): only
-    // this repository's own branches count, and never the default branch — nobody's conversation "is" that PR
-    const d = await this.graphql<any>(t, `query($owner:String!,$name:String!,$head:String!){ repository(owner:$owner,name:$name){ defaultBranchRef{ name } pullRequests(headRefName:$head,first:10,orderBy:{field:UPDATED_AT,direction:DESC}){ nodes{ id number title url state isDraft isCrossRepository mergeable reviewDecision autoMergeRequest{ enabledAt } commits(last:1){ nodes{ commit{ oid statusCheckRollup{ contexts(first:100){ nodes{ __typename ... on CheckRun{ name status conclusion detailsUrl checkSuite{ workflowRun{ databaseId } } } ... on StatusContext{ context state targetUrl } } } } } } } } } } }`, { owner: t.owner, name: t.repo, head: branch });
-    if (branch === d.repository?.defaultBranchRef?.name) return { why: 'default-branch' };
-    const p = (d.repository?.pullRequests?.nodes ?? []).find((x: any) => x && !x.isCrossRepository);
-    if (!p) return { why: 'no-pr' };
-    const c = p.commits?.nodes?.[0]?.commit;
-    return { pr: { id: p.id, number: p.number, title: p.title, url: p.url, state: p.state === 'MERGED' ? 'merged' : p.state === 'OPEN' ? 'open' : 'closed', draft: !!p.isDraft, mergeable: p.mergeable === 'MERGEABLE' ? true : p.mergeable === 'CONFLICTING' ? false : undefined, autoMerge: !!p.autoMergeRequest, review: p.reviewDecision === 'APPROVED' ? 'approved' : p.reviewDecision === 'CHANGES_REQUESTED' ? 'changes' : p.reviewDecision === 'REVIEW_REQUIRED' ? 'required' : undefined, sha: c?.oid ?? '', checks: summarizeChecks(c?.statusCheckRollup?.contexts?.nodes ?? []) } };
+    return this.forge(t).prForBranch(t, branch);
   }
 
-  /** GitHub auto-merge (squash) on or off for a pull request (its node id, from `prForBranch`). */
+  /** GitHub auto-merge (squash) / GitLab merge when the pipeline succeeds, on or off (`prId`: GitHub node id / MR iid). */
   async autoMerge(cwd: string, prId: string, on: boolean): Promise<void> {
     const t = await this.target(cwd);
-    if (t.provider !== 'github') throw new Error(tr('只支持 GitHub 的自动合并'));
-    if (on) await this.graphql(t, 'mutation($id:ID!){ enablePullRequestAutoMerge(input:{ pullRequestId:$id, mergeMethod:SQUASH }){ clientMutationId } }', { id: prId });
-    else await this.graphql(t, 'mutation($id:ID!){ disablePullRequestAutoMerge(input:{ pullRequestId:$id }){ clientMutationId } }', { id: prId });
+    await this.forge(t).setAutoMerge(t, prId, on);
+  }
+
+  /**
+   * 自动处理评论 (spec E1): the PR / MR's open comments, each marked `trusted` when its author may push (bots never).
+   * A thread comment without a diff gets the hunk around its line from the local branch.
+   */
+  async prComments(cwd: string, number: number, base?: string): Promise<{ comments: PrComment[] }> {
+    const t = await this.target(cwd);
+    const forge = this.forge(t);
+    const cands = await forge.comments(t, Number(number));
+    const trust = new Map<string, boolean>();
+    for (const c of cands) if (!c.bot && !trust.has(c.authorKey)) trust.set(c.authorKey, await forge.authorTrusted(t, c.authorKey));
+    const diffs = new Map<string, string>();
+    const comments: PrComment[] = [];
+    for (const { authorKey, ...c } of cands) {
+      let diff = c.diff;
+      if (!diff && c.path && c.line && base && /^[\w./-]+$/.test(base) && !c.path.startsWith('-')) {
+        try {
+          if (!diffs.has(c.path)) diffs.set(c.path, (await this.git.run(cwd, ['diff', '--unified=3', `origin/${base}...HEAD`, '--', c.path], { timeoutMs: 20_000 })).stdout);
+          diff = hunkAround(diffs.get(c.path) ?? '', c.line);
+        } catch { diffs.set(c.path, ''); }
+      }
+      comments.push({ ...c, diff, trusted: !c.bot && trust.get(authorKey) === true });
+    }
+    return { comments };
+  }
+
+  /** Reply under a comment; the mark keeps our reply (and the thread it answered) out of the next poll. */
+  async replyComment(cwd: string, number: number, ref: PrCommentRef, body: string): Promise<void> {
+    const t = await this.target(cwd);
+    await this.forge(t).reply(t, Number(number), ref, `${String(body ?? '').slice(0, 4000)}\n\n${REPLY_MARK}`);
+  }
+
+  async resolveComment(cwd: string, number: number, ref: PrCommentRef): Promise<void> {
+    const t = await this.target(cwd);
+    await this.forge(t).resolve(t, Number(number), ref);
+  }
+
+  /** 自动修流水线: the end of a failed GitLab job's log. */
+  async failureLog(cwd: string, jobId: number): Promise<{ text: string }> {
+    const t = await this.target(cwd);
+    return { text: await this.forge(t).failureLog(t, Number(jobId)) };
   }
 
   async merge(cwd: string, number: number, method: 'merge' | 'squash' | 'rebase', repo?: string) {

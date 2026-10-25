@@ -13,6 +13,7 @@ import { copyWorktreeIncludes, resolveWorktreeDir } from '../git/worktree-includ
 import { readChangelog } from '../app/changelog.js';
 import { recentArtifacts } from '../library/artifacts.js';
 import type { LocalEnvStore } from '../runtime/local-env.js';
+import type { VcsTokenStore } from '../vcs/token-store.js';
 import type { PreviewService } from '../preview/service.js';
 import { cacheParentFor } from '../runtime/cache-key.js';
 import { userCompactSource } from '../runtime/user-env.js';
@@ -94,6 +95,8 @@ export interface Services {
   localEnv?: LocalEnvStore;
   /** 预览服务器 (preview/service.ts): the browser's empty page lists and starts them; optional (tests) */
   previews?: PreviewService;
+  /** stage E: GitHub / GitLab tokens typed in settings (vcs/token-store.ts); optional (tests) */
+  vcsTokens?: VcsTokenStore;
 
   /** Cross-machine sessions: routes peer_… requests / merges lists before handle(); optional (tests). */
   federation?: FederationService;
@@ -1160,6 +1163,15 @@ export class Hub {
       case 'vcs.merge': await s.vcs.merge(req.cwd, req.number, req.method, req.repo); return null;
       case 'vcs.prForBranch': return s.vcs.prForBranch(req.cwd);
       case 'vcs.autoMerge': await s.vcs.autoMerge(req.cwd, req.prId, req.on); return null;
+      // stage E
+      case 'vcs.prComments': return s.vcs.prComments(req.cwd, req.number, req.base);
+      case 'vcs.replyComment': await s.vcs.replyComment(req.cwd, req.number, req.comment, req.body); return null;
+      case 'vcs.resolveComment': await s.vcs.resolveComment(req.cwd, req.number, req.comment); return null;
+      case 'vcs.failureLog': return s.vcs.failureLog(req.cwd, req.jobId);
+      case 'vcs.tokens.list': return s.vcs.tokenHosts();
+      case 'vcs.tokens.set':
+        if (!s.vcsTokens) throw new Error('no token store');
+        await s.vcsTokens.set(req.host, req.token); s.vcs.forgetToken(req.host); return null;
       case 'vcs.create': return s.vcs.create(req.cwd, { title: req.title, body: req.body, isPr: req.isPr, head: req.head, base: req.base, draft: req.draft, labels: req.labels }, req.repo);
       case 'vcs.checkout': return s.vcs.checkout(req.cwd, req.number, { worktree: req.worktree, repo: req.repo });
       case 'goals.list': return s.goals.list();

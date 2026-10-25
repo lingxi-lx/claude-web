@@ -700,6 +700,13 @@ export type ClientRequest =
   | { kind: 'vcs.prForBranch'; cwd: string }
   /** squash-merge on its own once the checks pass (GitHub auto-merge; the repository must allow it) */
   | { kind: 'vcs.autoMerge'; cwd: string; prId: string; on: boolean }
+  // stage E: PR / MR comments, GitLab job logs, forge tokens (host names only on the wire, never a token value back)
+  | { kind: 'vcs.prComments'; cwd: string; number: number; base?: string }
+  | { kind: 'vcs.replyComment'; cwd: string; number: number; comment: PrCommentRef; body: string }
+  | { kind: 'vcs.resolveComment'; cwd: string; number: number; comment: PrCommentRef }
+  | { kind: 'vcs.failureLog'; cwd: string; jobId: number }
+  | { kind: 'vcs.tokens.list' }
+  | { kind: 'vcs.tokens.set'; host: string; token: string | null }
   | { kind: 'vcs.create'; cwd: string; repo?: string; title: string; body?: string; isPr?: boolean; head?: string; base?: string; draft?: boolean; labels?: string[] }
   | { kind: 'vcs.checkout'; cwd: string; repo?: string; number: number; worktree?: boolean }
   | { kind: 'goals.list' }

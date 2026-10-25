@@ -69,6 +69,15 @@ describe('planRoute', () => {
       expect(refusedFromPeer(req), req.kind).toBeNull();
     }
   });
+  it('stage E: forge tokens stay on this machine; the PR comment requests are routed nowhere (cwd-based, local)', () => {
+    expect(refusedFromPeer({ kind: 'vcs.tokens.list' })).toBeTruthy();
+    expect(refusedFromPeer({ kind: 'vcs.tokens.set', host: 'gitlab.com', token: 'x' })).toBeTruthy();
+    for (const req of [
+      { kind: 'vcs.prComments', cwd: '/r', number: 1 }, { kind: 'vcs.failureLog', cwd: '/r', jobId: 1 },
+      { kind: 'vcs.replyComment', cwd: '/r', number: 1, comment: { id: 'a', kind: 'general' }, body: 'x' },
+      { kind: 'vcs.resolveComment', cwd: '/r', number: 1, comment: { id: 'a', kind: 'thread', threadId: 't' } },
+    ] as ClientRequest[]) expect(planRoute(req), req.kind).toEqual({ kind: 'none' });
+  });
   it('splits batches, keeps local UI state here, rejects the rest', () => {
     expect(planRoute({ kind: 'library.delete', sessionIds: ['a', 'peer_b1~s1'] })).toEqual({ kind: 'split' });
     expect(planRoute({ kind: 'session.setMeta', sessionId: 'peer_b1~s1', patch: { pinned: true } })).toEqual({ kind: 'local' });
