@@ -30,6 +30,7 @@ const SPLIT = new Set<ClientRequest['kind']>(['library.archive', 'library.delete
 /** This machine's own state keyed by a session id (ratings, pin / archive meta, the ledger, the memory store — there a session id is just a scope key). */
 const LOCAL = new Set<ClientRequest['kind']>([
   'session.setMeta', 'feedback.set', 'feedback.list', 'ledger.list', 'memory.search', 'memory.write',
+  'vcs.autoLease', // stage E fix: which window of this machine acts for the PR bar
 ]);
 
 /**
@@ -46,6 +47,7 @@ export function refusedFromPeer(req: ClientRequest): string | null {
   // stage E: GitHub / GitLab tokens stay on the machine that has them
   // stage E5: this computer's WSL distros and its SSH logins are its own
   if (req.kind.startsWith('wsl.') || req.kind === 'remote.hosts.test') return tr('其它机器不能使用本机的 WSL 或 SSH');
+  if ((req.kind === 'session.open' && req.params?.env?.kind === 'wsl') || (req.kind === 'terminal.open' && req.wsl)) return tr('其它机器不能使用本机的 WSL 或 SSH');
   if (req.kind.startsWith('vcs.tokens.')) return tr('其它机器不能查看或修改本机的 GitHub / GitLab 令牌');
   return null;
 }

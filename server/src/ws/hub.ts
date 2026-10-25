@@ -15,6 +15,7 @@ import { readChangelog } from '../app/changelog.js';
 import { recentArtifacts } from '../library/artifacts.js';
 import type { LocalEnvStore } from '../runtime/local-env.js';
 import type { VcsTokenStore } from '../vcs/token-store.js';
+import { autoLeases } from '../vcs/auto-lease.js';
 import type { WslService } from '../wsl/service.js';
 import { INSTALL_CMD } from '../wsl/distros.js';
 import type { PreviewService } from '../preview/service.js';
@@ -1209,6 +1210,9 @@ export class Hub {
       case 'vcs.replyComment': await s.vcs.replyComment(req.cwd, req.number, req.comment, req.body); return null;
       case 'vcs.resolveComment': await s.vcs.resolveComment(req.cwd, req.number, req.comment); return null;
       case 'vcs.failureLog': return s.vcs.failureLog(req.cwd, req.jobId);
+      case 'vcs.autoLease':
+        if (req.release) { autoLeases.release(req.sessionId, req.holder); return { ok: false }; }
+        return { ok: autoLeases.claim(req.sessionId, req.holder) };
       case 'vcs.tokens.list': return s.vcs.tokenHosts();
       case 'vcs.tokens.set':
         if (!s.vcsTokens) throw new Error('no token store');
@@ -1238,6 +1242,8 @@ export class Hub {
         return s.agents.list();
 
       case 'terminal.open':
+        // a WSL terminal only in a distro this computer lists (its name goes to wsl.exe -d)
+        if (req.wsl) { if (!s.wsl) throw new Error('no WSL'); await s.wsl.ensureKnown(String(req.wsl.distro)); }
         return s.terminal.open(req.cwd, req.cols, req.rows, req.wsl ? { wsl: { distro: String(req.wsl.distro) } } : {});
       case 'terminal.input':
         s.terminal.input(req.termId, req.data);

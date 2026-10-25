@@ -32,6 +32,7 @@ describe('planRoute', () => {
   it('the memory store is this machine\'s: a remote session id is only a scope key', () => {
     expect(planRoute({ kind: 'memory.search', sessionId: 'peer_b1~s1', cwd: '/r' })).toEqual({ kind: 'local' });
     expect(planRoute({ kind: 'memory.write', text: 'x', sessionId: 'peer_b1~s1' })).toEqual({ kind: 'local' });
+    expect(planRoute({ kind: 'vcs.autoLease', sessionId: 'peer_b1~s1', holder: 'w' })).toEqual({ kind: 'local' }); // fix E-I3
     expect(planRoute({ kind: 'memory.harvest', sessionId: 'peer_b1~s1' }).kind).toBe('reject');
   });
   it('per-session reads that live with the session are forwarded (usage, touched files, their diffs)', () => {
@@ -74,6 +75,11 @@ describe('planRoute', () => {
     expect(refusedFromPeer({ kind: 'wsl.install', distro: 'U', confirmed: true })).toBeTruthy();
     expect(refusedFromPeer({ kind: 'wsl.list' })).toBeTruthy();
     expect(refusedFromPeer({ kind: 'remote.hosts.test', target: 'me@box' })).toBeTruthy();
+    // E-minor: another machine cannot open a conversation or a terminal in this computer's WSL
+    expect(refusedFromPeer({ kind: 'session.open', params: { cwd: '/home/x', env: { kind: 'wsl', distro: 'U' } } } as ClientRequest)).toBeTruthy();
+    expect(refusedFromPeer({ kind: 'terminal.open', cwd: '/x', cols: 80, rows: 24, wsl: { distro: 'U' } })).toBeTruthy();
+    expect(refusedFromPeer({ kind: 'session.open', params: { cwd: '/x', env: { kind: 'local' } } } as ClientRequest)).toBeNull();
+    expect(refusedFromPeer({ kind: 'terminal.open', cwd: '/x', cols: 80, rows: 24 })).toBeNull();
   });
   it('stage E: forge tokens stay on this machine; the PR comment requests are routed nowhere (cwd-based, local)', () => {
     expect(refusedFromPeer({ kind: 'vcs.tokens.list' })).toBeTruthy();

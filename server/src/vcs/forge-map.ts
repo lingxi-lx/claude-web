@@ -12,6 +12,24 @@ export function forgeOf(host: string, gitlabHosts: readonly string[]): 'github' 
   return gitlabHosts.some((x) => bare(String(x)) === h) ? 'gitlab' : 'github';
 }
 
+const hostOf = (v: string | undefined) => bare(String(v ?? '').replace(/^[a-z]+:\/\//i, '').replace(/\/.*$/, ''));
+
+/**
+ * The token an environment variable holds for this host, if it is that variable's own host: GH_TOKEN / GITHUB_TOKEN
+ * for github.com, GH_ENTERPRISE_TOKEN / GITHUB_ENTERPRISE_TOKEN for GH_HOST, GITLAB_TOKEN for gitlab.com or GITLAB_HOST.
+ * Any other host (a self-hosted forge, a name that merely says gitlab) never gets one.
+ */
+export function envTokenFor(provider: 'github' | 'gitlab', host: string, env: Record<string, string | undefined>): string {
+  const h = bare(host);
+  if (provider === 'github') {
+    if (h === 'github.com') return env.GH_TOKEN || env.GITHUB_TOKEN || '';
+    const ghHost = hostOf(env.GH_HOST);
+    return ghHost && ghHost !== 'github.com' && ghHost === h ? env.GH_ENTERPRISE_TOKEN || env.GITHUB_ENTERPRISE_TOKEN || '' : '';
+  }
+  const glHost = hostOf(env.GITLAB_HOST);
+  return h === 'gitlab.com' || (glHost && glHost === h) ? env.GITLAB_TOKEN || '' : '';
+}
+
 /** The repository's own PR among `pullRequests(headRefName:)` (strangers' forks reuse branch names). */
 export function pickGithubPr(nodes: any[]): any | undefined {
   return (nodes ?? []).find((x: any) => x && !x.isCrossRepository);
