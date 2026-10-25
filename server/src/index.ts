@@ -45,6 +45,7 @@ import { projectOf } from './meta/project.js';
 import os from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { ProjectFiles, PROJECT_FILE_MAX } from './cloud/project-files.js';
+import { sameOriginRequest } from './cloud/same-origin.js';
 import { DispatchService } from './dispatch/service.js';
 import type { CloudServices } from './cloud/handlers.js';
 import { ClaudeAiSource } from './library/claudeai-source.js';
@@ -207,6 +208,9 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     if (token && presented === token) return true;
     return !!presented && !!remote?.authenticate(presented, req);
   };
+  /** The upload endpoints: like authOk, and with no token to guard them (loopback trusted) same-origin only (cloud/same-origin.ts). */
+  const uploadOk = (req: http.IncomingMessage, url: URL): boolean =>
+    authOk(req, url) && (!!token || !!(req.socket as any).cwRemote || sameOriginRequest(req));
   // eslint-disable-next-line prefer-const
   let gateway: GatewayService;
   // eslint-disable-next-line prefer-const
@@ -287,7 +291,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     }
     // Binary upload for message attachments: POST /api/attachments?sessionId=&rel=path/in/session (token-guarded like /ws)
     if (url.pathname === '/api/attachments' && req.method === 'POST') {
-      if (!authOk(req, url)) { res.writeHead(403).end(); return; }
+      if (!uploadOk(req, url)) { res.writeHead(403).end(); return; }
       const len = Number(req.headers['content-length'] ?? 0);
       if (len > ATTACH_MAX_BYTES) { res.writeHead(413).end('too large'); return; }
       let dest: string;
@@ -303,7 +307,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     }
     // 导入 claude.ai 数据 (stage F4): POST /api/import/claude-ai — the export zip, kept under <data>/claude-ai/uploads/
     if (url.pathname === '/api/import/claude-ai' && req.method === 'POST') {
-      if (!authOk(req, url)) { res.writeHead(403).end(); return; }
+      if (!uploadOk(req, url)) { res.writeHead(403).end(); return; }
       if (Number(req.headers['content-length'] ?? 0) > CLAUDEAI_UPLOAD_MAX) { res.writeHead(413).end('too large'); return; }
       const dir = path.join(dataDir(), 'claude-ai', 'uploads');
       try { fs.mkdirSync(dir, { recursive: true }); } catch (e: any) { res.writeHead(500).end(e.message); return; }
@@ -318,7 +322,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     }
     // 项目资料 (stage F2): POST /api/project-files?workspaceId=&name= — token-guarded like /ws, 20 MB
     if (url.pathname === '/api/project-files' && req.method === 'POST') {
-      if (!authOk(req, url)) { res.writeHead(403).end(); return; }
+      if (!uploadOk(req, url)) { res.writeHead(403).end(); return; }
       const wid = url.searchParams.get('workspaceId') ?? '';
       if (!meta.workspaces().some((w) => w.id === wid)) { res.writeHead(404).end('no such project'); return; }
       if (Number(req.headers['content-length'] ?? 0) > PROJECT_FILE_MAX) { res.writeHead(413).end('too large'); return; }
@@ -560,6 +564,8 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     serverName: () => os.hostname(),
   });
   const claudeAi = new ClaudeAiImport({ root: path.join(dataDir(), 'claude-ai'), meta, library: { join: (k, on) => library.join(k, on), invalidate: (k) => library.invalidate(k) }, source: claudeAiSource });
+  claudeAi.sweepUploads();
+  setInterval(() => claudeAi.sweepUploads(), 3_600_000).unref();
   const cloud: CloudServices = { projectFiles, dispatch, handoff, publish, claudeAi, workspaceExists: (id) => meta.workspaces().some((w) => w.id === id) };
   const importer = new ImportService({
     providers: { hasSame: (t, b, k) => providers.hasSame(t, b, k), upsert: (p) => providers.upsert(p) },
