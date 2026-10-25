@@ -96,7 +96,7 @@ export type LayoutAction =
   | { t: 'pane.ratio'; splitId: string; ratio: number }
   | { t: 'pane.even'; splitId?: string }
   | { t: 'pane.preset'; preset: LayoutPreset }
-  | { t: 'tile.open'; paneId: string; tile: Tile; mode: 'replace' | 'tab' }
+  | { t: 'tile.open'; paneId: string; tile: Tile; mode: 'replace' | 'tab' | 'background' }
   | { t: 'tile.close'; paneId: string; tileId: string }
   | { t: 'tile.activate'; paneId: string; tileId: string }
   | { t: 'tile.rename'; paneId: string; tileId: string; title: string }
@@ -530,12 +530,15 @@ function reduceLayout(s: LayoutState, a: LayoutAction): LayoutState {
         // an empty chat tile is always replaced; otherwise honour mode — but only a conversation is ever swapped out:
         // a terminal / document / diff / browser in front keeps its place (its process, its unsaved changes) and the
         // new tile becomes a tab next to it
-        const replace = cur?.kind === 'chat' && (a.mode === 'replace' || cur.sessionId === null);
+        // 'background' (a file Claude wrote, auto-open.ts): a tab behind the front one, which stays — never a replacement
+        const bg = a.mode === 'background';
+        const replace = !bg && cur?.kind === 'chat' && (a.mode === 'replace' || cur.sessionId === null);
         // same session / document / diff already open as a tab → just activate it (docs also take the new line).
         // Checked before replacing too: replacing would put a second tab of the same thing in the pane, or (when it
         // is the current tab) swap in a new tile id, which remounts the tile and throws away scroll / composer state.
         const nt = a.tile;
         const dup = p.tiles.find((t) => sameTile(t, nt));
+        if (dup && bg) return p;
         if (dup) {
           const tiles = nt.kind === 'doc' && nt.line ? p.tiles.map((t) => (t.id === dup.id ? { ...t, line: nt.line } : t)) : p.tiles;
           return p.activeTileId === dup.id && tiles === p.tiles ? p : { ...p, tiles, activeTileId: dup.id };
@@ -544,7 +547,7 @@ function reduceLayout(s: LayoutState, a: LayoutAction): LayoutState {
           const tiles = p.tiles.map((t) => (t.id === cur.id ? { ...a.tile, id: a.tile.id || cur.id } : t));
           return { ...p, tiles, activeTileId: tiles.find((t) => t === tiles[p.tiles.indexOf(cur)])!.id };
         }
-        return { ...p, tiles: [...p.tiles, a.tile], activeTileId: a.tile.id };
+        return { ...p, tiles: [...p.tiles, a.tile], activeTileId: bg && p.activeTileId ? p.activeTileId : a.tile.id };
       }));
     }
     case 'tile.close': {

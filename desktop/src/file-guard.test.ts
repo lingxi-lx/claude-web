@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ALLOW_TTL_MS, FILE_PAGE_CSP, FileGuard, SERVE_TTL_MS, fileKey, fileRequestAllowed, serveFile } from './file-guard';
+import { ALLOW_TTL_MS, FILE_PAGE_CSP, FileGuard, SERVE_TTL_MS, fileKey, assetAllowed, fileRequestAllowed, serveFile } from './file-guard';
 
 const PAGE = 'file:///C:/w/my%20page.html';
 
@@ -72,6 +72,39 @@ describe('FileGuard', () => {
     g.allowOnce('file:///C:/w/b.html', 2);
     expect(g.allowed({ url: 'file:///C:/w/b.html', resourceType: 'mainFrame', webContentsId: 1 }, 3)).toBe(true);
     expect(g.allowed({ url: PAGE, resourceType: 'mainFrame', webContentsId: 1 }, 4)).toBe(false);
+  });
+});
+
+describe('a local page\'s own styles, scripts and pictures (U6)', () => {
+  const SITE = 'file:///C:/w/site/index.html';
+  it('assetAllowed: script / style / picture / font / media inside the page\'s folder tree, nothing else', () => {
+    for (const t of ['script', 'stylesheet', 'image', 'font', 'media']) {
+      expect(assetAllowed({ url: 'file:///C:/w/site/style.css', resourceType: t }, SITE), t).toBe(true);
+      expect(assetAllowed({ url: 'file:///C:/w/site/img/a%20b.png', resourceType: t }, SITE), t).toBe(true);
+    }
+    // what reads a file's contents, a frame, a worker: never
+    for (const t of ['xhr', 'fetch', 'subFrame', 'mainFrame', 'object', 'webSocket', 'ping', 'cspReport', 'other', 'worker', 'sharedWorker']) {
+      expect(assetAllowed({ url: 'file:///C:/w/site/app.js', resourceType: t }, SITE), t).toBe(false);
+    }
+    // outside the folder: up a level, a sibling folder with the same prefix, encoded separators, another drive, the page itself
+    for (const url of ['file:///C:/w/secret.js', 'file:///C:/w/site/../secret.js', 'file:///C:/w/site/%2e%2e/secret.js', 'file:///C:/w/site-other/x.js', 'file:///C:/w/site/..%5Csecret.js', 'file:///C:/w/site/a%2F..%2F..%2Fx.js', 'file:///D:/w/site/x.js', 'file://host/share/x.js', SITE]) {
+      expect(assetAllowed({ url, resourceType: 'script' }, SITE), url).toBe(false);
+    }
+    expect(assetAllowed({ url: 'file:///C:/w/site/x.js', resourceType: 'script' }, undefined)).toBe(false);
+    // a page at the root of a drive gets no folder tree (the whole drive)
+    expect(assetAllowed({ url: 'file:///C:/x.js', resourceType: 'script' }, 'file:///C:/index.html')).toBe(false);
+  });
+  it('FileGuard: the granted tab loads its assets (and they are served, with the policy); another tab does not; fetch still fails', () => {
+    const g = new FileGuard();
+    g.allowOnce(SITE, 0);
+    expect(g.allowed({ url: SITE, resourceType: 'mainFrame', webContentsId: 7 }, 1)).toBe(true);
+    expect(g.takeServe(SITE, 2)).toBe(true);
+    expect(g.allowed({ url: 'file:///C:/w/site/style.css', resourceType: 'stylesheet', webContentsId: 7 }, 3)).toBe(true);
+    expect(g.takeServe('file:///C:/w/site/style.css', 4)).toBe(true);
+    expect(g.allowed({ url: 'file:///C:/w/site/data.json', resourceType: 'xhr', webContentsId: 7 }, 5)).toBe(false);
+    expect(g.takeServe('file:///C:/w/site/data.json', 6)).toBe(false);
+    expect(g.allowed({ url: 'file:///C:/w/site/style.css', resourceType: 'stylesheet', webContentsId: 8 }, 7)).toBe(false);
+    expect(g.allowed({ url: 'file:///C:/w/site/app.js', resourceType: 'script', webContentsId: undefined }, 8)).toBe(false);
   });
 });
 

@@ -137,7 +137,7 @@ interface State {
   dispatchLayout(a: LayoutAction): void;
   /** open a session (or a fresh empty tile when null) in the focused pane */
   openInPane(sessionId: string | null, mode?: 'replace' | 'tab', paneId?: string): void;
-  openTile(tile: Tile, mode?: 'replace' | 'tab', paneId?: string): void;
+  openTile(tile: Tile, mode?: 'replace' | 'tab' | 'background', paneId?: string): void;
   /** close a tile; asks first when it is an editor with unsaved changes */
   closeTile(paneId: string, tileId: string): Promise<void>;
   dirtyDocs: Record<string, boolean>; // doc tile id -> unsaved

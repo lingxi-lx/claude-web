@@ -146,7 +146,8 @@ describe('what opens when the turn ends', () => {
     expect(onTurnEndAutoOpen('s1', st(md), shell)).toEqual({ to: 'doc', path: '/w/auto-1.md' });
     expect(tiles).toHaveLength(1);
     expect(tiles[0][0]).toMatchObject({ kind: 'doc', path: '/w/auto-1.md' });
-    expect(tiles[0].slice(1)).toEqual(['tab', paneId]);
+    // stage B fix wave (U2): behind the conversation, never in front of it (this was 'tab', which brought it to the front)
+    expect(tiles[0].slice(1)).toEqual(['background', paneId]);
     expect(onTurnEndAutoOpen('s1', st(md), shell)).toBeNull();
     expect(onTurnEndAutoOpen('s1', st(turn('/w/AUTO-1.md')), shell)).toBeNull();
     expect(tiles).toHaveLength(1);
@@ -177,5 +178,36 @@ describe('what opens when the turn ends', () => {
     expect(planAutoOpen(input(turn('//host/share/x.md')))).toBeNull();
     expect(planAutoOpen(input(turn('out/r.md'), { cwd: 'C:\\w\\' }))).toEqual({ to: 'doc', path: 'C:/w/out/r.md' });
     expect(planAutoOpen(input(turn('out/r.md')))).toBeNull();
+  });
+
+  it('`..` and empty parts are resolved before the network-path test (U8)', () => {
+    // joined, this is //host/…: refused
+    expect(planAutoOpen(input(turn('./\\host\\share\\x.html'), { cwd: '/' }))).toBeNull();
+    // resolved as Windows does (the leading separator kept, inner empty parts dropped) these stay local — and the
+    // address handed on is the resolved one, never file:////host (which Chromium would take as a network path)
+    expect(planAutoOpen(input(turn('x/../..//host/s/a.html'), { cwd: '/' }))).toEqual({ to: 'browser', path: '/host/s/a.html', url: 'file:///host/s/a.html' });
+    expect(planAutoOpen(input(turn('/x/..//host/s/a.md')))).toEqual({ to: 'doc', path: '/host/s/a.md' });
+    // resolved, the rest stays where it was
+    expect(planAutoOpen(input(turn('C:\\w\\sub\\..\\b.html')))).toEqual({ to: 'browser', path: 'C:\\w\\b.html', url: 'file:///C:/w/b.html' });
+    expect(planAutoOpen(input(turn('out//./r.md'), { cwd: 'C:\\w' }))).toEqual({ to: 'doc', path: 'C:/w/out/r.md' });
+    // never above the drive
+    expect(planAutoOpen(input(turn('../../r.md'), { cwd: 'C:\\w' }))).toEqual({ to: 'doc', path: 'C:/r.md' });
+  });
+
+  it('a page this conversation rewrote that is still open in a tab is reloaded there (U9)', async () => {
+    const { st } = harness();
+    const reloads: string[] = [];
+    const shell = { allowFileOnce: async () => true };
+    const page = turn('/w/re-1.html');
+    expect(onTurnEndAutoOpen('s1', st(page), shell)?.to).toBe('browser');
+    await tick();
+    const tab = useBrowser.getState().tabs.at(-1)!;
+    expect(tab.src).toBe('file:///w/re-1.html');
+    expect(onTurnEndAutoOpen('s1', st(page), shell, (id) => reloads.push(id))).toBeNull();
+    expect(reloads).toEqual([tab.id]);
+    // the tab is gone: nothing (it was opened once already)
+    useBrowser.setState({ tabs: useBrowser.getState().tabs.filter((t) => t.id !== tab.id) });
+    expect(onTurnEndAutoOpen('s1', st(page), shell, (id) => reloads.push(id))).toBeNull();
+    expect(reloads).toEqual([tab.id]);
   });
 });

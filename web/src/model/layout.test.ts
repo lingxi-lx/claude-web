@@ -86,6 +86,25 @@ describe('panes', () => {
 });
 
 describe('tiles', () => {
+  it('background: a tab next to the front one, which stays in front — the conversation is never hidden (U2)', () => {
+    let s = initialLayout();
+    const p0 = focused(s);
+    s = layoutReducer(s, { t: 'tile.open', paneId: p0, tile: chatTile('a'), mode: 'tab' });
+    const chatId = activeGroup(s).panes[p0].activeTileId;
+    const doc = { id: 'd1', kind: 'doc', path: '/w/r.md' } as Tile;
+    s = layoutReducer(s, { t: 'tile.open', paneId: p0, tile: doc, mode: 'background' });
+    expect(activeGroup(s).panes[p0].tiles.map((t) => t.kind)).toEqual(['chat', 'doc']);
+    expect(activeGroup(s).panes[p0].activeTileId).toBe(chatId);
+    // already open: nothing changes (not brought to the front either)
+    const before = s;
+    s = layoutReducer(s, { t: 'tile.open', paneId: p0, tile: { ...doc, id: 'd2' } as Tile, mode: 'background' });
+    expect(s).toBe(before);
+    // an empty chat tile is not replaced by a background tab
+    let e = initialLayout();
+    const q0 = focused(e);
+    e = layoutReducer(e, { t: 'tile.open', paneId: q0, tile: doc, mode: 'background' });
+    expect(activeGroup(e).panes[q0].tiles.map((t) => t.kind)).toEqual(['chat', 'doc']);
+  });
   it('open replaces an empty chat tile, tabs otherwise, and dedupes the same session', () => {
     let s = initialLayout();
     const p0 = focused(s);

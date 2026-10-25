@@ -3,9 +3,10 @@
 // Chromium's extra file privileges (the GrantFileProtocolExtraPrivileges fuse is on by default): such a page could
 // fetch() any other file — ~/.claude/.credentials.json, ~/.ssh — and send it anywhere, and merely Edit-ing a cloned
 // repository's index.html would run its scripts with that, no click. So in the built-in browser's profiles a file:
-// request is only ever the top frame of a tab the app itself opened on that very file: nothing the page asks for
-// from file: (fetch, script, picture, style, frame) loads, and the page cannot take its tab to another file.
-// A page's own pictures and styles next to it do not load either — the app's doc preview shows those.
+// request is only ever the top frame of a tab the app itself opened on that very file, and the page cannot take its
+// tab to another file. What the page asks for from file: is refused — fetch / XMLHttpRequest, frames, objects — but
+// its own scripts, styles, pictures, fonts and media inside its folder tree (stage B fix wave U6, `assetAllowed`):
+// Claude's index.html + style.css + app.js shows as written, and still no script can read a file's contents.
 //
 // Workers (stage B task 9, found by the real-Electron check): a blob: dedicated Worker or a SharedWorker started by
 // such a page fetched — and read with a synchronous XMLHttpRequest — any file, and those requests never reach
@@ -43,6 +44,27 @@ export function fileRequestAllowed(req: FileRequest, allow: ReadonlySet<string>)
   return !!key && allow.has(key);
 }
 
+/** What a granted page may load from its own folder (U6): never xhr / fetch (they read contents), frames, objects, workers. */
+const ASSET_TYPES = new Set(['script', 'stylesheet', 'image', 'font', 'media']);
+
+/**
+ * A local page's own style, script, picture, font or media (stage B fix wave U6): a file inside the folder tree of the
+ * page its tab was granted (`granted`, a fileKey), never the page itself, never across an encoded separator, never
+ * for a page at a drive's root (its tree is the whole drive). Scripts still cannot read any file's contents (fetch /
+ * xhr stay refused, FILE_PAGE_CSP starts no worker); a picture or script elsewhere stays out.
+ */
+export function assetAllowed(req: FileRequest, granted: string | undefined): boolean {
+  if (!granted || !ASSET_TYPES.has(req.resourceType)) return false;
+  if (/%2f|%5c|\\/i.test(req.url.replace(/^file:\/\/\//i, ''))) return false;
+  const key = fileKey(req.url);
+  if (!key || key === granted) return false;
+  const dir = granted.slice(0, granted.lastIndexOf('/') + 1);
+  // file:///C:/ or file:/// — a root has no folder of its own
+  if (/^file:\/\/\/([A-Za-z]:\/)?$/i.test(dir)) return false;
+  const path = key.split(/[?#]/)[0];
+  return path.startsWith(dir) && path.length > dir.length;
+}
+
 /**
  * The addresses the app has said it is about to open (`allowOnce`, from its own page over IPC), each taken by the
  * first tab that loads it; from then on that tab may load that one file again (reload, back / forward), nothing else.
@@ -68,16 +90,24 @@ export class FileGuard {
     const allow = new Set<string>();
     if (mine) allow.add(mine);
     if (fresh) allow.add(key);
+    // the granted page's own styles / scripts / pictures (assetAllowed); everything else as a top frame only
+    if (req.resourceType !== 'mainFrame') {
+      const ok = /^file:/i.test(req.url) ? assetAllowed(req, mine) : true;
+      if (ok && key) this.pass(key, now);
+      return ok;
+    }
     const ok = fileRequestAllowed(req, allow);
     if (ok && key && fresh && key !== mine) {
       this.pending.delete(key);
       if (req.webContentsId !== undefined) this.granted.set(req.webContentsId, key);
     }
-    if (ok && key) {
-      for (const [k, at] of this.passed) if (at <= now) this.passed.delete(k);
-      this.passed.set(key, now + SERVE_TTL_MS);
-    }
+    if (ok && key) this.pass(key, now);
     return ok;
+  }
+
+  private pass(key: string, now: number): void {
+    for (const [k, at] of this.passed) if (at <= now) this.passed.delete(k);
+    this.passed.set(key, now + SERVE_TTL_MS);
   }
 
   /**
