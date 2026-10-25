@@ -34,9 +34,6 @@ span.bg-chip { padding: 0 2px 0 0; }
 .bg-drawer-head { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-3) var(--sp-2); }
 .bg-drawer-title { flex: 1 1 auto; min-width: 0; }
 .bg-drawer-head .btn { flex: none; white-space: nowrap; }
-/* one column (the drawer open, a narrow page): the graph keeps a reading size instead of filling the column (a 780 px
-   wide graph had a node the size of a coin and 主对话 in 24 px type — real run, 2026-10-13) */
-.bg-graph-wrap .bg-graph-svg { max-width: 440px; margin-inline: auto; }
 .bg-drawer-title .n { font-weight: 600; color: var(--ink-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bg-drawer-title .sub { font-size: var(--fs-meta); color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bg-drawer-err { margin: 0 var(--sp-3) var(--sp-2); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); background: color-mix(in oklab, var(--red) 10%, transparent); color: var(--red); font-size: var(--fs-sm); white-space: pre-wrap; }

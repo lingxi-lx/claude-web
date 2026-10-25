@@ -97,10 +97,10 @@ function Board({ session, live, taskId }: { session: BgSession; live: boolean; t
         <div className="bg-cafe-wrap"><ErrorBoundary area={tr('后台 · 网吧')}><Suspense fallback={null}><Cafe session={live ? session : undefined} onPick={pick} onAdmin={toChat(session.sessionId)} /></Suspense></ErrorBoundary></div>
         {live && <TaskChips session={session} taskId={taskId} />}
         <ErrorBoundary area={tr('后台 · 卡片')}><AgentCards session={session} taskId={taskId} onPick={pick} /></ErrorBoundary>
+        <div className="bg-graph-wrap"><ErrorBoundary area={tr('后台 · 关系图')}><CommandGraph session={session} taskId={taskId} onPick={pick} /></ErrorBoundary></div>
         <div className="bg-stage bg-stage-low">
           <div className="bg-side-col">
             <Bill sessionId={session.sessionId} />
-            <div className="bg-graph-wrap"><ErrorBoundary area={tr('后台 · 关系图')}><CommandGraph session={session} taskId={taskId} onPick={pick} /></ErrorBoundary></div>
             {session.events.length > 0 && <div className="bg-feed-wrap"><div className="bg-h">{tr('动态')}</div><EventFeed events={taskId ? session.events.filter((e) => e.taskId === taskId) : session.events} onPick={pick} /></div>}
           </div>
         </div>
