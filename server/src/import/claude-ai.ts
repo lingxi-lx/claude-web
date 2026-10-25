@@ -9,6 +9,7 @@ export interface ClaudeAiProject { uuid: string; name: string; description: stri
 export interface ClaudeAiExport { conversations: ClaudeAiConversation[]; projects: ClaudeAiProject[]; user?: { name: string; email: string }; skipped: number }
 
 const str = (v: unknown, d = '') => (typeof v === 'string' ? v : d);
+export const SAFE_ID = /^[\w-]{1,80}$/;
 const arr = (v: unknown): any[] => (Array.isArray(v) ? v : []);
 
 function fileByBase(files: Map<string, Buffer>, base: string): Buffer | undefined {
@@ -49,7 +50,8 @@ export function parseExport(files: Map<string, Buffer>): ClaudeAiExport {
   const conversations: ClaudeAiConversation[] = [];
   for (const c of arr(convRaw)) {
     try {
-      if (!c || typeof c !== 'object' || !str(c.uuid) || !Array.isArray(c.chat_messages)) { skipped++; continue; }
+      // the uuid becomes a file name: anything but plain id characters is skipped (and counted as skipped)
+      if (!c || typeof c !== 'object' || !SAFE_ID.test(str(c.uuid)) || !Array.isArray(c.chat_messages)) { skipped++; continue; }
       const created = str(c.created_at);
       const messages = c.chat_messages.map(message).filter((m: ClaudeAiMessage | null): m is ClaudeAiMessage => !!m);
       const projectUuid = str(c.project_uuid) || str(c.project?.uuid);

@@ -99,18 +99,60 @@ export class PublishService {
 
   list(): { items: PublishedView[]; local: string; lan: string | null } {
     void this.sweep();
+    void this.retryPendingRevokes();
     const now = this.now();
     return { items: this.items().filter((x) => !isExpired(x, now)).sort((a, b) => b.updatedAt - a.updatedAt).map((x) => this.view(x)), local: this.o.localBase(), lan: this.o.lanBase?.() ?? null };
   }
 
-  async revoke(id: string): Promise<null> {
+  /**
+   * 撤回. A copy on another machine is forgotten here only once that machine said it removed it (its revoke of an id it
+   * no longer has succeeds too): offline / refusing, the record stays marked `revokePending` and is retried when the
+   * list is read again and when the machine comes back (fix wave F6) — the page must not stay up there unseen.
+   */
+  async revoke(id: string): Promise<{ pending?: boolean } | null> {
     if (!isPublishId(id)) throw new Error(tr('这个发布已经不在了'));
     const items = this.items();
     const it = items.find((x) => x.id === id);
-    if (it?.peerId && this.o.request) await this.o.request(it.peerId, { kind: 'publish.revoke', id }).catch(() => { /* gone there already / offline: forget it here anyway */ });
+    if (it?.peerId && this.o.request) {
+      const done = await this.o.request(it.peerId, { kind: 'publish.revoke', id }).then(() => true, () => false);
+      if (!done) {
+        this.save(items.map((x) => (x.id === id ? { ...x, revokePending: true } : x)));
+        return { pending: true };
+      }
+    }
     fs.rmSync(path.join(this.o.dir, id), { recursive: true, force: true });
-    this.save(items.filter((x) => x.id !== id));
+    this.save(this.items().filter((x) => x.id !== id));
     return null;
+  }
+
+  private retrying: Promise<void> | null = null;
+  /** Revokes another machine could not be told about yet: tried again (one pass at a time). */
+  retryPendingRevokes(): Promise<void> {
+    if (this.retrying) return this.retrying;
+    const online = new Set((this.o.peers?.() ?? []).filter((p) => p.enabled && (!p.state || p.state === 'online')).map((p) => p.id));
+    const pending = this.items().filter((x) => x.revokePending && x.peerId && online.has(x.peerId));
+    if (!pending.length || !this.o.request) return Promise.resolve();
+    this.retrying = (async () => {
+      for (const it of pending) await this.revoke(it.id).catch(() => { /* next time */ });
+    })().finally(() => { this.retrying = null; });
+    return this.retrying;
+  }
+
+  /** What a publish of `file` would copy (the dialog lists it before 发布): the page and its own assets. */
+  async files(file: string): Promise<{ files: { rel: string; size: number }[]; bytes: number }> {
+    const abs = path.resolve(String(file ?? ''));
+    let st: fs.Stats;
+    try { st = fs.statSync(abs); } catch { throw new Error(tr('找不到这个文件')); }
+    if (!st.isFile()) throw new Error(tr('只能发布文件'));
+    const fromDir = fs.realpathSync(path.dirname(abs));
+    let bytes = 0;
+    const files = snapshotFiles(abs).map((rel) => {
+      const src = resolveInside(fromDir, rel);
+      const size = src ? fs.statSync(src).size : 0;
+      bytes += size;
+      return { rel, size };
+    });
+    return { files, bytes };
   }
 
   /** 发布到常开机器: the same snapshot, sent to the peer; the link is the peer's own address. */

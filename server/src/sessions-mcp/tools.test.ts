@@ -24,4 +24,8 @@ describe('跨对话: project scope (stage F2)', () => {
     // a conversation outside every project, asked for its project, sees only the loose ones
     expect(scopeSessions(all, 'loose', { projectOf }, true).map((s) => s.sessionId)).toEqual(['loose']);
   });
+  it('a new conversation not in the list yet is scoped by the folder it runs in (not left unrestricted)', () => {
+    const restricted = (_id: string, cwd?: string) => cwd === '/app';
+    expect(scopeSessions(all, 'fresh', { projectOf, restricted, cwdOf: (id) => (id === 'fresh' ? '/app' : undefined) }).map((s) => s.sessionId)).toEqual(['me', 'a2']);
+  });
 });

@@ -205,9 +205,12 @@ function PublishDialog({ path }: { path: string }) {
   const [it, setIt] = useState<View | null>(null);
   const [peers, setPeers] = useState<PeerInfo[]>([]);
   const [busy, setBusy] = useState(false);
+  // F7: exactly what 发布 copies (the page and its own assets), shown before it is published
+  const [files, setFiles] = useState<{ files: { rel: string; size: number }[]; bytes: number } | null>(null);
   const name = useMemo(() => path.split(/[\\/]/).pop() ?? path, [path]);
   const html = /\.html?$/i.test(path);
   useEffect(() => { ws.request<PeerInfo[]>({ kind: 'peers.list' }).then((l) => setPeers(l.filter((p) => p.enabled && p.state === 'online')), () => {}); }, []);
+  useEffect(() => { ws.request<{ files: { rel: string; size: number }[]; bytes: number }>({ kind: 'publish.files', path }).then(setFiles, () => {}); }, [path]);
   const run = async (fn: () => Promise<View>) => {
     setBusy(true);
     try { setIt(await fn()); } catch (e: any) { toast(e.message); }
@@ -227,6 +230,12 @@ function PublishDialog({ path }: { path: string }) {
       <div className="seg cloud-exp" role="radiogroup" aria-label={tr('有效期')}>
         {EXP.map(([v, l]) => <button key={v} role="radio" aria-checked={expiry === v} className={expiry === v ? 'active' : ''} data-exp={v} onClick={() => setExpiry(v)}>{l}</button>)}
       </div>
+      {files && files.files.length > 1 && (
+        <details className="dialog-msg" data-id="publish-files">
+          <summary>{tr('会一起发布 {n} 个文件（共 {size} KB）', { n: files.files.length, size: Math.max(1, Math.round(files.bytes / 1024)) })}</summary>
+          <pre className="cloud-diff mono">{files.files.map((f) => f.rel).join('\n')}</pre>
+        </details>
+      )}
       {it && <Links it={it} />}
       <div className="actions">
         {html && <button className="btn sm ghost" data-act="inline" onClick={() => void exportOne()}>{tr('导出成单个 HTML')}</button>}
@@ -245,7 +254,11 @@ function PublishedDialog() {
   useEffect(() => { void load(); }, []);
   const revoke = async (it: View) => {
     if (!(await dlg.confirm(tr('撤回「{name}」？', { name: it.name }), { message: tr('链接马上失效，快照会删除。'), danger: true }))) return;
-    await ws.request({ kind: 'publish.revoke', id: it.id }).then(load, (e) => toast(e.message));
+    await ws.request<{ pending?: boolean } | null>({ kind: 'publish.revoke', id: it.id }).then((r) => {
+      // F6: the machine is offline — the copy there is removed once it is back (the row stays, marked)
+      if (r?.pending) toast(tr('「{name}」现在连不上，等它连上后自动撤回', { name: it.peerName ?? '' }));
+      void load();
+    }, (e) => toast(e.message));
   };
   const republish = async (it: View) => {
     await ws.request({ kind: 'publish.create', path: it.source, expiry: it.expiresAt === null ? 'never' : '7d', id: it.id }).then(() => { toast(tr('已重新发布'), true); void load(); }, (e) => toast(e.message));
@@ -258,7 +271,7 @@ function PublishedDialog() {
             <li key={it.id} data-pub={it.id}>
               <div className="cloud-pub-head">
                 <strong className="pj-path" title={it.source}>{it.name}</strong>
-                <span className="pj-tag">{it.peerName ? tr('在 {name} 上', { name: it.peerName }) : ''} {expiryText(it.expiresAt)}</span>
+                <span className="pj-tag">{it.peerName ? tr('在 {name} 上', { name: it.peerName }) : ''} {it.revokePending ? tr('撤回待完成') : expiryText(it.expiresAt)}</span>
                 {!it.peerId && <button className="btn sm ghost" onClick={() => void republish(it)}>{tr('重新发布')}</button>}
                 <button className="btn sm ghost danger" data-act="revoke" onClick={() => void revoke(it)}>{tr('撤回')}</button>
               </div>

@@ -6,29 +6,50 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { AgentKind, ClaudeAiImportResult, ClaudeAiScan } from '../protocol.js';
-import { readZip } from './zip.js';
-import { parseExport, planImport, safeName, type ClaudeAiExport } from './claude-ai.js';
+import { readZipFile, ZipTooLarge } from './zip.js';
+import { parseExport, planImport, safeName, SAFE_ID, type ClaudeAiExport } from './claude-ai.js';
 import { conversationsDir, type StoredConversation } from '../library/claudeai-source.js';
 import { tr } from '../i18n/index.js';
 
-export const CLAUDEAI_UPLOAD_MAX = 2 * 1024 * 1024 * 1024;
+export const CLAUDEAI_UPLOAD_MAX = 1024 * 1024 * 1024;
+const EXPORT_FILES = new Set(['conversations.json', 'projects.json', 'users.json']);
+const isInside = (base: string, p: string) => {
+  const r = path.relative(path.resolve(base), path.resolve(p));
+  return !!r && !r.startsWith('..') && !path.isAbsolute(r);
+};
 
 export interface ClaudeAiImportOpts {
   root: string;
   meta: {
-    workspaces(): { id: string; path: string; name: string; claudeAiUuid?: string }[];
+    workspaces(): { id: string; path: string; name: string; claudeAiUuid?: string; instructions?: string }[];
     addWorkspace(p: string): Promise<{ id: string; path: string }>;
     updateWorkspace(id: string, patch: { instructions?: string | null; claudeAiUuid?: string }): Promise<unknown>;
   };
   library: { join(kind: AgentKind, on: boolean): Promise<void>; invalidate(kind?: AgentKind): void };
   source?: { invalidate(): void };
   now?(): number;
+  /** Tests only: smaller caps than the reader's 512 MB. */
+  zipLimits?: { maxEntry?: number; maxTotal?: number };
 }
 
 export class ClaudeAiImport {
   constructor(private readonly o: ClaudeAiImportOpts) {}
 
   uploadsDir() { return path.join(this.o.root, 'uploads'); }
+
+  /** An upload nobody imported (the dialog was closed): removed after a day. */
+  sweepUploads(maxAgeMs = 24 * 3_600_000): number {
+    const dir = this.uploadsDir();
+    const now = (this.o.now ?? Date.now)();
+    let names: string[] = [];
+    try { names = fs.readdirSync(dir); } catch { return 0; }
+    let n = 0;
+    for (const name of names) {
+      const f = path.join(dir, name);
+      try { if (now - fs.statSync(f).mtimeMs > maxAgeMs) { fs.rmSync(f, { force: true }); n++; } } catch { /* in use / gone */ }
+    }
+    return n;
+  }
 
   /** Only a file our own upload endpoint wrote. */
   private zipPath(p: string): string {
@@ -39,9 +60,13 @@ export class ClaudeAiImport {
   }
 
   private parse(p: string): ClaudeAiExport {
-    const buf = fs.readFileSync(this.zipPath(p));
     let files: Map<string, Buffer>;
-    try { files = readZip(buf); } catch { throw new Error(tr('这不是一个 zip 文件')); }
+    // only the three JSON files are inflated, each and all together capped (a zip bomb stops at the cap); the zip is
+    // read by offsets, never whole
+    try { files = readZipFile(this.zipPath(p), { ...this.o.zipLimits, want: (n) => EXPORT_FILES.has(n.split('/').pop()!) }); } catch (e) {
+      if (e instanceof ZipTooLarge) throw new Error(tr('导出包里的文件太大，读不了（单个文件和合计都不能超过 512 MB）'));
+      throw new Error(tr('这不是一个 zip 文件'));
+    }
     return parseExport(files);
   }
 
@@ -86,8 +111,12 @@ export class ClaudeAiImport {
           w = this.o.meta.workspaces().find((ws) => ws.id === added.id) ?? { ...added, name: pr.name };
           projectsCreated++;
         }
-        await this.o.meta.updateWorkspace(w.id, { claudeAiUuid: pr.uuid, ...(pr.instructions.trim() ? { instructions: pr.instructions } : {}) });
+        // the instructions only when the project has none (a re-import never replaces what the user wrote)
+        const setInstr = pr.instructions.trim() && !w.instructions?.trim();
+        await this.o.meta.updateWorkspace(w.id, { claudeAiUuid: pr.uuid, ...(setInstr ? { instructions: pr.instructions } : {}) });
         projectDir.set(pr.uuid, w.path);
+        // files are written only under the folder picked this time (a project moved elsewhere keeps its folder untouched)
+        if (!isInside(base, w.path)) continue;
         if (!fs.existsSync(w.path)) fs.mkdirSync(w.path, { recursive: true });
         for (const d of pr.docs) {
           const file = path.join(w.path, safeName(d.filename, 'document.txt'));
@@ -99,20 +128,24 @@ export class ClaudeAiImport {
     }
     const dir = conversationsDir(this.o.root);
     fs.mkdirSync(dir, { recursive: true });
-    const write = new Set([...plan.add, ...plan.update]);
+    const adds = new Set(plan.add), updates = new Set(plan.update);
     const now = (this.o.now ?? Date.now)();
+    // counted as written only when the file really is (parseExport already skips ids that can't be file names)
+    let added = 0, updated = 0, refused = 0;
     for (const c of x.conversations) {
-      if (!write.has(c.uuid) || !/^[\w-]{1,80}$/.test(c.uuid)) continue;
+      if (!adds.has(c.uuid) && !updates.has(c.uuid)) continue;
+      if (!SAFE_ID.test(c.uuid)) { refused++; continue; }
       const cwd = (c.projectUuid && projectDir.get(c.projectUuid)) || undefined;
       const stored: StoredConversation = { conv: c, ...(cwd ? { cwd } : {}), importedAt: now };
       const file = path.join(dir, `${c.uuid}.json`);
       fs.writeFileSync(`${file}.tmp`, JSON.stringify(stored));
       fs.renameSync(`${file}.tmp`, file);
+      if (adds.has(c.uuid)) added++; else updated++;
     }
     if (x.conversations.length) await this.o.library.join('claudeai', true);
     this.o.source?.invalidate();
     this.o.library.invalidate('claudeai');
     fs.rmSync(this.zipPath(p), { force: true });
-    return { ...scan, projectsCreated, projectsUpdated, filesWritten, filesKept };
+    return { ...scan, add: added, update: updated, skipped: scan.skipped + refused, projectsCreated, projectsUpdated, filesWritten, filesKept };
   }
 }

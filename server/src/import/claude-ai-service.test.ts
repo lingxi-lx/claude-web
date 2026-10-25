@@ -77,6 +77,61 @@ describe('ClaudeAiImport', () => {
     expect(t.workspaces).toEqual([]);
   });
 
+  it('a conversation whose id cannot be a file name is skipped and counted as skipped, not as added', async () => {
+    const t = setup();
+    fs.mkdirSync(t.svc.uploadsDir(), { recursive: true });
+    const convs = JSON.parse(fs.readFileSync(path.join(FIX, 'conversations.json'), 'utf8'));
+    convs.push({ ...convs[0], uuid: '../../pwn' });
+    const p = path.join(t.svc.uploadsDir(), 'evil.zip');
+    fs.writeFileSync(p, makeZip({ 'conversations.json': JSON.stringify(convs) }, { deflate: true }));
+    expect(await t.svc.scan(p)).toMatchObject({ conversations: 3, add: 3, skipped: 3 });
+    const r = await t.svc.run(p);
+    expect(r).toMatchObject({ add: 3, skipped: 3 });
+    expect(fs.readdirSync(path.join(root, 'claude-ai', 'conversations'))).toHaveLength(3);
+    expect(fs.existsSync(path.join(root, 'pwn.json'))).toBe(false);
+  });
+
+  it('a zip bomb is refused with a clear message', async () => {
+    const t = setup();
+    (t.svc as any).o.zipLimits = { maxEntry: 1024 * 1024, maxTotal: 1024 * 1024 }; // the real caps are 512 MB
+    fs.mkdirSync(t.svc.uploadsDir(), { recursive: true });
+    const p = path.join(t.svc.uploadsDir(), 'bomb.zip');
+    // a bomb next to the export is never opened (only the three JSON files are)
+    fs.writeFileSync(p, makeZip({ 'conversations.json': '[]', 'bomb.bin': Buffer.alloc(4 * 1024 * 1024) }, { deflate: true }));
+    expect(await t.svc.scan(p)).toMatchObject({ conversations: 0 });
+    fs.writeFileSync(p, makeZip({ 'conversations.json': Buffer.alloc(4 * 1024 * 1024, 0x20) }, { deflate: true }));
+    await expect(t.svc.scan(p)).rejects.toThrow(/太大/);
+    // a broken directory: not a zip
+    const z = makeZip({ 'conversations.json': '[]' });
+    z.writeUInt32LE(0xffff, z.length - 22 - 46 - 18 + 20); // csize past the end of the data
+    fs.writeFileSync(p, z);
+    await expect(t.svc.scan(p)).rejects.toThrow(/zip/);
+  });
+
+  it('re-import: documents go only under the folder picked this time; instructions only when the project has none', async () => {
+    const t = setup();
+    await t.svc.run(t.upload(), folder);
+    // the user moved the project elsewhere and wrote their own instructions
+    const elsewhere = path.join(root, 'elsewhere'); fs.mkdirSync(elsewhere);
+    t.workspaces[0].path = elsewhere;
+    t.workspaces[0].instructions = 'my own rules';
+    const other = path.join(root, 'other'); fs.mkdirSync(other);
+    const again = await t.svc.run(t.upload(), other);
+    expect(fs.readdirSync(elsewhere)).toEqual([]); // nothing written outside the picked folder
+    expect(again).toMatchObject({ projectsUpdated: 1, filesWritten: 0 });
+    expect(t.workspaces[0].instructions).toBe('my own rules');
+  });
+
+  it('uploads nobody imported are swept after a day', () => {
+    const t = setup();
+    const old = t.upload(), fresh = t.upload();
+    const day = 24 * 3_600_000;
+    fs.utimesSync(old, new Date(Date.now() - day - 60_000), new Date(Date.now() - day - 60_000));
+    expect(t.svc.sweepUploads()).toBe(1);
+    expect(fs.existsSync(old)).toBe(false);
+    expect(fs.existsSync(fresh)).toBe(true);
+  });
+
   it('only a file the upload endpoint wrote', async () => {
     const t = setup();
     const outside = path.join(root, 'x.zip');

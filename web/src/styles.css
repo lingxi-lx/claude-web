@@ -984,6 +984,8 @@ html[data-reduce-motion='1'] * { animation: none !important; transition: none !i
 .cloud-dialog textarea.field { width: 100%; resize: vertical; font: inherit; font-size: 13px; }
 .cloud-dialog .actions .grow, .cloud-dialog .grow { flex: 1; }
 .cloud-dialog .cloud-warn { color: var(--warn, var(--err)); display: flex; gap: 6px; align-items: center; }
+.cloud-dialog .cloud-check { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.cloud-dialog details > summary { cursor: pointer; color: var(--ink-3); font-size: 13px; margin-top: 4px; }
 .cloud-dialog .cloud-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 .cloud-dialog .cloud-row .pj-label { margin: 0; min-width: 48px; }
 .cloud-dialog .cloud-row select.field { flex: 1; }

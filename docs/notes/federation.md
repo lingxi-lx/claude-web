@@ -27,5 +27,13 @@
   - 取回（`handoff.fetchBack`）：先请对方 `handoff.publish`（它在自己的 worktree 里 `add -A` + commit + fast-forward push，失败也继续），再 `git fetch <remote> refs/heads/<branch>:refs/heads/<空名>`（已有就 `-2`、`-3`…），给 `diff HEAD...<新分支>`（截 400 KB）。**从不合并、不 checkout**；对话框里只有「复制合并命令」。
 - 路由：`handoff.check / start / fetchBack` 带 sessionId 但**故意不进 FORWARD**——其它机器上的对话由 planRoute 拒绝（rewrite.test 锁住）。
 - 坑：Windows 上 `core.autocrlf=true` 时对方 worktree 里的文件是 CRLF，比较内容先去掉 `\r`。`git push` 按远端名推会顺手更新 `refs/remotes/<remote>/cw/handoff-*`（不算用户的东西）。
+- 修补（阶段 F 修补轮，2026-10-25）：
+  - **未跟踪文件要用户勾**：`handoff.check` 回 `untracked { count, bytes, files, skipped }`，对话框「也带上 N 个新文件」默认不勾，`handoff.start { includeUntracked }`。像密钥的文件（`files/secret-name.ts` 的 `isSecretFile`：`.env*`、`*.pem/.key/.p12/.pfx`、`id_rsa*`、`.npmrc`、`credentials*`…）勾了也不带，对话框列出来。
+  - `git add -N` 的文件会让 `stash create` 报「not uptodate. Cannot merge」：先在**副本**里 `rm --cached`，`stash create` 之后再 `add -f` 回去（用户说过要跟踪它们）。
+  - 推上去了但对方没收下（`handoff.receive` 失败）→ `push <remote> --delete`（普通删除，不强制）；删也失败就在错误里写出留下的分支名。被占的判断只认 `already exists|fetch first|non-fast-forward`（pre-receive hook 的 rejected 不是「被占」）。
+  - 只读在服务端：`HandoffService.isReadOnly`（交接进行中 + `handedOff`）→ `pool.readOnly`；`pool.open`（非 fork）、hub `session.send`、IM、sessions MCP 的 deliver 都先问 `assertWritable`。同一对话同时只能一个交接；对话正在跑（running / waiting）时拒绝，**在快照之前**。
+  - 远端 URL 里的账号密码只留在对方 bare 缓存的 `origin`（`checkoutHandoff` 设），`received.json` / meta / 对话框里是 `redactUrl` 过的；publish 推 `origin`。内部 commit 都带 `--no-gpg-sign`。取回时对方没保存成功，对话框说原因（`saveError`）。
+  - 其它机器只能发「接收方」那几种：`handoff.receive / publish`、`publish.receive / revoke`、不带 `peer` 的 `dispatch.start / defaults`（`cloud/handlers.ts` 的 `cloudRefusedFromPeer`，`refusedFromPeer` 调它）。
+  - 发布：只带页面自己的资源（`src`、`<link rel=stylesheet|icon|preload…>` 的 href、video poster），**不跟 `<a href>`、iframe 的页面**，不带密钥名字的文件和点开头的目录；`publish.files` 先列给对话框看。撤回到离线的常开机器：记录留着标 `revokePending`（「撤回待完成」），列表读取、每 5 分钟、`peers.changed` 时重试。
 - 调试：`node server/ws-phase37.mjs [port] [token]` 自己起 B（临时 HOME）、临时仓库 + 临时 bare 远端，走完整交接 / 取回。
 - 没做：完成通知只在 A 打开了那边的对话时随 peer 事件来（没有单独的「那边做完了」推送）；外网上的常开机器没验（只验了本机第二个实例）。

@@ -155,7 +155,19 @@ export class RunnerPool extends EventEmitter {
     for (const r of runners) if (r instanceof SessionRunner) void r.refreshThinkingLanguage(sessionId ? own ?? '' : undefined).catch(() => { /* the old process keeps going */ });
   }
 
+  /**
+   * Why a conversation takes no new turns here (null = it does): one handed to another machine, or being handed right
+   * now (fix wave F4, set in index.ts from HandoffService.isReadOnly). Every reopen — window, IM, schedule, goal,
+   * another conversation's message — comes through open(); senders to a live runner ask `assertWritable`.
+   */
+  readOnly?: (sessionId: string) => string | null;
+  assertWritable(sessionId: string | undefined) {
+    const why = sessionId ? this.readOnly?.(sessionId) : null;
+    if (why) throw new Error(why);
+  }
+
   open(params: OpenSessionParams, resumeHistory: unknown[] | null = null): AgentDriver {
+    if (!params.fork) this.assertWritable(params.sessionId);
     void proxy.refresh(); // IM / schedules / goals come straight here: a stale look is redone for the next start (net/proxy.ts)
     if (params.sessionId && !params.fork && !params.resumeAt) {
       const existing = this.runners.get(params.sessionId);
@@ -192,6 +204,7 @@ export class RunnerPool extends EventEmitter {
     const chatOnly = !!params.features?.chatOnly || !!(params.sessionId && this.providers.meta?.sessionMeta(params.sessionId).chatOnly);
     if (chatOnly && !params.features?.chatOnly) params = { ...params, features: { ...params.features, chatOnly: true } };
     let r: AgentDriver;
+    let projInstr = '';
     if (kind === 'claude' || !this.agents || !this.transcripts) {
       // a fork routes its prompt cache under its root's key; every reopen (goals, IM, schedules, hot switch) keeps it
       if (params.sessionId && !params.fork && !params.resumeAt && !params.cacheParentId) {
@@ -213,7 +226,11 @@ export class RunnerPool extends EventEmitter {
       // a conversation in a project's main folder works in the project's extra folders too (stage C2)
       const proj = this.projectExtras(params);
       const extra = [...this.extraFolders(params.cwd), ...(proj.filesDir ? [proj.filesDir] : [])];
-      r = new SessionRunner(params, sp, { thinkingLanguage, ...(account ? { account } : {}), ...(extra.length ? { additionalDirectories: extra } : {}), ...(proj.instructions ? { projectInstructions: proj.instructions } : {}) });
+      // the project's instructions go into NEW conversations (spec F2) and stay theirs (recorded below): a resumed or
+      // forked one runs with what it started with — a conversation older than the project never gets them, an edit
+      // of the instructions changes no conversation already going
+      projInstr = params.sessionId ? (m?.sessionMeta(params.sessionId).projectInstructions ?? '') : proj.instructions;
+      r = new SessionRunner(params, sp, { thinkingLanguage, ...(account ? { account } : {}), ...(extra.length ? { additionalDirectories: extra } : {}), ...(projInstr ? { projectInstructions: projInstr } : {}) });
       // a pick is the conversation's from then on (a new one: under the id it was given; a fork gets its id at init)
       if (explicit !== undefined && m && !params.fork && !params.resumeAt) {
         void m.setSessionMeta(r.sessionId, { subagent: { providerId: providerKey(params.providerId), model: explicit } }).catch(() => { /* in memory; the next save persists it */ });
@@ -264,6 +281,10 @@ export class RunnerPool extends EventEmitter {
       if (runEnv?.kind === 'wsl' && meta && id && id !== placeholder && !meta.sessionMeta(id).env) void meta.setSessionMeta(id, { env: runEnv }).catch(() => { /* in memory; the next save persists it */ });
     };
     keepEnv(r.sessionId);
+    const keepInstr = (id: string | undefined) => {
+      if (projInstr && meta && id && id !== placeholder && meta.sessionMeta(id).projectInstructions !== projInstr) void meta.setSessionMeta(id, { projectInstructions: projInstr }).catch(() => { /* in memory; the next save persists it */ });
+    };
+    keepInstr(r.sessionId);
     r.on('message', (m) => this.emit('message', r.sessionId, m));
     // the user message a send accepted, from whichever window, IM, schedule or goal sent it (AgentDriver 'sent'). Its
     // own event, not 'message': the canonical mirror records sends itself, the ledger / IM / goals read the agent's stream
@@ -286,6 +307,7 @@ export class RunnerPool extends EventEmitter {
       // a fork gets its own id here: it is as tool-less as its parent
       keepChatOnly(i.sessionId);
       keepEnv(i.sessionId);
+      keepInstr(i.sessionId);
       // the mode it runs in now (picked in a window, or the CLI's own move out of plan mode) is what it comes back in
       const mode = asMode(i.permissionMode);
       if (mode && meta && i.sessionId && i.sessionId !== placeholder && meta.sessionMeta(i.sessionId).permissionMode !== mode) {

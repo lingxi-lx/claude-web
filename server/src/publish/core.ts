@@ -4,6 +4,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { isSecretFile } from '../files/secret-name.js';
 
 export type PublishExpiry = '1d' | '7d' | 'never';
 
@@ -53,15 +54,44 @@ export function resolveInside(root: string, rel: string): string | null {
   }
 }
 
-/** The relative src / href values of a page, in order (no scheme, no `//`, no `#`, no root-absolute; query / hash cut). */
+/** A relative reference fit to follow (no scheme, no `//`, no `#`, no root-absolute), query / hash cut; else null. */
+function relRef(raw: string): string | null {
+  const v = raw.trim();
+  if (!v || v.startsWith('#') || v.startsWith('//') || v.startsWith('/') || /^[a-z][a-z0-9+.-]*:/i.test(v)) return null;
+  return v.replace(/[?#].*$/, '') || null;
+}
+
+/** A reference that may be copied along with the page (relative, not a key / credentials file, not in a dot-folder); else null. */
+export function assetRef(raw: string): string | null {
+  const r = relRef(raw);
+  if (!r || isSecretFile(r) || r.split('/').some((seg) => seg.startsWith('.') && seg !== '.' && seg !== '..')) return null;
+  return r;
+}
+
+/** `<link rel=…>` kinds that load a resource the page itself shows (not a link to another page). */
+const ASSET_LINK = /(^|\s)(stylesheet|icon|shortcut|apple-touch-icon|preload|modulepreload|manifest)(\s|$)/i;
+/** Tags whose `src` is another page, not an asset of this one. */
+const PAGE_SRC = /^(iframe|frame)$/i;
+
+/**
+ * The page's own assets, in order: `src` of scripts / images / media (`poster` too) and `href` of stylesheet / icon
+ * links. Never `<a href>` or an iframe's page (fix wave F7: a link to `notes.txt` or `../.env` is not part of the page),
+ * and never a file whose name says key / credentials, or anything under a dot-folder (`.git/…`).
+ */
 export function localRefs(html: string): string[] {
   const out: string[] = [];
-  const re = /\b(?:src|href)\s*=\s*["']([^"']+)["']/gi;
-  for (let m = re.exec(html); m; m = re.exec(html)) {
-    const v = m[1].trim();
-    if (!v || v.startsWith('#') || v.startsWith('//') || v.startsWith('/') || /^[a-z][a-z0-9+.-]*:/i.test(v)) continue;
-    const cut = v.replace(/[?#].*$/, '');
-    if (cut) out.push(cut);
+  const push = (raw: string | undefined) => { const r = raw === undefined ? null : assetRef(raw); if (r) out.push(r); };
+  const tags = /<([a-z][a-z0-9-]*)\b([^>]*)>/gi;
+  for (let t = tags.exec(html); t; t = tags.exec(html)) {
+    const name = t[1].toLowerCase();
+    const attrs = t[2];
+    const attr = (a: string) => new RegExp(`(?:^|\\s)${a}\\s*=\\s*["']([^"']+)["']`, 'i').exec(attrs)?.[1];
+    if (name === 'link') {
+      if (ASSET_LINK.test(attr('rel') ?? '')) push(attr('href'));
+      continue;
+    }
+    if (!PAGE_SRC.test(name)) push(attr('src'));
+    if (name === 'video') push(attr('poster'));
   }
   return out;
 }
@@ -109,15 +139,15 @@ export function inlineHtml(file: string): string {
   html = html.replace(/<link\b[^>]*>/gi, (tag) => {
     if (!/\brel\s*=\s*["']?stylesheet/i.test(tag)) return tag;
     const href = /\bhref\s*=\s*["']([^"']+)["']/i.exec(tag)?.[1];
-    const f = href && localRefs(`href="${href}"`).length ? read(href) : null;
+    const f = href && assetRef(href) ? read(href) : null;
     return f ? `<style>${safeTag(f.buf.toString('utf8'), 'style')}</style>` : tag;
   });
   html = html.replace(/<script\b([^>]*)\bsrc\s*=\s*["']([^"']+)["']([^>]*)>\s*<\/script>/gi, (tag, a, src, b) => {
-    const f = localRefs(`src="${src}"`).length ? read(src) : null;
+    const f = assetRef(src) ? read(src) : null;
     return f ? `<script${`${a}${b}`.replace(/\s+$/, '')}>${safeTag(f.buf.toString('utf8'), 'script')}</script>` : tag;
   });
   html = html.replace(/(<(?:img|source|video|audio)\b[^>]*\bsrc\s*=\s*)(["'])([^"']+)\2/gi, (all, pre, q, src) => {
-    const f = localRefs(`src="${src}"`).length ? read(src) : null;
+    const f = assetRef(src) ? read(src) : null;
     return f ? `${pre}${q}data:${mimeOf(f.p).split(';')[0]};base64,${f.buf.toString('base64')}${q}` : all;
   });
   return html;

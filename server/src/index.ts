@@ -45,6 +45,7 @@ import { projectOf } from './meta/project.js';
 import os from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { ProjectFiles, PROJECT_FILE_MAX } from './cloud/project-files.js';
+import { sameOriginRequest } from './cloud/same-origin.js';
 import { DispatchService } from './dispatch/service.js';
 import type { CloudServices } from './cloud/handlers.js';
 import { ClaudeAiSource } from './library/claudeai-source.js';
@@ -207,6 +208,9 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     if (token && presented === token) return true;
     return !!presented && !!remote?.authenticate(presented, req);
   };
+  /** The upload endpoints: like authOk, and with no token to guard them (loopback trusted) same-origin only (cloud/same-origin.ts). */
+  const uploadOk = (req: http.IncomingMessage, url: URL): boolean =>
+    authOk(req, url) && (!!token || !!(req.socket as any).cwRemote || sameOriginRequest(req));
   // eslint-disable-next-line prefer-const
   let gateway: GatewayService;
   // eslint-disable-next-line prefer-const
@@ -232,6 +236,8 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     request: (peerId, req) => federation.request(peerId, req),
   });
   setInterval(() => void publish.sweep().catch(() => {}), 3_600_000).unref();
+  // 撤回 a machine missed while it was offline (F6): tried again every few minutes (and whenever the list is read)
+  setInterval(() => void publish.retryPendingRevokes().catch(() => {}), 5 * 60_000).unref();
   const handler = (req: http.IncomingMessage, res: http.ServerResponse) => {
     const url = requestUrl(req, HOST);
     if (publish.handle(req, res, url)) return;
@@ -287,7 +293,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     }
     // Binary upload for message attachments: POST /api/attachments?sessionId=&rel=path/in/session (token-guarded like /ws)
     if (url.pathname === '/api/attachments' && req.method === 'POST') {
-      if (!authOk(req, url)) { res.writeHead(403).end(); return; }
+      if (!uploadOk(req, url)) { res.writeHead(403).end(); return; }
       const len = Number(req.headers['content-length'] ?? 0);
       if (len > ATTACH_MAX_BYTES) { res.writeHead(413).end('too large'); return; }
       let dest: string;
@@ -303,7 +309,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     }
     // 导入 claude.ai 数据 (stage F4): POST /api/import/claude-ai — the export zip, kept under <data>/claude-ai/uploads/
     if (url.pathname === '/api/import/claude-ai' && req.method === 'POST') {
-      if (!authOk(req, url)) { res.writeHead(403).end(); return; }
+      if (!uploadOk(req, url)) { res.writeHead(403).end(); return; }
       if (Number(req.headers['content-length'] ?? 0) > CLAUDEAI_UPLOAD_MAX) { res.writeHead(413).end('too large'); return; }
       const dir = path.join(dataDir(), 'claude-ai', 'uploads');
       try { fs.mkdirSync(dir, { recursive: true }); } catch (e: any) { res.writeHead(500).end(e.message); return; }
@@ -318,7 +324,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     }
     // 项目资料 (stage F2): POST /api/project-files?workspaceId=&name= — token-guarded like /ws, 20 MB
     if (url.pathname === '/api/project-files' && req.method === 'POST') {
-      if (!authOk(req, url)) { res.writeHead(403).end(); return; }
+      if (!uploadOk(req, url)) { res.writeHead(403).end(); return; }
       const wid = url.searchParams.get('workspaceId') ?? '';
       if (!meta.workspaces().some((w) => w.id === wid)) { res.writeHead(404).end('no such project'); return; }
       if (Number(req.headers['content-length'] ?? 0) > PROJECT_FILE_MAX) { res.writeHead(413).end('too large'); return; }
@@ -527,6 +533,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     deliver: async (id, text) => {
       const sum = (await library.list()).find((x) => x.sessionId === id);
       // a closed conversation opens again (its provider / mode come back from meta, runtime/pool.ts) and then hears it
+      pool.assertWritable(id); // handed to another machine (F4)
       const r = pool.get(id) ?? pool.open({ sessionId: id, cwd: sum?.cwd ?? '', agent: sum?.agent });
       sendWhenIdle(r as any, text, { onGiveUp: (why) => console.warn(`[sessions-mcp] message for ${id} not delivered: ${why}`) });
     },
@@ -535,6 +542,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     isScheduled: (id) => meta.schedules().some((s) => s.sessionId === id) || meta.scheduleRuns(undefined, 300).some((r) => r.sessionId === id),
     // 项目页 (stage F2): a conversation's project, and whether that project keeps its sessions tools to itself
     projectOf: (id, cwd) => { const m = meta.sessionMeta(id); return projectOf({ cwd, workspaceId: m.workspaceId, groupCwd: m.groupCwd }, meta.workspaces())?.id; },
+    cwdOf: (id) => pool.get(id)?.info.cwd || undefined,
     restricted: (id, cwd) => { const m = meta.sessionMeta(id); return projectOf({ cwd, workspaceId: m.workspaceId, groupCwd: m.groupCwd }, meta.workspaces())?.sessionsScope === 'project'; },
   });
   // stage F (cloud/handlers.ts): project files, 派活
@@ -554,12 +562,19 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     summaryOf: async (id) => { const x = (await library.list()).find((y) => y.sessionId === id); return x ? { cwd: x.cwd, title: x.customTitle || x.title } : undefined; },
     readAll: (id) => library.readAll(id),
     stop: (id) => pool.close(id),
+    isRunning: (id) => { const st = pool.stateOf(id); return st === 'running' || st === 'waiting'; },
     open: (p) => pool.open(p),
     rename: async (id, title, cwd) => { await renameSdkSession(id, title, { dir: cwd }); sessionsSvc.emit('changed'); },
     dataDir: dataDir(),
     serverName: () => os.hostname(),
   });
+  // F4: handed off (or being handed) = read-only here, whoever sends — window, IM, schedule, goal, another conversation
+  pool.readOnly = (id) => handoff.readOnlyReason(id);
+  // a machine back online hears the 撤回 it missed (F6)
+  federation.on('event', (e: { kind: string }) => { if (e.kind === 'peers.changed') void publish.retryPendingRevokes().catch(() => {}); });
   const claudeAi = new ClaudeAiImport({ root: path.join(dataDir(), 'claude-ai'), meta, library: { join: (k, on) => library.join(k, on), invalidate: (k) => library.invalidate(k) }, source: claudeAiSource });
+  claudeAi.sweepUploads();
+  setInterval(() => claudeAi.sweepUploads(), 3_600_000).unref();
   const cloud: CloudServices = { projectFiles, dispatch, handoff, publish, claudeAi, workspaceExists: (id) => meta.workspaces().some((w) => w.id === id) };
   const importer = new ImportService({
     providers: { hasSame: (t, b, k) => providers.hasSame(t, b, k), upsert: (p) => providers.upsert(p) },

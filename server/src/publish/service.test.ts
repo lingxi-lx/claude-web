@@ -98,6 +98,41 @@ describe('PublishService', () => {
     expect((await get(`/p/${ok.id}/`)).body).toBe('<p>hi</p>');
   });
 
+  it('F6: a copy on a machine that is offline stays listed as 撤回待完成 and is revoked when the machine is back', async () => {
+    let online = false;
+    const told: string[] = [];
+    const peerSvc = new PublishService({ dir: path.join(root, 'peer-published'), exportsDir: path.join(root, 'peer-exports'), localBase: () => base });
+    const s2 = new PublishService({
+      dir: path.join(root, 'published2'), exportsDir: path.join(root, 'exports2'), localBase: () => base, now: () => now,
+      peers: () => [{ id: 'p1', name: 'Box', url: 'http://box:3090', via: 'direct', enabled: true, state: online ? 'online' : 'offline' }],
+      request: async (_peer: string, req: any): Promise<any> => {
+        if (!online) throw new Error('机器离线');
+        if (req.kind === 'publish.receive') return peerSvc.receive(req);
+        if (req.kind === 'publish.revoke') { told.push(req.id); return peerSvc.revoke(req.id); }
+      },
+    });
+    online = true;
+    const it = await s2.toPeer(path.join(src, 'page.html'), 'never', 'p1');
+    online = false;
+    expect(await s2.revoke(it.id)).toEqual({ pending: true });
+    expect(s2.list().items).toMatchObject([{ id: it.id, revokePending: true }]);
+    expect(peerSvc.list().items.map((x) => x.id)).toEqual([it.id]); // still up there
+    online = true;
+    await s2.retryPendingRevokes();
+    expect(told).toEqual([it.id]);
+    expect(peerSvc.list().items).toEqual([]);
+    expect(s2.list().items).toEqual([]);
+  });
+
+  it('F7: files() lists exactly what 发布 would copy — not a linked notes.txt or ../.env', async () => {
+    fs.writeFileSync(path.join(src, 'page.html'), '<link rel="stylesheet" href="style.css"><a href="secret.txt">s</a><a href="../.env">e</a><img src="img/a.png">');
+    const r = await svc.files(path.join(src, 'page.html'));
+    expect(r.files.map((f) => f.rel)).toEqual(['page.html', 'style.css', 'img/a.png']);
+    expect(r.bytes).toBe(r.files.reduce((n, f) => n + f.size, 0));
+    const it = await svc.create(path.join(src, 'page.html'), '1d');
+    expect((await get(`/p/${it.id}/secret.txt`)).status).toBe(404);
+  });
+
   it('exports one self-contained HTML file', async () => {
     const r = await svc.inline(path.join(src, 'page.html'));
     const html = fs.readFileSync(r.path, 'utf8');

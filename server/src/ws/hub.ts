@@ -3,7 +3,7 @@ import type { ImportService } from '../import/service.js';
 import fs from 'node:fs';
 import type { WebSocket, WebSocketServer } from 'ws';
 import { CLAUDE_PROVIDER_ID, type ClientRequest, type OpenSessionParams, type RemoteStatus, type ServerEvent, type WireDown, type WireUp } from '../protocol.js';
-import { RunnerPool } from '../runtime/pool.js';
+import { RunnerPool, asMode } from '../runtime/pool.js';
 import { SessionRunner, setNodegraphHint, setPromptSuggestions, setThinkingLanguageSetting } from '../runtime/session-runner.js';
 import { NODEGRAPH_HINT_KEY } from '../runtime/nodegraph-hint.js';
 import { THINKING_LANGUAGE_KEY } from '../runtime/thinking-language.js';
@@ -561,6 +561,7 @@ export class Hub {
           outgoing = await expandSessionRefs(outgoing, (id) => s.library.readAll(id));
         }
         await afterSwitch(req.params.sessionId); // a switch in progress: the new process takes it
+        this.s.pool.assertWritable(req.params.sessionId); // handed to another machine (F4): read-only here
         this.runner(req.params.sessionId).send(outgoing, req.params.images, req.params.steer, req.params.uuid, req.params.attachments);
         // Neither path echoes the user's own message back through the pool (the SDK doesn't, and the
         // foreign drivers `record()` it without emitting), so the canonical mirror has to be told here
@@ -593,6 +594,10 @@ export class Hub {
         // the folders must be a list of existing folders: checked here (the page cannot), one sentence naming the first
         // that is not; a network folder only from this user's own windows, and its stat bounded (folder-check.ts)
         await checkExtraFolders(req.folders, { fromPeer: this.peerConns.has(ws) });
+        // what goes into every new conversation's system prompt / permission mode: only a string of bounded length, only a real mode
+        if (req.instructions != null && (typeof req.instructions !== 'string' || req.instructions.length > 20_000)) throw new Error(tr('项目说明不能超过 20000 个字'));
+        if (req.permissionMode != null && !asMode(req.permissionMode)) throw new Error(tr('没有这个权限模式'));
+        if (req.sessionsScope != null && req.sessionsScope !== 'project') throw new Error(tr('没有这个权限模式'));
         const w = await s.meta.updateWorkspace(req.id, { name: req.name, folders: req.folders, instructions: req.instructions, sessionsScope: req.sessionsScope, permissionMode: req.permissionMode });
         if (!w) throw new Error(tr('这个项目已经不在了'));
         return w;

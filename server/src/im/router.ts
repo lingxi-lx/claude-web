@@ -84,6 +84,7 @@ export class ImRouter {
     const r = this.d.pool.get(b.sessionId);
     if (!r) { await reply(tr('会话已关闭，用 /new 或 /use 重新绑定。')); return; }
     if (r.state === 'waiting') { const p = this.lastPermission.get(b.sessionId); if (p) await reply(tr('会话正在等你处理权限：{toolName}。用 /allow 或 /deny，或按上一条消息的按钮。', { toolName: p.toolName })); }
+    this.d.pool.assertWritable?.(b.sessionId); // handed to another machine: read-only here (F4)
     r.send(text);
     this.lastText.set(b.sessionId, '');
   }
@@ -175,6 +176,7 @@ export class ImRouter {
       default: {
         // unknown slash command → forward to the session (Claude's own /commands)
         if (!b || !runner) return reply(tr('未知命令，/help 看说明'));
+        this.d.pool.assertWritable?.(b.sessionId);
         runner.send(text);
         return;
       }
@@ -196,6 +198,8 @@ export class ImRouter {
   private async ensureSession(gw: string, chatId: string, cfg: ImGatewayConfig): Promise<ImBinding> {
     const b = this.bindingFor(gw, chatId);
     if (b && this.d.pool.get(b.sessionId)) return b;
+    // handed to another machine (F4): say so, never quietly move the chat to a new conversation
+    if (b) this.d.pool.assertWritable?.(b.sessionId);
     if (b) {
       // re-open the previous session so context continues
       // on its own agent; the pool keeps the provider it was recorded with
