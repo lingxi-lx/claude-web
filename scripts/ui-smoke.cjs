@@ -180,7 +180,7 @@ function runElectron(env, timeoutMs) {
     // a profile of its own, never the user's (their Claude Web may be running)
     const udd = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-uismoke-udd-'));
     const c = spawn(electron, [__filename, `--user-data-dir=${udd}`], { env: e, stdio: 'ignore', windowsHide: false });
-    const t = setTimeout(() => { c.kill(); res(-1); }, timeoutMs);
+    const t = setTimeout(() => { console.log(`electron still running after ${Math.round(timeoutMs / 1000)} s: killed`); c.kill(); res(-1); }, timeoutMs);
     c.on('exit', (code) => { clearTimeout(t); res(code); });
   });
 }
@@ -243,7 +243,9 @@ async function runner() {
     SMOKE_NODE: process.execPath,
     SMOKE_SHOW: arg('--show', false) ? '1' : '',
     SMOKE_INVENTORY: JSON.stringify(inv),
-  }, (idle + 520) * 1000);
+    // longer than the driver's own hard stop (below): the driver must get to write its result and say where it stopped
+    // (with 520 s here the grown smoke, ~9 min, was killed mid stage B and reported only "electron exited -1")
+  }, (idle + 780) * 1000);
   let r = null;
   try { r = JSON.parse(fs.readFileSync(result, 'utf8')); } catch { /* electron died */ }
   let failed = !r || code !== 0;
@@ -302,8 +304,8 @@ function driver() {
   const check = (name, ok, detail) => { res.checks.push({ name, ok: !!ok, detail: detail || undefined }); log(`${ok ? 'PASS' : 'FAIL'} ${name} ${detail || ''}`); };
   const finish = (code) => { res.seconds = Math.round((Date.now() - res.startedAt) / 1000); try { fs.writeFileSync(E.SMOKE_RESULT, JSON.stringify(res, null, 2)); } catch { /* ignore */ } app.exit(code); };
   process.on('uncaughtException', (e) => { log(`uncaught ${e.stack || e}`); check('driver', false, String(e.message || e)); finish(3); });
-  // the right-panel (phase 2), sidebar (phase 4) and chat (phase 5) phases together take ~6 minutes on a busy machine
-  const hardStop = setTimeout(() => { check('driver finished in time', false); finish(6); }, (Number(E.SMOKE_IDLE || 0) + 600) * 1000);
+  // the whole smoke takes ~9 minutes on a busy machine (stage B's browser section alone ~1.5); the runner waits longer
+  const hardStop = setTimeout(() => { check(`driver finished in time (stopped in phase ${phase})`, false); finish(6); }, (Number(E.SMOKE_IDLE || 0) + 720) * 1000);
 
   app.whenReady().then(async () => {
     const show = E.SMOKE_SHOW === '1';
@@ -3961,11 +3963,12 @@ function driver() {
         const { ipcMain, webContents: allWc, session } = require('electron');
         const D = (m) => require(path.join(ROOT, 'desktop', 'dist', m));
         const { FileGuard, guardSession } = D('file-guard.js');
-        const { emulate, cleanVp, BROWSER_PARTITIONS, LOCAL_PARTITION } = D('guest-tools.js');
+        const { emulate, cleanVp, endStuckPage, BROWSER_PARTITIONS, LOCAL_PARTITION } = D('guest-tools.js');
         const guard = new FileGuard();
         for (const p of [...BROWSER_PARTITIONS, LOCAL_PARTITION]) guardSession(session.fromPartition(p), guard);
-        // as main.ts desktop:browser:recover does: a page stuck in a script is ended and loaded again
-        ipcMain.handle('smoke:recover', (_e, id) => { const g = allWc.fromId(id); if (!g) return false; try { g.forcefullyCrashRenderer(); } catch { /* gone */ } setTimeout(() => { try { if (!g.isDestroyed()) g.reload(); } catch { /* closed */ } }, 100); return true; });
+        // as main.ts desktop:browser:recover does (the shell's own code): a page stuck in a script is ended and loaded
+        // again once its renderer is gone; never one in the app window's process
+        ipcMain.handle('smoke:recover', (_e, id) => { const g = allWc.fromId(id); return !!g && endStuckPage(g, _e.sender.getOSProcessId()); });
         ipcMain.handle('smoke:allowFile', (_e, u) => guard.allowOnce(u));
         ipcMain.handle('smoke:emulate', async (_e, id, vp) => { const g = allWc.fromId(id); if (!g) return false; await emulate(g, cleanVp(vp) ?? null, { base: g.getUserAgent(), uaFor: () => g.getUserAgent() }); return true; });
         const site = http.createServer((req, res) => {

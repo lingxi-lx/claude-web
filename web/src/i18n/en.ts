@@ -3772,6 +3772,7 @@ export const EN_WEB: Record<string, string> = {
   "这个标签页上还有标注，关掉它会清掉这些标注。": "This tab still has marks; closing it clears them.",
   "这个标签页已经关掉了：用 browser_open 重新打开网址。": "This tab has been closed: open the URL again with browser_open.",
   "这个标签页现在没有打开的页面（没打开，或者被拒绝打开了），不能在里面操作。": "This tab has no open page right now (it never opened, or opening it was refused), so nothing can be done in it.",
+  "这个页面崩溃了，正在重新加载：过一会儿再试。": "This page crashed and is being reloaded: try again in a moment.",
   "这个标签页的缩放：点一下还原到 100%": "This tab's zoom: click to reset to 100%",
   "这个模型 / agent 没有可靠的价格（ccb 按 Claude 价表估的数不作数）": "This model / agent has no reliable pricing (numbers ccb estimates from the Claude price table don't count)",
   "这个模型没有": "Not for this model",

@@ -107,6 +107,44 @@ export async function emulate(guest: WebContents, vp: Vp | null, o: { base: stri
   if (url && url !== 'about:blank') guest.reload();
 }
 
+// ---------- a page stuck in a script ----------
+
+/** How long the end of a stuck page's renderer is waited for before it is loaded again anyway. */
+export const GONE_WAIT_MS = 3000;
+/** After the reload: a page still crashed this long after is loaded once more. */
+export const RECHECK_MS = 4000;
+type StuckGuest = Pick<WebContents, 'forcefullyCrashRenderer' | 'reload' | 'isDestroyed' | 'isCrashed' | 'getOSProcessId' | 'once' | 'removeListener'>;
+
+/**
+ * A page stuck in a script (browser_eval `while (1) {}`) answers nothing, not even a reload: its renderer is ended and
+ * the page loaded again. The reload waits for `render-process-gone`: one that arrives before the end is noticed goes
+ * to the dying renderer and is lost with it — the page then stays crashed with no new renderer, and every script run
+ * in it after never settles (ui-smoke stage B fix wave A5, intermittent on a busy machine). Refused (false) for a page
+ * in the asking window's own process (`hostPid`): ending it would end the app's window.
+ */
+export function endStuckPage(guest: StuckGuest, hostPid: number): boolean {
+  if (guest.isDestroyed()) return false;
+  const pid = guest.getOSProcessId();
+  if (pid > 0 && pid === hostPid) return false;
+  const reload = () => { try { if (!guest.isDestroyed()) guest.reload(); } catch { /* closed meanwhile */ } };
+  let reloaded = false;
+  const onGone = () => {
+    if (reloaded) return;
+    reloaded = true;
+    clearTimeout(wait);
+    guest.removeListener('render-process-gone', onGone);
+    // after the event's own handlers (the <webview> tag hears of the crash first)
+    setTimeout(() => {
+      reload();
+      setTimeout(() => { try { if (!guest.isDestroyed() && guest.isCrashed()) reload(); } catch { /* closed */ } }, RECHECK_MS);
+    }, 0);
+  };
+  const wait = setTimeout(onGone, GONE_WAIT_MS);
+  guest.once('render-process-gone', onGone);
+  try { guest.forcefullyCrashRenderer(); } catch { /* already gone */ }
+  return true;
+}
+
 // ---------- cookies and browsing data (stage B task 4) ----------
 
 /**

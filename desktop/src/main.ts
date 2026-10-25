@@ -9,7 +9,7 @@ import { MacSelfUpdate } from './mac-update';
 import { execFileSync } from 'node:child_process';
 import { captureGuest, drawGuest, hostedGuest } from './browser-capture';
 import { guestDebug, pageNavigated } from './guest-debug';
-import { BROWSER_PARTITIONS, LOCAL_PARTITION, Downloads, browserPartition, cleanVp, clearBrowsingData, emulate, emulatedUa, forgetGuest, guestKeyOf, importCookies, safeName } from './guest-tools';
+import { BROWSER_PARTITIONS, LOCAL_PARTITION, Downloads, browserPartition, cleanVp, clearBrowsingData, emulate, emulatedUa, endStuckPage, forgetGuest, guestKeyOf, importCookies, safeName } from './guest-tools';
 import { geminiForget, geminiLogin, geminiRefresh } from './gemini-login';
 import { cleanUserAgent } from './user-agent';
 import { userAgentFor } from './sign-in-ua';
@@ -881,9 +881,10 @@ ipcMain.handle('desktop:browser:debug', async (e, id: unknown, q: unknown) => {
 ipcMain.handle('desktop:browser:recover', (e, id: unknown) => {
   const guest = hostedGuest(e.sender, id);
   if (!guest) return false;
-  try { guest.forcefullyCrashRenderer(); } catch { /* already gone */ }
-  setTimeout(() => { try { if (!guest.isDestroyed()) guest.reload(); } catch { /* closed meanwhile */ } }, 100);
-  return true;
+  // reloaded once its renderer is gone; never a page in the app window's own process (guest-tools.ts)
+  const ok = endStuckPage(guest, e.sender.getOSProcessId());
+  if (!ok) mainLog('browser recover refused: the page is gone or shares the app window\'s process');
+  return ok;
 });
 // 保存截图: the page as it is drawn, full size, as a PNG where the user says. The path saved, null when the user
 // cancelled, false when nothing could be drawn or written.

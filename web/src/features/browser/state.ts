@@ -181,6 +181,7 @@ export interface WebviewEl extends HTMLElement {
   getTitle(): string;
   isLoading(): boolean;
   isLoadingMainFrame?(): boolean;
+  isCrashed?(): boolean;
   stop(): void;
   reload(): void;
   canGoBack(): boolean;
