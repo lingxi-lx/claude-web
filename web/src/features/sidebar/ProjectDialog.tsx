@@ -10,13 +10,13 @@ import { desktop } from '@/desktop';
 import { dlg } from '@/ui/dialog';
 import { Icon } from '@/ui/icons';
 import { imeComposing } from '@/ui/ime';
+import { trapTab } from '@/ui/focus-trap';
 import { tr } from '@/i18n';
+import { isWinPath, samePath } from './project-paths';
 
 const useProjectDialog = create<{ id: string | null }>(() => ({ id: null }));
 export const openProjectDialog = (w: Pick<Workspace, 'id'>) => useProjectDialog.setState({ id: w.id });
 const close = () => useProjectDialog.setState({ id: null });
-
-const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 
 export function ProjectDialogHost() {
   const id = useProjectDialog((s) => s.id);
@@ -30,13 +30,17 @@ function ProjectDialog({ w }: { w: Workspace }) {
   const [folders, setFolders] = useState<string[]>(w.folders ?? []);
   const [busy, setBusy] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const dirty = name !== w.name || JSON.stringify(folders) !== JSON.stringify(w.folders ?? []);
   useEffect(() => { setTimeout(() => nameRef.current?.focus(), 0); }, []);
   const toast = (t: string) => useStore.getState().toast(t);
 
   const add = async () => {
-    const p = desktop ? await desktop.pickDir() : await ws.request<string | null>({ kind: 'fs.pickDir' }).catch((e) => { toast(e.message); return null; });
+    const failed = (e: unknown) => { toast(e instanceof Error ? e.message : String(e)); return null; };
+    const p = desktop ? await desktop.pickDir().catch(failed) : await ws.request<string | null>({ kind: 'fs.pickDir' }).catch(failed);
     if (!p) return;
-    if ([w.path, ...folders].some((f) => norm(f) === norm(p))) { toast(tr('这个文件夹已经在项目里了')); return; }
+    const win = isWinPath(w.path);
+    if ([w.path, ...folders].some((f) => samePath(f, p, win))) { toast(tr('这个文件夹已经在项目里了')); return; }
     setFolders((f) => [...f, p]);
   };
   const save = async () => {
@@ -51,14 +55,16 @@ function ProjectDialog({ w }: { w: Workspace }) {
       setBusy(false);
     }
   };
+  // a click beside the box with edits not saved asks first (Esc and 取消 are deliberate: they just close)
+  const backdrop = async () => { if (!dirty || (await dlg.confirm(tr('放弃没保存的改动？'), { danger: true }))) close(); };
   const remove = async () => {
     if (!(await dlg.confirm(tr('从侧栏移除「{name}」？', { name: w.name }), { message: tr('只移除侧栏里的这条记录，不动磁盘上的文件。'), danger: true }))) return;
     await ws.request({ kind: 'workspaces.remove', id: w.id }).then(close, (e) => toast(e.message));
   };
 
   return (
-    <div className="modal-bg dialog-bg" data-id="project-dialog" onMouseDown={(e) => e.target === e.currentTarget && close()} onKeyDown={(e) => { if (e.key === 'Escape' && !imeComposing(e.nativeEvent)) { e.stopPropagation(); close(); } }}>
-      <div className="modal dialog project-dialog" role="dialog" aria-modal="true" aria-label={tr('编辑项目')}>
+    <div className="modal-bg dialog-bg" data-id="project-dialog" onMouseDown={(e) => { if (e.target === e.currentTarget) void backdrop(); }} onKeyDown={(e) => { if (e.key === 'Escape' && !imeComposing(e.nativeEvent)) { e.stopPropagation(); close(); } else trapTab(e, boxRef.current); }}>
+      <div ref={boxRef} className="modal dialog project-dialog" role="dialog" aria-modal="true" aria-label={tr('编辑项目')}>
         <h3>{tr('编辑项目')}</h3>
         <label className="pj-label" htmlFor="pj-name">{tr('名字')}</label>
         <input id="pj-name" ref={nameRef} className="field" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !imeComposing(e.nativeEvent)) void save(); }} />
