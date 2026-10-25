@@ -44,6 +44,11 @@ describe('filterSessions', () => {
     expect(shown).toContain('opencode-x');
     expect(shown).toContain('c3');
   });
+  it('otherAgents off hides other agents’ conversations unless a source is picked', () => {
+    const all = [{ sessionId: 'c', title: 'c', cwd: '', lastModified: 0 }, { sessionId: 'x', title: 'x', cwd: '', lastModified: 0, agent: 'codex' }] as any;
+    expect(filterSessions(all, { source: 'all', query: '', showArchived: false, meta: {}, otherAgents: false }).map((s) => s.sessionId)).toEqual(['c']);
+    expect(filterSessions(all, { source: 'codex', query: '', showArchived: false, meta: {}, otherAgents: false }).map((s) => s.sessionId)).toEqual(['x']);
+  });
 });
 
 describe('sourceCounts', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { attachmentFolderPath, isWithin, joinPath } from './paths';
+import { attachmentFolderPath, isWithin, joinPath, projectRoots } from './paths';
 
 describe('joinPath', () => {
   it('keeps POSIX separators on macOS / Linux paths', () => {
@@ -57,5 +57,11 @@ describe('projectFor (a conversation is listed under the folder it ran in)', () 
     expect(projectFor('C:\\Users\\me\\dashboard', ws)).toBeUndefined();
     expect(projectFor('/proj/app2', ws)).toBeUndefined();
     expect(projectFor('', ws)).toBeUndefined();
+  });
+  it('projectRoots: a project folder lists its extra folders after it; anything else is just itself', () => {
+    const ws2 = [{ path: 'C:\\proj', folders: ['D:\\lib'] }];
+    expect(projectRoots('c:\\proj', ws2)).toEqual(['c:\\proj', 'D:\\lib']);
+    expect(projectRoots('C:\\proj\\sub', ws2)).toEqual(['C:\\proj\\sub']);
+    expect(projectRoots('', ws2)).toEqual([]);
   });
 });

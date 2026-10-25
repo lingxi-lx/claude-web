@@ -38,6 +38,13 @@ export function projectFor<W extends { path: string }>(cwd: string, workspaces: 
   return cwd ? workspaces.find((w) => samePath(cwd, w.path)) : undefined;
 }
 
+/** The folders a conversation in `cwd` works in: its own, then — in a project's folder — the project's extra folders (stage C2). */
+export function projectRoots(cwd: string, workspaces: readonly { path: string; folders?: string[] }[]): string[] {
+  if (!cwd) return [];
+  const w = projectFor(cwd, workspaces);
+  return [cwd, ...(w?.folders ?? []).filter((f) => !samePath(f, cwd))];
+}
+
 /**
  * Where an uploaded folder attachment lives on disk. The server stores `<root>/<rel>` (rel with its
  * separators normalised to the platform's), so the folder is `dest` minus the rel suffix plus the

@@ -8,6 +8,8 @@ export interface SessionFilter {
   meta: Record<string, SessionMeta>;
   /** federation: 'local' = this machine, a peer id = that machine; omitted / 'all' = every machine */
   machine?: string;
+  /** 显示 → 其它 agent 的对话 (off: Claude's only, unless a source is picked) */
+  otherAgents?: boolean;
 }
 
 /** Sessions with no `agent` are Claude Code's. */
@@ -45,6 +47,7 @@ export function filterSessions(all: SessionSummary[], o: SessionFilter): Session
   return all.filter((s) => {
     if (s.parentId) return false;
     if (o.source !== 'all' && agentOf(s) !== o.source) return false;
+    if (o.source === 'all' && o.otherAgents === false && agentOf(s) !== 'claude') return false;
     if (o.machine && o.machine !== 'all' && machineOf(s) !== o.machine) return false;
     if (!o.showArchived && isArchived(s, o.meta)) return false;
     return !q || s.title.toLowerCase().includes(q) || folderName(s.cwd).toLowerCase().includes(q);
