@@ -827,6 +827,7 @@ export const EN_SERVER: Record<string, string> = {
   "编排「{name}」等你审批：{title}{note}": "Orchestration “{name}” is waiting for your approval: {title}{note}",
   "缺少 MCP 配置": "MCP config is missing",
   "缺少 webhook 地址": "The webhook address is missing",
+  "缺少来源": "Source is required",
   "网关不支持这个接口：{method} {rest}": "The gateway doesn't support this endpoint: {method} {rest}",
   "网关密钥无效": "Invalid gateway key",
   "网关密钥无效：agent 没有用网关密钥（发来的不是 cwg- 开头的密钥），检查它的登录方式是否被账号登录覆盖了": "Invalid gateway key: the agent isn't using a gateway key (what it sent doesn't start with cwg-). Check whether its login method is overridden by an account login",

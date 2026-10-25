@@ -71,6 +71,8 @@ import { handleGatewayRequest, isGatewayRequest } from '../gateway/handlers.js';
 import type { UpstreamService } from '../upstreams/service.js';
 import type { MaintenanceScheduler } from '../upstreams/tasks.js';
 import { handleUpstreamRequest, isUpstreamRequest } from '../upstreams/handlers.js';
+import type { ChannelService } from '../channels/service.js';
+import { handleChannelRequest, isChannelRequest } from '../channels/handlers.js';
 
 import type { AgentConfigService } from '../agent-config/service.js';
 import { handleAgentConfig, isAgentConfigRequest } from '../agent-config/handlers.js';
@@ -152,6 +154,7 @@ export interface Services {
   gateway: GatewayService;
   /** 账号池: Claude subscription accounts and the pools they are grouped into (upstreams.*). */
   upstreams: UpstreamService;
+  channels: ChannelService;
   /** 任务中心: the scheduler behind tasks.* (check-in, keepalive, growth, …). */
   tasks: MaintenanceScheduler;
   /** 联网: web search, and the browser tools carried out by the window hosting the built-in browser (web.* / browser.*). */
@@ -1260,6 +1263,7 @@ export class Hub {
         s.terminal.close(req.termId);
         return null;
     }
+    if (isChannelRequest(req)) return handleChannelRequest(s.channels, req);
     if (isUpstreamRequest(req)) return handleUpstreamRequest(s.upstreams, s.tasks, req);
     if (isGatewayRequest(req)) return handleGatewayRequest(s.gateway, req);
     throw new Error(`unknown request ${(req as any).kind}`);
