@@ -103,6 +103,18 @@ function startSite() {
     if (u.pathname === '/never.png') return; // never answered: a page whose load does not finish
     // a page to work on by position: everything at a known place, everything that happens to it written down
     // hover / drag / select (stage B task 7): what happens is written in #log
+    // stage B fix wave (S1): a page that takes itself to another host a moment after it loads
+    if (u.pathname === '/hop') {
+      const to = String(u.searchParams.get('to') || '');
+      return html(page('Hop', `<button id="b">Hop</button><script>setTimeout(() => { location.href = ${JSON.stringify(to)}; }, 300);</script>`));
+    }
+    // …and one that puts its own __cwAgent in place, reporting another address than its own
+    if (u.pathname === '/forge') {
+      return html(page('Forge', `<button id="b">Forge</button><script>
+const fake = new Proxy({}, { get: () => () => ({ page: { url: 'https://forged.example/', title: 'Forged', text: 'forged', elements: [] } }) });
+Object.defineProperty(window, '__cwAgent', { configurable: false, get: () => fake, set: () => {} });
+</script>`));
+    }
     if (u.pathname === '/t7') {
       return html(`<!doctype html><html><head><meta charset="utf-8"><title>Smoke T7</title><style>
   body { margin: 0; font: 15px sans-serif; }
@@ -673,6 +685,52 @@ function driver() {
         const ev5 = await mcp.call('browser_eval', { script: '1+1' });
         check('t7: over MCP, a script is refused too when nobody can be asked', ev5.isError, text(ev5).slice(0, 200));
         mcp.stop();
+
+        // ---- stage B fix wave: the window never trusts the server's (or the page's) idea of where the tab is (S1)
+        phase = 'fixwave';
+        const raw = await rawOp(T, 'click', { ref: hov });
+        check('fix wave S1: a page-changing op that did not come through the site check (no site) is refused', !raw.ok && /没有经过网站检查/.test(raw.error), JSON.stringify(raw).slice(0, 200));
+        const forged = await op('smoke-forge', 'open', { url: `${E.SMOKE_SITE}/forge` });
+        const forgedRead = await op('smoke-forge', 'read');
+        check('fix wave S1: a page that reports a forged address — every answer says the tab\'s real one', forgedRead.ok && [forged, forgedRead].every((x) => !x.ok || (x.a.page?.url === `${E.SMOKE_SITE}/forge` && /Forge/.test(x.a.page?.title ?? '') && !/Forged/.test(x.a.page?.title ?? ''))),`${JSON.stringify(forged).slice(0, 200)} ${JSON.stringify(forgedRead).slice(0, 200)}`);
+        const forgedClick = await op('smoke-forge', 'click', { ref: '1', site: 'forged.example' });
+        check('fix wave S1: an op judged for the forged site is refused with the real address', !forgedClick.ok && forgedClick.error.startsWith('cw-site-changed:') && forgedClick.error.includes('/forge'), JSON.stringify(forgedClick).slice(0, 200));
+        // over MCP: the allowed 127.0.0.1 page takes itself to localhost; the click judged for 127.0.0.1 is refused by
+        // the window, judged again for localhost — nobody can be asked — refused
+        const hopMcp = startMcp({ CW_WEB_URL: E.SMOKE_ORIGIN, CW_WEB_TOKEN_FILE: TOKEN_FILE, CW_SESSION_ID: 'smoke-hop' });
+        await hopMcp.rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'smoke', version: '0' } });
+        const hop = await hopMcp.call('browser_open', { url: `${E.SMOKE_SITE}/hop?to=${encodeURIComponent(`${local}/t7`)}` });
+        const hopped = await waitFor(`(() => { const t = window.__cwBrowser.state.getState().tabs.find((x) => x.agent === 'smoke-hop'); const w = t && document.querySelector('.bw-view[data-tab="' + t.id + '"] webview'); return !!w && /localhost/.test(w.getURL()) && !w.isLoading(); })()`, 8000);
+        const hopClick = await hopMcp.call('browser_click', { ref: '1' });
+        const hopLog = await js(`(() => { const t = window.__cwBrowser.state.getState().tabs.find((x) => x.agent === 'smoke-hop'); return t ? document.querySelector('.bw-view[data-tab="' + t.id + '"] webview').executeJavaScript('(document.getElementById("log") || {}).textContent') : 'no tab'; })()`);
+        check('fix wave S1: an allowed page that navigates itself to another host — the gated click is refused there, nothing happens', !hop.isError && hopped && hopClick.isError && /localhost/.test(text(hopClick)) && !/hover|down/.test(String(hopLog)), `hopped=${hopped} ${text(hopClick).slice(0, 200)} log=${hopLog}`);
+        // browser_tabs new / switch: the server forgets the page it judged; the next click is judged where the tab is
+        const tabsMcp = startMcp({ CW_WEB_URL: E.SMOKE_ORIGIN, CW_WEB_TOKEN_FILE: TOKEN_FILE, CW_SESSION_ID: 'smoke-tabs' });
+        await tabsMcp.rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'smoke', version: '0' } });
+        const t1 = await tabsMcp.call('browser_open', { url: `${E.SMOKE_SITE}/t7` });
+        const t1Ref = (/\[(\w+)\][^\n]*Hover me/.exec(text(t1)) ?? [])[1] ?? '1';
+        const allowedClick = await tabsMcp.call('browser_click', { ref: t1Ref });
+        const t2 = await tabsMcp.call('browser_tabs', { action: 'new', url: `${local}/t7` });
+        await sleep(1500);
+        const afterSwitch = await tabsMcp.call('browser_click', { ref: t1Ref });
+        check('fix wave S1: after browser_tabs new (another host) the next click is judged for that tab — refused', !allowedClick.isError && !t2.isError && afterSwitch.isError && /localhost/.test(text(afterSwitch)), `allowed=${text(allowedClick).slice(0, 120)} tabs=${text(t2).slice(0, 120)} after=${text(afterSwitch).slice(0, 200)}`);
+        hopMcp.stop();
+        tabsMcp.stop();
+
+        // A3: 接管 while a drag is on its way — it stops before its next step; the page never sees the drop
+        await op(T, 'eval', { script: 'document.getElementById("log").textContent = "log:"; 1' });
+        const dragged = await js(`(async () => { const B = window.__cwBrowser; const c = ${JSON.stringify({ id: 'fw-drag', sessionId: T, op: 'drag', args: { from: src, to: dst } })};
+          c.args.site = B.siteOf(c.sessionId);
+          const p = B.carryOut(c).then((a) => ({ ok: true, a }), (e) => ({ ok: false, error: String(e && e.message || e) }));
+          for (let i = 0; i < 200; i++) { await new Promise((r) => setTimeout(r, 5)); const t = B.state.getState().tabs.find((x) => x.agent === c.sessionId); const w = t && document.querySelector('.bw-view[data-tab="' + t.id + '"] webview'); if (w && /down/.test(await w.executeJavaScript('document.getElementById("log").textContent'))) break; }
+          B.state.setState({ takenOver: [...B.state.getState().takenOver, c.sessionId] });
+          return p; })()`);
+        await sleep(500);
+        const dragLog = await logText();
+        await js(`window.__cwBrowser.state.setState({ takenOver: window.__cwBrowser.state.getState().takenOver.filter((x) => x !== '${T}') })`);
+        check('fix wave A3: 接管 during a long drag cancels it — refused with 用户接管了浏览器, the page saw the press but no drop', !dragged.ok && /用户接管了浏览器/.test(dragged.error) && /down/.test(dragLog) && !/dropped/.test(dragLog), `${JSON.stringify(dragged).slice(0, 200)} log=${dragLog}`);
+        const afterGive = await op(T, 'hover', { ref: hov });
+        check('fix wave A3: after 交还 the next op works', afterGive.ok, JSON.stringify(afterGive).slice(0, 200));
       }
       // closing the Agent's tab: its next operation says there is no page
       phase = 'close';

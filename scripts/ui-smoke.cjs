@@ -3657,9 +3657,11 @@ function driver() {
         const { ipcMain, webContents: allWc, session } = require('electron');
         const D = (m) => require(path.join(ROOT, 'desktop', 'dist', m));
         const { FileGuard, guardSession } = D('file-guard.js');
-        const { emulate, cleanVp, BROWSER_PARTITIONS } = D('guest-tools.js');
+        const { emulate, cleanVp, BROWSER_PARTITIONS, LOCAL_PARTITION } = D('guest-tools.js');
         const guard = new FileGuard();
-        for (const p of BROWSER_PARTITIONS) guardSession(session.fromPartition(p), guard);
+        for (const p of [...BROWSER_PARTITIONS, LOCAL_PARTITION]) guardSession(session.fromPartition(p), guard);
+        // as main.ts desktop:browser:recover does: a page stuck in a script is ended and loaded again
+        ipcMain.handle('smoke:recover', (_e, id) => { const g = allWc.fromId(id); if (!g) return false; try { g.forcefullyCrashRenderer(); } catch { /* gone */ } setTimeout(() => { try { if (!g.isDestroyed()) g.reload(); } catch { /* closed */ } }, 100); return true; });
         ipcMain.handle('smoke:allowFile', (_e, u) => guard.allowOnce(u));
         ipcMain.handle('smoke:emulate', async (_e, id, vp) => { const g = allWc.fromId(id); if (!g) return false; await emulate(g, cleanVp(vp) ?? null, { base: g.getUserAgent(), uaFor: () => g.getUserAgent() }); return true; });
         const site = http.createServer((req, res) => {
@@ -3679,6 +3681,7 @@ window.desktop = {
   onCommand: () => () => {}, onFocusSession: () => () => {},
   allowFileOnce: (u) => ipcRenderer.invoke('smoke:allowFile', u),
   guestEmulate: (id, vp) => ipcRenderer.invoke('smoke:emulate', id, vp),
+  guestRecover: (id) => ipcRenderer.invoke('smoke:recover', id),
   saveScreenshot: async () => null, pickHtmlFile: async () => null, importCookies: async () => false, clearBrowsingData: async () => true,
 };`);
         const bw = new BrowserWindow({ width: 1320, height: 860, show: false, webPreferences: { webviewTag: true, preload, contextIsolation: false, sandbox: false, backgroundThrottling: false } });
@@ -3822,6 +3825,52 @@ try { const s = new SharedWorker(URL.createObjectURL(new Blob([src], { type: 'te
           const leaked = (a) => !Array.isArray(a) || a.some((m) => /SMOKE-SECRET-B/.test(m));
           check('browser-b · security: in a file:// page the app opened, neither a blob: Worker nor a SharedWorker can read a local file', allowed === true && fileLoaded && !leaked(wk.dedicated) && !leaked(wk.shared) && wk.dedicated.length > 0 && wk.shared.length > 0, `allowed=${allowed} loaded=${fileLoaded} ${JSON.stringify(wk)}`);
           try { fs.rmSync(wkDir, { recursive: true, force: true }); } catch { /* busy */ }
+
+          // ---- stage B fix wave
+          // U6: a local page the app opened shows its own style / script / picture next to it (in the cw-local
+          // profile); fetch of a sibling file still fails, a Worker still does not start
+          const siteDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-smoke-local-'));
+          fs.writeFileSync(path.join(siteDir, 'style.css'), 'body { background: rgb(1, 2, 3); }');
+          fs.writeFileSync(path.join(siteDir, 'app.js'), 'window.__js = "ran";');
+          fs.writeFileSync(path.join(siteDir, 'sibling.txt'), 'SMOKE-SIBLING');
+          fs.writeFileSync(path.join(siteDir, 'pic.png'), Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64'));
+          fs.writeFileSync(path.join(siteDir, 'index.html'), `<!doctype html><html><head><title>Local site</title><link rel="stylesheet" href="style.css"><script src="app.js"></script></head><body><img src="pic.png" alt=""><script>
+window.__fetch = 'pending';
+fetch('sibling.txt').then((r) => r.text()).then((t) => { window.__fetch = 'READ:' + t; }, (e) => { window.__fetch = 'FAILED'; });
+try { const w = new Worker('app.js'); w.onerror = () => { window.__worker = 'ERROR'; }; window.__worker = 'STARTED'; } catch (e) { window.__worker = 'START-FAILED'; }
+</script></body></html>`);
+          const siteUrl = require('node:url').pathToFileURL(path.join(siteDir, 'index.html')).href;
+          const siteOk = await bjs(`window.desktop.allowFileOnce(${JSON.stringify(siteUrl)})`);
+          await bjs(`(() => { const s = window.__cwBrowser.state; const t = s.getState().tabs[0]; s.setState({ tabs: [...s.getState().tabs, { ...t, id: 'blocal', agent: undefined, partition: 'cw-local', src: ${JSON.stringify(siteUrl)}, url: ${JSON.stringify(siteUrl)}, title: '', loading: true, viewport: undefined, error: undefined }], active: 'blocal' }); })()`);
+          const localLoaded = await bwait(`(() => { const w = document.querySelector('${tabSel('blocal')} webview'); return !!w && w.getURL().startsWith('file:') && !w.isLoading(); })()`, 15_000);
+          await sleep(1500);
+          const lp = await bjs(`document.querySelector('${tabSel('blocal')} webview').executeJavaScript('JSON.stringify({ bg: getComputedStyle(document.body).backgroundColor, js: window.__js, img: document.images[0] && document.images[0].naturalWidth, fetch: window.__fetch, worker: window.__worker })')`).then((x) => JSON.parse(x), (e) => ({ error: String(e) }));
+          const part = await bjs(`document.querySelector('${tabSel('blocal')} webview').getAttribute('partition')`);
+          check('fix wave U6: a local page shows its own css / js / picture from its folder; fetch of a sibling file fails; a Worker does not start; it is in the cw-local profile', siteOk === true && localLoaded && lp.bg === 'rgb(1, 2, 3)' && lp.js === 'ran' && lp.img === 1 && lp.fetch === 'FAILED' && lp.worker !== 'STARTED' && part === 'cw-local', `ok=${siteOk} loaded=${localLoaded} part=${part} ${JSON.stringify(lp)}`);
+          // V1 / V2: a local page the shell refused (never granted) — the scripts that look at it do not take the app
+          // window down, and the tab says why it is empty
+          const nope = require('node:url').pathToFileURL(path.join(siteDir, 'sibling.txt')).href;
+          await bjs(`(() => { const s = window.__cwBrowser.state; const t = s.getState().tabs[0]; s.setState({ tabs: [...s.getState().tabs, { ...t, id: 'bblank', agent: 'smoke-blank', partition: 'cw-local', src: ${JSON.stringify(nope)}, url: ${JSON.stringify(nope)}, title: '', loading: true, viewport: undefined, error: undefined }], active: 'bblank' }); })()`);
+          const said = await bwait(`!!document.querySelector('${tabSel('bblank')} .bw-error')`, 10_000);
+          const saidText = await bjs(`(document.querySelector('${tabSel('bblank')} .bw-error') || {}).textContent || ''`);
+          const chk = await bjs(`Promise.resolve(window.__cwBrowser.checkPage('bblank')).then((x) => 'ok:' + JSON.stringify(x).slice(0, 80), (e) => 'err:' + String(e && e.message || e))`).catch((e) => 'THREW:' + e);
+          const rd = await op('smoke-blank', 'read');
+          const ev = await op('smoke-blank', 'eval', { script: '1+1' });
+          const alive = await bjs('1 + 1').catch(() => 0);
+          check('fix wave V1: scripts on a refused / blank local tab (page check, read, eval) do not crash the app window', alive === 2 && !/THREW/.test(chk), `alive=${alive} check=${chk} read=${JSON.stringify(rd).slice(0, 120)} eval=${JSON.stringify(ev).slice(0, 120)}`);
+          check('fix wave V2: a refused local page says so in its tab (not a silent blank page)', said && /本地/.test(saidText), `said=${said} ${saidText.slice(0, 160)}`);
+          try { fs.rmSync(siteDir, { recursive: true, force: true }); } catch { /* busy */ }
+
+          // A5: a browser_eval that never yields (an endless loop) is given up on, the page ended and loaded again,
+          // and the next op works
+          await bjs(`window.__cwBrowser.state.setState({ active: ${JSON.stringify(aid)} })`);
+          const t0 = Date.now();
+          const loop = await op(A, 'eval', { script: 'while (1) {}' });
+          const took = Date.now() - t0;
+          await sleep(2500);
+          let next = await op(A, 'read');
+          if (!next.ok) { await sleep(2500); next = await op(A, 'read'); }
+          check('fix wave A5: an eval that never yields times out (about 15 s), and the next op on the page works', !loop.ok && /卡住/.test(loop.error) && took < 25_000 && next.ok && /Stage B page/.test(JSON.stringify(next.a)), `took=${took} ${JSON.stringify(loop).slice(0, 160)} next=${JSON.stringify(next).slice(0, 160)}`);
         } catch (e) {
           check('browser-b driver', false, e.stack || String(e));
         } finally {
@@ -3830,6 +3879,7 @@ try { const s = new SharedWorker(URL.createObjectURL(new Blob([src], { type: 'te
           site.close();
           ipcMain.removeHandler('smoke:allowFile');
           ipcMain.removeHandler('smoke:emulate');
+          ipcMain.removeHandler('smoke:recover');
         }
       }
 
