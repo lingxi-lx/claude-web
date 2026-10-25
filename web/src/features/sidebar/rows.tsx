@@ -75,8 +75,9 @@ export interface Selection {
 export const NO_SELECTION: Selection = { on: false, ids: new Set(), toggle: () => {}, range: (id) => openFromSidebar(id, 'replace') };
 
 export interface RowCtx {
-  /** which list the rows are in: the same conversation can be in 「需要你」 and in its project at once */
-  where: 'list' | 'attn';
+  /** which list the rows are in: the same conversation can be in 「需要你」 (or a section of the user's own) and in its
+   *  project at once */
+  where: 'list' | 'attn' | 'custom';
   /** the sidebar's one open menu (`row:<where>:<id>`, `filter`, `auto`, `account`, `proj:<id>`), or null */
   menu: string | null;
   setMenu(v: string | null): void;

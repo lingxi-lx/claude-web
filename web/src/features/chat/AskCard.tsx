@@ -33,7 +33,8 @@ export function AskCard({ p, sessionId, scope }: { p: PermissionRequestEvent; se
   const d = drafts[cur] ?? EMPTY_DRAFT;
 
   const rows = () => [...(root.current?.querySelectorAll<HTMLElement>('.ask-opt') ?? [])];
-  const focusRow = (i: number) => { setFocus(i); rows()[i]?.focus(); };
+  // (`inside` is set here too: a focus() while the window itself is not focused fires no focus event)
+  const focusRow = (i: number) => { setFocus(i); setInside(true); rows()[i]?.focus(); };
   /** the composer's empty Enter: into the card, on the current page's chosen row (or the first) */
   const focusCard = () => {
     if (!q) return false;
@@ -48,6 +49,7 @@ export function AskCard({ p, sessionId, scope }: { p: PermissionRequestEvent; se
     if (!nav) return;
     const i = rowFor(qs[cur], drafts[cur]);
     setFocus(i);
+    setInside(true);
     rows()[i]?.focus();
   }, [nav]); // eslint-disable-line react-hooks/exhaustive-deps
 

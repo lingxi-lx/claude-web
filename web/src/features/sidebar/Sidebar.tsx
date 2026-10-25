@@ -231,6 +231,9 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
     toggleKids: (id) => setExpanded((e) => { const n = new Set(e); if (n.has(id)) n.delete(id); else n.add(id); return n; }),
     tagFor: (s) => { const k = agentOf(s); return k === 'claude' ? null : nameOf(k); },
   };
+  // a section's rows are also in their own group: a menu key of their own, or right-clicking one opened both menus
+  // and they shut each other (stage C fix wave, found by the C-U3 ui-smoke check)
+  const customCtx: RowCtx = { ...ctx, where: 'custom' };
   const toggleGroup = (k: string, cur = !!collapsed[k]) => dispatch({ t: 'sidebar.set', patch: { sections: { ...collapsed, [k]: !cur } } });
   const pickWorkspace = async () => {
     const p = desktop ? await desktop.pickDir() : await ws.request<string | null>({ kind: 'fs.pickDir' });
@@ -437,7 +440,7 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
                 <div className="sb-rows">
                   {items.map((s) => (
                     <div key={s.sessionId} className="sb-row-wrap with-out">
-                      <SessionRow s={s} ctx={ctx} flat />
+                      <SessionRow s={s} ctx={customCtx} flat />
                       <button className="icon-btn xs sb-custom-out" data-id={cu('custom-out')} title={tr('移出分区')} aria-label={tr('移出分区')} onClick={() => void saveSections(removeFromSection(sections, c.id, s.sessionId))}><Icon name="close" size={12} /></button>
                     </div>
                   ))}
