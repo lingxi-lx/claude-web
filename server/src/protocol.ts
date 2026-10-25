@@ -905,7 +905,7 @@ export interface HandoffFrom { id: string; from: string; branch: string; url: st
 export type PublishExpiry = '1d' | '7d' | 'never';
 export interface PublishedItem { id: string; name: string; source: string; entry: string; createdAt: number; updatedAt: number; expiresAt: number | null; files: number; bytes: number; peerId?: string; peerName?: string; url?: string; /** 撤回待完成: the peer could not be told yet; retried when it is back */ revokePending?: boolean }
 export interface ClaudeAiScan { conversations: number; projects: number; docs: number; add: number; update: number; same: number; skipped: number; user?: string }
-export interface ClaudeAiImportResult extends ClaudeAiScan { projectsCreated: number; projectsUpdated: number; filesWritten: number; filesKept: number }
+export interface ClaudeAiImportResult extends ClaudeAiScan { projectsCreated: number; projectsUpdated: number; filesWritten: number; filesKept: number; /** projects whose instructions were cut to the 20 000-character limit */ instructionsShortened?: number }
 export type CloudRequest =
   | { kind: 'projects.files.list'; workspaceId: string }
   | { kind: 'projects.files.remove'; workspaceId: string; name: string }

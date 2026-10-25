@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { makeZip } from './zip.js';
-import { ClaudeAiImport } from './claude-ai-service.js';
+import { ClaudeAiImport, MAX_INSTRUCTIONS } from './claude-ai-service.js';
 import { ClaudeAiSource } from '../library/claudeai-source.js';
 
 const FIX = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'fixtures', 'claude-ai-export');
@@ -24,10 +24,10 @@ function setup() {
     library: { join: async (k) => { joined.push(k); }, invalidate: () => {} },
     source,
   });
-  const upload = () => {
+  const upload = (over: Record<string, string> = {}) => {
     fs.mkdirSync(svc.uploadsDir(), { recursive: true });
     const p = path.join(svc.uploadsDir(), `u${Math.random().toString(16).slice(2)}.zip`);
-    fs.writeFileSync(p, makeZip(Object.fromEntries(['conversations.json', 'projects.json', 'users.json'].map((n) => [n, fs.readFileSync(path.join(FIX, n))])), { deflate: true }));
+    fs.writeFileSync(p, makeZip(Object.fromEntries(['conversations.json', 'projects.json', 'users.json'].map((n) => [n, over[n] ?? fs.readFileSync(path.join(FIX, n))])), { deflate: true }));
     return p;
   };
   return { svc, source, workspaces, joined, upload };
@@ -68,6 +68,19 @@ describe('ClaudeAiImport', () => {
     expect(again).toMatchObject({ add: 0, same: 3, projectsCreated: 0, projectsUpdated: 1, filesWritten: 0, filesKept: 1 });
     expect(fs.readFileSync(path.join(folder, 'Garden', 'soil.md'), 'utf8')).toBe('my edits');
     expect(t.workspaces).toHaveLength(1);
+  });
+
+  it('instructions longer than workspaces.update allows are cut to the limit and the summary says so', async () => {
+    const t = setup();
+    const projects = JSON.parse(fs.readFileSync(path.join(FIX, 'projects.json'), 'utf8'));
+    const long = 'x'.repeat(MAX_INSTRUCTIONS + 500);
+    for (const p of projects) if (p.uuid === 'p-1111-garden') p.prompt_template = long;
+    const r = await t.svc.run(t.upload({ 'projects.json': JSON.stringify(projects) }), folder);
+    expect(r.instructionsShortened).toBe(1);
+    expect(t.workspaces[0].instructions).toBe(long.slice(0, MAX_INSTRUCTIONS));
+    expect(MAX_INSTRUCTIONS).toBe(20_000);
+    const normal = setup();
+    expect((await normal.svc.run(normal.upload(), folder)).instructionsShortened).toBeUndefined();
   });
 
   it('no folder: conversations only', async () => {

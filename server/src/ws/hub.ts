@@ -597,7 +597,7 @@ export class Hub {
         // what goes into every new conversation's system prompt / permission mode: only a string of bounded length, only a real mode
         if (req.instructions != null && (typeof req.instructions !== 'string' || req.instructions.length > 20_000)) throw new Error(tr('项目说明不能超过 20000 个字'));
         if (req.permissionMode != null && !asMode(req.permissionMode)) throw new Error(tr('没有这个权限模式'));
-        if (req.sessionsScope != null && req.sessionsScope !== 'project') throw new Error(tr('没有这个权限模式'));
+        if (req.sessionsScope != null && req.sessionsScope !== 'project') throw new Error(tr('不认识这个范围'));
         const w = await s.meta.updateWorkspace(req.id, { name: req.name, folders: req.folders, instructions: req.instructions, sessionsScope: req.sessionsScope, permissionMode: req.permissionMode });
         if (!w) throw new Error(tr('这个项目已经不在了'));
         return w;

@@ -145,7 +145,7 @@ function ClaudeAiImportDialog() {
     <Shell id="claudeai-import" label={tr('导入 claude.ai 数据')}>
       {done ? (
         <>
-          <div className="dialog-msg" data-act="result">{tr('导入完成：新对话 {add} 个、更新 {update} 个、跳过重复 {same} 个；新项目 {pc} 个、更新 {pu} 个；写入资料 {fw} 个（已有的 {fk} 个没动）。', { add: done.add, update: done.update, same: done.same, pc: done.projectsCreated, pu: done.projectsUpdated, fw: done.filesWritten, fk: done.filesKept })}</div>
+          <div className="dialog-msg" data-act="result">{tr('导入完成：新对话 {add} 个、更新 {update} 个、跳过重复 {same} 个；新项目 {pc} 个、更新 {pu} 个；写入资料 {fw} 个（已有的 {fk} 个没动）。', { add: done.add, update: done.update, same: done.same, pc: done.projectsCreated, pu: done.projectsUpdated, fw: done.filesWritten, fk: done.filesKept })}{done.instructionsShortened ? ' ' + tr('{n} 个项目的说明超过 20000 个字，只导入了前 20000 个字。', { n: done.instructionsShortened }) : ''}</div>
           <div className="dialog-msg pj-note"><div>{tr('导入的对话在对话库的「claude.ai」来源里，可以搜索，也可以「接着聊」（在 Claude 里开新对话）。')}</div></div>
           <div className="actions"><span className="grow" /><button className="btn primary" onClick={close}>{tr('完成')}</button></div>
         </>

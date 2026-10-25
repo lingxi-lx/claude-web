@@ -12,6 +12,8 @@ import { conversationsDir, type StoredConversation } from '../library/claudeai-s
 import { tr } from '../i18n/index.js';
 
 export const CLAUDEAI_UPLOAD_MAX = 1024 * 1024 * 1024;
+/** the limit workspaces.update enforces on project instructions (server/src/ws/hub.ts) */
+export const MAX_INSTRUCTIONS = 20_000;
 const EXPORT_FILES = new Set(['conversations.json', 'projects.json', 'users.json']);
 const isInside = (base: string, p: string) => {
   const r = path.relative(path.resolve(base), path.resolve(p));
@@ -96,7 +98,7 @@ export class ClaudeAiImport {
     const x = this.parse(p);
     const scan = this.summary(x);
     const plan = planImport(x.conversations, this.existing());
-    let projectsCreated = 0, projectsUpdated = 0, filesWritten = 0, filesKept = 0;
+    let projectsCreated = 0, projectsUpdated = 0, filesWritten = 0, filesKept = 0, instructionsShortened = 0;
     const projectDir = new Map<string, string>();
     const base = folder?.trim() ? path.resolve(folder.trim()) : '';
     if (base) {
@@ -113,7 +115,10 @@ export class ClaudeAiImport {
         }
         // the instructions only when the project has none (a re-import never replaces what the user wrote)
         const setInstr = pr.instructions.trim() && !w.instructions?.trim();
-        await this.o.meta.updateWorkspace(w.id, { claudeAiUuid: pr.uuid, ...(setInstr ? { instructions: pr.instructions } : {}) });
+        // cut to the limit workspaces.update enforces, so saving the project later doesn't fail
+        let instructions = pr.instructions;
+        if (setInstr && instructions.length > MAX_INSTRUCTIONS) { instructions = instructions.slice(0, MAX_INSTRUCTIONS); instructionsShortened++; }
+        await this.o.meta.updateWorkspace(w.id, { claudeAiUuid: pr.uuid, ...(setInstr ? { instructions } : {}) });
         projectDir.set(pr.uuid, w.path);
         // files are written only under the folder picked this time (a project moved elsewhere keeps its folder untouched)
         if (!isInside(base, w.path)) continue;
@@ -146,6 +151,6 @@ export class ClaudeAiImport {
     this.o.source?.invalidate();
     this.o.library.invalidate('claudeai');
     fs.rmSync(this.zipPath(p), { force: true });
-    return { ...scan, add: added, update: updated, skipped: scan.skipped + refused, projectsCreated, projectsUpdated, filesWritten, filesKept };
+    return { ...scan, add: added, update: updated, skipped: scan.skipped + refused, projectsCreated, projectsUpdated, filesWritten, filesKept, ...(instructionsShortened ? { instructionsShortened } : {}) };
   }
 }

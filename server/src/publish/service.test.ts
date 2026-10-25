@@ -124,6 +124,30 @@ describe('PublishService', () => {
     expect(s2.list().items).toEqual([]);
   });
 
+  it('a revoke that fails to reach the other machine keeps what changed meanwhile (no stale list saved)', async () => {
+    let release!: () => void;
+    let online = true;
+    const peerSvc = new PublishService({ dir: path.join(root, 'peer-published'), exportsDir: path.join(root, 'peer-exports'), localBase: () => base });
+    const s2 = new PublishService({
+      dir: path.join(root, 'published2'), exportsDir: path.join(root, 'exports2'), localBase: () => base, now: () => now,
+      peers: () => [{ id: 'p1', name: 'Box', url: 'http://box:3090', via: 'direct', enabled: true, state: 'offline' }],
+      request: async (_peer: string, req: any): Promise<any> => {
+        if (req.kind === 'publish.receive') return peerSvc.receive(req);
+        if (!online) { await new Promise<void>((r) => { release = r; }); throw new Error('机器离线'); }
+      },
+    });
+    const remote = await s2.toPeer(path.join(src, 'page.html'), 'never', 'p1');
+    online = false;
+    const revoking = s2.revoke(remote.id);
+    await new Promise((r) => setTimeout(r, 0));
+    const local = await s2.create(path.join(src, 'page.html'), 'never'); // while the other machine is being asked
+    release();
+    expect(await revoking).toEqual({ pending: true });
+    const ids = s2.list().items.map((x) => x.id).sort();
+    expect(ids).toEqual([remote.id, local.id].sort());
+    expect(s2.list().items.find((x) => x.id === remote.id)).toMatchObject({ revokePending: true });
+  });
+
   it('F7: files() lists exactly what 发布 would copy — not a linked notes.txt or ../.env', async () => {
     fs.writeFileSync(path.join(src, 'page.html'), '<link rel="stylesheet" href="style.css"><a href="secret.txt">s</a><a href="../.env">e</a><img src="img/a.png">');
     const r = await svc.files(path.join(src, 'page.html'));

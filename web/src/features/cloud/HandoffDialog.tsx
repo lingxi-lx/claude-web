@@ -132,7 +132,7 @@ function FetchBackDialog({ sessionId }: { sessionId: string }) {
       {r && (
         <>
           <div className="dialog-msg">{tr('已取回到本地分支 {branch}（{n} 个文件有改动）。不会自动合并：看过之后自己决定合并、挑选还是丢掉。', { branch: r.branch, n: r.files })}</div>
-          {!r.saved && <div className="dialog-msg cloud-warn" data-id="fetch-back-unsaved">{tr('那台机器没能先保存它的改动（{why}），取回的是远端上已有的内容。', { why: r.saveError || tr('连不上') })}</div>}
+          {!r.saved && <div className="dialog-msg cloud-warn" data-id="fetch-back-unsaved">{tr('那台机器没能先保存它的改动（{why}），取回的是远端上已有的内容。', { why: r.saveError || tr('那台机器连不上') })}</div>}
           <pre className="cloud-diff mono" data-id="fetch-back-diff">{r.stat ? `${r.stat}\n\n${r.diff}` : tr('没有改动')}</pre>
           <div className="actions">
             <button className="btn sm ghost" onClick={() => { void navigator.clipboard.writeText(`git merge ${r.branch}`); toast(tr('已复制'), true); }}>{tr('复制合并命令')}</button>

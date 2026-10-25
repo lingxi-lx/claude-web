@@ -116,7 +116,8 @@ export class PublishService {
     if (it?.peerId && this.o.request) {
       const done = await this.o.request(it.peerId, { kind: 'publish.revoke', id }).then(() => true, () => false);
       if (!done) {
-        this.save(items.map((x) => (x.id === id ? { ...x, revokePending: true } : x)));
+        // re-read: the list may have changed while the other machine was asked
+        this.save(this.items().map((x) => (x.id === id ? { ...x, revokePending: true } : x)));
         return { pending: true };
       }
     }
