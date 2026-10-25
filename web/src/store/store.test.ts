@@ -146,6 +146,18 @@ describe('respondPermission', () => {
   });
 });
 
+// 2026-10-26 user report: the question card never showed — ChatView memoizes `ask` on the `pending` array, and a
+// request pushed into the same array left the memo on its old (empty) result.
+describe('permission.request', () => {
+  it('replaces the pending array so memos on it see the new request', () => {
+    const before = useStore.getState().open.s1.pending;
+    emit({ kind: 'permission.request', request: { requestId: 'r1', sessionId: 's1', toolName: 'AskUserQuestion', input: { questions: [] } } });
+    const after = useStore.getState().open.s1.pending;
+    expect(after).not.toBe(before);
+    expect(after.map((p) => p.requestId)).toEqual(['r1']);
+  });
+});
+
 describe('setDraft', () => {
   it('does not create an entry for a session that is not open', () => {
     useStore.getState().setDraft('nope', 'x');

@@ -632,7 +632,7 @@ export const useStore = create<State>((set, get) => ({
           set((s) => bump(s, e.info.sessionId, (o) => { o.info = e.info; if (!o.cwd && e.info.cwd) o.cwd = e.info.cwd; }));
           break;
         case 'permission.request':
-          set((s) => bump(s, e.request.sessionId, (o) => { if (!o.pending.some((p) => p.requestId === e.request.requestId)) o.pending.push(e.request); }));
+          set((s) => bump(s, e.request.sessionId, (o) => { if (!o.pending.some((p) => p.requestId === e.request.requestId)) o.pending = [...o.pending, e.request]; }));
           if (desktop) {
             const title = get().sessions.find((x) => x.sessionId === e.request.sessionId)?.title ?? tr('对话');
             const body = e.request.toolName === 'AskUserQuestion' ? tr('Claude 有问题要问你') : e.request.toolName === 'ExitPlanMode' ? tr('Claude 请求批准计划') : tr('需要权限：{toolName}', { toolName: e.request.toolName });
