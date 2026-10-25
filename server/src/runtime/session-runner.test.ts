@@ -434,8 +434,20 @@ describe('SessionRunner Stop (interrupt)', () => {
       queries.length = 0;
       const b = new SessionRunner({ sessionId: 'pv-2', cwd: without } as any);
       await tick();
-      expect(queries[0].options.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code' });
+      // (the ```nodegraph hint, spec D4, is appended to every conversation by default — only the verify part must be missing)
+      expect(queries[0].options.systemPrompt).toMatchObject({ type: 'preset', preset: 'claude_code' });
+      expect(queries[0].options.systemPrompt.append ?? '').not.toMatch(/preview_start|launch\.json/);
       await b.close();
+      // spec D4: the ```nodegraph hint follows ui.nodegraphHint, read when a process starts
+      const { setNodegraphHint } = await import('./session-runner.js');
+      expect(queries[0].options.systemPrompt.append).toMatch(/```nodegraph/);
+      setNodegraphHint(false);
+      queries.length = 0;
+      const c = new SessionRunner({ sessionId: 'pv-3', cwd: without } as any);
+      await tick();
+      expect(queries[0].options.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code' });
+      await c.close();
+      setNodegraphHint(true);
     } finally {
       setPreviewDeps(null);
       fs.rmSync(withLaunch, { recursive: true, force: true });
