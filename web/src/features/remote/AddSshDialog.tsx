@@ -36,7 +36,8 @@ export function AddSshDialog({ onClose, onJoined }: { onClose: () => void; onJoi
   useEffect(() => {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     box.current?.querySelector<HTMLElement>('input')?.focus();
-    return () => { if (opener?.isConnected) opener.focus(); };
+    // opened from the machine menu: its row is gone by now — back to the chip
+    return () => { if (opener?.isConnected && opener !== document.body) opener.focus(); else document.querySelector<HTMLElement>('.machine-chip')?.focus(); };
   }, []);
   const target = user.trim() ? `${user.trim()}@${host.trim()}` : host.trim();
   const port = (s: string) => { const n = Number(s); return Number.isInteger(n) && n > 0 && n < 65536 ? n : undefined; };

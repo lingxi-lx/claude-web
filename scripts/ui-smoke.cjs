@@ -218,7 +218,8 @@ async function runner() {
     home = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-smoke-'));
     seed = seedHome(home);
     if (idle) fs.rmSync(spawnLog, { force: true });
-    srv = await startServer(home, out, idle ? { CW_SPAWN_LOG: '1', CW_SPAWN_LOG_FILE: spawnLog } : {});
+    // stage E: the PR bar's forge requests go to scripts/fake-forge.cjs (the driver starts it and writes this file)
+    srv = await startServer(home, out, { CW_FAKE_FORGE_FILE: path.join(home, 'fake-forge.json'), ...(idle ? { CW_SPAWN_LOG: '1', CW_SPAWN_LOG_FILE: spawnLog } : {}) });
     console.log(`server up (HOME=${home})`);
   }
   const result = path.join(out, 'ui-smoke.json');
@@ -239,6 +240,7 @@ async function runner() {
     SMOKE_REVIEW_SID: seed?.reviewSid ?? '',
     // the server's data dir (the temp HOME's): checks that read what the server wrote (the canonical mirror)
     SMOKE_DATA: home ? path.join(home, '.claude-web') : '',
+    SMOKE_FAKE_FORGE: home ? path.join(home, 'fake-forge.json') : '',
     // the mock ACP agent (phase 5: a real permission request) runs under this node, not Electron
     SMOKE_NODE: process.execPath,
     SMOKE_SHOW: arg('--show', false) ? '1' : '',
@@ -4120,6 +4122,125 @@ try { const w = new Worker('app.js'); w.onerror = () => { window.__worker = 'ERR
           ipcMain.removeHandler('smoke:allowFile');
           ipcMain.removeHandler('smoke:emulate');
           ipcMain.removeHandler('smoke:recover');
+        }
+      }
+
+      // ---- stage E: the 文件 panel's empty state, 选机器 → 添加 SSH 机器…, 录屏's picker (no recording), the PR bar with
+      // comments against the fake GitHub (scripts/fake-forge.cjs). A window of its own with a desktop-bridge stand-in
+      // (captureSources from the real desktopCapturer); nothing is sent to a model, nothing recorded.
+      if (E.SMOKE_READONLY !== '1' && E.SMOKE_FAKE_FORGE) {
+        phase = 'stage-e';
+        const { ipcMain } = require('electron');
+        const { execFileSync } = require('node:child_process');
+        const { startFakeForge } = require(path.join(ROOT, 'scripts', 'fake-forge.cjs'));
+        const forge = await startFakeForge();
+        fs.writeFileSync(E.SMOKE_FAKE_FORGE, JSON.stringify({ 'github.fake': forge.origin, 'gitlab.fake': forge.origin }));
+        const sreq = (req) => new Promise((res, rej) => {
+          const WS = require(path.join(ROOT, 'node_modules', 'ws'));
+          const u = new URL(E.SMOKE_URL);
+          const s = new WS(`ws://${u.host}/ws?token=${u.searchParams.get('token')}`);
+          s.on('error', rej);
+          s.on('open', () => s.send(JSON.stringify({ type: 'request', request: { id: '1', req } })));
+          s.on('message', (raw) => { const m = JSON.parse(String(raw)); if (m.type === 'reply' && m.reply.id === '1') { s.close(); m.reply.ok ? res(m.reply.data) : rej(new Error(m.reply.error)); } });
+        });
+        await sreq({ kind: 'vcs.tokens.set', host: 'github.fake', token: 'gh-test' });
+        const gitEnv = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' };
+        const ghRepo = fs.mkdtempSync(path.join(require('os').tmpdir(), 'cw-smoke-gh-'));
+        for (const a of [['init', '-q'], ['commit', '-q', '--allow-empty', '-m', 'init'], ['remote', 'add', 'origin', 'https://github.fake/acme/app.git'], ['checkout', '-q', '-b', 'feat/retry']]) execFileSync('git', a, { cwd: ghRepo, windowsHide: true, env: gitEnv, stdio: 'ignore' });
+        // a fixed list: the real desktopCapturer took the smoke's Electron down (exit -1, twice in a row on this machine)
+        const thumb = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+        ipcMain.handle('smoke:captureSources', async () => [{ id: 'screen:0:0', name: 'Screen 1', kind: 'screen', thumb }, { id: 'window:1:0', name: 'Notepad', kind: 'window', thumb }]);
+        const epre = path.join(out, 'stage-e-preload.js');
+        fs.writeFileSync(epre, `const { ipcRenderer } = require('electron');
+window.desktop = {
+  version: '0.0.0-smoke', platform: 'win32',
+  pickDir: async () => null, pickFile: async () => null, openPath: async () => {}, openExternal: async () => {},
+  notify() {}, setBadge() {}, setTitleBarColors() {}, getLoginItem: async () => false, setLoginItem: async () => {},
+  onCommand: () => () => {}, onFocusSession: () => () => {},
+  captureSources: () => ipcRenderer.invoke('smoke:captureSources'), chooseCapture: async () => false,
+};`);
+        const ew = new BrowserWindow({ width: 1320, height: 860, show: false, webPreferences: { preload: epre, contextIsolation: false, sandbox: false, backgroundThrottling: false } });
+        ew.showInactive();
+        const ewc = ew.webContents;
+        ewc.on('console-message', (a, b, c) => {
+          const level = typeof a === 'object' && a && 'level' in a ? a.level : b;
+          const message = typeof a === 'object' && a && 'message' in a ? a.message : c;
+          if (level === 'error' || level === 'warning' || Number(level) >= 2) res.console.push({ phase, level: String(level), message: String(message).slice(0, 800) });
+        });
+        const ejs = (code) => ewc.executeJavaScript(code, true);
+        const ewait = async (code, ms = 15_000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await ejs(code).catch(() => false)) return true; await sleep(150); } return false; };
+        const ekey = async (keyCode, modifiers = []) => { ewc.sendInputEvent({ type: 'keyDown', keyCode, modifiers }); ewc.sendInputEvent({ type: 'keyUp', keyCode, modifiers }); await sleep(250); };
+        const eshot = async (name) => { try { const img = await ewc.capturePage(); const f = path.join(out, `ux-${name}.png`); fs.writeFileSync(f, img.toPNG()); res.shots.push(f); } catch (e) { log(`shot ${name} failed: ${e.message}`); } };
+        const eclick = (sel) => ejs(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); if (!el) return false; el.scrollIntoView({ block: 'nearest' }); el.click(); return true; })()`);
+        try {
+          await ewc.loadURL(E.SMOKE_URL);
+          const up = await ewait(`!!window.__store && window.__store.getState().connected && window.__store.getState().metaLoaded`, 30_000);
+          check('stage-e: a window with the desktop-bridge stand-in is up', up);
+          await ejs(`window.__store.getState().setSetting('onboarded', true)`);
+          await sleep(500);
+
+          // 1. 文件: a conversation where Claude read and changed nothing → 本对话的文件's sentence and its two buttons
+          await ejs(`window.__store.getState().loadHistory(${JSON.stringify(E.SMOKE_REVIEW_SID)})`);
+          await ewait(`!!document.querySelector('.sess-head .sh-more > button')`, 15_000);
+          await eclick('.sess-head .sh-more > button');
+          await ewait('!!document.querySelector(".menu.sess-menu [data-view=\\"files\\"]")', 3000);
+          await eclick('.menu.sess-menu [data-view="files"]');
+          const fileEmpty = await ewait(`[...document.querySelectorAll('.dock .fv-touched .es-text')].some((e) => e.textContent === 'Claude 读过和改过的文件会显示在这里')`, 8000);
+          const btns = await ejs(`[...document.querySelectorAll('.dock .fv-touched .es-act button')].map((b) => b.textContent.trim())`);
+          await eshot('stage-e-files-empty');
+          await ejs(`[...document.querySelectorAll('.dock .fv-touched .es-act button')].find((b) => b.textContent.startsWith('搜索文件'))?.click()`);
+          const toSearch = await ewait(`[...document.querySelectorAll('.dock .files-view .seg [role=tab]')].some((t) => t.getAttribute('aria-selected') === 'true' && t.textContent === '搜索')`, 4000);
+          check('stage-e 文件: 本对话的文件 says 「Claude 读过和改过的文件会显示在这里」 with 打开文件 / 搜索文件 (kbd); 搜索文件 switches to the search', fileEmpty && btns.length === 2 && btns[0] === '打开文件' && btns[1].startsWith('搜索文件') && toSearch, JSON.stringify({ fileEmpty, btns, toSearch }));
+
+          // 2. 选机器: the welcome page's machine chip; its last row 添加 SSH 机器… opens the dialog; Esc closes it
+          await ekey('N', ['alt']);
+          const chip = await ewait(`!!document.querySelector('.welcome .composer .machine-chip')`, 8000);
+          await eclick('.welcome .composer .machine-chip');
+          await ewait(`!!document.querySelector('.menu.machine-menu [data-id="machine-add-ssh"]')`, 4000);
+          const last = await ejs(`(() => { const m = document.querySelector('.menu.machine-menu'); const its = m ? [...m.querySelectorAll('[data-mi]')] : []; return its.length ? its[its.length - 1].textContent.trim() : null; })()`);
+          await sleep(1500); // the distros' checks come back (read-only: wsl -l -q, a login shell's home / claude / interop)
+          await eshot('stage-e-machine-menu');
+          await eclick('.menu.machine-menu [data-id="machine-add-ssh"]');
+          const dlg = await ewait(`!!document.querySelector('.add-ssh-dlg') && document.querySelector('.add-ssh-dlg').textContent.includes('地址')`, 4000);
+          await eshot('stage-e-add-ssh');
+          await ekey('Escape');
+          const closed = await ewait(`!document.querySelector('.add-ssh-dlg')`, 3000);
+          const focusBack = await ejs(`!!document.activeElement?.closest('.machine-chip')`);
+          check('stage-e 选机器: the chip is on the welcome page; 添加 SSH 机器… is the last row; it opens the dialog (地址); Esc closes it, the focus back on the chip', chip && last === '添加 SSH 机器…' && dlg && closed && focusBack, JSON.stringify({ chip, last, dlg, closed, focusBack }));
+
+          // 3. 录屏: the + menu has it; the picker lists at least one whole screen; Esc closes it, nothing recorded
+          await eclick('.welcome .cb .plus');
+          const recRow = await ewait(`!!document.querySelector('[data-id="record"]')`, 3000);
+          await eclick('[data-id="record"]');
+          const thumbs = await ewait(`(() => { const p = document.querySelector('.rec-picker'); if (!p) return false; const h = [...p.querySelectorAll('.rec-h')].find((x) => x.textContent === '整个屏幕'); return !!h && !!h.nextElementSibling?.querySelector('.rec-src img'); })()`, 10_000);
+          await eshot('stage-e-rec-picker');
+          await ejs(`document.querySelector('.rec-picker')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))`);
+          const pickerGone = await ewait(`!document.querySelector('.rec-picker')`, 3000);
+          const notRec = await ejs(`!document.querySelector('.rec-dot') && !document.querySelector('.rec-countdown')`);
+          check('stage-e 录屏: the + menu has 录屏; the picker shows 整个屏幕 with a thumbnail; Esc closes it, nothing records', recRow && thumbs && pickerGone && notRec, JSON.stringify({ recRow, thumbs, pickerGone, notRec }));
+
+          // 4. the PR bar against the fake GitHub: PR #12, 3 条评论 (自动处理评论 off), alice / dependabot (机器人), the CI menu has 自动处理评论
+          const ghSid = await ejs(`window.__store.getState().openSession({ cwd: ${JSON.stringify(ghRepo)}, agent: 'acp:smoke', permissionMode: 'default' })`);
+          const bar = await ewait(`(() => { const b = document.querySelector('.pane.focused .pr-bar'); return !!b && b.querySelector('.pr-n')?.textContent === 'PR #12' && b.querySelector('.pr-comments')?.textContent === '3 条评论'; })()`, 20_000);
+          await eclick('.pane.focused .pr-bar .pr-comments');
+          const listed = await ewait(`(() => { const l = document.querySelector('.menu.pr-comment-list'); if (!l) return false; const t = l.textContent; return t.includes('alice') && t.includes('dependabot') && !!l.querySelector('.pr-cm-bot'); })()`, 4000);
+          await eshot('stage-e-pr-comments');
+          await ekey('Escape');
+          await eclick('.pane.focused .pr-bar .pr-ci:not(.pr-comments)');
+          const autoRow = await ewait(`!!document.querySelector('.menu.pr-menu .pr-auto-comments')`, 3000);
+          await eshot('stage-e-pr-ci');
+          await ekey('Escape');
+          check('stage-e PR bar: PR #12, 3 条评论 while 自动处理评论 is off; the list has alice and dependabot (机器人); the CI menu has 自动处理评论', !!ghSid && bar && listed && autoRow, JSON.stringify({ ghSid, bar, listed, autoRow }));
+          const writes = forge.calls.filter((c) => (c.method !== 'GET' && c.path !== '/api/graphql') || (c.path === '/api/graphql' && /mutation/.test(String(c.body?.query ?? '')))).length;
+          check('stage-e PR bar: nothing was written to the forge (no reply, no auto-merge, no resolve)', writes === 0, String(writes));
+          if (ghSid) await ejs(`window.__store.getState().closeSession(${JSON.stringify(ghSid)})`).catch(() => {});
+        } catch (e) {
+          check('stage-e', false, e.stack || String(e));
+        } finally {
+          ipcMain.removeHandler('smoke:captureSources');
+          try { ew.destroy(); } catch { /* gone */ }
+          await forge.close();
+          try { fs.rmSync(ghRepo, { recursive: true, force: true }); } catch { /* windows may hold it */ }
         }
       }
 

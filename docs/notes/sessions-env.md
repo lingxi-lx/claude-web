@@ -81,3 +81,22 @@
 - 本机环境变量：`__proto__` / `constructor` 之类不是变量名；Windows 上 `PATH` 和 `Path` 是同一个，第二种写法拒绝。
 - 跨对话：同一个对话 10 分钟内最多收 10 条别的对话发来的消息（两个对话互相「告诉对方」会无限互答）；定时任务的对话不投递。
 - 已知风险（没改）：发送方的权限模式比接收方严时，消息会在接收方更宽的权限下执行——接收方本来就是用户自己开的对话。
+
+## 阶段 E：WSL 里的对话（2026-10-25）
+
+- **`SessionEnv`**（`{ kind: 'wsl', distro }`）写进 meta（`env`），pool 恢复对话时读回来；新对话「选机器」的值是一个字符串：
+  `''` 本机 / `wsl:<distro>` / peer id（`composer/machine.ts`）。
+- **runner**：spawn 钩子换成 `wsl/spawn.ts`：`wsl.exe -d <d> --cd <linux cwd> -- claude <同样的 CLI 参数>`（参数里的 Windows
+  路径换成 /mnt/…）。跑的是**发行版自己装的官方 CLI**，用它自己的登录；不走供应商、网关、子代理分流（WSL 的 NAT 下
+  127.0.0.1 不通）。WSLENV 列出 runner 额外加的变量。
+- **注入的 MCP**（记忆、联网、操控电脑……）是 Windows 程序：经互通用 /mnt 路径启动，参数保持 Windows 路径，env 用 `WSLENV …/u`。
+  互通关了就去掉它们，`info.wsl.dropped` 列出来，输入框下面一行灰字说明。
+- **检查**：`sh -lc` 打印 home、`command -v claude`、互通状态。真机上 `command -v claude` 会找到 `/mnt/c/…/nodejs/claude`
+  ——WSL 把 Windows 的 PATH 接在后面，那是 Windows 安装的 npm 垫片，发行版里跑不了：`/mnt/` 开头的一律算没装。
+- **对话记录**在发行版里（`\wsl.localhost\<d>\home\…\.claude\projects`）：`addTranscriptRoot` 加额外根，启动时把有 WSL 对话
+  的发行版都加上；历史也从那里读。
+- **文件 / Git / 终端**：`\wsl.localhost\<d>` / `\wsl$\<d>` 进 FilesService 的允许根；git 对这些路径加 `-c safe.directory=*`
+  （文件属主是 Linux 用户）；终端 `wsl: { distro }` → `wsl.exe -d <d> --cd <path>`；「在终端中继续」→
+  `wsl.exe -d <d> --cd <linux cwd> -- claude --resume <id>`。
+- **安装**：`wsl.installCommand` 只返回命令原文，用户在确认框看见后才 `wsl.install { confirmed: true }`；没有 confirmed 拒绝。
+- 联邦：带 WSL env 的 session.open 不转给 peer；peer 发来的 `wsl.*` 拒绝。

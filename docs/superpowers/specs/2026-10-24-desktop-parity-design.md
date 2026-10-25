@@ -456,3 +456,14 @@ B 已完成（e722be2..45939c1）：9 个任务 + 三路阶段审查（安全 / 
 - Codex 的额外文件夹（`sandbox_workspace_write.writable_roots`）只有单元测试（mock app-server 记下的参数），没有真 Codex 的 e2e；ACP 不支持额外文件夹。
 - mac 没有真机验证。
 - 问答卡没有停靠卡的「改用排队的这段话回复」按钮和 `dockNote` 提示。
+
+## 阶段 E 完成后留下的（2026-10-25）
+
+- 真机没测到：WSL 的 Ubuntu 里没有 Linux 版 claude（`command -v claude` 找到的是 Windows 安装经 PATH 透进来的 /mnt/c/… npm 垫片，
+  现在算「没装」）——没装，所以没跑真的 WSL 对话、也没写 /tmp/cw-e-check；本机没有 sshd 服务，SSH「能登录」那条路没测到；
+  没有 GitLab 真仓库（GitLab 只对着假托管方和 gitlab.com 公开接口的字段核过）。GitHub 真接口只读跑过：本仓库唯一带 PR 的分支
+  都是别人 fork 来的，按规则不认，正确地回 no-pr。
+- 录屏：选择框 / 缩略图在 ui-smoke 里测到；真录 5 秒、抽帧后发给模型没在这次做。
+- GitLab 审批状态没做：条上 `review` 为空。
+- WSL 里的对话不能用供应商 / 网关 / 子代理分流（NAT 下 127.0.0.1 不通），只用发行版自己的 Claude 登录。
+- 桌面版「搜索文件」是 Ctrl+Shift+F，不是计划里的 Ctrl+P（Ctrl+P 已是菜单里的「搜索对话」）。

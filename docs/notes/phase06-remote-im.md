@@ -10,3 +10,13 @@
 - `server/src/im/router.test.ts` 用假 adapter / pool 覆盖路由逻辑；`server/ws-phase6.mjs` 端到端跑远程监听 + 配对 + 设备令牌 + 隧道失败路径 + IM 配置。
 - vitest 只认 `src/**/*.test.ts`；server 的 `tsconfig` 现在排除测试与 `__mocks__`，不然 `npm run build` 会把测试编译进 `dist/` 然后 vitest 连 dist 里的副本一起跑（mock 路径不存在 → 超时）。
 - **按真实时间计时的测试单独一组、最后跑**（`server/vitest.config.ts` 的 `REAL_TIME`：`relay-link` / `signal` / `p2p` 三个文件，`projects` + `sequence.groupOrder: 1`）：转发每秒 20 包的节奏、几秒内处理完的洪泛、有上限的连接用时，和整套并行跑在一起时被抢 CPU，每次全量都挂 4 个，单独跑次次通过。新写的这类测试放进这张表，别放宽断言。
+
+## 添加 SSH 机器…（阶段 E，2026-10-25）
+
+- 「选机器」菜单最后一项打开 `features/remote/AddSshDialog.tsx`：地址 / 用户 / 密钥（更多：SSH 端口、对方端口、对方令牌）→
+  「测试连接」= `remote.hosts.test`（`remote/ssh-probe.ts`：一次 `ssh -o BatchMode=yes -o ConnectTimeout=10
+  -o StrictHostKeyChecking=accept-new … curl/wget 127.0.0.1:<port>/api/health`，target 过 `assertTarget`，不许以 `-` 开头）。
+  结果分 ok（Claude Web 在跑 / 没跑）、auth、hostkey、unreachable、no-ssh、error，各有一句话。没跑时填「启动命令」，
+  只提示怎么装，不在对方机器上执行任何东西。「连接并加入」= `remote.hosts.set` + `peers.add { hostId }`。
+- `refusedFromPeer` 新拒的：`vcs.tokens.*`、`wsl.*`、`remote.hosts.test`。
+- 真机：本机没有 sshd 服务（没装），没测到 ok 那条路；e2e 第 36 期测到连不上的那条。
