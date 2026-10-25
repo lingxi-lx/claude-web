@@ -1,6 +1,7 @@
 import type { ClientRequest, ServerEvent, SessionSummary } from '../protocol.js';
 import { isPeerId, parsePeerId, peerSessionId } from './types.js';
 import { tr } from '../i18n/index.js';
+import { cloudRefusedFromPeer } from '../cloud/handlers.js';
 
 /**
  * Pure id rewriting between this machine and one peer. Outbound: a request about
@@ -47,6 +48,8 @@ export function refusedFromPeer(req: ClientRequest): string | null {
   // stage E5: this computer's WSL distros and its SSH logins are its own
   if (req.kind.startsWith('wsl.') || req.kind === 'remote.hosts.test') return tr('其它机器不能使用本机的 WSL 或 SSH');
   if (req.kind.startsWith('vcs.tokens.')) return tr('其它机器不能查看或修改本机的 GitHub / GitLab 令牌');
+  // stage F: only the receiving side of a hand-off / publish, and a 派活 run here (cloud/handlers.ts)
+  if (cloudRefusedFromPeer(req)) return tr('其它机器不能在本机做这件事');
   return null;
 }
 

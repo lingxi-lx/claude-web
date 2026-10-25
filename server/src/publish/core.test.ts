@@ -62,6 +62,19 @@ describe('publish core', () => {
     expect(snapshotFiles(path.join(dir, 'page.html')).sort()).toEqual(['img/a.png', 'js/app.js', 'page.html', 'style.css']);
   });
 
+  it('F7: only the page\'s own assets — never <a href> targets, an iframe\'s page, key files or dot-folders', () => {
+    const html = [
+      '<a href="notes.txt">notes</a>', '<a href="../.env">x</a>', '<area href="map.txt">', '<iframe src="other.html"></iframe>',
+      '<link rel="canonical" href="page2.html">', '<link rel="icon" href="fav.ico">', '<link href="s.css" rel="stylesheet">',
+      '<img src="server.key">', '<img src=".git/config">', '<script src="cfg/.env.local"></script>', '<img data-src="lazy.png">',
+      '<video poster="poster.jpg" src="v.mp4"></video>', '<img src="ok.png">',
+    ].join('');
+    expect(localRefs(html)).toEqual(['fav.ico', 's.css', 'v.mp4', 'poster.jpg', 'ok.png']);
+    for (const f of ['notes.txt', 'other.html', 'page2.html', 'fav.ico', 's.css', 'server.key', 'v.mp4', 'poster.jpg', 'ok.png']) fs.writeFileSync(path.join(dir, f), 'x');
+    fs.writeFileSync(path.join(dir, 'page.html'), html);
+    expect(snapshotFiles(path.join(dir, 'page.html')).sort()).toEqual(['fav.ico', 'ok.png', 'page.html', 'poster.jpg', 's.css', 'v.mp4']);
+  });
+
   it('inlines local css, scripts and pictures into one page', () => {
     fs.writeFileSync(path.join(dir, 'page.html'), '<html><head><link rel="stylesheet" href="style.css"></head><body><img src="a.png" alt="x"><script src="app.js"></script><img src="https://x.test/b.png"></body></html>');
     fs.writeFileSync(path.join(dir, 'style.css'), 'body{color:red}');

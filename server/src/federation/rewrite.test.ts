@@ -69,6 +69,21 @@ describe('planRoute', () => {
       expect(refusedFromPeer(req), req.kind).toBeNull();
     }
   });
+  it('stage F (fix wave F5): another machine only gets the receiving side of a hand-off / publish and a 派活 run here', () => {
+    for (const req of [
+      { kind: 'handoff.check', sessionId: 's' }, { kind: 'handoff.start', sessionId: 's', peerId: 'p' }, { kind: 'handoff.fetchBack', sessionId: 's' },
+      { kind: 'publish.create', path: '/x', expiry: '1d' }, { kind: 'publish.list' }, { kind: 'publish.toPeer', path: '/x', expiry: '1d', peerId: 'p' },
+      { kind: 'publish.inline', path: '/x' }, { kind: 'publish.files', path: '/x' },
+      { kind: 'claudeai.scan', path: '/x' }, { kind: 'claudeai.import', path: '/x' },
+      { kind: 'projects.files.list', workspaceId: 'w' }, { kind: 'projects.files.remove', workspaceId: 'w', name: 'a' },
+      { kind: 'dispatch.start', prompt: 'x', peer: 'other' }, { kind: 'dispatch.defaults', peer: 'other' },
+    ] as ClientRequest[]) expect(refusedFromPeer(req), req.kind).toBeTruthy();
+    for (const req of [
+      { kind: 'handoff.receive', id: 'a', url: 'u', branch: 'cw/handoff-a', events: [], from: 'x' }, { kind: 'handoff.publish', branch: 'cw/handoff-a' },
+      { kind: 'publish.receive', name: 'n', entry: 'i.html', source: 's', expiry: '1d', files: [] }, { kind: 'publish.revoke', id: 'a' },
+      { kind: 'dispatch.start', prompt: 'x' }, { kind: 'dispatch.defaults' },
+    ] as ClientRequest[]) expect(refusedFromPeer(req), req.kind).toBeNull();
+  });
   it('stage E5: a WSL conversation cannot go to another machine; WSL and SSH tests belong to this machine', () => {
     expect(planRoute({ kind: 'session.open', params: { cwd: '/x', peer: 'peer_b1', env: { kind: 'wsl', distro: 'U' } } } as ClientRequest).kind).toBe('reject');
     expect(refusedFromPeer({ kind: 'wsl.install', distro: 'U', confirmed: true })).toBeTruthy();

@@ -8,11 +8,24 @@ import { tr } from '../i18n/index.js';
 const KINDS = new Set<string>([
   'projects.files.list', 'projects.files.remove', 'dispatch.start', 'dispatch.defaults',
   'handoff.check', 'handoff.start', 'handoff.receive', 'handoff.publish', 'handoff.fetchBack',
-  'publish.create', 'publish.list', 'publish.revoke', 'publish.toPeer', 'publish.receive', 'publish.inline',
+  'publish.create', 'publish.list', 'publish.revoke', 'publish.toPeer', 'publish.receive', 'publish.inline', 'publish.files',
   'claudeai.scan', 'claudeai.import',
 ]);
 
 export function isCloudRequest(req: { kind: string }): req is CloudRequest { return KINDS.has(req.kind); }
+
+/**
+ * Fix wave F5: what another machine of the federation may ask here — only the receiving side of a hand-off / a
+ * publish, and a 派活 that runs HERE (no further `peer`: no relaying through this machine). Everything else (start a
+ * hand-off of our conversations, publish our files, read our project files, import into our library…) is this
+ * machine's user's alone. Used by federation/rewrite.ts refusedFromPeer.
+ */
+const PEER_KINDS = new Set<string>(['handoff.receive', 'handoff.publish', 'publish.receive', 'publish.revoke', 'dispatch.start', 'dispatch.defaults']);
+export function cloudRefusedFromPeer(req: { kind: string; peer?: unknown }): boolean {
+  if (!KINDS.has(req.kind)) return false;
+  if (!PEER_KINDS.has(req.kind)) return true;
+  return (req.kind === 'dispatch.start' || req.kind === 'dispatch.defaults') && !!req.peer;
+}
 
 /** The parts of the services this file talks to (each service file declares its own full class). */
 export interface CloudServices {
@@ -21,7 +34,7 @@ export interface CloudServices {
   workspaceExists(id: string): boolean;
   handoff?: {
     check(sessionId: string): Promise<unknown>;
-    start(sessionId: string, peerId: string, prompt?: string): Promise<unknown>;
+    start(sessionId: string, peerId: string, prompt?: string, o?: { includeUntracked?: boolean }): Promise<unknown>;
     receive(req: Extract<CloudRequest, { kind: 'handoff.receive' }>): Promise<unknown>;
     publish(branch: string): Promise<unknown>;
     fetchBack(sessionId: string): Promise<unknown>;
@@ -33,6 +46,7 @@ export interface CloudServices {
     toPeer(path: string, expiry: Extract<CloudRequest, { kind: 'publish.toPeer' }>['expiry'], peerId: string): Promise<unknown>;
     receive(req: Extract<CloudRequest, { kind: 'publish.receive' }>): Promise<unknown>;
     inline(path: string): Promise<unknown>;
+    files(path: string): Promise<unknown>;
   };
   claudeAi?: {
     scan(path: string): Promise<unknown>;
@@ -62,7 +76,7 @@ export async function handleCloud(c: CloudServices | undefined, req: CloudReques
     }
     case 'dispatch.defaults': return c.dispatch.defaults(req.peer);
     case 'handoff.check': if (!c.handoff) throw off(); return c.handoff.check(req.sessionId);
-    case 'handoff.start': if (!c.handoff) throw off(); return c.handoff.start(req.sessionId, req.peerId, req.prompt);
+    case 'handoff.start': if (!c.handoff) throw off(); return c.handoff.start(req.sessionId, req.peerId, req.prompt, { includeUntracked: !!req.includeUntracked });
     case 'handoff.receive': if (!c.handoff) throw off(); return c.handoff.receive(req);
     case 'handoff.publish': if (!c.handoff) throw off(); return c.handoff.publish(req.branch);
     case 'handoff.fetchBack': if (!c.handoff) throw off(); return c.handoff.fetchBack(req.sessionId);
@@ -72,6 +86,7 @@ export async function handleCloud(c: CloudServices | undefined, req: CloudReques
     case 'publish.toPeer': if (!c.publish) throw off(); return c.publish.toPeer(req.path, req.expiry, req.peerId);
     case 'publish.receive': if (!c.publish) throw off(); return c.publish.receive(req);
     case 'publish.inline': if (!c.publish) throw off(); return c.publish.inline(req.path);
+    case 'publish.files': if (!c.publish) throw off(); return c.publish.files(req.path);
     case 'claudeai.scan': if (!c.claudeAi) throw off(); return c.claudeAi.scan(req.path);
     case 'claudeai.import': if (!c.claudeAi) throw off(); return c.claudeAi.run(req.path, req.folder);
   }
