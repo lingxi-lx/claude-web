@@ -1,0 +1,267 @@
+[
+  {
+    "uuid": "5f1c2a9e-1111-4a2b-9c3d-000000000001",
+    "name": "Plan a garden",
+    "summary": "",
+    "created_at": "2026-09-01T10:00:00.000000Z",
+    "updated_at": "2026-09-01T11:00:00.000000Z",
+    "account": {
+      "uuid": "a1b2c3d4-0000-4000-8000-000000000001"
+    },
+    "chat_messages": [
+      {
+        "uuid": "m-0001",
+        "text": "Help me plan my beds",
+        "content": [
+          {
+            "start_timestamp": "2026-09-01T10:00:00.000000Z",
+            "stop_timestamp": "2026-09-01T10:00:00.000000Z",
+            "type": "text",
+            "text": "Help me plan my beds",
+            "citations": []
+          }
+        ],
+        "sender": "human",
+        "created_at": "2026-09-01T10:00:00.000000Z",
+        "updated_at": "2026-09-01T10:00:00.000000Z",
+        "attachments": [
+          {
+            "file_name": "beds.txt",
+            "file_size": 15,
+            "file_type": "txt",
+            "extracted_content": "bed 1: tomatoes"
+          }
+        ],
+        "files": []
+      },
+      {
+        "uuid": "m-0002",
+        "text": "",
+        "content": [
+          {
+            "start_timestamp": "2026-09-01T10:00:00.000000Z",
+            "stop_timestamp": "2026-09-01T10:00:00.000000Z",
+            "type": "thinking",
+            "thinking": "The user has one bed of tomatoes.",
+            "summaries": [
+              {
+                "summary": "Thinking about beds"
+              }
+            ],
+            "cut_off": false
+          },
+          {
+            "start_timestamp": "2026-09-01T10:00:00.000000Z",
+            "stop_timestamp": "2026-09-01T10:00:00.000000Z",
+            "type": "text",
+            "text": "Put basil next to the tomatoes.",
+            "citations": []
+          }
+        ],
+        "sender": "assistant",
+        "created_at": "2026-09-01T10:00:00.000000Z",
+        "updated_at": "2026-09-01T10:00:00.000000Z",
+        "attachments": [],
+        "files": []
+      },
+      {
+        "uuid": "m-0003",
+        "text": "Here is a photo",
+        "content": [
+          {
+            "start_timestamp": "2026-09-01T11:00:00.000000Z",
+            "stop_timestamp": "2026-09-01T11:00:00.000000Z",
+            "type": "text",
+            "text": "Here is a photo",
+            "citations": []
+          }
+        ],
+        "sender": "human",
+        "created_at": "2026-09-01T11:00:00.000000Z",
+        "updated_at": "2026-09-01T11:00:00.000000Z",
+        "attachments": [],
+        "files": [
+          {
+            "file_name": "photo.jpg"
+          }
+        ]
+      },
+      {
+        "uuid": "m-0004",
+        "text": "Looks sunny.",
+        "content": [
+          {
+            "start_timestamp": "2026-09-01T11:00:00.000000Z",
+            "stop_timestamp": "2026-09-01T11:00:00.000000Z",
+            "type": "text",
+            "text": "Looks sunny.",
+            "citations": []
+          }
+        ],
+        "sender": "assistant",
+        "created_at": "2026-09-01T11:00:00.000000Z",
+        "updated_at": "2026-09-01T11:00:00.000000Z",
+        "attachments": [],
+        "files": []
+      }
+    ]
+  },
+  {
+    "uuid": "5f1c2a9e-2222-4a2b-9c3d-000000000002",
+    "name": "Landing page",
+    "summary": "A landing page for the shop",
+    "created_at": "2026-09-02T09:00:00.000000Z",
+    "updated_at": "2026-09-02T10:00:00.000000Z",
+    "account": {
+      "uuid": "a1b2c3d4-0000-4000-8000-000000000001"
+    },
+    "chat_messages": [
+      {
+        "uuid": "m-0101",
+        "text": "Make a landing page and check current trends",
+        "content": [
+          {
+            "start_timestamp": "2026-09-02T09:00:00.000000Z",
+            "stop_timestamp": "2026-09-02T09:00:00.000000Z",
+            "type": "text",
+            "text": "Make a landing page and check current trends",
+            "citations": []
+          }
+        ],
+        "sender": "human",
+        "created_at": "2026-09-02T09:00:00.000000Z",
+        "updated_at": "2026-09-02T09:00:00.000000Z",
+        "attachments": [],
+        "files": []
+      },
+      {
+        "uuid": "m-0102",
+        "text": "",
+        "content": [
+          {
+            "start_timestamp": "2026-09-02T09:00:00.000000Z",
+            "stop_timestamp": "2026-09-02T09:00:00.000000Z",
+            "type": "tool_use",
+            "name": "web_search",
+            "input": {
+              "query": "landing page trends 2026"
+            },
+            "message": "Searching the web",
+            "integration_name": null,
+            "context": null,
+            "display_content": null
+          },
+          {
+            "start_timestamp": "2026-09-02T09:00:00.000000Z",
+            "stop_timestamp": "2026-09-02T09:00:00.000000Z",
+            "type": "tool_result",
+            "name": "web_search",
+            "content": [
+              {
+                "type": "knowledge",
+                "title": "Trends",
+                "url": "https://example.com/trends",
+                "metadata": {
+                  "site_domain": "example.com"
+                },
+                "text": "Big type, short copy."
+              }
+            ],
+            "is_error": false,
+            "message": null,
+            "display_content": null
+          },
+          {
+            "start_timestamp": "2026-09-02T09:00:00.000000Z",
+            "stop_timestamp": "2026-09-02T09:00:00.000000Z",
+            "type": "text",
+            "text": "Here is the page:",
+            "citations": []
+          },
+          {
+            "start_timestamp": "2026-09-02T09:00:00.000000Z",
+            "stop_timestamp": "2026-09-02T10:00:00.000000Z",
+            "type": "tool_use",
+            "name": "artifacts",
+            "input": {
+              "id": "landing",
+              "type": "text/html",
+              "title": "Shop landing page",
+              "command": "create",
+              "content": "<!doctype html><h1>Shop</h1>",
+              "language": null,
+              "version_uuid": "v-1"
+            },
+            "message": "artifacts",
+            "integration_name": null,
+            "context": null,
+            "display_content": null
+          },
+          {
+            "start_timestamp": "2026-09-02T10:00:00.000000Z",
+            "stop_timestamp": "2026-09-02T10:00:00.000000Z",
+            "type": "tool_result",
+            "name": "artifacts",
+            "content": [
+              {
+                "type": "text",
+                "text": "OK",
+                "uuid": "r-1"
+              }
+            ],
+            "is_error": false,
+            "message": null,
+            "display_content": null
+          },
+          {
+            "start_timestamp": "2026-09-02T10:00:00.000000Z",
+            "stop_timestamp": "2026-09-02T10:00:00.000000Z",
+            "type": "text",
+            "text": "Want any changes?",
+            "citations": []
+          }
+        ],
+        "sender": "assistant",
+        "created_at": "2026-09-02T10:00:00.000000Z",
+        "updated_at": "2026-09-02T10:00:00.000000Z",
+        "attachments": [],
+        "files": []
+      }
+    ]
+  },
+  {
+    "uuid": "5f1c2a9e-3333-4a2b-9c3d-000000000003",
+    "name": "Untitled",
+    "summary": "",
+    "created_at": "2026-09-03T08:00:00.000000Z",
+    "updated_at": "2026-09-03T08:00:00.000000Z",
+    "account": {
+      "uuid": "a1b2c3d4-0000-4000-8000-000000000001"
+    },
+    "chat_messages": [
+      {
+        "uuid": "m-0201",
+        "text": "only the text field",
+        "content": [],
+        "sender": "human",
+        "created_at": "2026-09-03T08:00:00.000000Z",
+        "updated_at": "2026-09-03T08:00:00.000000Z",
+        "attachments": [],
+        "files": []
+      }
+    ]
+  },
+  {
+    "name": "no uuid",
+    "created_at": "2026-09-04T08:00:00.000000Z",
+    "updated_at": "2026-09-04T08:00:00.000000Z",
+    "chat_messages": []
+  },
+  {
+    "uuid": "5f1c2a9e-5555-4a2b-9c3d-000000000005",
+    "name": "broken",
+    "created_at": "2026-09-05T08:00:00.000000Z",
+    "updated_at": "2026-09-05T08:00:00.000000Z",
+    "chat_messages": null
+  }
+]
