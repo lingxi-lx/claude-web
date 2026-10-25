@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'node:path';
+import { MAX_ENTRY_BYTES } from './src/shell/assets';
 
 export default defineConfig({
   // relative asset URLs (./assets/…): the phone shell runs the same build below a folder (app/index.html)
@@ -14,6 +15,18 @@ export default defineConfig({
         if (String(req.url ?? '').includes('backdrop-worker')) res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self' 'unsafe-eval'");
         next();
       });
+    },
+  }, {
+    // review X1: the app's entry chunk (boot-*.js) is a first-screen file — over the relay one past MAX_ENTRY_BYTES never
+    // arrives. web/dist/index.html is the phone shell's afterwards (build:shell), so its own check never sees this one
+    name: 'boot-chunk-size',
+    apply: 'build',
+    generateBundle(_o: unknown, bundle: Record<string, { type: string; isEntry?: boolean; fileName: string; code?: string }>) {
+      for (const c of Object.values(bundle)) {
+        if (c.type !== 'chunk' || !/^assets\/boot-[^/]+\.js$/.test(c.fileName)) continue;
+        const bytes = Buffer.byteLength(c.code ?? '');
+        if (bytes >= MAX_ENTRY_BYTES) (this as any).error(`${c.fileName} is ${bytes} bytes — first-screen files must stay under ${MAX_ENTRY_BYTES} (lazy-load a dialog or panel)`);
+      }
     },
   }],
   resolve: {

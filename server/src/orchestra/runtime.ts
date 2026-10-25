@@ -76,7 +76,7 @@ export function orchestraDeps(s: RuntimeServices, dirs: { runs: string; worktree
     async open(p) {
       // same defaults as the hub's session.open for a brand-new session
       const settings = s.meta.settings();
-      let params: OpenSessionParams = { cwd: p.cwd, model: p.model, permissionMode: p.permissionMode ?? 'default' };
+      let params: OpenSessionParams = { cwd: p.cwd, model: p.model, permissionMode: p.permissionMode ?? 'default', drivenBy: 'orchestra' };
       if (p.agent !== 'claude') params.agent = p.agent as AgentKind;
       else {
         params = { ...params, providerId: settings.defaultProviderId as string | undefined };

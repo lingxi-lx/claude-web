@@ -2,8 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { clsx } from '@/util';
 import { NodeGraph } from '@/ui/node-graph/NodeGraph';
 import { flowchartToGraph, isFlowchart } from '@/ui/node-graph/mermaid-flow';
+import { chatFit } from '@/ui/node-graph/viewport';
+import { useColumnFit } from '@/ui/node-graph/useColumnFit';
+import type { NgEdge, NgNode } from '@/ui/node-graph/schema';
+import { ErrorBoundary } from '@/ui/ErrorBoundary';
 import { tr } from '@/i18n';
 
+const NONE: { nodes: NgNode[]; edges: NgEdge[] } = { nodes: [], edges: [] };
 let seq = 0;
 let inited: string | null = null;
 
@@ -26,6 +31,10 @@ export default function MermaidBlock({ source }: { source: string }) {
   const flow = useMemo(() => (isFlowchart(source) ? flowchartToGraph(source) : null), [source]);
   const [view, setView] = useState<'graph' | 'raw'>(() => (flow?.ok ? 'graph' : 'raw'));
   const graphOn = view === 'graph' && !!flow?.ok;
+  // review D4: sized like a ```nodegraph block — the reply's width sets the scale, the height follows
+  const wrap = useRef<HTMLDivElement>(null);
+  const fg = flow?.ok ? flow.graph : NONE;
+  const { height, fit } = useColumnFit(wrap, fg.nodes, fg.edges, chatFit(false));
   useEffect(() => {
     if (graphOn) return;
     let alive = true;
@@ -40,7 +49,7 @@ export default function MermaidBlock({ source }: { source: string }) {
     return () => { alive = false; };
   }, [source, graphOn]);
   return (
-    <div className="mermaid-wrap">
+    <div className="mermaid-wrap" ref={wrap}>
       {flow?.ok && (
         <div className="mmd-view" role="group" aria-label={tr('显示方式')}>
           <button type="button" className={clsx('btn sm', view === 'graph' && 'on')} aria-pressed={view === 'graph'} data-view="graph" onClick={() => setView('graph')}>{tr('节点图')}</button>
@@ -48,7 +57,7 @@ export default function MermaidBlock({ source }: { source: string }) {
         </div>
       )}
       {graphOn && flow?.ok
-        ? <NodeGraph graph={flow.graph} ariaLabel={tr('流程图')} height={360} className="ng-mermaid" />
+        ? <ErrorBoundary area={tr('节点图')}><NodeGraph graph={flow.graph} ariaLabel={tr('流程图')} height={height} fit={fit} embedded className="ng-mermaid" /></ErrorBoundary>
         : <div ref={ref} className="mermaid-svg" />}
       {err && !graphOn && <pre className="code-body" style={{ color: 'var(--red)' }}>mermaid: {err}{'\n'}{source}</pre>}
     </div>

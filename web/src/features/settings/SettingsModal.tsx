@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { backdropOn } from '@/features/home/letter-flow';
 import { useStore } from '@/store';
 import { clsx } from '@/util';
@@ -43,8 +43,9 @@ import { tr, trAs } from '@/i18n';
 import { CustomCssSection } from './CustomCssSection';
 import { VIEW_MODES, viewModeLabel } from '@/features/chat/view-mode';
 import { LocalEnvEditor } from './LocalEnvEditor';
-import { GitlabSection } from './GitlabSection';
 import { thinkingLanguageOptions } from './thinking-language';
+// review X1: the GitLab hosts editor loads when its row is shown
+const GitlabSection = lazy(() => import('./GitlabSection').then((m) => ({ default: m.GitlabSection })));
 
 export { Row } from './controls';
 
@@ -58,7 +59,7 @@ const CONTROLS: Record<EntryId, (e: EntryMeta) => ReactNode> = {
   'ui.showThinking': (e) => <Toggle k={e.id} label={e.label} />,
   'ui.viewMode': (e) => <Select k={e.id} def="normal" label={e.label} options={VIEW_MODES.map((id) => ({ id, l: viewModeLabel(id) }))} />,
   'ui.autoArchivePr': (e) => <Toggle k={e.id} label={e.label} />,
-  'vcs.gitlabHosts': (e) => <GitlabSection label={e.label} />,
+  'vcs.gitlabHosts': (e) => <Suspense fallback={null}><GitlabSection label={e.label} /></Suspense>,
   'vcs.resolveOnReply': (e) => <Toggle k={e.id} label={e.label} />,
   'ui.infoPanel': (e) => <Toggle k={e.id} label={e.label} def />,
   'ui.sidebarFolded': (e) => <Toggle k={e.id} label={e.label} def />,

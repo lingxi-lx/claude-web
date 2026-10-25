@@ -1,4 +1,4 @@
-import { openDispatch } from '@/features/cloud/CloudDialogs';
+import { openDispatch } from '@/features/cloud/cloud-open';
 import { modKey } from '@/features/workbench/shortcuts';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useStore } from '@/store';

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NG_MAX_NODES, normalizeNodeGraph, parseNodeGraph } from './schema';
+import { NG_MAX_ITEMS, NG_MAX_NODES, NG_MAX_OPTIONS, NG_MAX_ROWS, NG_MAX_SOURCE, NG_MAX_TAGS, NG_MAX_TEXT, NG_MAX_XY, normalizeNodeGraph, parseNodeGraph } from './schema';
 import { ACCESS_SAMPLE } from './sample';
 
 const ok = (x: unknown) => { const r = normalizeNodeGraph(x); if (!r.ok) throw new Error(r.error); return r.graph; };
@@ -56,5 +56,37 @@ describe('nodegraph format', () => {
   });
   it('keys it does not know are ignored', () => {
     expect(ok({ nodes: [{ id: 'a', title: 'A', colour: 'red' }], theme: 'x' }).nodes[0].id).toBe('a');
+  });
+  it('ids that are names on every object (review D1)', () => {
+    const tricky = ['constructor', '__proto__', 'toString', 'hasOwnProperty'];
+    const g = ok(JSON.parse(JSON.stringify({
+      nodes: tricky.map((id) => ({ id, title: id, rows: [{ id: 'valueOf', label: 'k', value: 'a', options: ['a', { value: 'b', marks: { [id + '>x']: 'error' } }] }] })).concat([{ id: 'x', title: 'X', rows: [] }] as never),
+      edges: tricky.map((id) => ({ id: id + '>x', from: id, to: 'x', fromRow: 'valueOf' })).concat([{ id: '__proto__', from: 'x', to: 'constructor' }] as never),
+    })));
+    expect(g.nodes.map((n) => n.id)).toEqual([...tricky, 'x']);
+    expect(Object.keys(g.nodes[1].rows[0].options[1].marks)).toEqual(['__proto__>x']);
+    expect(g.edges.map((e) => e.id)).toContain('__proto__');
+  });
+  it('size caps (review D3)', () => {
+    expect(parseNodeGraph(JSON.stringify({ nodes: two, pad: 'x'.repeat(NG_MAX_SOURCE) })).ok).toBe(false);
+    const rows = (n: number) => Array.from({ length: n }, (_, i) => ({ label: 'l' + i, value: 'v' }));
+    expect(ok({ nodes: [{ id: 'a', title: 'A', rows: rows(NG_MAX_ROWS) }] }).nodes[0].rows).toHaveLength(NG_MAX_ROWS);
+    expect(bad({ nodes: [{ id: 'a', title: 'A', rows: rows(NG_MAX_ROWS + 1) }] })).toMatch(/^nodes\[0\]\.rows:/);
+    const opts = (n: number) => Array.from({ length: n }, (_, i) => 'o' + i);
+    expect(bad({ nodes: [{ id: 'a', title: 'A', rows: [{ label: 'k', value: 'o0', options: opts(NG_MAX_OPTIONS + 1) }] }] })).toMatch(/^nodes\[0\]\.rows\[0\]\.options:/);
+    const items = ok({ nodes: [{ id: 'a', title: 'A', list: { title: 't', items: Array.from({ length: 80 }, (_, i) => ({ text: 'i' + i, tags: ['1', '2', '3', '4', '5', '6', '7'] })) } }] }).nodes[0].list!.items;
+    expect(items).toHaveLength(NG_MAX_ITEMS);
+    expect(items[NG_MAX_ITEMS - 1].text).toMatch(/31/);
+    expect(items[0].tags).toHaveLength(NG_MAX_TAGS);
+    const long = ok({ nodes: [{ id: 'a'.repeat(300), title: 'T'.repeat(500), x: 1e9, y: -1e9 }] }).nodes[0];
+    expect(long.id).toHaveLength(300);
+    expect([...long.title]).toHaveLength(NG_MAX_TEXT);
+    expect(long.title.endsWith('…')).toBe(true);
+    expect([long.x, long.y]).toEqual([NG_MAX_XY, -NG_MAX_XY]);
+  });
+  it('options: the same value twice is one option; a default row id never takes an explicit one (review D-minor)', () => {
+    const g = ok({ nodes: [{ id: 'a', title: 'A', rows: [{ label: 'x', value: 'v', options: ['v', 'w', { value: 'v', label: 'again' }] }, { id: 'r0', label: 'y', value: '1' }] }] });
+    expect(g.nodes[0].rows[0].options.map((o) => o.label)).toEqual(['v', 'w']);
+    expect(g.nodes[0].rows.map((r) => r.id)).toEqual(['r0_2', 'r0']);
   });
 });

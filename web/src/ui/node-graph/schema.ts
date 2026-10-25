@@ -8,6 +8,12 @@ export type NodeState = 'idle' | 'queued' | 'running' | 'waiting' | 'done' | 'fa
 export const NODE_STATES: readonly NodeState[] = ['idle', 'queued', 'running', 'waiting', 'done', 'failed', 'stopped'];
 export const NG_MAX_NODES = 500;
 export const NG_MAX_EDGES = 2000;
+// review D3: what one block may hold — the source before JSON.parse, rows / options per card, list items / tags, text
+export const NG_MAX_SOURCE = 256 * 1024, NG_MAX_ROWS = 30, NG_MAX_OPTIONS = 30, NG_MAX_ITEMS = 50, NG_MAX_TAGS = 5, NG_MAX_TEXT = 200, NG_MAX_XY = 20000;
+/** review D1: a record keyed by author ids (`constructor`, `__proto__` …) — no prototype to collide with */
+export const dict = <T>(): Record<string, T> => Object.create(null) as Record<string, T>;
+/** an own entry only: `rec.constructor` of a plain object is not an entry */
+export const own = <T>(rec: Readonly<Record<string, T>>, k: string): T | undefined => (Object.hasOwn(rec, k) ? rec[k] : undefined);
 
 // ---- input: the JSON Claude writes (spec D1's format + options' marks + edges' pulse) ----
 export interface NgOptionIn { value: string; label?: string; marks?: Record<string, EdgeStyle> }
@@ -36,13 +42,20 @@ export type ParseResult = { ok: true; graph: NodeGraphData } | { ok: false; erro
 class Bad extends Error {}
 function fail(path: string, why: string): never { throw new Bad(`${path}: ${why}`); }
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
-const str = (v: unknown, p: string): string => (typeof v === 'string' && v.trim() ? v : fail(p, tr('要是非空字符串')));
-const optStr = (v: unknown, p: string): string | undefined => (v === undefined || v === null ? undefined : typeof v === 'string' ? v : fail(p, tr('要是字符串')));
+/** text shown on the canvas: past NG_MAX_TEXT characters it ends in … (ids are never cut — edges and marks refer to them) */
+const cut = (t: string): string => (t.length <= NG_MAX_TEXT || [...t].length <= NG_MAX_TEXT ? t : [...t].slice(0, NG_MAX_TEXT - 1).join('') + '…');
+const id = (v: unknown, p: string): string => (typeof v === 'string' && v.trim() ? v : fail(p, tr('要是非空字符串')));
+const str = (v: unknown, p: string): string => cut(id(v, p));
+const optId = (v: unknown, p: string): string | undefined => (v === undefined || v === null ? undefined : typeof v === 'string' ? v : fail(p, tr('要是字符串')));
+const optStr = (v: unknown, p: string): string | undefined => { const t = optId(v, p); return t === undefined ? t : cut(t); };
 const optNum = (v: unknown, p: string): number | undefined => (v === undefined || v === null ? undefined : typeof v === 'number' && Number.isFinite(v) ? v : fail(p, tr('要是数字')));
+const optXY = (v: unknown, p: string): number | undefined => { const n = optNum(v, p); return n === undefined ? n : Math.max(-NG_MAX_XY, Math.min(NG_MAX_XY, n)); };
 const arr = (v: unknown, p: string): unknown[] => (v === undefined ? [] : Array.isArray(v) ? v : fail(p, tr('要是数组')));
+const capped = (v: unknown, p: string, max: number): unknown[] => { const a = arr(v, p); return a.length > max ? fail(p, tr('太多了（最多 {max} 个）', { max })) : a; };
 const styleOf = (v: unknown, p: string): EdgeStyle => (v === undefined ? 'normal' : (EDGE_STYLES as readonly unknown[]).includes(v) ? (v as EdgeStyle) : fail(p, tr('不认识的线样式 {style}（只能是 normal / strong / error / dashed）', { style: String(v) })));
 
 export function parseNodeGraph(text: string): ParseResult {
+  if (text.length > NG_MAX_SOURCE / 4 && new TextEncoder().encode(text).length > NG_MAX_SOURCE) return { ok: false, error: tr('这张图太大了（最多 {kb} KB）', { kb: NG_MAX_SOURCE / 1024 }) };
   let raw: unknown;
   try { raw = JSON.parse(text); } catch (e) { return { ok: false, error: tr('不是 JSON：{msg}', { msg: (e as Error).message }) }; }
   return normalizeNodeGraph(raw);
@@ -68,53 +81,64 @@ function build(raw: unknown): NodeGraphData {
   edgesIn.forEach((e, i) => {
     const p = `edges[${i}]`;
     if (!isObj(e)) fail(p, tr('要是一个对象'));
-    const from = str(e.from, `${p}.from`);
-    const to = str(e.to, `${p}.to`);
+    const from = id(e.from, `${p}.from`);
+    const to = id(e.to, `${p}.to`);
     if (!byId.has(from)) fail(`${p}.from`, tr('没有 id 为 {id} 的卡片', { id: from }));
     if (!byId.has(to)) fail(`${p}.to`, tr('没有 id 为 {id} 的卡片', { id: to }));
-    const fr = optStr(e.fromRow, `${p}.fromRow`);
+    const fr = optId(e.fromRow, `${p}.fromRow`);
     let fromRow: string | undefined;
     if (fr !== undefined) {
       const row = byId.get(from)!.rows.find((x) => x.id === fr || x.label === fr);
       if (!row) fail(`${p}.fromRow`, tr('{row} 不是卡片 {node} 里的一行', { row: fr, node: from }));
       fromRow = row.id;
     }
-    let id = optStr(e.id, `${p}.id`);
-    if (id !== undefined && ids.has(id)) fail(`${p}.id`, tr('线 id 重复：{id}', { id }));
-    if (id === undefined) { id = `${from}>${to}`; for (let k = 2; ids.has(id); k++) id = `${from}>${to}#${k}`; }
-    ids.add(id);
+    let eid = optId(e.id, `${p}.id`);
+    if (eid !== undefined && ids.has(eid)) fail(`${p}.id`, tr('线 id 重复：{id}', { id: eid }));
+    if (eid === undefined) { eid = `${from}>${to}`; for (let k = 2; ids.has(eid); k++) eid = `${from}>${to}#${k}`; }
+    ids.add(eid);
     const pulse = e.pulse === undefined ? undefined : typeof e.pulse === 'boolean' ? e.pulse : fail(`${p}.pulse`, tr('要是 true 或 false'));
-    edges.push({ id, from, to, fromRow, label: optStr(e.label, `${p}.label`), style: styleOf(e.style, `${p}.style`), pulse });
+    edges.push({ id: eid, from, to, fromRow, label: optStr(e.label, `${p}.label`), style: styleOf(e.style, `${p}.style`), pulse });
   });
   nodes.forEach((n, i) => n.rows.forEach((r, j) => r.options.forEach((o, k) => {
     for (const eid of Object.keys(o.marks)) if (!ids.has(eid)) fail(`nodes[${i}].rows[${j}].options[${k}].marks`, tr('没有 id 为 {id} 的线', { id: eid }));
   })));
   // only now (the error paths above use the author's indexes): a value that is not among its options comes first
-  for (const n of nodes) for (const r of n.rows) if (r.options.length && !r.options.some((o) => o.value === r.value)) r.options.unshift({ value: r.value, label: r.value, marks: {} });
+  for (const n of nodes) for (const r of n.rows) if (r.options.length && !r.options.some((o) => o.value === r.value)) r.options.unshift({ value: r.value, label: r.value, marks: dict() });
   return { title: optStr(raw.title, 'title'), subtitle: optStr(raw.subtitle, 'subtitle'), badge: badge(raw.badge), nodes, edges };
 }
 
 function node(v: unknown, p: string): NgNode {
   if (!isObj(v)) fail(p, tr('要是一个对象'));
-  const id = str(v.id, `${p}.id`);
+  const nid = id(v.id, `${p}.id`);
   const title = str(v.title, `${p}.title`);
-  const rows = arr(v.rows, `${p}.rows`).map((r, j) => row(r, `${p}.rows[${j}]`, j));
+  const rowsIn = capped(v.rows, `${p}.rows`, NG_MAX_ROWS);
+  const given = rowsIn.map((r, j) => (isObj(r) ? optId(r.id, `${p}.rows[${j}].id`) : undefined));
   const seen = new Set<string>();
-  rows.forEach((r, j) => { if (seen.has(r.id)) fail(`${p}.rows[${j}].id`, tr('行 id 重复：{id}', { id: r.id })); seen.add(r.id); });
+  given.forEach((g, j) => { if (g === undefined) return; if (seen.has(g)) fail(`${p}.rows[${j}].id`, tr('行 id 重复：{id}', { id: g })); seen.add(g); });
+  // a row without an id gets r<j> — or r<j>_2 … when the author named another row that (review D-minor)
+  const rows = rowsIn.map((r, j) => {
+    let rid = given[j];
+    if (rid === undefined) { rid = `r${j}`; for (let k = 2; seen.has(rid); k++) rid = `r${j}_${k}`; seen.add(rid); }
+    return row(r, `${p}.rows[${j}]`, rid);
+  });
   const state = v.state === undefined ? undefined : (NODE_STATES as readonly unknown[]).includes(v.state) ? (v.state as NodeState) : fail(`${p}.state`, tr('不认识的状态 {state}', { state: String(v.state) }));
-  return { id, title, subtitle: optStr(v.subtitle, `${p}.subtitle`), icon: optStr(v.icon, `${p}.icon`), rows, list: v.list === undefined ? undefined : list(v.list, `${p}.list`), state, x: optNum(v.x, `${p}.x`), y: optNum(v.y, `${p}.y`) };
+  return { id: nid, title, subtitle: optStr(v.subtitle, `${p}.subtitle`), icon: optStr(v.icon, `${p}.icon`), rows, list: v.list === undefined ? undefined : list(v.list, `${p}.list`), state, x: optXY(v.x, `${p}.x`), y: optXY(v.y, `${p}.y`) };
 }
 
-function row(v: unknown, p: string, j: number): NgRow {
+function row(v: unknown, p: string, rid: string): NgRow {
   if (!isObj(v)) fail(p, tr('要是一个对象'));
-  return { id: optStr(v.id, `${p}.id`) ?? `r${j}`, label: str(v.label, `${p}.label`), value: str(v.value, `${p}.value`), options: arr(v.options, `${p}.options`).map((o, k) => option(o, `${p}.options[${k}]`)) };
+  const label = str(v.label, `${p}.label`), value = str(v.value, `${p}.value`);
+  // the same value twice: the first one is the option (review D-minor)
+  const options: NgOption[] = [];
+  capped(v.options, `${p}.options`, NG_MAX_OPTIONS).forEach((o, k) => { const x = option(o, `${p}.options[${k}]`); if (!options.some((y) => y.value === x.value)) options.push(x); });
+  return { id: rid, label, value, options };
 }
 
 function option(v: unknown, p: string): NgOption {
-  if (typeof v === 'string') return { value: v, label: v, marks: {} };
+  if (typeof v === 'string') { const t = cut(v); return { value: t, label: t, marks: dict() }; }
   if (!isObj(v)) fail(p, tr('要是字符串或对象'));
   const value = str(v.value, `${p}.value`);
-  const marks: Record<string, EdgeStyle> = {};
+  const marks = dict<EdgeStyle>();
   if (v.marks !== undefined) {
     if (!isObj(v.marks)) fail(`${p}.marks`, tr('要是一个对象'));
     for (const [k, s] of Object.entries(v.marks)) marks[k] = styleOf(s, `${p}.marks`);
@@ -124,14 +148,15 @@ function option(v: unknown, p: string): NgOption {
 
 function list(v: unknown, p: string): NgList {
   if (!isObj(v)) fail(p, tr('要是一个对象'));
-  return {
-    title: str(v.title, `${p}.title`),
-    items: arr(v.items, `${p}.items`).map((x, k) => {
-      if (typeof x === 'string') return { text: x, tags: [] };
-      if (!isObj(x)) fail(`${p}.items[${k}]`, tr('要是字符串或对象'));
-      return { text: str(x.text, `${p}.items[${k}].text`), tags: arr(x.tags, `${p}.items[${k}].tags`).map((t, m) => str(t, `${p}.items[${k}].tags[${m}]`)) };
-    }),
-  };
+  const all = arr(v.items, `${p}.items`);
+  // a list is only read: past NG_MAX_ITEMS the rest is one line saying how many; past NG_MAX_TAGS tags are dropped
+  const items: NgListItem[] = all.slice(0, all.length > NG_MAX_ITEMS ? NG_MAX_ITEMS - 1 : NG_MAX_ITEMS).map((x, k) => {
+    if (typeof x === 'string') return { text: cut(x), tags: [] };
+    if (!isObj(x)) fail(`${p}.items[${k}]`, tr('要是字符串或对象'));
+    return { text: str(x.text, `${p}.items[${k}].text`), tags: arr(x.tags, `${p}.items[${k}].tags`).slice(0, NG_MAX_TAGS).map((t, m) => str(t, `${p}.items[${k}].tags[${m}]`)) };
+  });
+  if (all.length > NG_MAX_ITEMS) items.push({ text: tr('…还有 {n} 项', { n: all.length - items.length }), tags: [] });
+  return { title: str(v.title, `${p}.title`), items };
 }
 
 function badge(v: unknown): NgBadge | undefined {

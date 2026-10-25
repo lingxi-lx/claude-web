@@ -31,6 +31,30 @@ describe('NodeGraph markup', () => {
     expect(h).not.toContain('<animateMotion');
     expect(h).toContain('data-motion="off"');
   });
+  it('no travelling dots above 300 edges (review D3)', () => {
+    const nodes = Array.from({ length: 30 }, (_, i) => ({ id: `n${i}`, title: `n${i}`, rows: [] }));
+    const edges = Array.from({ length: 301 }, (_, i) => ({ id: `e${i}`, from: `n${i % 30}`, to: `n${(i * 7 + 1) % 30}`, style: 'strong' as const }));
+    expect(renderToStaticMarkup(<NodeGraph graph={{ nodes, edges }} ariaLabel="t" />)).toContain('data-motion="off"');
+  });
+  it('only cards that can be picked are Tab stops (review D-minor)', () => {
+    const h = html({ onSelect: () => {}, canSelect: (id) => id === 'link' });
+    expect(h.match(/class="ng-card[^"]*"[^>]*tabindex="0"/g)).toHaveLength(1);
+    expect(h).toMatch(/data-node="link"[^>]*tabindex="0"/);
+    expect(h.match(/tabindex="-1"/g)).toHaveLength(4);
+    expect(html().match(/tabindex="-1"/g)).toHaveLength(5);
+  });
+  it('the ok badge carries a ✓ (review D-minor)', () => {
+    const h = html({ picks: { ...initialPicks(g), 'link/read': 'Admin' } });
+    expect(h).toMatch(/class="ng-badge" data-tone="ok"[^>]*><svg/);
+  });
+  it('a card whose id is a name on every object still renders (review D1)', () => {
+    const tricky = normalizeNodeGraph({ nodes: [{ id: 'constructor', title: 'C' }, { id: '__proto__', title: 'P' }], edges: [{ from: 'constructor', to: '__proto__', label: 'x' }] });
+    if (!tricky.ok) throw new Error(tricky.error);
+    const h = renderToStaticMarkup(<NodeGraph graph={tricky.graph} ariaLabel="t" />);
+    expect(h).toContain('data-node="__proto__"');
+    expect(h).toContain('data-edge="constructor&gt;__proto__"');
+    expect(h).not.toContain('NaN');
+  });
   it('rows without onPick are plain text', () => {
     expect(html()).toMatch(/data-row="read"[^]*?class="v">Anyone</);
   });

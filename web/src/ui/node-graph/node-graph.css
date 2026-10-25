@@ -1,5 +1,6 @@
 /* spec 2026-10-24 D1 — the shared node graph. Sizes come from layout.ts through the --ng-* variables set inline. */
-.ng { position: relative; overflow: hidden; border-radius: var(--r-lg); color: var(--ink-1); font-family: var(--font); user-select: none;
+/* overflow: clip, not hidden — a focused card must not scroll the box under the transform (review D6) */
+.ng { position: relative; overflow: clip; border-radius: var(--r-lg); color: var(--ink-1); font-family: var(--font); user-select: none;
   background-color: color-mix(in oklab, var(--bg) 82%, var(--bg-2));
   background-image: radial-gradient(circle, var(--edge-subtle) 1px, transparent 1.4px);
   --ng-strong: var(--accent); --ng-error: var(--err); --ng-line: var(--edge-strong); }
@@ -9,6 +10,7 @@
 .ng-badge { position: absolute; right: 12px; top: 12px; z-index: 2; display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 999px;
   font-size: var(--fs-meta); font-weight: 600; background: var(--fill-subtle); color: var(--ink-2); transition: background var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out); }
 .ng-badge[data-tone='error'] { background: var(--err-soft); color: color-mix(in oklab, var(--err) 80%, var(--ink-1)); }
+.ng-badge[data-tone='strong'] { background: color-mix(in oklab, var(--ng-strong) 16%, transparent); color: color-mix(in oklab, var(--ng-strong) 80%, var(--ink-1)); }
 .ng-badge[data-tone='ok'] { background: var(--ok-soft); color: color-mix(in oklab, var(--ok) 80%, var(--ink-1)); }
 .ng-viewport { position: absolute; inset: 0; cursor: grab; touch-action: none; outline: none; }
 .ng-viewport:focus-visible { box-shadow: inset 0 0 0 2px var(--focus-ring); }
@@ -71,6 +73,8 @@
 @keyframes ng-breathe { 50% { opacity: 0.32; } }
 :root[data-reduce-motion='1'] .ng, :root[data-reduce-motion='1'] .ng * { animation: none !important; transition: none !important; }
 @media (prefers-reduced-motion: reduce) { .ng, .ng * { animation: none !important; transition: none !important; } }
+/* scrolled out of view: nothing keeps animating (review D-minor) */
+.ng[data-offscreen], .ng[data-offscreen] * { animation-play-state: paused !important; }
 /* chat: ```nodegraph blocks and the Mermaid 节点图 / 原图 switch (spec D4) */
 .code.ng-block { padding: 0; background: transparent; border: 0; }
 .ng-foot { display: flex; gap: 12px; align-items: center; padding: 6px 2px 0; font-size: var(--fs-meta); }

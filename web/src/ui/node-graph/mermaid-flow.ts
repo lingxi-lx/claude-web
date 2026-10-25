@@ -5,7 +5,9 @@ import { NG_MAX_NODES, normalizeNodeGraph, type EdgeStyle, type NgEdgeIn, type N
 
 export type FlowResult = { ok: true; graph: NodeGraphData } | { ok: false; reason: string };
 const HEADER = /^(?:flowchart|graph)\b(?:\s+(?:LR|RL|TD|TB|BT))?\s*$/i;
-const SKIP = /^(?:classDef|class|style|linkStyle|click|direction|accTitle|accDescr|subgraph|end)\b/;
+// only the keyword forms (`class A hot`, `style B fill:…`, a bare `end`): a node named class / style / click is a node
+// (review D-minor) — what follows the keyword is not a link or an & group
+const SKIP = /^(?:(?:classDef|class|style|linkStyle|click|direction|subgraph)\s+(?![-=.&<|])|acc(?:Title|Descr)\s*[:{]|end\s*$|subgraph\s*$)/;
 const SHAPES: [string, ...string[]][] = [['([', '])'], ['[[', ']]'], ['[(', ')]'], ['((', '))'], ['{{', '}}'], ['[/', '/]', '\\]'], ['[\\', '\\]', '/]'], ['>', ']'], ['[', ']'], ['(', ')'], ['{', '}']];
 const ID = /^[\p{L}\p{N}_]+/u;
 const ARROW = /^<?(?:-{2,}>|-{3,}|={2,}>|={3,}|-\.+->|-\.+-|--[xo]|==[xo])/;

@@ -143,6 +143,9 @@ export interface OpenSessionParams {
   /** Server-set: the prompt-cache route key when it is not this session's id — a fork's root (its prefix is the
    *  parent's), kept in `SessionMeta.cacheKey` for later reopens (runtime/cache-key.ts). */
   cacheParentId?: string;
+  /** Server-set: the run is driven from IM, a scheduled task or the orchestra — its replies are not read in Claude Web
+   *  first, so no ```nodegraph hint (review D-minor) */
+  drivenBy?: 'im' | 'schedule' | 'orchestra';
 }
 
 /** The single runtime that drives every session: our engine claude-web-engine (runtime 'ccb': a fork of claude-code-best, a superset of Claude Code) with the official binary as silent fallback. */

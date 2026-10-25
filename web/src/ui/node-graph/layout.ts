@@ -1,4 +1,4 @@
-import type { NgEdge, NgNode } from './schema';
+import { dict, own, type NgEdge, type NgNode } from './schema';
 // spec D1: columns from the edges (orchestra's topological layering, moved here), variable-height cards, bezier edges.
 
 export interface LayerIn { id: string; dependsOn: string[] }
@@ -43,7 +43,7 @@ export interface LayoutOpts { cardW?: number; gapX?: number; gapY?: number; pad?
 export interface Placed { boxes: Record<string, Box>; width: number; height: number; cols: string[][] }
 
 export function layoutNodes(nodes: NgNode[], edges: NgEdge[], o: LayoutOpts = {}): Placed {
-  if (!nodes.length) return { boxes: {}, width: 0, height: 0, cols: [] };
+  if (!nodes.length) return { boxes: dict(), width: 0, height: 0, cols: [] };
   const cardW = o.cardW ?? NG_CARD_W, gapX = o.gapX ?? NG_GAP_X, gapY = o.gapY ?? NG_GAP_Y, pad = o.pad ?? NG_PAD;
   const deps = new Map<string, string[]>(nodes.map((n) => [n.id, []]));
   for (const e of edges) if (e.from !== e.to && deps.has(e.from) && deps.has(e.to)) deps.get(e.to)!.push(e.from);
@@ -51,7 +51,7 @@ export function layoutNodes(nodes: NgNode[], edges: NgEdge[], o: LayoutOpts = {}
   const size = new Map(nodes.map((n) => [n.id, cardSize(n, cardW)]));
   const colH = cols.map((c) => c.reduce((h, n) => h + size.get(n.id)!.h, 0) + Math.max(0, c.length - 1) * gapY);
   const tallest = Math.max(...colH);
-  const boxes: Record<string, Box> = {};
+  const boxes = dict<Box>();
   cols.forEach((c, ci) => {
     let y = pad + (o.align === 'top' ? 0 : (tallest - colH[ci]) / 2);
     for (const n of c) { const s = size.get(n.id)!; boxes[n.id] = { x: pad + ci * (cardW + gapX), y, ...s }; y += s.h + gapY; }
@@ -62,13 +62,18 @@ export function layoutNodes(nodes: NgNode[], edges: NgEdge[], o: LayoutOpts = {}
 }
 
 export function moveBoxes(boxes: Record<string, Box>, offsets: Readonly<Record<string, { dx: number; dy: number }>>): Record<string, Box> {
-  const out: Record<string, Box> = {};
-  for (const [id, b] of Object.entries(boxes)) { const d = offsets[id]; out[id] = d ? { ...b, x: b.x + d.dx, y: b.y + d.dy } : b; }
+  const out = dict<Box>();
+  for (const [id, b] of Object.entries(boxes)) { const d = own(offsets, id); out[id] = d ? { ...b, x: b.x + d.dx, y: b.y + d.dy } : b; }
   return out;
 }
 
 const r1 = (v: number) => Math.round(v * 10) / 10;
-export interface EdgeGeom { id: string; d: string; mid: { x: number; y: number }; len: number }
+export interface EdgeGeom { id: string; d: string; mid: { x: number; y: number }; len: number; /** the bezier's 4 points, x / y pairs */ p: number[] }
+/** a point on the cubic bezier `p` (x / y pairs) */
+export function bezierAt(p: readonly number[], t: number): { x: number; y: number } {
+  const u = 1 - t, k = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
+  return { x: k[0] * p[0] + k[1] * p[2] + k[2] * p[4] + k[3] * p[6], y: k[0] * p[1] + k[1] * p[3] + k[2] * p[5] + k[3] * p[7] };
+}
 
 export function edgeGeom(id: string, a: Box, b: Box, row: number | null): EdgeGeom {
   const x1 = a.x + a.w, y1 = a.y + (row === null ? Math.min(a.h, NG_HEAD_H) / 2 : rowAnchor(row));
@@ -76,15 +81,35 @@ export function edgeGeom(id: string, a: Box, b: Box, row: number | null): EdgeGe
   // backwards edges (a cycle in a draft, a dragged card) bow out instead of cutting through the cards
   const dx = x2 > x1 ? Math.max(30, (x2 - x1) / 2) : 80;
   const p = [x1, y1, x1 + dx, y1, x2 - dx, y2, x2, y2];
-  const at = (t: number) => { const u = 1 - t; const k = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t]; return { x: k[0] * p[0] + k[1] * p[2] + k[2] * p[4] + k[3] * p[6], y: k[0] * p[1] + k[1] * p[3] + k[2] * p[5] + k[3] * p[7] }; };
+  const at = (t: number) => bezierAt(p, t);
   let len = 0, prev = at(0);
   for (let i = 1; i <= 16; i++) { const q = at(i / 16); len += Math.hypot(q.x - prev.x, q.y - prev.y); prev = q; }
   const m = at(0.5);
-  return { id, d: `M${r1(p[0])},${r1(p[1])} C${r1(p[2])},${r1(p[3])} ${r1(p[4])},${r1(p[5])} ${r1(p[6])},${r1(p[7])}`, mid: { x: r1(m.x), y: r1(m.y) }, len };
+  return { id, d: `M${r1(p[0])},${r1(p[1])} C${r1(p[2])},${r1(p[3])} ${r1(p[4])},${r1(p[5])} ${r1(p[6])},${r1(p[7])}`, mid: { x: r1(m.x), y: r1(m.y) }, len, p };
 }
 
 export function labelWidth(text: string, fs = 11): number {
   let w = 0;
   for (const ch of text) w += /[\u2E80-\uFFFF]/.test(ch) ? fs : fs * 0.6;
   return Math.round(w + 12);
+}
+
+export const NG_LABEL_H = 18;
+const LABEL_TS = [0.5, 0.38, 0.62, 0.28, 0.72, 0.2, 0.8];
+/**
+ * review D-minor: where each edge label sits — the middle of its edge, or, when that would cover a label already
+ * placed (edges leaving the same card bunch up there), further along its own edge. Pure, in order.
+ */
+export function placeLabels(items: readonly { id: string; p: readonly number[]; w: number }[]): Record<string, { x: number; y: number }> {
+  const out: Record<string, { x: number; y: number }> = Object.create(null);
+  const placed: { x: number; y: number; w: number }[] = [];
+  const hits = (q: { x: number; y: number }, w: number) => placed.some((o) => Math.abs(o.x - q.x) * 2 < o.w + w + 4 && Math.abs(o.y - q.y) < NG_LABEL_H + 2);
+  for (const it of items) {
+    let at = bezierAt(it.p, 0.5);
+    for (const t of LABEL_TS) { const q = bezierAt(it.p, t); if (!hits(q, it.w)) { at = q; break; } }
+    const q = { x: r1(at.x), y: r1(at.y) };
+    placed.push({ ...q, w: it.w });
+    out[it.id] = q;
+  }
+  return out;
 }

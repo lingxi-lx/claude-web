@@ -23,6 +23,12 @@ describe('marks and the badge', () => {
   it('an option without marks leaves the edges as they are', () => {
     expect(edgeStyles(g, { 'link/write': 'Team' })).toEqual(edgeStyles(g, {}));
   });
+  it('the badge tone follows the counted style (review D-minor)', () => {
+    const st = { a: 'strong', b: 'dashed', c: 'normal' } as const;
+    expect(badgeView({ kind: 'count', count: 'strong', text: '{n} hot', okText: 'calm' }, st)).toEqual({ text: '1 hot', tone: 'strong' });
+    expect(badgeView({ kind: 'count', count: 'dashed', text: '{n} off', okText: 'all on' }, st)).toEqual({ text: '1 off', tone: 'plain' });
+    expect(badgeView({ kind: 'count', count: 'error', text: '{n}', okText: 'fine' }, st)).toEqual({ text: 'fine', tone: 'ok' });
+  });
   it('a plain badge, and none', () => {
     expect(badgeView({ kind: 'text', text: 'draft' }, {})).toEqual({ text: 'draft', tone: 'plain' });
     expect(badgeView(undefined, {})).toBeNull();
@@ -39,5 +45,13 @@ describe('marks and the badge', () => {
     expect(changeSentence(g, init, init)).toBe('');
     expect(changeSentence(g, init, { ...init, 'link/read': 'Admin' })).toBe('我在图里把「Share link」的 read 从 Anyone 改成了 Admin。');
     expect(changeSentence(g, init, { 'link/read': 'Admin', 'link/write': 'Team' })).toBe('我在图里把「Share link」的 read 从 Anyone 改成了 Admin；「Share link」的 write 从 Admin 改成了 Team。');
+  });
+  it('edge ids that are names on every object (review D1)', () => {
+    const r = normalizeNodeGraph({ nodes: [{ id: 'a', title: 'A', rows: [{ id: 'k', label: 'k', value: 'on', options: [{ value: 'on', marks: { constructor: 'error' } }, 'off'] }] }, { id: 'b', title: 'B' }], edges: [{ id: 'constructor', from: 'a', to: 'b' }, { id: 'toString', from: 'b', to: 'a' }] });
+    if (!r.ok) throw new Error(r.error);
+    const s = edgeStyles(r.graph, {});
+    expect({ ...s }).toEqual({ constructor: 'error', toString: 'normal' });
+    expect(edgeStyles(r.graph, { 'a/k': 'off' }).constructor).toBe('normal');
+    expect(badgeView({ kind: 'count', count: 'error', text: '{n}', okText: 'ok' }, s)?.text).toBe('1');
   });
 });

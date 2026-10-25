@@ -6,7 +6,6 @@
 // 设置 / 说明 are saved together through `workspaces.update` (a folder that no longer exists is refused by the server:
 // toast, the dialog stays); 资料 act at once. Opened from the project's ··· menu (`openProjectDialog`).
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { create } from 'zustand';
 import type { PermissionMode, ProjectFile, Workspace } from '@shared';
 import { useStore } from '@/store';
 import { ws } from '@/ws/client';
@@ -20,9 +19,9 @@ import { tr } from '@/i18n';
 import { projectSessions, uploadTo } from '@/features/cloud/logic';
 import { isWinPath, samePath } from './project-paths';
 
-export type ProjectTab = 'settings' | 'instructions' | 'files' | 'conversations';
-const useProjectDialog = create<{ id: string | null; tab: ProjectTab }>(() => ({ id: null, tab: 'settings' }));
-export const openProjectDialog = (w: Pick<Workspace, 'id'>, tab: ProjectTab = 'settings') => useProjectDialog.setState({ id: w.id, tab });
+import { useProjectDialog, type ProjectTab } from './project-dialog-open';
+// opening it lives in project-dialog-open.ts (this module is loaded on first open — review X1)
+export { openProjectDialog, type ProjectTab } from './project-dialog-open';
 const close = () => useProjectDialog.setState({ id: null });
 
 const TABS: { id: ProjectTab; label: () => string }[] = [

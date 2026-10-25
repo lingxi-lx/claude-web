@@ -3313,6 +3313,9 @@ function driver() {
         check('```nodegraph: title, red badge 「1 open path」, error / dashed edges, 5 labels, the list under a card, − N% + control', !!first && first.title === 'Access settings' && /1 open path/.test(first.badge) && first.tone === 'error' && first.open === 'error' && first.dashed === 'dashed' && first.labels === 5 && first.list === 4 && /^\d+%$/.test(first.pct), JSON.stringify(first));
         check('the red path carries a travelling dot while motion is on', !!first && first.motion === 'on' && first.dots >= 1, JSON.stringify(first));
         await shot('node-graph-sample');
+        // review D4: the canvas is as tall as the cards need at the reply's width — no empty band under them, the title row free
+        const band = drawn && await js(`(() => { const v = document.querySelector('${G} .ng-viewport').getBoundingClientRect(); const cs = [...document.querySelectorAll('${G} .ng-card')].map((c) => c.getBoundingClientRect()); return { gap: Math.round(v.bottom - Math.max(...cs.map((c) => c.bottom))), top: Math.round(Math.min(...cs.map((c) => c.top)) - v.top), h: Math.round(v.height), pct: document.querySelector('${G} .ng-zoom-pct').textContent }; })()`);
+        check('```nodegraph in a reply: no empty band under the cards, the title row kept free (review D4)', !!band && band.gap <= 96 && band.top >= 40, JSON.stringify(band));
         if (drawn) {
           // 减少动画 (the in-app setting): no travelling dot, no breathing glow
           await js(`window.__store.getState().setSetting('ui.reduceMotion', true)`);
@@ -3324,6 +3327,17 @@ function driver() {
           // − N% +, then the wheel (the shared A3 rule: taken over the graph, Shift left to the page)
           const pctOf = () => js(`parseInt(document.querySelector('${G} .ng-zoom-pct').textContent, 10)`);
           const p0 = await pctOf();
+          // review D5: in a reply the graph takes the wheel only once it was clicked / focused — before that the page scrolls
+          await js(`(() => { document.activeElement?.blur?.(); window.__ngW0 = []; window.__ngW0On = (e) => window.__ngW0.push(e.defaultPrevented); addEventListener('wheel', window.__ngW0On, { passive: true }); })()`);
+          {
+            const r = await js(`(() => { const r = document.querySelector('${G} .ng-viewport').getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+            wc.sendInputEvent({ type: 'mouseMove', x: r.x, y: r.y }); wc.sendInputEvent({ type: 'mouseWheel', x: r.x, y: r.y, deltaX: 0, deltaY: 120 }); await sleep(250);
+          }
+          const w0 = await js(`(() => { removeEventListener('wheel', window.__ngW0On, { passive: true }); return window.__ngW0; })()`);
+          const pw = await pctOf();
+          check('in a reply, before the graph was clicked, the wheel is left to the page (review D5)', pw === p0 && w0.length >= 1 && w0.every((x) => x === false), `${p0}→${pw} ${JSON.stringify(w0)}`);
+          await js(`document.querySelector('${G}')?.scrollIntoView({ block: 'center' })`);
+          await sleep(300);
           await click(`${G} .ng-zoom-in`); await sleep(100); const p1 = await pctOf();
           await click(`${G} .ng-zoom-out`); await sleep(100); const p2 = await pctOf();
           check('zoom control: + is about ×1.2, − comes back', Math.abs(p1 - Math.round(p0 * 1.2)) <= 1 && Math.abs(p2 - p0) <= 1, `${p0} ${p1} ${p2}`);
@@ -3399,6 +3413,8 @@ function driver() {
         const orchUp = await waitFor(`document.querySelectorAll('${OG} .ng-card').length === 3`, 8000);
         const og = await js(`({ run: document.querySelector('${OG} .ng-card[data-node="build"]')?.dataset.state, edge: document.querySelector('${OG} .ng-edge[data-edge="plan>build"]')?.dataset.style })`);
         check('orchestra run view: the running step glows, the edge into it is strong', orchUp && og.run === 'running' && og.edge === 'strong', JSON.stringify(og));
+        const oh = await js(`(() => { const g = document.querySelector('${OG}'); const v = g?.querySelector('.ng-viewport')?.getBoundingClientRect(); return { h: v ? Math.round(v.height) : 0, tip: g?.querySelector('.ng-card[data-node="build"]')?.getAttribute('title') ?? null }; })()`);
+        check('orchestra: the graph is as tall as its cards need (160–420), a card names itself on hover (review D5)', oh.h >= 160 && oh.h <= 420 && oh.tip === 'build', JSON.stringify(oh));
         await shot('node-graph-orchestra');
         await js(`window.__cwOrch.inject(${JSON.stringify(orun('failed'))})`);
         const red = await waitFor(`document.querySelector('${OG} .ng-edge[data-edge="plan>build"]')?.dataset.style === 'error'`, 3000);

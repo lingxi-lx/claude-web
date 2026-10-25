@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { wheelZoom } from '@/ui/wheel-zoom';
-import { entranceTimes, fitView, motionOn, NG_ZOOM, pct, zoomAt, zoomBy } from './viewport';
+import { chatFit, entranceTimes, fitHeight, fitView, motionOn, NG_ZOOM, panToShow, pct, zoomAt, zoomBy } from './viewport';
 
 describe('viewport', () => {
   it('fit: centred, never above max', () => {
@@ -29,10 +29,32 @@ describe('viewport', () => {
     expect(wheelZoom(NG_ZOOM.max, { deltaY: -100, shiftKey: false }, NG_ZOOM)).toBeNull();
     expect(wheelZoom(1, { deltaY: -100, shiftKey: true }, NG_ZOOM)).toBeNull();
   });
-  it('no animation when reduced or above 150 cards', () => {
-    expect(motionOn(150, false)).toBe(true);
-    expect(motionOn(151, false)).toBe(false);
-    expect(motionOn(3, true)).toBe(false);
+  it('no animation when reduced or above 150 cards / 300 edges', () => {
+    expect(motionOn(150, 0, false)).toBe(true);
+    expect(motionOn(151, 0, false)).toBe(false);
+    expect(motionOn(3, 0, true)).toBe(false);
+    expect(motionOn(3, 300, false)).toBe(true);
+    expect(motionOn(3, 301, false)).toBe(false);
+  });
+  it('fit: room for the title and the zoom buttons; a graph too wide for the minimum starts at the top left (review D4)', () => {
+    expect(fitView({ w: 400, h: 200 }, { w: 432, h: 300 }, { max: 1, top: 56, bottom: 44 })).toEqual({ scale: 1, x: 16, y: 56 });
+    expect(fitView({ w: 2000, h: 200 }, { w: 632, h: 300 }, { min: 0.6, max: 1, top: 56, bottom: 44, start: true })).toEqual({ scale: 0.6, x: 16, y: 56 + (200 - 120) / 2 });
+  });
+  it('chat sizing: the width sets the scale, the height follows it — no empty band (review D4)', () => {
+    const o = chatFit(true);
+    expect(fitHeight({ w: 1180, h: 400 }, 640, o)).toEqual({ scale: 0.6, height: 340 });
+    expect(fitHeight({ w: 600, h: 400 }, 832, o)).toEqual({ scale: 1, height: 500 });
+    expect(fitHeight({ w: 600, h: 900 }, 832, o).height).toBe(560);
+    expect(fitHeight({ w: 300, h: 60 }, 832, chatFit(false)).height).toBe(200);
+    // the fitted view at that height is that scale (the title row and the zoom buttons keep their room)
+    const { scale, height } = fitHeight({ w: 800, h: 400 }, 700, o);
+    expect(fitView({ w: 800, h: 400 }, { w: 700, h: height }, { ...o, start: true }).scale).toBeCloseTo(scale);
+  });
+  it('a focused card is panned into view (review D6)', () => {
+    const v = { scale: 1, x: 0, y: 0 };
+    expect(panToShow(v, { x: 20, y: 20, w: 100, h: 50 }, { w: 400, h: 300 })).toBe(v);
+    expect(panToShow(v, { x: 500, y: 20, w: 100, h: 50 }, { w: 400, h: 300 })).toEqual({ scale: 1, x: -216, y: 0 });
+    expect(panToShow({ scale: 0.5, x: 0, y: 0 }, { x: -100, y: 700, w: 100, h: 50 }, { w: 400, h: 300 }, { bottom: 44 })).toEqual({ scale: 0.5, x: 66, y: -119 });
   });
   it('cards one after another, then the edges', () => {
     const t = entranceTimes(3, 2);

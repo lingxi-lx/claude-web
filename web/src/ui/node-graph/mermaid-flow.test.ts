@@ -37,4 +37,9 @@ describe('mermaid flowchart → node graph', () => {
       expect(flowchartToGraph(s).ok, s).toBe(false);
     }
   });
+  it('node ids that are names on every object, and ids named like the skipped keywords (review D1 / D-minor)', () => {
+    expect(edges('flowchart LR\nconstructor --> __proto__\ntoString --> constructor')).toEqual(['constructor>__proto__:normal', 'toString>constructor:normal']);
+    expect(edges('flowchart LR\nclass --> style\nclick --> end2\nstyle --- click')).toEqual(['class>style:normal', 'click>end2:normal', 'style>click:normal']);
+    expect(ok('flowchart LR\nA --> B\nclass A hot\nstyle B fill:#0f0\nclick A cb\ndirection LR').edges).toHaveLength(1);
+  });
 });
