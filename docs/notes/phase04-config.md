@@ -13,3 +13,9 @@
 - **桌面壳**：`electron-updater`（GitHub Releases，`electron-builder.yml` 的 `publish`，开发模式直接报「不检查更新」）；退出守卫统计运行中会话 + 待处理权限 + 未保存文件，`ui.confirmExit` / `ui.closeToTray` 可关；`flags.json` 里的 `softwareRender` 在 `ready` 前 `disableHardwareAcceleration()`，GPU 进程连挂两次自动写标记重启；`ui.softwareRender` 设置通过 `desktop.setFlags` 同步。
 - 诊断包：`diag.bundle` → `~/.claude-web/diagnostics/<ts>/`（info.json、server.log / main.log 尾部、脱敏 meta.json 与 settings.json）+ tar。
 - `server/ws-phase4.mjs`：skills / tools / secrets 迁移 / cron / 账本 / 诊断 / 注册表 的端到端检查。首次运行引导只在没有任何工作区时出现（两步：登录 · 项目文件夹，见「界面改版 阶段 7」）。
+
+### 统一来源基础（2026-10-26）
+
+- `server/src/channels/` 是供应商和账号池的只读来源视图：`channels.status` / `channels.refresh`。凭据仍分别由 ProviderService 和 UpstreamService 持有，不复制、不迁移。
+- `projectChannels()` 固定给出 Claude、Gemini 网页、WorkBuddy 三个来源；API 供应商按 `provider:<id>` 投影。视图不含 apiKey、cookie、账号身份或代理地址。
+- 对话仍只消费 Provider/Upstream。后续网关 UI、隐私管道和智能路由从 ChannelService 读取来源，不让聊天代码依赖 ChannelDriver。
