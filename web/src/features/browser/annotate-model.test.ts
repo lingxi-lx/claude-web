@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { annotationCount, annotationName, annotationNote, clipHtml, fenceFor, keepMark, rectBetween, type Mark, type PickedEl } from './annotate-model';
+import { annotationCount, annotationName, annotationNote, clipHtml, fenceFor, keepMark, reconcileOrder, rectBetween, type Mark, type PickedEl } from './annotate-model';
 
 const bytes = (s: string) => new TextEncoder().encode(s).length;
 
@@ -43,6 +43,20 @@ const el = (o: Partial<PickedEl> = {}): PickedEl => ({
 const box: Mark = { kind: 'rect', x: 0.1, y: 0.1, w: 0.2, h: 0.2 };
 const pen: Mark = { kind: 'pen', points: [[0, 0], [0.1, 0.1]] };
 const words: Mark = { kind: 'text', x: 0.5, y: 0.5, text: '这里太挤了' };
+
+describe('reconcileOrder: 撤销 takes back the most recent pick or mark (U9)', () => {
+  it('appends what grew, drops the latest of what shrank', () => {
+    let o = reconcileOrder([], 1, 0);
+    o = reconcileOrder(o, 1, 1);
+    o = reconcileOrder(o, 2, 1);
+    expect(o).toEqual(['pick', 'mark', 'pick']);
+    // 撤销 of the last (a pick)
+    expect(reconcileOrder(o, 1, 1)).toEqual(['pick', 'mark']);
+    // a new page drops every pick: the marks stay in order
+    expect(reconcileOrder(o, 0, 1)).toEqual(['mark']);
+    expect(reconcileOrder(['mark', 'pick', 'mark'], 1, 1)).toEqual(['mark', 'pick']);
+  });
+});
 
 describe('counting', () => {
   it('one picked element and one box are two', () => {

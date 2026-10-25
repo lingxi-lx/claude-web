@@ -88,6 +88,8 @@ describe('<Markdown> links keep their href and route', () => {
       h.onClick({ button: 0, ctrlKey: true, preventDefault: vi.fn() });
       h.onClick({ button: 0, metaKey: true, preventDefault: vi.fn() });
       expect(links.desktop.openExternal).toHaveBeenCalledTimes(2);
+      // the link's own address goes to the system browser (stage B fix wave U9)
+      expect(links.desktop.openExternal.mock.calls.map((c) => c[0])).toEqual(['https://e.com/a', 'https://e.com/a']);
       expect(links.openInBrowser).toHaveBeenCalledTimes(1);
     } finally { links.desktop = null; }
   });

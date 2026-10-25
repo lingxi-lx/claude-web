@@ -91,6 +91,8 @@ function recordVisit(url: string, title: string) {
  * and React drops a boolean on an attribute it does not know.
  */
 const ALLOW_POPUPS = { allowpopups: 'true' } as unknown as { allowpopups?: boolean };
+/** A local page the shell would not load (desktop/src/file-guard.ts). */
+const LOCAL_REFUSED = () => tr('这个本地页面没有打开：只有应用自己打开的本地文件能显示。');
 
 /**
  * One tab's page. Desktop: a real `<webview>` in the tab's browser profile, created with the tab's first address and
@@ -132,6 +134,13 @@ function TabView({ tab, front }: { tab: BrowserTab; front: boolean }) {
       sync();
       // the user's own browsing is what 最近打开 lists (not what an Agent looked up)
       try { if (!tab.agent) recordVisit(el.getURL(), el.getTitle()); } catch { /* not attached */ }
+      // a local page the shell refused (file-guard.ts: only a file the app itself opened shows) ends with no page at
+      // all: said in the tab instead of a blank one
+      try {
+        const want = tabOf(id)?.src ?? '';
+        const now = el.getURL() || '';
+        if (/^file:/i.test(want) && (now === '' || now === 'about:blank')) patchTab(id, { error: LOCAL_REFUSED() });
+      } catch { /* not attached */ }
     };
     // a page that arrives after all is no failure: the shell cancels a load and starts it again with another user
     // agent (desktop/src/main.ts, Google's sign-in), and the cancelled one reports -2. A load that really fails
@@ -139,9 +148,12 @@ function TabView({ tab, front }: { tab: BrowserTab; front: boolean }) {
     const onNavigate = () => { patchTab(id, { error: undefined }); progress(id, 'navigate'); sync(); };
     const onTitle = (e: Event) => patchTab(id, { title: String((e as unknown as { title?: string }).title ?? '').slice(0, 200) });
     const onFail = (e: Event) => {
-      const f = e as unknown as { errorCode?: number; errorDescription?: string; isMainFrame?: boolean };
+      const f = e as unknown as { errorCode?: number; errorDescription?: string; isMainFrame?: boolean; validatedURL?: string };
+      if (f.isMainFrame === false) return;
+      // a local file the shell would not load (file-guard.ts)
+      if (/^file:/i.test(f.validatedURL ?? '')) { patchTab(id, { loading: false, progress: undefined, error: LOCAL_REFUSED() }); return; }
       // -3: the load was replaced by another (a redirect in script, a download) — not a failure to show
-      if (f.isMainFrame === false || f.errorCode === -3) return;
+      if (f.errorCode === -3) return;
       patchTab(id, { loading: false, progress: undefined, error: `${f.errorDescription || tr('加载失败')}（${f.errorCode ?? '?'}）` });
     };
     el.addEventListener('dom-ready', onReady);
@@ -190,7 +202,7 @@ function TabView({ tab, front }: { tab: BrowserTab; front: boolean }) {
         <div className="bw-error" role="alert">
           <span className="tile-ic tint-warn"><Icon name="alert" size={18} /></span>
           <b>{tr('打不开这个页面')}</b>
-          <span className="why">{siteOf(tab.url)} · {tab.error}</span>
+          <span className="why">{siteOf(tab.url) ? `${siteOf(tab.url)} · ${tab.error}` : tab.error}</span>
           <button className="btn sm" onClick={() => { patchTab(tab.id, { error: undefined }); drive(tab.id, 'reload'); }}>{tr('再试一次')}</button>
         </div>
       )}
@@ -474,6 +486,15 @@ function PageMenu({ tab, close, external, onSites }: { tab: BrowserTab; close: (
   }, [view]);
   const hasPage = !!tab.src;
   const live = hasWebview() && hasPage;
+  // in 视口 › / 保留 Cookie ›: Esc and ← go back to the menu (Popover leaves a key someone handled alone)
+  const back = (e: React.KeyboardEvent) => {
+    if ((e.key !== 'Escape' && e.key !== 'ArrowLeft') || imeComposing(e.nativeEvent)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setView('main');
+  };
+  // a local page has no address another browser could open (file: is the app's to open, file-guard.ts)
+  const local = /^file:/i.test(tab.url || tab.src);
   const row = (id: string, icon: Parameters<typeof Icon>[0]['name'], label: string, act: () => void, after?: React.ReactNode) => (
     <button type="button" data-mi role="menuitem" className="cm-it" data-act={id} onClick={act}>
       <span className="cm-ck"><Icon name={icon} size={14} /></span><span className="cm-tx"><span className="cm-l">{label}</span></span>{after}
@@ -482,9 +503,9 @@ function PageMenu({ tab, close, external, onSites }: { tab: BrowserTab; close: (
   if (view === 'viewport') {
     const cur = tab.viewport ?? 'auto';
     return (
-      <div ref={box} className="cm-ref" data-id="viewport-menu">
+      <div ref={box} className="cm-ref" data-id="viewport-menu" onKeyDown={back}>
         <div className="cm-ref-head">
-          <button type="button" data-mi className="icon-btn xs" aria-label={tr('返回')} onClick={() => setView('main')}><Icon name="chevronRight" size={12} className="flip" /></button>
+          <button type="button" data-mi role="menuitem" className="icon-btn xs" aria-label={tr('返回')} onClick={() => setView('main')}><Icon name="chevronRight" size={12} className="flip" /></button>
           <span className="cm-l">{tr('视口')}</span>
         </div>
         {VIEWPORT_IDS.map((id) => (
@@ -499,9 +520,9 @@ function PageMenu({ tab, close, external, onSites }: { tab: BrowserTab; close: (
   }
   if (view === 'cookies') {
     return (
-      <div ref={box} className="cm-ref" data-id="cookies-menu">
+      <div ref={box} className="cm-ref" data-id="cookies-menu" onKeyDown={back}>
         <div className="cm-ref-head">
-          <button type="button" data-mi className="icon-btn xs" aria-label={tr('返回')} onClick={() => setView('main')}><Icon name="chevronRight" size={12} className="flip" /></button>
+          <button type="button" data-mi role="menuitem" className="icon-btn xs" aria-label={tr('返回')} onClick={() => setView('main')}><Icon name="chevronRight" size={12} className="flip" /></button>
           <span className="cm-l">{tr('保留 Cookie')}</span>
         </div>
         {COOKIE_MODES.map((id) => {
@@ -521,7 +542,7 @@ function PageMenu({ tab, close, external, onSites }: { tab: BrowserTab; close: (
   const browser = hasWebview();
   return (
     <div ref={box} className="cm-ref">
-      {hasPage && row('external', 'external', tr('在系统浏览器打开'), () => { close(false); external(); })}
+      {hasPage && !local && row('external', 'external', tr('在系统浏览器打开'), () => { close(false); external(); })}
       {hasPage && row('copy-url', 'copy', tr('复制地址'), () => { close(false); void navigator.clipboard?.writeText(tab.url).then(() => toast(tr('已复制地址'), true), () => toast(tr('没能复制'))); })}
       {live && desktop?.saveScreenshot && row('screenshot', 'image', tr('保存截图'), () => { close(false); void saveShot(tab); })}
       {live && desktop?.guestEmulate && row('viewport', 'device', tr('视口'), () => setView('viewport'),
@@ -534,7 +555,7 @@ function PageMenu({ tab, close, external, onSites }: { tab: BrowserTab; close: (
       {browser && (
         <>
           <div className="menu-sep" />
-          <div className="cm-h">Cookie</div>
+          <div className="cm-h">{tr('Cookie')}</div>
           {desktop?.importCookies && row('import-cookies', 'attach', tr('导入 Cookie…'), () => { close(false); void importCookieFile(tab); })}
           {row('cookies', 'database', tr('保留 Cookie'), () => setView('cookies'), <span className="cm-r">{cookieModeText(mode).label} <Icon name="chevronRight" size={12} /></span>)}
           {desktop?.clearBrowsingData && row('clear-data', 'trash', tr('清除浏览数据'), () => { close(false); void clearBrowsingData(); })}
@@ -606,6 +627,13 @@ export function BrowserPanel({ visible }: { visible: boolean }) {
     }
     setAnn((a) => ({ tabId, start, n: a && a.tabId === tabId ? a.n + 1 : 0 }));
   }, [ann, tabs]);
+  const closeAsk = async (tabId: string) => {
+    if (ann?.tabId === tabId && annCount.current > 0) {
+      const ok = await dlg.confirm(tr('丢掉标注？'), { message: tr('这个标签页上还有标注，关掉它会清掉这些标注。'), okLabel: tr('丢掉'), danger: true, focusCancel: true });
+      if (!ok) return;
+    }
+    closeTab(tabId);
+  };
   if (!tab) return <div className="bw" />;
   const findOn = find && find.tabId === tab.id && !!tab.src ? find : null;
   return (
@@ -624,10 +652,10 @@ export function BrowserPanel({ visible }: { visible: boolean }) {
             <div key={t.id} role="tab" tabIndex={0} aria-selected={t.id === tab.id} className={clsx('bw-tab', t.id === tab.id && 'on', t.agent && 'agent')} data-tab={t.id} title={`${tabName(t)}${t.agent ? tr("\nAgent 打开的页面") : ''}`}
               onClick={() => frontTab(t.id)}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); frontTab(t.id); } }}
-              onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); closeTab(t.id); } }}>
+              onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); void closeAsk(t.id); } }}>
               {t.loading ? <span className="spinner" aria-hidden /> : t.agent ? <span className="bw-bot" aria-hidden><Icon name="sparkle" size={12} /></span> : t.url ? <SiteMark url={t.url} /> : <Icon name="web" size={13} />}
               <span className="t">{tabName(t)}</span>
-              <button className="x" title={tr('关闭标签页')} aria-label={tr('关闭 {tabName}', { tabName: tabName(t) })} onClick={(e) => { e.stopPropagation(); closeTab(t.id); }}><Icon name="close" size={11} /></button>
+              <button className="x" title={tr('关闭标签页')} aria-label={tr('关闭 {tabName}', { tabName: tabName(t) })} onClick={(e) => { e.stopPropagation(); void closeAsk(t.id); }}><Icon name="close" size={11} /></button>
             </div>
           ))}
         </div>

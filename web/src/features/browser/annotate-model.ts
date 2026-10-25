@@ -35,6 +35,23 @@ export function clipHtml(html: string, max = MAX_HTML): string {
 }
 
 /** How many places are marked: each picked element and each drawn mark. */
+/**
+ * The order picks and marks were added in, kept in step with their counts: what grew is appended, what shrank (撤销,
+ * a new page dropping the picks) loses its latest entries — so 撤销 always takes back the most recent one.
+ */
+export function reconcileOrder(order: readonly ('pick' | 'mark')[], picks: number, marks: number): ('pick' | 'mark')[] {
+  const out = [...order];
+  const have = (kind: 'pick' | 'mark') => out.filter((k) => k === kind).length;
+  const drop = (kind: 'pick' | 'mark', n: number) => {
+    for (let i = out.length - 1; i >= 0 && n > 0; i--) if (out[i] === kind) { out.splice(i, 1); n--; }
+  };
+  drop('pick', have('pick') - picks);
+  drop('mark', have('mark') - marks);
+  for (let i = have('pick'); i < picks; i++) out.push('pick');
+  for (let i = have('mark'); i < marks; i++) out.push('mark');
+  return out;
+}
+
 export const annotationCount = (picked: readonly PickedEl[], marks: readonly Mark[]): number => picked.length + marks.length;
 
 /** The attachment's name. */

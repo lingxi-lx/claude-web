@@ -341,7 +341,7 @@
     /**
      * 选元素: the element under the pointer is outlined; a click picks it (the page never sees that click) and it
      * keeps a box numbered `n`. Resolves with the element's description, `{ cancel: 'esc' }` on Esc, or null when
-     * `pickStop` ends it first.
+     * `pickStop` ends it first. `still`: the page is not scrolled meanwhile (wheel, scroll keys).
      */
     pick(o) {
       endPick(null);
@@ -364,12 +364,27 @@
           markPicked(info.rect, n);
           endPick(info);
         };
-        const key = (e) => { if (e.key === 'Escape' && !e.isComposing) { swallow(e); endPick({ cancel: 'esc' }); } };
+        const SCROLL_KEYS = [' ', 'PageDown', 'PageUp', 'ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Home', 'End'];
+        const key = (e) => {
+          if (e.key === 'Escape' && !e.isComposing) { swallow(e); endPick({ cancel: 'esc' }); return; }
+          if (o && o.still && SCROLL_KEYS.indexOf(e.key) >= 0) swallow(e);
+        };
         const listeners = [['pointermove', move], ['mouseover', move], ['click', click], ['keydown', key]];
+        // `still` (the user has drawn marks over the page): it does not scroll while picking — the marks would be left beside what they marked
+        if (o && o.still) for (const t of ['wheel', 'touchmove']) listeners.push([t, swallow]);
         for (const t of ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'dblclick', 'auxclick', 'contextmenu', 'touchstart']) listeners.push([t, swallow]);
         for (const [type, fn] of listeners) window.addEventListener(type, fn, { capture: true, passive: false });
         picking = { resolve, listeners };
       });
+    },
+
+    /** 撤销 of a pick: its numbered box (the last one) comes off the page. */
+    unpickLast() {
+      if (!layer) return false;
+      const boxes = [...layer.root.children].filter((c) => c !== layer.hover);
+      const last = boxes[boxes.length - 1];
+      if (last) last.remove();
+      return !!last;
     },
 
     /** Stop picking (the picked boxes stay). */

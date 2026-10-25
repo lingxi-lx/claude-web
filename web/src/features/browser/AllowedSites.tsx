@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom';
 import { useStore } from '@/store';
 import { Icon } from '@/ui/icons';
 import { imeComposing } from '@/ui/ime';
+import { trapTab } from '@/ui/focus-trap';
 import { EMPTY, emptyText } from '@/ui/terms';
 import { tr } from '@/i18n';
 
@@ -30,7 +31,7 @@ export function AllowedSites({ onClose }: { onClose: () => void }) {
     void setSetting(ALLOWED_SITES_KEY, sites.filter((s) => s !== site)).catch((e) => toast((e as Error).message));
   };
   return createPortal(
-    <div className="modal-bg dialog-bg" onMouseDown={(e) => e.target === e.currentTarget && onClose()} onKeyDown={(e) => { if (e.key === 'Escape' && !imeComposing(e.nativeEvent)) { e.stopPropagation(); onClose(); } }}>
+    <div className="modal-bg dialog-bg" onMouseDown={(e) => e.target === e.currentTarget && onClose()} onKeyDown={(e) => { if (e.key === 'Escape' && !imeComposing(e.nativeEvent)) { e.stopPropagation(); onClose(); } else trapTab(e, box.current); }}>
       <div ref={box} className="modal dialog bw-allowed" role="dialog" aria-modal="true" aria-label={tr('允许的网站')} data-id="allowed-sites">
         <h3>{tr('允许的网站')}</h3>
         <p className="sub">{tr('Claude 在这些网站上点击、输入、填表时不再先问你；让它在页面里运行脚本仍然每次都问。「*.」开头的包括它的子域名。')}</p>

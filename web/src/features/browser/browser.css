@@ -50,8 +50,11 @@
 .bw-ann[hidden] { display: none; }
 .bw-ann canvas { position: absolute; pointer-events: none; touch-action: none; outline: none; }
 .bw-ann.drawing canvas { pointer-events: auto; cursor: crosshair; }
+/* marks on the page and no tool: the canvas keeps the wheel and the pointer, so the page under the marks stays put (U1) */
+.bw-ann.holding canvas { pointer-events: auto; cursor: default; }
 .bw-ann.drawing[data-tool='text'] canvas { cursor: text; }
-.bw-ann-bar { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); max-width: calc(100% - 16px); display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: var(--r-pill); background: var(--surface-elev); box-shadow: var(--elev-composer); pointer-events: auto; }
+/* a narrow panel: the bar wraps onto a second line rather than running off the edge */
+.bw-ann-bar { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); max-width: calc(100% - 16px); display: flex; flex-wrap: wrap; justify-content: center; row-gap: 4px; align-items: center; gap: 2px; padding: 4px; border-radius: var(--r-pill); background: var(--surface-elev); box-shadow: var(--elev-composer); pointer-events: auto; }
 .bw-ann-bar .icon-btn.on { background: var(--layer-selected); color: var(--ink-1); }
 .bw-ann-bar .sep { flex: none; width: 1px; height: 18px; margin: 0 4px; background: var(--fill-subtle); }
 .bw-ann-bar .cnt { flex: none; padding: 0 6px; color: var(--ink-3); font-size: var(--fs-meta); font-variant-numeric: tabular-nums; white-space: nowrap; }

@@ -247,15 +247,22 @@ export type PickAnswer = PickedEl | { cancel: 'esc' } | null;
  * 标注 · 选元素: the user points at an element in the tab's page and clicks it (page-agent.js `pick`), which keeps a
  * box numbered `n` on it. Waits for as long as the user takes; null when picking was stopped or the page went away.
  */
-export async function pickIn(tabId: string, n: number): Promise<PickAnswer> {
+export async function pickIn(tabId: string, n: number, still = false): Promise<PickAnswer> {
   const el = guestOf(tabId);
   if (!el) return null;
   try {
-    const r = await runIn<PickAnswer>(el, `${agentSrc}\n;window.__cwAgent.pick(${JSON.stringify({ n })})`);
+    const r = await runIn<PickAnswer>(el, `${agentSrc}\n;window.__cwAgent.pick(${JSON.stringify({ n, still })})`);
     if (!r || typeof r !== 'object') return null;
     if ('cancel' in r) return { cancel: 'esc' };
     return typeof r.selector === 'string' && typeof r.html === 'string' && r.rect && r.styles ? r : null;
   } catch { return null; }
+}
+
+/** 撤销 of a pick: the last numbered box comes off the tab's page. */
+export async function unpickLast(tabId: string): Promise<void> {
+  const el = guestOf(tabId);
+  if (!el) return;
+  return runIn(el, `${agentSrc}\n;window.__cwAgent.unpickLast()`).then(() => {}, () => {});
 }
 
 /** Stop picking in the tab's page; `clear`: also take the numbered boxes off it. */

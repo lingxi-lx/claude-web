@@ -11,6 +11,7 @@ import './browser.css';
 import { tr } from '@/i18n';
 import { Select } from '@/ui/Select';
 import { COOKIES_KEY, COOKIE_MODES, cookieModeText, cookiesMode } from './state';
+import { ALLOWED_SITES_KEY, AllowedSites, readSites } from './AllowedSites';
 
 /** The search services that need a key of their own → the setting it is kept in (protected on the server, never sent back). */
 const KEY_SETTING: Record<string, string> = { brave: 'web.search.braveKey' };
@@ -33,6 +34,10 @@ export function WebSettings() {
   const storedMode = useStore((s) => s.settings[COOKIES_KEY]);
   const oldIsolated = useStore((s) => s.settings['web.browser.isolated']);
   const cookieMode = cookiesMode({ [COOKIES_KEY]: storedMode, 'web.browser.isolated': oldIsolated });
+  // 允许的网站: the stored array (stable reference), counted here; listed and removed in AllowedSites
+  const storedSites = useStore((s) => s.settings[ALLOWED_SITES_KEY]);
+  const sites = readSites(storedSites);
+  const [sitesOpen, setSitesOpen] = useState(false);
 
   const load = () => ws.request<WebStatus>({ kind: 'web.status' }).then(setSt).catch(() => {});
   useEffect(() => { void load(); const off = ws.on((e) => { if (e.kind === 'web.changed') void load(); }); return () => { off(); }; }, []);
@@ -107,6 +112,11 @@ export function WebSettings() {
         <Row label={tr('保留 Cookie')} hint={tr('{desc}。已经打开的页面还用原来的，之后新开的页面用新的设置。', { desc: cookieModeText(cookieMode).desc })}>
           <Select className="field" aria-label={tr('保留 Cookie')} data-id="web-cookies" value={cookieMode} onValueChange={(value) => void set(COOKIES_KEY, String(value))} options={COOKIE_MODES.map((m) => ({ value: m, label: cookieModeText(m).label }))} />
         </Row>
+        {/* the site card's 「设置 → 联网 → 允许的网站 里可以删掉」 points here (PermissionCards.tsx) */}
+        <Row label={tr('允许的网站')} hint={sites.length ? tr('Claude 在这 {n} 个网站上操作页面不再先问你。', { n: sites.length }) : tr('在权限卡上点「总是允许这个网站」的网站会列在这里。')}>
+          <button className="btn sm" data-id="web-allowed-sites" onClick={() => setSitesOpen(true)}>{tr('管理…')}</button>
+        </Row>
+        {sitesOpen && <AllowedSites onClose={() => setSitesOpen(false)} />}
       </div>
     </>
   );

@@ -48,7 +48,9 @@ export function FindBar({ tabId, focusKey, onClose }: { tabId: string; focusKey:
         data-id="find-input"
         placeholder={tr('在页面中查找…')}
         aria-label={tr('在页面中查找')}
-        onChange={(e) => { setQ(e.target.value); find(e.target.value, { findNext: true }); }}
+        // while an IME is composing the text is not the word yet: the search waits for compositionend
+        onChange={(e) => { setQ(e.target.value); if (!imeComposing(e.nativeEvent as InputEvent)) find(e.target.value, { findNext: true }); }}
+        onCompositionEnd={(e) => find(e.currentTarget.value, { findNext: true })}
         onKeyDown={(e) => {
           if (imeComposing(e.nativeEvent)) return;
           if (e.key === 'Enter') { e.preventDefault(); step(!e.shiftKey); }

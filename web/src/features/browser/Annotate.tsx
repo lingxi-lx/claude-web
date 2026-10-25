@@ -7,15 +7,15 @@
 // the panel is resized and land on the same spot in the picture, whatever its size. Picked elements are boxed by the
 // page itself (page-agent.js `pick`), so the picture has them where they are.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useStore } from '@/store';
+import { useScopedSession, useStore } from '@/store';
 import { desktop } from '@/desktop';
 import { clsx } from '@/util';
 import { Icon } from '@/ui/icons';
 import { imeComposing } from '@/ui/ime';
 import { dlg } from '@/ui/dialog';
 import { tr } from '@/i18n';
-import { annotationCount, annotationName, annotationNote, keepMark, rectBetween, type Mark, type PickedEl } from './annotate-model';
-import { pickIn, stopPicking } from './guest';
+import { annotationCount, annotationName, annotationNote, keepMark, reconcileOrder, rectBetween, type Mark, type PickedEl } from './annotate-model';
+import { pickIn, stopPicking, unpickLast } from './guest';
 import { guestElOf, guestOf, hasWebview, type BrowserTab } from './state';
 
 export type AnnotateTool = 'pick' | 'pen' | 'rect' | 'text';
@@ -82,6 +82,8 @@ const NO_BOX = { x: 0, y: 0, w: 0, h: 0 };
  */
 export function Annotate({ tab, front, start, startKey, onCount, onClose }: { tab: BrowserTab; front: boolean; start: AnnotateTool; startKey: number; onCount: (n: number) => void; onClose: () => void }) {
   const live = hasWebview() && !!tab.src;
+  // the conversation 发给对话 would go to (the one this panel is scoped to): 发给 Claude goes to the same one
+  const scoped = useScopedSession()?.sessionId ?? null;
   const [tool, setTool] = useState<AnnotateTool | null>(live || start !== 'pick' ? start : 'pen');
   const [marks, setMarks] = useState<Mark[]>([]);
   const [picked, setPicked] = useState<PickedEl[]>([]);
@@ -94,6 +96,8 @@ export function Annotate({ tab, front, start, startKey, onCount, onClose }: { ta
   const origin = useRef<[number, number] | null>(null);
   const pickedN = useRef(0);
   pickedN.current = picked.length;
+  const marksN = useRef(0);
+  marksN.current = marks.length;
   const count = annotationCount(picked, marks);
   useEffect(() => onCount(count), [count]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -152,7 +156,7 @@ export function Annotate({ tab, front, start, startKey, onCount, onClose }: { ta
     let alive = true;
     void (async () => {
       while (alive) {
-        const r = await pickIn(tab.id, pickedN.current + 1);
+        const r = await pickIn(tab.id, pickedN.current + 1, marksN.current > 0);
         if (!alive || !r) return;
         if ('cancel' in r) { setTool(null); return; }
         pickedN.current += 1;
@@ -212,16 +216,24 @@ export function Annotate({ tab, front, start, startKey, onCount, onClose }: { ta
     onClose();
   };
 
+  // what was added, in order ('pick' | 'mark'): 撤销 takes the most recent one back, whichever it was
+  const order = useRef<('pick' | 'mark')[]>([]);
+  useEffect(() => { order.current = reconcileOrder(order.current, picked.length, marks.length); }, [picked.length, marks.length]);
   const undo = () => {
-    if (marks.length) setMarks((m) => m.slice(0, -1));
+    const last = order.current[order.current.length - 1];
+    if (last === 'pick' && picked.length) {
+      setPicked((p) => p.slice(0, -1));
+      pickedN.current = Math.max(0, pickedN.current - 1);
+      void unpickLast(tab.id);
+    } else if (marks.length) setMarks((m) => m.slice(0, -1));
   };
 
   /** 发给 Claude: the picture with the marks, and the words, as one attachment in the conversation's input box. */
   const send = async () => {
     const st = useStore.getState();
     if (!count) return st.toast(tr('还没有标注：选一个元素，或者在页面上画一下'));
-    // the conversation whose Agent works in this tab, else the one in front
-    const target = tab.agent && st.open[tab.agent] ? tab.agent : st.activeId;
+    // the conversation whose Agent works in this tab, else the one 发给对话 goes to (useScopedSession)
+    const target = tab.agent && st.open[tab.agent] ? tab.agent : scoped;
     if (!target || !st.open[target]) return st.toast(tr('先打开一个对话，再把页面发给它'));
     const el = guestOf(tab.id);
     if (!el || !desktop?.captureGuest) return st.toast(tr('截图需要桌面版'));
@@ -238,7 +250,7 @@ export function Annotate({ tab, front, start, startKey, onCount, onClose }: { ta
       const name = annotationName(count);
       st.addComposerAttachment(target, { id: `pa${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, name, image: { mediaType: m[1], data: m[2], url, name }, text: annotationNote(tab.url, picked, marks) });
       // the conversation's box shows it: bring that conversation to the front if it is not (as 看对话 does)
-      if (target !== st.activeId) void st.loadHistory(target);
+      if (target !== scoped) void st.loadHistory(target);
       st.toast(tr('「{name}」已放进输入框', { name }), true);
       void stopPicking(tab.id, true);
       onClose();
@@ -250,6 +262,8 @@ export function Annotate({ tab, front, start, startKey, onCount, onClose }: { ta
   };
 
   const drawing = !!tool && tool !== 'pick';
+  // marks drawn and not 选元素: the canvas keeps catching the pointer and the wheel, so the page under them cannot scroll away
+  const holding = !drawing && tool !== 'pick' && marks.length > 0;
   const toolBtn = (id: AnnotateTool, icon: Parameters<typeof Icon>[0]['name'], label: string, disabled = false) => (
     <button type="button" className={clsx('icon-btn xs', tool === id && 'on')} data-act={`ann-${id}`} aria-pressed={tool === id} disabled={disabled || busy} title={label} aria-label={label}
       onClick={() => { commitText(); setTool(tool === id ? null : id); }}>
@@ -257,7 +271,7 @@ export function Annotate({ tab, front, start, startKey, onCount, onClose }: { ta
     </button>
   );
   return (
-    <div ref={layer} className={clsx('bw-ann', drawing && 'drawing')} data-id="annotate" data-tool={tool ?? undefined} hidden={!front}
+    <div ref={layer} className={clsx('bw-ann', drawing && 'drawing', holding && 'holding')} data-id="annotate" data-tool={tool ?? undefined} hidden={!front}
       onKeyDown={(e) => {
         if (e.key !== 'Escape' || imeComposing(e.nativeEvent)) return;
         e.stopPropagation();
@@ -282,7 +296,7 @@ export function Annotate({ tab, front, start, startKey, onCount, onClose }: { ta
         {toolBtn('pen', 'pen', tr('画笔'))}
         {toolBtn('rect', 'frame', tr('框'))}
         {toolBtn('text', 'text', tr('文字'))}
-        <button type="button" className="icon-btn xs" data-act="ann-undo" disabled={!marks.length || busy} title={tr('撤销上一笔')} aria-label={tr('撤销上一笔')} onClick={undo}><Icon name="undo" size={15} /></button>
+        <button type="button" className="icon-btn xs" data-act="ann-undo" disabled={!count || busy} title={tr('撤销上一笔')} aria-label={tr('撤销上一笔')} onClick={undo}><Icon name="undo" size={15} /></button>
         <span className="sep" aria-hidden />
         <span className="cnt" data-id="annotate-count">{tr('{n} 处', { n: count })}</span>
         <button type="button" className="btn sm primary" data-act="ann-send" disabled={!count || busy} onClick={() => void send()}>

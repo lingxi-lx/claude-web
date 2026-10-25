@@ -657,6 +657,8 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     } catch (e: any) {
       toast(e.message);
       setUpload(null);
+      // a 页面标注 that did not go is not lost: back in the box (its picture exists nowhere else)
+      setBundles((cur) => (cur.length ? cur : sentBundles));
     }
   };
 
