@@ -14,6 +14,8 @@ import { readChangelog } from '../app/changelog.js';
 import { recentArtifacts } from '../library/artifacts.js';
 import type { LocalEnvStore } from '../runtime/local-env.js';
 import type { VcsTokenStore } from '../vcs/token-store.js';
+import type { WslService } from '../wsl/service.js';
+import { INSTALL_CMD } from '../wsl/distros.js';
 import type { PreviewService } from '../preview/service.js';
 import { cacheParentFor } from '../runtime/cache-key.js';
 import { userCompactSource } from '../runtime/user-env.js';
@@ -97,6 +99,8 @@ export interface Services {
   previews?: PreviewService;
   /** stage E: GitHub / GitLab tokens typed in settings (vcs/token-store.ts); optional (tests) */
   vcsTokens?: VcsTokenStore;
+  /** stage E5: WSL distros; optional (tests) */
+  wsl?: WslService;
 
   /** Cross-machine sessions: routes peer_… requests / merges lists before handle(); optional (tests). */
   federation?: FederationService;
@@ -456,6 +460,12 @@ export class Hub {
 
       case 'session.open': {
         let params = req.params;
+        // stage E5: a WSL conversation needs Claude Code in that distro (interop off still opens: the runner drops the MCP)
+        if (params.env?.kind === 'wsl') {
+          if (!s.wsl) throw new Error('no WSL');
+          const d = await s.wsl.check(params.env.distro);
+          if (d.claude === false) throw new Error(tr('{d} 里没有 Claude Code，先在「选机器」里安装', { d: d.name }));
+        }
         // DeepSeek Harness (SourceCaps.continueInClaude): a send goes on in the Claude conversation that replays it, on
         // any provider — never in the harness (its own DeepSeek key). Before the head check: an earlier version left an
         // imported `dsh` head that would start the harness again. The reply's other sessionId re-keys the client.
@@ -1117,6 +1127,22 @@ export class Hub {
         await s.federation?.hostChanged(req.host.id, before); // peers riding this host reconnect when its connection settings moved
         return null;
       }
+      case 'remote.hosts.test':
+        return s.tunnels.probe(req);
+      // stage E5: WSL
+      case 'wsl.list':
+        if (!s.wsl) return { available: false, distros: [] };
+        return { available: s.wsl.available(), distros: await s.wsl.list() };
+      case 'wsl.check':
+        if (!s.wsl) throw new Error('no WSL');
+        return s.wsl.check(req.distro);
+      case 'wsl.installCommand':
+        return { command: INSTALL_CMD };
+      case 'wsl.install':
+        // only after the user saw the command and said yes (the dialog sends confirmed: true)
+        if (req.confirmed !== true) throw new Error(tr('安装要先确认'));
+        if (!s.wsl) throw new Error('no WSL');
+        return s.wsl.install(req.distro);
       case 'remote.hosts.remove':
         await s.tunnels.close(req.id);
         await s.meta.removeRemoteHost(req.id);
@@ -1197,7 +1223,7 @@ export class Hub {
         return s.agents.list();
 
       case 'terminal.open':
-        return s.terminal.open(req.cwd, req.cols, req.rows);
+        return s.terminal.open(req.cwd, req.cols, req.rows, req.wsl ? { wsl: { distro: String(req.wsl.distro) } } : {});
       case 'terminal.input':
         s.terminal.input(req.termId, req.data);
         return null;

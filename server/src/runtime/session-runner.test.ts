@@ -45,11 +45,33 @@ const eng = vi.hoisted(() => ({ kind: 'claude' as 'claude' | 'ccb' }));
 const cli = vi.hoisted(() => ({ models: [] as any[] }));
 vi.mock('../claude-exe.js', () => ({ resolveEngine: (rt?: 'claude' | 'ccb') => ({ file: 'claude', kind: rt ?? eng.kind }), spawnClaude: () => null }));
 vi.mock('../memory/launcher.js', () => ({ claudeMcpServer: () => ({}) }));
+// stage E5: a WSL conversation spawns wsl.exe (only spawn is caught; the rest of child_process stays real)
+const spawned = vi.hoisted(() => [] as { cmd: string; args: string[]; opts: any }[]);
+vi.mock('node:child_process', async (orig) => {
+  const real: any = await orig();
+  const { EventEmitter } = await import('node:events');
+  return { ...real, spawn: (cmd: string, args: string[], opts: any) => { spawned.push({ cmd, args, opts }); const c: any = new EventEmitter(); c.stderr = new EventEmitter(); c.stderr.setEncoding = () => {}; return c; } };
+});
 
 const { SessionRunner } = await import('./session-runner.js');
 const tick = () => new Promise((r) => setTimeout(r, 10));
 
 describe('SessionRunner', () => {
+  it('stage E5: a WSL conversation runs the distro\'s own claude through wsl.exe, in its Linux folder', async () => {
+    queries.length = 0;
+    spawned.length = 0;
+    const r = new SessionRunner({ sessionId: 'wsl1', cwd: '\\\\wsl.localhost\\Ubuntu\\home\\me\\p', env: { kind: 'wsl', distro: 'Ubuntu' } } as any);
+    await tick();
+    const o = queries[0].options;
+    expect(o.pathToClaudeCodeExecutable).toBe('claude');
+    o.spawnClaudeCodeProcess({ command: 'claude', args: ['-p'], env: {}, cwd: 'x' });
+    expect(spawned[0].cmd).toBe('wsl.exe');
+    expect(spawned[0].args).toEqual(['-d', 'Ubuntu', '--cd', '/home/me/p', '--', 'claude', '-p']);
+    expect(spawned[0].opts.windowsHide).toBe(true);
+    expect(r.info.wsl).toEqual({ distro: 'Ubuntu', dropped: [] });
+    await r.close();
+  });
+
   it('extra project folders go to the SDK as additionalDirectories; none → the option is absent', async () => {
     queries.length = 0;
     const a = new SessionRunner({ sessionId: 'dirs1', cwd: '/proj' } as any, undefined, { additionalDirectories: ['/lib', '/docs'] });

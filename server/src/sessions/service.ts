@@ -5,11 +5,12 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import type { SessionSummary } from '../protocol.js';
 import { watchTree, type TreeWatcher } from '../runtime/watch-tree.js';
-import { findClaudeTranscript, hasClaudeTranscript } from '../runtime/transcript-file.js';
-import { closeSync, openSync, readSync } from 'node:fs';
+import { findClaudeTranscript, hasClaudeTranscript, transcriptRoots } from '../runtime/transcript-file.js';
+import { closeSync, openSync, readFileSync, readSync } from 'node:fs';
 import { BRIEFING_HEAD } from '../session/handoff.js';
 import { tr } from '../i18n/index.js';
 import { summaryFromFile, unlistedTranscripts } from './unlisted.js';
+import { wslToWin } from '../wsl/paths.js';
 import { unalias } from '../models/subagent.js';
 
 export const claudeDir = process.env.CLAUDE_CONFIG_DIR ?? path.join(os.homedir(), '.claude');
@@ -138,6 +139,15 @@ export class SessionService extends EventEmitter {
     // + what the SDK skipped (a long first prompt and no title at the end: sessions/unlisted.ts)
     const ids = new Set(all.map((s) => s.sessionId));
     const extra = unlistedTranscripts(path.join(claudeDir, 'projects'), ids).map(summaryFromFile).filter((x): x is SessionSummary => !!x);
+    // stage E5: conversations that ran in a WSL distro (its own ~/.claude/projects), their folder as Windows reaches it
+    for (const root of transcriptRoots()) {
+      if (!root.distro) continue;
+      for (const x of unlistedTranscripts(root.dir, ids).map(summaryFromFile)) {
+        if (!x || ids.has(x.sessionId)) continue;
+        ids.add(x.sessionId);
+        extra.push(x.cwd && x.cwd.startsWith('/') ? { ...x, cwd: wslToWin(x.cwd, root.distro) } : x);
+      }
+    }
     const out = [...all.map(toSummary), ...extra].sort((a, b) => b.lastModified - a.lastModified);
     // a write landed while we were scanning: this result may predate it, so don't pin it as the cache
     if (gen === this.gen) { this.cache = out; this.cacheLimit = fetchLimit; }
@@ -164,6 +174,11 @@ export class SessionService extends EventEmitter {
 
   async transcript(sessionId: string) {
     const info = await getSessionInfo(sessionId);
+    if (!info) {
+      // stage E5: a WSL conversation's transcript is outside this machine's ~/.claude: read the file, in the SDK's shape
+      const file = findClaudeTranscript(sessionId);
+      if (file && transcriptRoots().some((r) => r.distro && file.toLowerCase().startsWith(r.dir.toLowerCase()))) return readTranscriptFile(file, sessionId);
+    }
     const dir = info?.cwd;
     return getSessionMessages(sessionId, { dir, includeSystemMessages: true });
   }
@@ -280,4 +295,20 @@ export class SessionService extends EventEmitter {
     }
     return undefined;
   }
+}
+
+/** A transcript file's user / assistant / system lines as getSessionMessages gives them (WSL conversations). */
+function readTranscriptFile(file: string, sessionId: string): Awaited<ReturnType<typeof getSessionMessages>> {
+  let text = '';
+  try { text = readFileSync(file, 'utf8'); } catch { return []; }
+  const out: any[] = [];
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    let e: any;
+    try { e = JSON.parse(line); } catch { continue; }
+    if (e?.type !== 'user' && e?.type !== 'assistant' && e?.type !== 'system') continue;
+    if (e.isSidechain) continue;
+    out.push({ type: e.type, uuid: e.uuid, session_id: sessionId, message: e.message ?? { content: e.content }, parent_tool_use_id: null });
+  }
+  return out;
 }

@@ -4,7 +4,11 @@ import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { statSync } from 'node:fs';
 import { withExplanation } from '../errors/explain.js';
-import { dropEmptyBlocks, findClaudeTranscript, hasClaudeTranscript, hasEntry, lastCostState, lastHumanPrompt, repairLeaf } from './transcript-file.js';
+import { spawnWsl } from '../wsl/spawn.js';
+import { rewriteMcpForWsl, type StdioServer } from '../wsl/launch.js';
+import { toWslPath } from '../wsl/paths.js';
+import { wslService } from '../wsl/service.js';
+import { addTranscriptRoot, dropEmptyBlocks, findClaudeTranscript, hasClaudeTranscript, hasEntry, lastCostState, lastHumanPrompt, repairLeaf } from './transcript-file.js';
 import { compactCap, ownAnthropicBase, ownOverride, settingsOverride, userAnthropicEnv } from './user-env.js';
 import { providerKey, splitSupport, subAlias, subagentTarget, unalias, type SplitKind, type SubagentPick } from '../models/subagent.js';
 import { splitEndpoint, splitTarget, type SplitSub } from '../gateway/split.js';
@@ -221,10 +225,13 @@ export class SessionRunner extends EventEmitter {
 
   /** the project's extra folders (stage C2), read once when the conversation opens: the SDK's additionalDirectories (a respawn keeps them) */
   private extraDirs: string[];
+  /** stage E5: running inside this WSL distro (its own claude, its own login) */
+  private wsl: { distro: string } | null;
 
   constructor(params: OpenSessionParams, provider?: SessionProvider, opts: { thinkingLanguage?: string; account?: AccountPrefs; additionalDirectories?: string[] } = {}) {
     super();
     this.extraDirs = (opts.additionalDirectories ?? []).filter((d) => typeof d === 'string' && !!d);
+    this.wsl = params.env?.kind === 'wsl' ? { distro: params.env.distro } : null;
     this.ownThinkingLanguage = opts.thinkingLanguage ?? '';
     if (opts.account) this.accountPrefs = { windows: familyWindows(opts.account.windows), ...(opts.account.compactAt !== undefined ? { compactAt: opts.account.compactAt } : {}) };
     this.cwd = params.cwd;
@@ -241,8 +248,9 @@ export class SessionRunner extends EventEmitter {
     this.model = params.model || provider?.defaultModel || undefined;
     this.effort = params.effort;
     this.permissionMode = params.permissionMode ?? 'default';
-    this.subagent = params.subagentModel ?? '';
-    this.info = { sessionId: this.sessionId, state: 'starting', cwd: this.cwd, model: this.model, effort: this.effort, permissionMode: this.permissionMode, providerId: provider?.id, providerName: provider?.name, features: this.features, agent: 'claude' };
+    // in WSL (NAT) this computer's gateway is not at 127.0.0.1: subagents stay on the main model
+    this.subagent = this.wsl ? '' : params.subagentModel ?? '';
+    this.info = { sessionId: this.sessionId, state: 'starting', cwd: this.cwd, model: this.model, effort: this.effort, permissionMode: this.permissionMode, providerId: provider?.id, providerName: provider?.name, features: this.features, agent: 'claude', ...(this.wsl ? { wsl: { distro: this.wsl.distro, dropped: [] } } : {}) };
     if (this.subagent) this.info.subagentModel = this.subagent;
     // 深度编排 picked before the conversation started (welcome page, a reopen): our engine starts with --ultracode; the
     // official binary only has `/effort ultracode` inside the conversation — sent just before the first message (at
@@ -375,7 +383,8 @@ export class SessionRunner extends EventEmitter {
     // …and it runs on the official binary: a relay checking the client (super-nb) refuses ccb's requests, and the
     // account has no 测试连接 that could have found that out and pinned it (2026-10-02, real relays)
     const relay = this.provider ?? (own!.relay ? { type: 'anthropic' as const, runtime: ccbOnly ? undefined : ('claude' as const), defaultModel: own!.env.ANTHROPIC_MODEL, modelMap: { opus: own!.env.ANTHROPIC_DEFAULT_OPUS_MODEL, sonnet: own!.env.ANTHROPIC_DEFAULT_SONNET_MODEL, haiku: own!.env.ANTHROPIC_DEFAULT_HAIKU_MODEL } } : undefined);
-    const engine = resolveEngine(relay ? preferredRuntime(relay, ccbOnly ? undefined : model ?? '') : ccbOnly ? undefined : this.account?.runtime);
+    // WSL: the distro's own `claude` on its PATH (no extension: the SDK takes it as a native binary; spawnWsl runs it)
+    const engine = this.wsl ? { file: 'claude', kind: 'claude' as const } : resolveEngine(relay ? preferredRuntime(relay, ccbOnly ? undefined : model ?? '') : ccbOnly ? undefined : this.account?.runtime);
     const anthropicWire = relay?.type === 'anthropic' || relay?.type === 'gateway';
     const noThinking = engine.kind === 'ccb' && anthropicWire && ccbMisthinks(providerModelId(relay!, model ?? ''));
     // the official binary's earlier compaction is an environment variable, read once at start: a model that needs
@@ -386,6 +395,12 @@ export class SessionRunner extends EventEmitter {
   }
 
   private start(extra: Partial<Options>) {
+    if (this.wsl) {
+      const d = this.wsl.distro;
+      if (toWslPath(this.cwd, d) === null) throw new Error(tr('这个文件夹不在 {d} 里，也不是本机磁盘', { d }));
+      const root = wslService()?.projectsRoot(d);
+      if (root) addTranscriptRoot(root, d);
+    }
     const { engine, noThinking, key } = this.plan();
     this.planKey = key;
     // ultracode on: a restarted claude-web-engine process starts with it (`--ultracode`)
@@ -551,7 +566,7 @@ export class SessionRunner extends EventEmitter {
       // uninstalling claude-web must not leave an MCP entry behind in the user's own config.
       // 联网 (`web`: search + the built-in browser) goes in the same way (web/launcher.ts).
       // 操控电脑 (`computer`: the whole desktop, computer/launcher.ts) only for a conversation that has it switched on.
-      mcpServers: bare ? {} : { ...claudeMcpServer({ cwd: this.cwd, sessionId: this.sessionId, agent: 'claude' }), ...webClaudeMcpServer({ sessionId: this.sessionId }), ...computer, ...sessionsMcp, ...previewMcp },
+      mcpServers: bare ? {} : { ...this.injectedMcp({ ...claudeMcpServer({ cwd: this.cwd, sessionId: this.sessionId, agent: 'claude' }), ...webClaudeMcpServer({ sessionId: this.sessionId }), ...computer }), ...sessionsMcp, ...previewMcp },
       // a sidecar (`lean`, see above): the core set still covers read / search / edit / run
       ...(chatOnly ? { tools: [], strictMcpConfig: true } : lean ? { tools: LEAN_TOOLS, strictMcpConfig: true } : {}),
       // 网吧's cafe-character skill, as a local plugin (both runtimes load it: 2026-10-13), only while the `web` server
@@ -597,8 +612,19 @@ export class SessionRunner extends EventEmitter {
    * "exited with code 1" (the cause — ccb's "unknown option '--session-mirror'" — was one stderr line), and a pipe nobody
    * reads can fill and stall the CLI. Read it, log it, keep its end for the error message.
    */
+  /**
+   * The injected stdio MCP servers (Windows programs). In WSL they start through interop at their /mnt path, or are
+   * dropped (interop off) and named in info.wsl. sessions / preview are in-process (the SDK's control channel): untouched.
+   */
+  private injectedMcp(servers: Record<string, McpServerConfig>): Record<string, McpServerConfig> {
+    if (!this.wsl) return servers;
+    const r = rewriteMcpForWsl(servers as Record<string, StdioServer>, { interop: wslService()?.cached(this.wsl.distro)?.interop !== false });
+    this.info.wsl = { distro: this.wsl.distro, dropped: r.dropped };
+    return r.servers as Record<string, McpServerConfig>;
+  }
+
   private spawnProcess(o: Parameters<typeof spawnClaude>[0]) {
-    const child = spawnClaude(o);
+    const child = this.wsl ? spawnWsl(o, { distro: this.wsl.distro, cwd: toWslPath(this.cwd, this.wsl.distro)!, exe: 'claude' }) : spawnClaude(o);
     this.child = child;
     this.stderrTail = '';
     const flag = this.nextFlag;

@@ -109,8 +109,14 @@ export interface SourceStatus {
   caps?: SourceCaps;
 }
 
+/** stage E5: where a conversation runs — this computer, or inside one of its WSL distros */
+export type SessionEnv = { kind: 'local' } | { kind: 'wsl'; distro: string };
+export interface WslDistro { name: string; claude: boolean | null; interop: boolean | null; home: string | null }
+export type { SshProbe } from './remote/ssh-probe.js';
 export interface OpenSessionParams {
   sessionId?: string; // resume this session; omit to start a new one
+  /** stage E5: run it inside a WSL distro (local only; recorded in the session meta) */
+  env?: SessionEnv;
   /** 新对话选机器: start it on this federation peer (its id); routed and dropped by federation/rewrite.ts */
   peer?: string;
   cwd: string;
@@ -381,6 +387,8 @@ export interface SessionMeta {
   /** a rename made while the conversation's process ran (server/src/meta/store.ts) */
   /** stage E1 自动处理评论: when the switch went on (0 / absent = off), comment ids already handed over (newest 200), the batch waiting for a push */
   prAutoComments?: number; prCommentsDone?: string[]; prCommentsSent?: { ids: string[]; sha: string; at: number };
+  /** stage E5: the machine it runs on (WSL); stage E3: the built-in browser's recordings (newest 20) */
+  env?: SessionEnv; browserRecordings?: { path: string; start: number; end: number }[];
   pendingTitle?: string; /** 只聊天: started without tools; a resume keeps it that way */ chatOnly?: boolean; /** 保持电脑唤醒 while this conversation is busy */ keepAwake?: boolean; /** 代码审查卡: findings dismissed here, `<toolUseId>#<index>` */ reviewDismissed?: string[]; /** 任务 chip: suggestions dismissed (tool use ids), and started (tool use id → the new conversation) */ taskDismissed?: string[]; taskStarted?: Record<string, string>; /** PR 监控条: 自动修 CI on, and the failures it already asked about */ prAutoFix?: boolean; prFixed?: string[]; pinned?: boolean; archived?: boolean; workspaceId?: string; tags?: string[]; providerId?: string; /** sidebar grouping directory when it differs from the cwd (orchestration worktrees) */ groupCwd?: string; /** prompt-cache route key when it is not the session's own id (forks keep their root's) */ cacheKey?: string; /** the model its subagents run on, picked for this provider ('' = the main model) */ subagent?: { providerId: string; model: string }; /** the permission mode it last ran with: a resume without a pick comes back in it (the SDK never says it) */ permissionMode?: PermissionMode; /** 思考用的语言 for this conversation: '' / absent = the setting `ai.thinkingLanguage`, 'off' = none here, 'auto' = the interface language, else a THINKING_LANGUAGES id */ thinkingLanguage?: string; /** a `continueInClaude` source's conversation: the Claude conversation it goes on in */ continuedAs?: string; /** the Claude conversation of a `continuedAs`: what it goes on from, and how many of its messages are in it */ continuedFrom?: string; replayed?: number }
 export interface Schedule { id: string; name: string; cwd: string; prompt: string; everyMinutes: number; cron?: string; enabled: boolean; lastRunAt?: number; nextRunAt?: number; sessionId?: string; model?: string; permissionMode?: string; freshSession?: boolean; lastError?: string; runs?: number; /** 手动: only 立即运行 starts it */ manual?: boolean; /** each run in its own worktree (with freshSession) */ worktree?: boolean }
 export interface LimitWindow { label: string; percent: number; resetsAt: string | null; active: boolean; severity?: string }
@@ -447,6 +455,8 @@ export type PermissionResponse =
 
 export interface SessionInfoSnapshot {
   sessionId: string;
+  /** stage E5: running inside this WSL distro; `dropped` = injected MCP servers that could not start there */
+  wsl?: { distro: string; dropped: string[] };
   state: RunnerState;
   cwd: string;
   model?: string;
@@ -681,6 +691,12 @@ export type ClientRequest =
   | { kind: 'tunnel.close'; hostId: string }
   | { kind: 'tunnel.list' }
   | { kind: 'tunnel.run'; hostId: string; command: string }
+  | { kind: 'remote.hosts.test'; target: string; sshPort?: number; identityFile?: string; remotePort?: number }
+  // stage E5: WSL (local only; install runs only the shown command after the user said yes)
+  | { kind: 'wsl.list' }
+  | { kind: 'wsl.check'; distro: string }
+  | { kind: 'wsl.installCommand' }
+  | { kind: 'wsl.install'; distro: string; confirmed: true }
   | { kind: 'im.kinds' }
   | { kind: 'im.list' }
   | { kind: 'im.set'; id: string; patch: Partial<ImGatewayConfig> | null }
@@ -727,7 +743,7 @@ export type ClientRequest =
   | { kind: 'android.launchApp'; serial: string; pkg: string }
   | { kind: 'android.startEmulator'; avd: string }
   | { kind: 'agents.set'; agent: AgentKind; patch: { command?: string; args?: string[]; env?: Record<string, string>; model?: string; label?: string; enabled?: boolean; name?: string; protocol?: 'acp' | 'codex'; providerId?: string } | null }
-  | { kind: 'terminal.open'; cwd: string; cols: number; rows: number }
+  | { kind: 'terminal.open'; cwd: string; cols: number; rows: number; wsl?: { distro: string } }
   | { kind: 'terminal.input'; termId: string; data: string }
   | { kind: 'terminal.resize'; termId: string; cols: number; rows: number }
   | { kind: 'terminal.close'; termId: string }

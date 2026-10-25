@@ -42,6 +42,8 @@ export function refusedFromPeer(req: ClientRequest): string | null {
   if (req.kind.startsWith('peers.')) return tr('其它机器不能管理本机的机器列表');
   if (OWN_WINDOW_ONLY.has(req.kind)) return tr('只有本机的桌面窗口才能提供内置浏览器');
   // stage E: GitHub / GitLab tokens stay on the machine that has them
+  // stage E5: this computer's WSL distros and its SSH logins are its own
+  if (req.kind.startsWith('wsl.') || req.kind === 'remote.hosts.test') return tr('其它机器不能使用本机的 WSL 或 SSH');
   if (req.kind.startsWith('vcs.tokens.')) return tr('其它机器不能查看或修改本机的 GitHub / GitLab 令牌');
   return null;
 }
@@ -69,6 +71,8 @@ export function planRoute(req: ClientRequest): RoutePlan {
   const open = req.kind === 'session.open' ? req.params : undefined;
   const want = typeof open?.peer === 'string' ? open.peer : '';
   if (want) {
+    // stage E5: a WSL distro is this computer's; another machine's conversation cannot run in it
+    if (open!.env?.kind === 'wsl') return { kind: 'reject', reason: tr('WSL 对话只能开在本机') };
     const sid = open!.sessionId;
     if (sid && parsePeerId(sid)?.peerId !== want) return { kind: 'reject', reason: tr('一个请求不能同时涉及多台机器') };
     return { kind: 'forward', peerId: want };

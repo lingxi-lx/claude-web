@@ -146,9 +146,17 @@ export class RunnerPool extends EventEmitter {
       }
     }
     const kind = params.agent ?? 'claude';
+    // WSL (spec E5): the conversation's machine is its own — whoever reopens it (a window, IM, a schedule) starts it
+    // in the same distro; there it runs the distro's own Claude Code login, never a provider of this machine
+    const recordedEnv = params.sessionId ? this.providers.meta?.sessionMeta(params.sessionId).env : undefined;
+    const runEnv = params.env ?? recordedEnv;
+    if (runEnv?.kind === 'wsl') {
+      if (kind !== 'claude') throw new Error(tr('WSL 里只能跑 Claude Code'));
+      params = { ...params, env: runEnv, providerId: undefined };
+    }
     // the provider, when the caller did not say: IM, scheduled tasks, goals and hand-overs open sessions here
     // without going through the hub, and used to start on the account whatever the user had set up
-    const chosen = this.resolveProvider(params);
+    const chosen = runEnv?.kind === 'wsl' ? { byPool: false as const } : this.resolveProvider(params);
     if (chosen.byPool) params = { ...params, providerId: chosen.providerId };
     // the permission mode, when the caller did not say (a window that never had it live — after a restart, on the
     // phone — IM, schedules, goals): what this conversation last ran with, else the default for new conversations.
@@ -180,7 +188,7 @@ export class RunnerPool extends EventEmitter {
       const thinkingLanguage = params.sessionId ? m?.sessionMeta(params.sessionId).thinkingLanguage : undefined;
       // the own claude.ai login: its 200K / 1M picks and 自动压缩 point (A7); a provider / another account has its own
       let account: AccountPrefs | undefined;
-      if (!sp) account = this.accountPrefs();
+      if (!sp && params.env?.kind !== 'wsl') account = this.accountPrefs();
       // a conversation in a project's main folder works in the project's extra folders too (stage C2)
       const extra = this.extraFolders(params.cwd);
       r = new SessionRunner(params, sp, { thinkingLanguage, ...(account ? { account } : {}), ...(extra.length ? { additionalDirectories: extra } : {}) });
@@ -230,6 +238,10 @@ export class RunnerPool extends EventEmitter {
       if (chatOnly && meta && id && id !== placeholder && !meta.sessionMeta(id).chatOnly) void meta.setSessionMeta(id, { chatOnly: true }).catch(() => { /* in memory; the next save persists it */ });
     };
     keepChatOnly(r.sessionId);
+    const keepEnv = (id: string | undefined) => {
+      if (runEnv?.kind === 'wsl' && meta && id && id !== placeholder && !meta.sessionMeta(id).env) void meta.setSessionMeta(id, { env: runEnv }).catch(() => { /* in memory; the next save persists it */ });
+    };
+    keepEnv(r.sessionId);
     r.on('message', (m) => this.emit('message', r.sessionId, m));
     // the user message a send accepted, from whichever window, IM, schedule or goal sent it (AgentDriver 'sent'). Its
     // own event, not 'message': the canonical mirror records sends itself, the ledger / IM / goals read the agent's stream
@@ -251,6 +263,7 @@ export class RunnerPool extends EventEmitter {
       }
       // a fork gets its own id here: it is as tool-less as its parent
       keepChatOnly(i.sessionId);
+      keepEnv(i.sessionId);
       // the mode it runs in now (picked in a window, or the CLI's own move out of plan mode) is what it comes back in
       const mode = asMode(i.permissionMode);
       if (mode && meta && i.sessionId && i.sessionId !== placeholder && meta.sessionMeta(i.sessionId).permissionMode !== mode) {

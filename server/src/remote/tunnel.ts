@@ -3,6 +3,7 @@ import net from 'node:net';
 import { EventEmitter } from 'node:events';
 import type { RemoteHost, TunnelInfo } from '../protocol.js';
 import { tr } from '../i18n/index.js';
+import { classifySshProbe, sshProbeArgs, type SshProbe } from './ssh-probe.js';
 
 /**
  * SSH port-forward manager: `ssh -N -L 127.0.0.1:<local>:127.0.0.1:<remotePort> user@host` makes a claude-web
@@ -53,6 +54,22 @@ export class TunnelManager extends EventEmitter {
   async closeAll() { for (const id of [...this.tunnels.keys()]) await this.close(id); }
 
   /** Run a one-off command on the remote host (used to start claude-web there). Resolves when ssh exits or after 15s. */
+  /** 添加 SSH 机器… → 测试连接: one non-interactive login that asks the remote Claude Web's health (20 s). Starts nothing. */
+  probe(h: { target: string; sshPort?: number; identityFile?: string; remotePort?: number }): Promise<SshProbe> {
+    const args = sshProbeArgs(h);
+    return new Promise((resolve) => {
+      let output = '';
+      let done = false;
+      const finish = (r: { code: number | null; enoent?: boolean }) => { if (done) return; done = true; clearTimeout(timer); resolve(classifySshProbe({ ...r, output })); };
+      const child = spawn('ssh', args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+      const timer = setTimeout(() => { output += '\nConnection timed out'; try { child.kill(); } catch { /* gone */ } finish({ code: 255 }); }, 20_000);
+      child.stdout?.on('data', (d) => { output += String(d); });
+      child.stderr?.on('data', (d) => { output += String(d); });
+      child.on('error', (e: NodeJS.ErrnoException) => finish({ code: null, enoent: e.code === 'ENOENT' }));
+      child.on('close', (code) => finish({ code }));
+    });
+  }
+
   runRemote(host: RemoteHost, command: string): Promise<{ code: number | null; output: string }> {
     assertTarget(host.target);
     return new Promise((res) => {
