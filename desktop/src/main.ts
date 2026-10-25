@@ -8,7 +8,7 @@ import { CHECK_EVERY_MS, FIRST_CHECK_MS, firstLine, isRequired, macBundle, macSe
 import { MacSelfUpdate } from './mac-update';
 import { execFileSync } from 'node:child_process';
 import { captureGuest, drawGuest, hostedGuest } from './browser-capture';
-import { guestDebug } from './guest-debug';
+import { guestDebug, pageNavigated } from './guest-debug';
 import { BROWSER_PARTITIONS, LOCAL_PARTITION, Downloads, browserPartition, cleanVp, clearBrowsingData, emulate, emulatedUa, forgetGuest, guestKeyOf, importCookies, safeName } from './guest-tools';
 import { geminiForget, geminiLogin, geminiRefresh } from './gemini-login';
 import { cleanUserAgent } from './user-agent';
@@ -327,6 +327,8 @@ function createWindow(url: string | null, winId = 'main', bounds?: Bounds, hidde
     downloads.watch(guest.session);
     const guestId = guest.id;
     guest.once('destroyed', () => { fileGuard.forget(guestId); forgetGuest(guestId); });
+    // a new page (main frame, not an in-page hash / history change): the old one's console and requests go
+    guest.on('did-navigate', () => pageNavigated(guestId));
     // Ctrl/Cmd+F and Ctrl/Cmd + = / - / 0 pressed in the page belong to the panel (find, this tab's zoom) — and not to
     // the menu's accelerators, which would zoom the app (guest-tools.ts guestKeyOf)
     guest.on('before-input-event', (e, input) => {

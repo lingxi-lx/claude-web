@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EventEmitter } from 'node:events';
-import { PageLog, RING, acquire, axOutline, earlierRequests, forgetDebug, guestDebug, holds, release, type AXNodeLike } from './guest-debug';
+import { PageLog, RING, acquire, axOutline, earlierRequests, forgetDebug, guestDebug, holds, pageNavigated, release, type AXNodeLike } from './guest-debug';
 import { emulate, forgetGuest } from './guest-tools';
 
 let nextId = 1000;
@@ -91,6 +91,52 @@ describe('one DevTools protocol per page, shared', () => {
     expect(again.entries.at(-1)).toEqual({ method: 'POST', url: 'https://app.example/later', type: 'Fetch' });
     expect(again.earlier).toBe(0); // said once
     forgetDebug(p.guest.id);
+  });
+
+  it('the page goes to another address: the old page\'s console and requests are dropped (A6)', async () => {
+    const p = page();
+    await guestDebug(p.guest, { op: 'console' });
+    p.fire('Runtime.exceptionThrown', { exceptionDetails: { text: 'old boom' } });
+    p.fire('Network.requestWillBeSent', { requestId: '1', request: { url: 'https://old.example/api' } });
+    pageNavigated(p.guest.id);
+    p.fire('Network.requestWillBeSent', { requestId: '2', request: { url: 'https://new.example/app.js' } });
+    expect(((await guestDebug(p.guest, { op: 'console' })) as any).entries).toEqual([]);
+    expect(((await guestDebug(p.guest, { op: 'network' })) as any).entries.map((e: any) => e.url)).toEqual(['https://new.example/app.js']);
+    pageNavigated(424242); // a page with no log: nothing to do
+    forgetDebug(p.guest.id);
+  });
+
+  it('two first looks at once share one start; a failed start does not take the other\'s hold (A7)', async () => {
+    let release1!: () => void;
+    const gate = new Promise<void>((r) => { release1 = r; });
+    const p = page({ answer: async (m) => { if (m === 'Runtime.enable') { await gate; p.fire('Runtime.consoleAPICalled', { type: 'log', args: [{ value: 'early' }] }); } return {}; } });
+    const a = guestDebug(p.guest, { op: 'console' });
+    const b = guestDebug(p.guest, { op: 'console' });
+    release1();
+    const [ra, rb] = (await Promise.all([a, b])) as any[];
+    // the second look waited for the start: it sees what the page had logged
+    expect(ra.entries.map((e: any) => e.text)).toEqual(['early']);
+    expect(rb.entries.map((e: any) => e.text)).toEqual(['early']);
+    expect(p.sent.filter((m) => m === 'Runtime.enable')).toHaveLength(1);
+    forgetDebug(p.guest.id);
+
+    // both looks at once and the start fails: both are told, nothing is held
+    const f = page({ answer: (m) => { if (m === 'Network.enable') throw new Error('broken'); return {}; } });
+    const both = (await Promise.all([guestDebug(f.guest, { op: 'console' }), guestDebug(f.guest, { op: 'network' })])) as any[];
+    expect(both.map((x) => String(x.error))).toEqual([expect.stringMatching(/broken/), expect.stringMatching(/broken/)]);
+    expect(holds(f.guest.id, 'capture')).toBe(false);
+    expect(f.attached()).toBe(false);
+
+    // the viewport holds the protocol, the start fails: the viewport keeps it
+    const q = page({ answer: (m) => { if (m === 'Log.enable') throw new Error('nope'); return {}; } });
+    acquire(q.guest, 'viewport');
+    const r = (await guestDebug(q.guest, { op: 'console' })) as any;
+    expect(String(r.error ?? r)).toMatch(/nope/);
+    expect(holds(q.guest.id, 'viewport')).toBe(true);
+    expect(holds(q.guest.id, 'capture')).toBe(false);
+    expect(q.attached()).toBe(true);
+    release(q.guest, 'viewport');
+    expect(q.attached()).toBe(false);
   });
 
   it('network after console: the earlier requests were taken when the log started, and said on the first look', async () => {

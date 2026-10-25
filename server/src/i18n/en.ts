@@ -592,7 +592,7 @@ export const EN_SERVER: Record<string, string> = {
   "新密钥组": "New key group",
   "新组": "New group",
   "新账号池": "New account pool",
-  "方括号里的编号可以交给 browser_click / browser_type；要读正文用 browser_read。": "The refs in square brackets can be passed to browser_click / browser_type; to read the text, use browser_read.",
+  "方括号里的编号可以交给 browser_click / browser_type / browser_hover / browser_drag / browser_select / browser_wait；要读正文用 browser_read。": "The refs in square brackets can be passed to browser_click / browser_type / browser_hover / browser_drag / browser_select / browser_wait; to read the text, use browser_read.",
   "旗舰，推荐默认": "Flagship, recommended default",
   "无效包名：{pkg}": "Invalid package name: {pkg}",
   "无效按键": "Invalid key",

@@ -207,7 +207,7 @@ export function formatSnapshot(page: BrowserPage, note?: string): string {
     `${CONTENT_START} snapshot ${page.url}>>>`,
     defuse(text) || tr('（页面上没有找到可以列出的结构）'),
     CONTENT_END,
-    tr('方括号里的编号可以交给 browser_click / browser_type；要读正文用 browser_read。'),
+    tr('方括号里的编号可以交给 browser_click / browser_type / browser_hover / browser_drag / browser_select / browser_wait；要读正文用 browser_read。'),
   ].join('\n');
 }
 

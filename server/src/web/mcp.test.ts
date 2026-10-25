@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { TOOLS, callServer, callTimeoutOf } from './mcp.js';
 import { SITE_ASK_TIMEOUT_MS } from './site-gate.js';
 import { webMcpEntry } from './launcher.js';
+import { formatSnapshot } from './format.js';
 
 /** The claude-web server as the MCP process sees it: one endpoint, a bearer, MCP content back. */
 interface Hit { method?: string; url?: string; auth?: string; body: any }
@@ -169,6 +170,12 @@ describe('the tool list', () => {
     expect(schema('browser_viewport').properties.preset.enum).toEqual(['auto', 'phone', 'tablet', 'desktop']);
     expect(schema('browser_viewport').required).toEqual(['preset']);
     for (const n of ['browser_console', 'browser_network', 'browser_snapshot', 'browser_wait', 'browser_tabs', 'browser_viewport']) expect(TOOLS.find((t) => t.name === n)!.description, n).toMatch(/desktop app/);
+    // stage B fix wave (A8): a ref from browser_snapshot works for every tool that takes one
+    const refDesc = (TOOLS.find((t) => t.name === 'browser_click')!.inputSchema as any).properties.ref.description;
+    expect(refDesc).toMatch(/browser_snapshot/);
+    expect(TOOLS.find((t) => t.name === 'browser_snapshot')!.description).toMatch(/browser_click.*browser_type.*browser_hover.*browser_drag.*browser_select.*browser_wait/);
+    const snap = formatSnapshot({ url: 'https://a.example/', title: 'A', text: 'button "Go" [k1]' });
+    for (const tool of ['browser_click', 'browser_type', 'browser_hover', 'browser_drag', 'browser_select', 'browser_wait']) expect(snap, tool).toContain(tool);
   });
 
   it('hover / drag / select / eval take what the contract says, and say who is asked', () => {

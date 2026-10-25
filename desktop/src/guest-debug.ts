@@ -110,9 +110,24 @@ interface Shared {
   /** We attached it (and so detach it). */
   ours: boolean;
   log: PageLog | null;
+  /** The log being started (enable commands on their way): a second first look waits for it, a failure tells both. */
+  starting?: Promise<PageLog | string>;
   off: () => void;
 }
 const shared = new Map<number, Shared>();
+
+/**
+ * The page went to another address (main frame; main.ts `did-navigate`): the old page's console messages and requests
+ * are dropped, so they are never read — or counted by the preview check — as the new page's.
+ */
+export function pageNavigated(guestId: number): void {
+  const log = shared.get(guestId)?.log;
+  if (!log) return;
+  log.console.length = 0;
+  log.network.length = 0;
+  log.earlier = 0;
+  log.earlierTold = true;
+}
 
 export const NO_DEBUGGER = () => tr('读不了这个页面的调试信息：它开着开发者工具（DevTools），或者被别的调试器占着。关掉开发者工具再试。');
 
@@ -166,16 +181,31 @@ async function startCapture(guest: WebContents): Promise<{ log: PageLog; fresh: 
   const err = acquire(guest, 'capture');
   if (err) return err;
   const s = shared.get(guest.id)!;
+  // being started by another look: wait for it (its messages handed over), and share its failure
+  if (s.starting) {
+    const r = await s.starting;
+    return typeof r === 'string' ? r : { log: r, fresh: false };
+  }
   if (s.log) return { log: s.log, fresh: false };
   const log = new PageLog();
   s.log = log;
+  let done!: (r: PageLog | string) => void;
+  s.starting = new Promise((r) => { done = r; });
+  const r = await enableCapture(guest, log);
+  if (shared.get(guest.id) === s) s.starting = undefined;
+  if (typeof r === 'string') release(guest, 'capture');
+  done(r);
+  return typeof r === 'string' ? r : { log: r, fresh: true };
+}
+
+/** The enable commands, and the requests from before them (resource timing) put at the front of `log`. */
+async function enableCapture(guest: WebContents, log: PageLog): Promise<PageLog | string> {
   try {
     // Runtime.enable hands over the console messages the page logged before; Log.enable the browser's own lines
     await guest.debugger.sendCommand('Runtime.enable');
     await guest.debugger.sendCommand('Log.enable');
     await guest.debugger.sendCommand('Network.enable', { maxPostDataSize: 0 });
   } catch (e) {
-    release(guest, 'capture');
     return tr('读不了这个页面的调试信息：{why}', { why: String((e as Error)?.message ?? e).slice(0, 200) });
   }
   // the requests made before now are not handed over: the page's resource timing has them (address, time, status)
@@ -191,7 +221,7 @@ async function startCapture(guest: WebContents): Promise<{ log: PageLog; fresh: 
   log.network.unshift(...earlier);
   if (log.network.length > RING) log.network.splice(0, log.network.length - RING);
   log.earlier = earlier.length;
-  return { log, fresh: true };
+  return log;
 }
 
 /** The requests the page made before the log started, from its resource timing: address, time, and the status if the page gives it. */
