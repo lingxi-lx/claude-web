@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SessionSummary } from '@shared';
-import { addSection, addToSection, dateBucket, DEFAULT_VIEW, deleteSection, groupSessions, perGroupLimit, readSections, readView, removeFromSection, renameSection, sortSessions } from './view';
+import { addAllToSection, addSection, addToSection, pruneSections, dateBucket, DEFAULT_VIEW, deleteSection, groupSessions, perGroupLimit, readSections, readView, removeFromSection, renameSection, sortSessions } from './view';
 
 const s = (id: string, o: Partial<SessionSummary> = {}): SessionSummary => ({ sessionId: id, title: id, cwd: 'C:\\a', lastModified: 0, ...o });
 const now = new Date(2026, 9, 24, 15, 0).getTime();
@@ -80,5 +80,14 @@ describe('custom sections', () => {
     l = renameSection(removeFromSection(l, 's1', 'x'), 's1', '下周');
     expect(l).toEqual([{ id: 's1', name: '下周', ids: ['y'] }]);
     expect(deleteSection(l, 's1')).toEqual([]);
+  });
+  it('several at once (the multi-select bar), each once', () => {
+    const l = addAllToSection([{ id: 's1', name: 'A', ids: ['x'] }, { id: 's2', name: 'B', ids: [] }], 's1', ['x', 'y', 'z']);
+    expect(l).toEqual([{ id: 's1', name: 'A', ids: ['x', 'y', 'z'] }, { id: 's2', name: 'B', ids: [] }]);
+  });
+  it('pruned when written (C-U4): ids of conversations that are gone go; another machine’s stay (it may be offline); an empty list prunes nothing', () => {
+    const l = [{ id: 's1', name: 'A', ids: ['x', 'gone', 'peer_box~abc'] }];
+    expect(pruneSections(l, new Set(['x']))).toEqual([{ id: 's1', name: 'A', ids: ['x', 'peer_box~abc'] }]);
+    expect(pruneSections(l, new Set())).toEqual(l);
   });
 });

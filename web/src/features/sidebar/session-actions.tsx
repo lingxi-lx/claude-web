@@ -12,6 +12,7 @@ import { MenuHost, closeDrawer, useAnchoredMenu } from './menus';
 import type { RowMenuId } from './entries';
 import { TERMS } from '@/ui/terms';
 import { tr } from '@/i18n';
+import { SECTIONS_KEY, pruneSections, type CustomSection } from './view';
 
 export { effectiveCaps, capsIntersection, nativeCliCommand, type EffectiveCaps } from './caps';
 
@@ -117,6 +118,12 @@ export async function handOverToLocal(s: SessionSummary, agent: AgentKind): Prom
     await st.refreshSessions().catch(() => {});
     if (r?.sessionId) await st.loadHistory(r.sessionId, { mode: 'tab' });
   } catch (e) { st.toast(errText(e)); }
+}
+
+/** Writes the custom sections, dropping ids of conversations that are gone (C-U4; another machine's stay). */
+export function saveSections(l: CustomSection[]): Promise<void> {
+  const st = useStore.getState();
+  return st.setSetting(SECTIONS_KEY, pruneSections(l, new Set(st.sessions.map((x) => x.sessionId))));
 }
 
 export function openNativeCli(s: SessionSummary): void {

@@ -1508,6 +1508,9 @@ html[data-density='compact'] .sb-row.sess { height: 28px; padding: 0 10px 0 var(
 .sb-custom .sb-row-wrap.with-out { display: flex; align-items: center; }
 .sb-custom .sb-row-wrap.with-out > :first-child { flex: 1; min-width: 0; }
 .sb-custom.drop-on > .sb-sec-h { background: var(--layer-selected); }
+.sb-custom .sb-sec-t { all: unset; display: inline-flex; align-items: center; gap: 4px; flex: 1; min-width: 0; height: 100%; cursor: pointer; border-radius: var(--r-row); }
+.sb-custom .sb-sec-t:focus-visible { box-shadow: var(--focus-ring); }
+.sb-custom .sb-sec-t:focus-visible .sec-chev, .sb-custom .sb-sec-t[aria-expanded='false'] .sec-chev { opacity: 1; }
 
 /* account row: avatar · name · plan + quota ring · settings */
 .sb-foot.sb-account { height: 58px; padding: 0 var(--sp-2); gap: 4px; flex: none; }

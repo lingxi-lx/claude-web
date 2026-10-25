@@ -2916,6 +2916,37 @@ function driver() {
               const out = await waitFor(`!document.querySelector('.sidebar .sb-custom [data-sid="${sid0}"]') && !!document.querySelector('.sidebar .sb-list [data-sid="${sid0}"]')`, 3000);
               const sections = JSON.parse(await js(`JSON.stringify(window.__store.getState().settings['ui.sidebar.sections'] ?? null)`));
               check('新建分区 (named in the dialog) sits above the groups; a row dropped on it is there and in its own group too; × takes it out; kept in ui.sidebar.sections', asked && made && !!sid0 && dropped && inBoth && secMenu && out && Array.isArray(sections) && sections.some((x) => x.name === '本周要交' && Array.isArray(x.ids) && x.ids.length === 0), JSON.stringify({ asked, made, sid0, dropped, inBoth, secMenu, out, sections }));
+              // stage C fix wave C-U3: no drag needed — the row menu's 加入分区「…」 / 移出分区「…」 and the multi-select bar's
+              // 加入分区; the section's heading folds with a real button (C-U4)
+              const inSec = `!!document.querySelector('.sidebar .sb-custom [data-sid="${sid0}"]')`;
+              await ctxMenu(`${projSec} [data-sid="${sid0}"]`);
+              const addItem = await waitFor('!!document.querySelector(".menu.sess-menu [data-id=\\"section-add\\"]")', 2000);
+              const addLabel = await js(`document.querySelector('.menu.sess-menu [data-id="section-add"]')?.textContent?.trim() ?? null`);
+              await harvest();
+              await click('.menu.sess-menu [data-id="section-add"]');
+              const addedByMenu = await waitFor(inSec, 3000);
+              await closeMenus();
+              await ctxMenu(`.sidebar .sb-custom [data-sid="${sid0}"]`);
+              const outItem = await waitFor('!!document.querySelector(".menu.sess-menu [data-id=\\"section-out\\"]")', 2000);
+              await harvest();
+              await click('.menu.sess-menu [data-id="section-out"]');
+              const outByMenu = await waitFor(`!(${inSec})`, 3000);
+              await closeMenus();
+              await openView();
+              await click('.menu.sb-view [data-id="select"]');
+              await waitFor('!!document.querySelector(".sidebar .sel-bar")', 2000);
+              await js(`document.querySelector('${projSec} [data-sid="${sid0}"]')?.click()`);
+              const barBtn = await waitFor('!!document.querySelector(".sidebar .sel-bar [data-id=\\"select-section\\"]")', 2000);
+              await click('.sidebar .sel-bar [data-id="select-section"]');
+              await waitFor('!!document.querySelector(".menu [data-section]")', 2000);
+              await harvest();
+              await js(`[...document.querySelectorAll('.menu [data-section]')].find((b) => b.textContent.trim() === '本周要交')?.click()`);
+              const addedByBar = await waitFor(`${inSec} && !document.querySelector('.sidebar .sel-bar')`, 3000);
+              const head = await js(`(() => { const h = document.querySelector('.sidebar .sb-custom > .sb-sec-h'); const t = h?.querySelector('button.sb-sec-t'); return { role: h?.getAttribute('role') ?? null, btn: !!t, expanded: t?.getAttribute('aria-expanded') ?? null, nested: !!t?.querySelector('button') }; })()`);
+              await js(`document.querySelector('.sidebar .sb-custom [data-sid="${sid0}"]')?.closest('.sb-row-wrap')?.querySelector('[data-id="custom-out"]')?.click()`);
+              await waitFor(`!(${inSec})`, 3000);
+              check('C-U3: row menu 加入分区「本周要交」 puts it in, 移出分区「本周要交」 there takes it out; 选择多个 → 加入分区 → 本周要交 adds the picked and ends the selection; the heading folds with its own button (C-U4)',
+                addItem && /本周要交/.test(addLabel || '') && addedByMenu && outItem && outByMenu && barBtn && addedByBar && head.role === null && head.btn && head.expanded === 'true' && !head.nested, JSON.stringify({ addItem, addLabel, addedByMenu, outItem, outByMenu, barBtn, addedByBar, head }));
               // 恢复默认: back to the defaults (and 显示已归档 off), the section stays; 查看全部 opens the palette
               await pickIn('group-by', '日期');
               await openView();

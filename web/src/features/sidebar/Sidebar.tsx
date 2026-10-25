@@ -15,13 +15,13 @@ import { navGo, useNav } from '@/features/workbench/nav-history';
 import { Icon } from '@/ui/icons';
 import { projectFor } from '@/features/paths';
 import { agentOf, childrenOf, filterSessions, filterSummary, isArchived, machineCounts, renderedRows, sourceCounts } from './filter';
-import { capsIntersection, deleteSessions, setArchived } from './session-actions';
+import { capsIntersection, deleteSessions, saveSections, setArchived } from './session-actions';
 import { rangeIds } from './status';
 import { SessionRow, type RowCtx, type Selection } from './rows';
 import { Group, ProjectMenu } from './groups';
 import { NeedsYou } from './attention';
 import { ViewMenu, type SourceChip } from './view-menu';
-import { addSection, addToSection, DEFAULT_VIEW, deleteSection, groupSessions, isDefaultView, perGroupLimit, readSections, readView, removeFromSection, renameSection, SECTIONS_KEY, sortSessions, VIEW_KEY, type DateBucket } from './view';
+import { addAllToSection, addSection, addToSection, DEFAULT_VIEW, deleteSection, groupSessions, perGroupLimit, readSections, readView, removeFromSection, renameSection, SECTIONS_KEY, sortSessions, VIEW_KEY, type DateBucket } from './view';
 import { MIME_SESSION } from '@/features/workbench/dnd';
 import { dlg } from '@/ui/dialog';
 import { AccountRow } from './account';
@@ -131,6 +131,10 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
   // listed, there is no 「已筛选」 row for it and 清除 leaves it on (it still lights the funnel: a non-default setting)
   const summary = filterSummary({ source: sourceFilter, machine, query: q }, nameOf, (m) => machines.find((x) => x.id === m)?.name ?? m);
   const narrowed = summary.length > 0;
+  // the 显示 button's dot (and the button staying shown at rest): something narrows, widens or hides part of the list.
+  // A deliberate 分组 / 排序 / 每组几条 choice is not that — the list itself shows it — and lighting it for good would
+  // add a control at rest (外框控件计数, 界面改版 阶段 0–1; stage C fix wave C-U4)
+  const viewDot = narrowed || showArchived || !view.show.otherAgents;
   const clearFilters = () => { setQ(''); setSourceFilter('all'); setMachine('all'); };
   const pending = sources.filter((x) => x.kind !== 'claude' && x.detected && !x.joined && !x.dismissed);
   const pinned = visible.filter((s) => sessionMeta[s.sessionId]?.pinned);
@@ -340,10 +344,11 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
   const [dropOn, setDropOn] = useState<string | null>(null);
   const newSection = async () => {
     const name = (await dlg.prompt(tr('分区名称'), '', { placeholder: tr('比如：本周要交') }))?.trim();
-    if (name) await setSetting(SECTIONS_KEY, addSection(sections, `sec-${Date.now().toString(36)}`, name));
+    if (name) await saveSections(addSection(sections, `sec-${Date.now().toString(36)}`, name));
   };
   const DATE_NAME: Record<DateBucket, string> = { today: tr('今天'), yesterday: tr('昨天'), week: tr('最近 7 天'), month: tr('最近 30 天'), older: tr('更早') };
   const selBar: RowId = 'select-bar';
+  const selSec: RowId = 'select-section';
 
   return (
     <>
@@ -374,6 +379,18 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
             <span className="grow" />
             {selCaps.archive && <button className="btn sm" onClick={async () => { await setArchived(selected, !allArchived); endSelect(); }}><Icon name="archive" size={12} /> {allArchived ? tr('取消归档') : tr('归档')}</button>}
             {selCaps.delete && <button className="btn sm danger" onClick={async () => { if (await deleteSessions(selected)) endSelect(); }}><Icon name="trash" size={12} /> {tr('删除')}</button>}
+            {sections.length > 0 && selected.length > 0 && (
+              <span className="anchor">
+                <button className="btn sm" data-id={selSec} aria-haspopup="menu" aria-expanded={menu === 'sel-section'} onClick={toggleMenu('sel-section')}><Icon name="plus" size={12} /> {tr('加入分区')}</button>
+                {menu === 'sel-section' && (
+                  <Menu onClose={() => closeMenu('sel-section')} label={tr('加入分区')}>
+                    {sections.map((c) => (
+                      <button key={c.id} data-section={c.id} onClick={async () => { closeMenu('sel-section'); await saveSections(addAllToSection(sections, c.id, selected.map((x) => x.sessionId))); endSelect(); }}>{c.name}</button>
+                    ))}
+                  </Menu>
+                )}
+              </span>
+            )}
             <button className="btn sm ghost" title={tr('退出多选 (Esc)')} onClick={endSelect}>{tr('完成')}</button>
             {selected.length > 0 && !selCaps.archive && !selCaps.delete && <span className="hint">{tr('选中的对话来源不支持批量操作')}</span>}
           </div>
@@ -394,22 +411,25 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
           const menuOpen = toggleMenu(k);
           return (
             <div key={c.id} className={clsx('sb-group sb-sec sb-custom', shut && 'collapsed', dropOn === c.id && 'drop-on')} data-group={k} data-section={c.id} data-id={sec('custom')}>
-              <div className="sb-sec-h fold" data-id={cu('custom-section')} role="button" tabIndex={0} aria-expanded={!shut} title={tr('把对话拖到这里放进这个分区')}
-                onClick={() => toggleGroup(k, shut)} onContextMenu={menuOpen}
-                onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggleGroup(k, shut); } }}
+              {/* the heading is the drop target; its title is a real button (fold), the ⋯ button sits beside it — no control
+                  nested inside a role=button (stage C fix wave C-U4) */}
+              <div className="sb-sec-h fold" data-id={cu('custom-section')} title={tr('把对话拖到这里放进这个分区')}
+                onClick={(e) => { if (e.target === e.currentTarget) toggleGroup(k, shut); }} onContextMenu={menuOpen}
                 onDragOver={(e) => { if (!e.dataTransfer.types.includes(MIME_SESSION)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; if (dropOn !== c.id) setDropOn(c.id); }}
                 onDragLeave={() => setDropOn((d) => (d === c.id ? null : d))}
-                onDrop={(e) => { const sid = e.dataTransfer.getData(MIME_SESSION); setDropOn(null); if (!sid) return; e.preventDefault(); void setSetting(SECTIONS_KEY, addToSection(sections, c.id, sid)); }}>
-                <span className="name">{c.name}</span>
-                <Icon name={shut ? 'chevronRight' : 'chevronDown'} size={12} className="sec-chev" />
-                {shut && <span className="cnt">{items.length}</span>}
-                <span className="acts" onClick={(e) => e.stopPropagation()}>
+                onDrop={(e) => { const sid = e.dataTransfer.getData(MIME_SESSION); setDropOn(null); if (!sid) return; e.preventDefault(); void saveSections(addToSection(sections, c.id, sid)); }}>
+                <button type="button" className="sb-sec-t" aria-expanded={!shut} onClick={() => toggleGroup(k, shut)}>
+                  <span className="name">{c.name}</span>
+                  <Icon name={shut ? 'chevronRight' : 'chevronDown'} size={12} className="sec-chev" />
+                  {shut && <span className="cnt">{items.length}</span>}
+                </button>
+                <span className="acts">
                   <button className="icon-btn xs" title={tr('更多')} aria-label={tr('分区菜单')} aria-haspopup="menu" aria-expanded={menu === k} onClick={menuOpen}><Icon name="more" size={14} /></button>
                 </span>
                 {menu === k && (
                   <Menu onClose={() => closeMenu(k)} className="sb-custom-menu" label={tr('分区 {name}', { name: c.name })}>
-                    <button data-id={cu('custom-rename')} onClick={async () => { closeMenu(k); const n = (await dlg.prompt(tr('分区名称'), c.name))?.trim(); if (n) await setSetting(SECTIONS_KEY, renameSection(sections, c.id, n)); }}><Icon name="edit" size={14} /> {tr('重命名')}</button>
-                    <button data-id={cu('custom-delete')} className="danger" onClick={async () => { closeMenu(k); if (await dlg.confirm(tr('删除分区「{name}」？', { name: c.name }), { message: tr('只删除这个分区，对话还在原来的分组里'), danger: true })) await setSetting(SECTIONS_KEY, deleteSection(sections, c.id)); }}><Icon name="trash" size={14} /> {tr('删除分区')}</button>
+                    <button data-id={cu('custom-rename')} onClick={async () => { closeMenu(k); const n = (await dlg.prompt(tr('分区名称'), c.name))?.trim(); if (n) await saveSections(renameSection(sections, c.id, n)); }}><Icon name="edit" size={14} /> {tr('重命名')}</button>
+                    <button data-id={cu('custom-delete')} className="danger" onClick={async () => { closeMenu(k); if (await dlg.confirm(tr('删除分区「{name}」？', { name: c.name }), { message: tr('只删除这个分区，对话还在原来的分组里'), danger: true })) await saveSections(deleteSection(sections, c.id)); }}><Icon name="trash" size={14} /> {tr('删除分区')}</button>
                   </Menu>
                 )}
               </div>
@@ -418,7 +438,7 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
                   {items.map((s) => (
                     <div key={s.sessionId} className="sb-row-wrap with-out">
                       <SessionRow s={s} ctx={ctx} flat />
-                      <button className="icon-btn xs sb-custom-out" data-id={cu('custom-out')} title={tr('移出分区')} aria-label={tr('移出分区')} onClick={() => void setSetting(SECTIONS_KEY, removeFromSection(sections, c.id, s.sessionId))}><Icon name="close" size={12} /></button>
+                      <button className="icon-btn xs sb-custom-out" data-id={cu('custom-out')} title={tr('移出分区')} aria-label={tr('移出分区')} onClick={() => void saveSections(removeFromSection(sections, c.id, s.sessionId))}><Icon name="close" size={12} /></button>
                     </div>
                   ))}
                   {!items.length && <div className="sb-empty-row">{tr('把对话拖到这里')}</div>}
@@ -432,8 +452,8 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
             <span>{byProject ? trAs('项目', 'Projects') : tr('对话')}</span>
             <span className="grow" />
             <span className="anchor">
-              <button className={clsx('icon-btn xs', (narrowed || showArchived || !isDefaultView(view) || menu === 'view') && 'on')} data-id={head('view')} title={tr('显示：分组、排序、筛选、来源、已归档、选择多个')} aria-label={tr('显示')} aria-haspopup="menu" aria-expanded={menu === 'view'} onClick={toggleMenu('view')}>
-                <Icon name="filter" size={14} />{(narrowed || showArchived || !isDefaultView(view)) && <span className="fdot" />}
+              <button className={clsx('icon-btn xs', (viewDot || menu === 'view') && 'on')} data-id={head('view')} title={tr('显示：分组、排序、筛选、来源、已归档、选择多个')} aria-label={tr('显示')} aria-haspopup="menu" aria-expanded={menu === 'view'} onClick={toggleMenu('view')}>
+                <Icon name="filter" size={14} />{viewDot && <span className="fdot" />}
               </button>
               {menu === 'view' && (
                 <ViewMenu

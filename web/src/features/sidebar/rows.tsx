@@ -8,7 +8,8 @@ import { MIME_SESSION } from '@/features/workbench/dnd';
 import { sessionDiffStat } from '@/model/diffstat';
 import { TERMS } from '@/ui/terms';
 import { isArchived } from './filter';
-import { SessionMenu, effectiveCaps } from './session-actions';
+import { SessionMenu, effectiveCaps, saveSections } from './session-actions';
+import { addToSection, readSections, removeFromSection, SECTIONS_KEY } from './view';
 import { closeDrawer } from './menus';
 import { rowStatus, type RowStatus } from './status';
 import type { RowId, RowMenuId } from './entries';
@@ -25,6 +26,7 @@ function SidebarMenuExtra({ s, onClose }: { s: SessionSummary; onClose: () => vo
   const openIn = (mode: 'tab' | 'replace') => act(() => (open ? st.openInPane(s.sessionId, mode) : st.loadHistory(s.sessionId, { mode })));
   const id = (x: RowMenuId) => x;
   const split = () => openFromSidebar(s.sessionId, 'split');
+  const sections = readSections(st.settings[SECTIONS_KEY]);
   return (
     <>
       <button data-id={id('open-tab')} onClick={openIn('tab')}><Icon name="board" size={14} /> {tr('在新{tile}打开', { tile: TERMS.tile })}</button>
@@ -34,6 +36,11 @@ function SidebarMenuExtra({ s, onClose }: { s: SessionSummary; onClose: () => vo
       {!s.peer && <button data-id={id('explorer')} onClick={act(() => ws.request({ kind: 'shell.open', path: s.cwd }).catch((e) => useStore.getState().toast(e.message)))}><Icon name="folder" size={14} /> {tr('在资源管理器打开')}</button>}
       {!s.peer && <button data-id={id('vscode')} onClick={act(() => ws.request({ kind: 'shell.open', path: s.cwd, app: 'code' }).catch((e) => useStore.getState().toast(e.message)))}><Icon name="keyboard" size={14} /> {tr('在 VS Code 打开')}</button>}
       {open && open.state !== 'history' && <button data-id={id('stop')} onClick={act(() => st.closeSession(s.sessionId))}><Icon name="stop" size={14} /> {tr('结束进程')}</button>}
+      {/* the user's own sections without dragging (stage C fix wave C-U3): in or out of each */}
+      {sections.length > 0 && <div className="menu-sep" />}
+      {sections.map((c) => (c.ids.includes(s.sessionId)
+        ? <button key={c.id} data-id={id('section-out')} data-section={c.id} onClick={act(() => saveSections(removeFromSection(sections, c.id, s.sessionId)))}><Icon name="close" size={14} /> {tr('移出分区「{name}」', { name: c.name })}</button>
+        : <button key={c.id} data-id={id('section-add')} data-section={c.id} onClick={act(() => saveSections(addToSection(sections, c.id, s.sessionId)))}><Icon name="plus" size={14} /> {tr('加入分区「{name}」', { name: c.name })}</button>))}
       <div className="menu-sep" />
     </>
   );

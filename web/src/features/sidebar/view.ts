@@ -95,3 +95,14 @@ export const renameSection = (l: CustomSection[], id: string, name: string): Cus
 export const deleteSection = (l: CustomSection[], id: string): CustomSection[] => l.filter((x) => x.id !== id);
 export const addToSection = (l: CustomSection[], id: string, sid: string): CustomSection[] => l.map((x) => (x.id === id && !x.ids.includes(sid) ? { ...x, ids: [...x.ids, sid] } : x));
 export const removeFromSection = (l: CustomSection[], id: string, sid: string): CustomSection[] => l.map((x) => (x.id === id ? { ...x, ids: x.ids.filter((i) => i !== sid) } : x));
+/** The multi-select bar's 加入分区 (C-U3): every picked conversation, each once. */
+export const addAllToSection = (l: CustomSection[], id: string, sids: readonly string[]): CustomSection[] => sids.reduce((acc, sid) => addToSection(acc, id, sid), l);
+/**
+ * What is written drops the ids of conversations that are no longer there (deleted, or gone with their folder:
+ * C-U4) — but never another machine's (`peer_…`: that machine may just be offline) and nothing at all while the list
+ * of conversations is empty (not loaded yet).
+ */
+export function pruneSections(l: CustomSection[], known: ReadonlySet<string>): CustomSection[] {
+  if (!known.size) return l;
+  return l.map((x) => ({ ...x, ids: x.ids.filter((i) => known.has(i) || i.startsWith('peer_')) }));
+}

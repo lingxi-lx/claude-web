@@ -58,7 +58,9 @@ export function HomeLists({ onOpen }: { onOpen: (sessionId: string) => void }) {
   const byId = useMemo(() => new Map(sessions.map((s) => [s.sessionId, s])), [sessions]);
   const all = () => {
     if (tab === 'schedules') openAutomation('schedules');
-    else if (tab === 'archived') { useStore.getState().setShowArchived(true); useStore.setState({ sidebarOpen: true }); }
+    // just for now: 显示已归档 in the 显示 menu is the setting (kept in ui.sidebar.view); a look from the start page
+    // must not turn it on for good (stage C fix wave C-U4) — the next start reads the setting again
+    else if (tab === 'archived') useStore.setState({ showArchived: true, sidebarOpen: true });
     else useStore.setState({ paletteOpen: true });
   };
   const showAll = tab === 'schedules' || more > 0;
