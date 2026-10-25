@@ -11,7 +11,7 @@ import { envTokenFor, forgeOf } from './forge-map.js';
 import { GithubForge } from './github-forge.js';
 import { GitlabForge } from './gitlab-forge.js';
 import type { VcsTokenStore } from './token-store.js';
-import { isWslUnc } from '../wsl/paths.js';
+import { wslSafeDirArgs } from '../wsl/paths.js';
 
 const execFileAsync = promisify(execFile);
 const isWin = process.platform === 'win32';
@@ -294,7 +294,7 @@ export class VcsService {
   async prForBranch(cwd: string): Promise<{ pr?: BranchPr; why?: string }> {
     if (!cwd || !path.isAbsolute(cwd)) return { why: 'not-a-repo' };
     let branch = '';
-    try { branch = (await execFileAsync('git', [...(isWslUnc(cwd) ? ['-c', 'safe.directory=*'] : []), 'rev-parse', '--abbrev-ref', 'HEAD'], { cwd, windowsHide: true, timeout: 10_000 })).stdout.trim(); } catch { return { why: 'not-a-repo' }; }
+    try { branch = (await execFileAsync('git', [...wslSafeDirArgs(cwd), 'rev-parse', '--abbrev-ref', 'HEAD'], { cwd, windowsHide: true, timeout: 10_000 })).stdout.trim(); } catch { return { why: 'not-a-repo' }; }
     if (!branch || branch === 'HEAD') return { why: 'detached' };
     let t: Target;
     try { t = await this.target(cwd); } catch { return { why: 'no-remote' }; }

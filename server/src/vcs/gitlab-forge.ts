@@ -1,12 +1,15 @@
 // GitLab for the PR bar (spec E2): the branch's MR with its pipeline, merge when the pipeline succeeds, job logs,
 // discussions and who may push (REST v4; the service carries it over `glab api` or a stored token).
 import type { PrCommentRef } from '../protocol.js';
+import { tr } from '../i18n/index.js';
 import { gitlabComments, isGitlabWriter, type CommentCandidate, type PermissionCache } from './comments.js';
 import type { Forge, ForgeApi, Target } from './forge.js';
 import { mapGitlabMr, pickGitlabMr, traceTail } from './forge-map.js';
 
 const pid = (t: Target) => encodeURIComponent(`${t.owner}/${t.repo}`);
 const enc = encodeURIComponent;
+/** Discussions are read page by page (oldest first): at most this many pages of 100. */
+export const DISCUSSION_PAGES = 20;
 
 export class GitlabForge implements Forge {
   readonly kind = 'gitlab' as const;
@@ -25,6 +28,11 @@ export class GitlabForge implements Forge {
 
   async setAutoMerge(t: Target, prId: string, on: boolean) {
     const iid = enc(prId);
+    if (on) {
+      // with no pipeline on the head, "merge when the pipeline succeeds" merges right away — refuse instead
+      const mr = await this.api.rest<any>(t, `/projects/${pid(t)}/merge_requests/${iid}`);
+      if (!mr?.head_pipeline?.id) throw new Error(tr('这个 MR 的最新提交还没有流水线，GitLab 会立刻合并；等流水线开始后再打开'));
+    }
     if (on) await this.api.rest(t, `/projects/${pid(t)}/merge_requests/${iid}/merge`, { method: 'PUT', body: { merge_when_pipeline_succeeds: true, auto_merge: true } });
     else await this.api.rest(t, `/projects/${pid(t)}/merge_requests/${iid}/cancel_merge_when_pipeline_succeeds`, { method: 'POST' });
   }
@@ -34,7 +42,13 @@ export class GitlabForge implements Forge {
   }
 
   async comments(t: Target, number: number): Promise<CommentCandidate[]> {
-    const ds = await this.api.rest<any[]>(t, `/projects/${pid(t)}/merge_requests/${Number(number)}/discussions?per_page=100`);
+    const ds: any[] = [];
+    for (let page = 1; page <= DISCUSSION_PAGES; page++) {
+      const one = await this.api.rest<any[]>(t, `/projects/${pid(t)}/merge_requests/${Number(number)}/discussions?per_page=100&page=${page}`);
+      if (!Array.isArray(one)) break;
+      ds.push(...one);
+      if (one.length < 100) break;
+    }
     return gitlabComments(ds, `https://${t.host}/${t.owner}/${t.repo}/-/merge_requests/${Number(number)}`);
   }
 

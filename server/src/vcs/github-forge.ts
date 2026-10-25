@@ -9,7 +9,7 @@ import { mapGithubPr, pickGithubPr } from './forge-map.js';
 // this repository's own branches count, and never the default branch — nobody's conversation "is" that PR
 const PR_QUERY = `query($owner:String!,$name:String!,$head:String!){ repository(owner:$owner,name:$name){ defaultBranchRef{ name } pullRequests(headRefName:$head,first:10,orderBy:{field:UPDATED_AT,direction:DESC}){ nodes{ id number title url state isDraft isCrossRepository mergeable reviewDecision baseRefName autoMergeRequest{ enabledAt } commits(last:1){ nodes{ commit{ oid statusCheckRollup{ contexts(first:100){ nodes{ __typename ... on CheckRun{ name status conclusion detailsUrl checkSuite{ workflowRun{ databaseId } } } ... on StatusContext{ context state targetUrl } } } } } } } } } } }`;
 
-const COMMENTS_QUERY = `query($owner:String!,$name:String!,$n:Int!){ viewer{ login } repository(owner:$owner,name:$name){ pullRequest(number:$n){ reviewThreads(first:100){ nodes{ id isResolved path line originalLine comments(last:20){ nodes{ databaseId author{ login __typename } body url createdAt diffHunk } } } } comments(last:50){ nodes{ databaseId author{ login __typename } body url createdAt } } } } }`;
+const COMMENTS_QUERY = `query($owner:String!,$name:String!,$n:Int!){ viewer{ login } repository(owner:$owner,name:$name){ pullRequest(number:$n){ reviewThreads(last:100){ nodes{ id isResolved path line originalLine comments(last:20){ nodes{ databaseId author{ login __typename } body url createdAt diffHunk } } } } comments(last:50){ nodes{ databaseId author{ login __typename } body url createdAt } } } } }`;
 
 export class GithubForge implements Forge {
   readonly kind = 'github' as const;
