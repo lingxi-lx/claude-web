@@ -4,6 +4,21 @@
 
 Every version's changes are recorded here; installers are on the [Releases](https://github.com/ypyik0669/claude-web/releases) page. Versions follow [semantic versioning](https://semver.org/).
 
+## [0.4.1] — 2026-10-26
+
+### Fixed
+
+- **The question card works again.** When Claude asked something (AskUserQuestion), the conversation showed only the question and "Waiting for an answer…", with no options, Skip or Commit, so the only way out was replying in the input box. A new question was appended to the old list, and the card never recomputed.
+- **Subagents can use the model gateway's models while the main model is on another relay.** Switching the main model to another provider used to drop the gateway's whole section (account pools such as WorkBuddy) from the subagent menu. The subagents' requests now go to that gateway group, with its members and failover as usual.
+
+### Changed
+
+- **Every model gets the thinking-strength parameter.** A relay's logs showed Kimi (kimi-k3.1-pro) requests never carried `reasoning_effort` while DeepSeek's did: only models we knew got the parameter, the rest only a line in the prompt. Now:
+  - OpenAI-format relays: every model gets `reasoning_effort`; a model nobody describes gets the standard low / medium / high.
+  - Claude-format relays: non-Claude models there get a thinking budget too.
+  - The model gateway used to drop the strength when converting formats; it now turns it into the target format's parameter (`reasoning_effort`, Gemini's thinkingConfig…) at the levels that model supports.
+  - When an upstream refuses the parameter, that turn is resent without it and the model goes through the prompt from then on; the conversation does not fail.
+
 ## [0.4.0] — 2026-10-26
 
 This release mostly catches up with the official desktop app and the Codex app: a much stronger built-in browser, a question card, projects with several folders, node graphs, auto-handling of PR comments, GitLab, screen recording, WSL / SSH, and local versions of a few claude.ai cloud features. The bundled engine is now 2.8.4-cw.7.
