@@ -5,6 +5,7 @@ import type { SessionService } from '../sessions/service.js';
 import type { ImAdapter, InboundMessage } from './types.js';
 import type { AgentKind, ImBinding, ImGatewayConfig, PermissionRequestEvent } from '../protocol.js';
 import { tr } from '../i18n/index.js';
+import { parseImDispatch } from '../dispatch/core.js';
 
 const HELP = tr("Claude Web 命令：\n/new [目录] — 新会话（默认第一个工作区）\n/sessions — 最近会话\n/use <序号|id前缀> — 切换到某个会话\n/status — 当前会话状态\n/stop — 中断当前回合\n/allow · /deny — 处理最近的权限请求\n/mode <default|acceptEdits|bypassPermissions> — 权限模式\n/model <名字> — 切换模型\n/verbose on|off — 是否推送工具调用过程\n/help — 这份说明\n其它文字 = 直接发给当前会话");
 
@@ -112,7 +113,22 @@ export class ImRouter {
     const b = this.bindingFor(gw, m.chatId);
     const runner = b ? this.d.pool.get(b.sessionId) : undefined;
     switch (cmd.toLowerCase()) {
-      case '/help': case '/start': return reply(HELP);
+      case '/help': case '/start': return reply(`${HELP}\n${tr('/dispatch [项目名:] <任务> — 派活：在电脑上新开一个对话去做，做完在这里告诉你')}`);
+      // 派活 (stage F3): a new conversation in the project (its own permission mode), bound to this chat, task sent
+      case '/dispatch': case '/派活': {
+        const ws = this.d.meta.workspaces() as { id: string; name: string; path: string; permissionMode?: string }[];
+        const parsed = parseImDispatch(text, ws);
+        if (!parsed) return reply(tr('用法：/dispatch [项目名:] <任务>'));
+        const w = parsed.workspaceId ? ws.find((x) => x.id === parsed.workspaceId) : undefined;
+        const cwd = w?.path || cfg.defaultCwd || ws[0]?.path;
+        if (!cwd) return reply(tr('没有工作区：/new <目录> 指定一个绝对路径。'));
+        const r = this.openNew(cfg, cwd, w?.permissionMode);
+        await this.d.meta.setImBinding({ gatewayId: gw, chatId: m.chatId, sessionId: r.sessionId, cwd, since: Date.now(), ...(cfg.agent ? { agent: cfg.agent } : {}) });
+        if (typeof (this.d.meta as any).setSessionMeta === 'function') await this.d.meta.setSessionMeta(r.sessionId, { origin: 'dispatch', dispatchFrom: 'im', ...(w ? { workspaceId: w.id } : {}) });
+        r.send(parsed.prompt);
+        this.lastText.set(r.sessionId, '');
+        return reply(tr('📨 已派出：新对话 {id} · {cwd}{channel}\n做完或需要你回答时会在这里告诉你。', { id: r.sessionId.slice(0, 8), cwd, channel: channel(r.info) }));
+      }
       case '/new': {
         const cwd = arg || cfg.defaultCwd || this.d.meta.workspaces()[0]?.path;
         if (!cwd) return reply(tr('没有工作区：/new <目录> 指定一个绝对路径。'));
@@ -170,11 +186,11 @@ export class ImRouter {
    * pool decides) the new-conversation default, the same one a new conversation in the window gets. A picked
    * provider the agent cannot use (the agent was changed afterwards) falls back to that default.
    */
-  private openNew(cfg: ImGatewayConfig, cwd: string) {
+  private openNew(cfg: ImGatewayConfig, cwd: string, mode?: string) {
     const agent = (cfg.agent as AgentKind) || undefined;
     const picked = cfg.providerId || undefined;
     const providerId = picked && !this.d.pool.providerFitError?.(picked, agent) ? picked : undefined;
-    return this.d.pool.open({ cwd, permissionMode: (cfg.permissionMode as any) ?? 'default', agent, providerId });
+    return this.d.pool.open({ cwd, permissionMode: ((mode || cfg.permissionMode) as any) ?? 'default', agent, providerId });
   }
 
   private async ensureSession(gw: string, chatId: string, cfg: ImGatewayConfig): Promise<ImBinding> {

@@ -40,6 +40,11 @@ import { setPromptSuggestions, setThinkingLanguageSetting } from './runtime/sess
 import { THINKING_LANGUAGE_KEY } from './runtime/thinking-language.js';
 import { LocalEnvStore } from './runtime/local-env.js';
 import { setSessionsDeps, setSessionsMcpEnabled } from './sessions-mcp/tools.js';
+import { projectOf } from './meta/project.js';
+import os from 'node:os';
+import { ProjectFiles, PROJECT_FILE_MAX } from './cloud/project-files.js';
+import { DispatchService } from './dispatch/service.js';
+import type { CloudServices } from './cloud/handlers.js';
 import { setDesktopSkillsEnabled } from './runtime/desktop-skills.js';
 import { findClaudeTranscript } from './runtime/transcript-file.js';
 import { PreviewService } from './preview/service.js';
@@ -275,6 +280,18 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       out.on('error', (e) => { if (!res.headersSent) res.writeHead(500).end(e.message); else res.destroy(); });
       return;
     }
+    // 项目资料 (stage F2): POST /api/project-files?workspaceId=&name= — token-guarded like /ws, 20 MB
+    if (url.pathname === '/api/project-files' && req.method === 'POST') {
+      if (!authOk(req, url)) { res.writeHead(403).end(); return; }
+      const wid = url.searchParams.get('workspaceId') ?? '';
+      if (!meta.workspaces().some((w) => w.id === wid)) { res.writeHead(404).end('no such project'); return; }
+      if (Number(req.headers['content-length'] ?? 0) > PROJECT_FILE_MAX) { res.writeHead(413).end('too large'); return; }
+      projectFiles.write(wid, url.searchParams.get('name') ?? '', req).then(
+        (f) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(f)); },
+        (e) => { if (!res.headersSent) res.writeHead(400).end(e.message); else res.destroy(); },
+      );
+      return;
+    }
     let pathname: string;
     // a stray `%` (e.g. GET /%E0) makes decodeURIComponent throw — uncaught, that takes the server down
     try { pathname = decodeURIComponent(url.pathname); } catch { res.writeHead(400).end(); return; }
@@ -461,7 +478,20 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     rename: async (id, title) => { await library.rename(id, title); sessionsSvc.emit('changed'); },
     archive: async (id) => { await library.archive([id], true); },
     isScheduled: (id) => meta.schedules().some((s) => s.sessionId === id) || meta.scheduleRuns(undefined, 300).some((r) => r.sessionId === id),
+    // 项目页 (stage F2): a conversation's project, and whether that project keeps its sessions tools to itself
+    projectOf: (id, cwd) => { const m = meta.sessionMeta(id); return projectOf({ cwd, workspaceId: m.workspaceId, groupCwd: m.groupCwd }, meta.workspaces())?.id; },
+    restricted: (id, cwd) => { const m = meta.sessionMeta(id); return projectOf({ cwd, workspaceId: m.workspaceId, groupCwd: m.groupCwd }, meta.workspaces())?.sessionsScope === 'project'; },
   });
+  // stage F (cloud/handlers.ts): project files, 派活
+  const projectFiles = new ProjectFiles(dataDir());
+  const dispatch = new DispatchService({
+    meta,
+    open: (p) => pool.open(p),
+    homeDir: () => os.homedir(),
+    forward: (peerId, req) => federation.request(peerId, req),
+    peers: () => federation.list(),
+  });
+  const cloud: CloudServices = { projectFiles, dispatch, workspaceExists: (id) => meta.workspaces().some((w) => w.id === id) };
   const importer = new ImportService({
     providers: { hasSame: (t, b, k) => providers.hasSame(t, b, k), upsert: (p) => providers.upsert(p) },
     mcp: {
@@ -470,7 +500,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     },
   });
   themes.watch();
-  const services = { importer, customCss, orchestra, background, characters, themes, remote, anywhere, tunnels, im, vcs: new VcsService(gitSvc), goals, android: new AndroidService(), pool, sessions: sessionsSvc, config, usage: new UsageService(async (sid) => providerTimeline(await canonical.providerSwitches(sid), meta.sessionMeta(sid).providerId, (id) => { const p = meta.provider(id); return p ? { type: p.type, name: p.name } : undefined; })), files, terminal, meta, limits: new LimitsService(), schedules: new ScheduleService(meta, pool), providers, git: gitSvc, search: new SearchService(), skills: new SkillsService(), mcp: new McpService(), diag: new DiagService(version), ledger, agents, transcripts, canonical, memory, library, version, federation, agentConfig: new AgentConfigService({ agents, backupDir: path.join(dataDir(), 'config-backups') }), gateway, upstreams, tasks, web, computer, siteAsk, localEnv: localEnvStore, previews };
+  const services = { importer, customCss, orchestra, background, characters, themes, remote, anywhere, tunnels, im, vcs: new VcsService(gitSvc), goals, android: new AndroidService(), pool, sessions: sessionsSvc, config, usage: new UsageService(async (sid) => providerTimeline(await canonical.providerSwitches(sid), meta.sessionMeta(sid).providerId, (id) => { const p = meta.provider(id); return p ? { type: p.type, name: p.name } : undefined; })), files, terminal, meta, limits: new LimitsService(), schedules: new ScheduleService(meta, pool), providers, git: gitSvc, search: new SearchService(), skills: new SkillsService(), mcp: new McpService(), diag: new DiagService(version), ledger, agents, transcripts, canonical, memory, library, version, federation, agentConfig: new AgentConfigService({ agents, backupDir: path.join(dataDir(), 'config-backups') }), gateway, upstreams, tasks, web, computer, siteAsk, localEnv: localEnvStore, previews, cloud };
   new Hub(wss, services);
   tasks.start();
   // model lists older than a day (or never pulled) are refreshed in the background — list only, no tokens

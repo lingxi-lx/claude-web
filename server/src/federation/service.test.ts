@@ -367,4 +367,17 @@ describe('FederationService', () => {
     await expect(fed.route({ kind: 'session.interrupt', sessionId: 'peer_b1~s' }, { peerConn: true, local: local([]) })!).rejects.toThrow('多跳');
     expect(await fed.route({ kind: 'peers.list' }, { local: local([]) })).toHaveLength(1);
   });
+
+  it('常开机器 (stage F1): alwaysOn is stored, listed first, and cleared again', async () => {
+    const { fed } = setup({ peers: [
+      { id: 'b1', name: 'B', url: 'http://b', via: 'direct', token: 'x', enabled: true, addedAt: 1 },
+      { id: 'c1', name: 'C', url: 'http://c', via: 'direct', token: 'x', enabled: true, addedAt: 2 },
+    ] });
+    await fed.start(); await settle();
+    expect(fed.list().map((p) => p.id)).toEqual(['b1', 'c1']);
+    await fed.update('c1', { alwaysOn: true });
+    expect(fed.list().map((p) => [p.id, !!p.alwaysOn])).toEqual([['c1', true], ['b1', false]]);
+    await fed.update('c1', { alwaysOn: false });
+    expect(fed.list().find((p) => p.id === 'c1')!.alwaysOn).toBeUndefined();
+  });
 });

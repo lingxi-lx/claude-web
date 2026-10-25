@@ -36,7 +36,7 @@ export function parseImDispatch(text: string, workspaces: readonly { id: string;
   const pm = /^([^:：\n]{1,80})[:：]\s*([\s\S]+)$/.exec(rest);
   if (pm) {
     const name = pm[1].trim().toLowerCase();
-    const w = workspaces.find((x) => x.name.trim().toLowerCase() === name);
+    const w = workspaces.find((x) => String(x.name ?? '').trim().toLowerCase() === name);
     if (w) return { prompt: pm[2].trim(), workspaceId: w.id };
   }
   return { prompt: rest };

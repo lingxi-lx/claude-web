@@ -372,12 +372,12 @@ export interface AttachmentRef { kind: 'image' | 'text' | 'file' | 'folder'; nam
 
 export interface MessageFeedback { rating: 'up' | 'down' | null; note?: string; at: number }
 
-export interface Workspace { id: string; path: string; name: string; addedAt: number; order: number; /** extra folders (stage C2): never the main path; [] for old data */ folders: string[] }
+export interface Workspace { id: string; path: string; name: string; addedAt: number; order: number; /** extra folders (stage C2): never the main path; [] for old data */ folders: string[]; /** 项目页 (stage F2): appended to the system prompt of every conversation in the project */ instructions?: string; /** the sessions tools of its conversations only see this project's conversations */ sessionsScope?: 'project'; /** the permission mode 派活 (stage F3) starts its conversations in */ permissionMode?: PermissionMode; /** made by 导入 claude.ai 数据 from this claude.ai project (stage F4) */ claudeAiUuid?: string }
 export interface SessionMeta {
   /** replies pinned with 📌 under them (the info column's 钉住 card): their item id and first words */
   pinnedMsgs?: { id: string; text: string }[];
   /** a rename made while the conversation's process ran (server/src/meta/store.ts) */
-  pendingTitle?: string; /** 只聊天: started without tools; a resume keeps it that way */ chatOnly?: boolean; /** 保持电脑唤醒 while this conversation is busy */ keepAwake?: boolean; /** 代码审查卡: findings dismissed here, `<toolUseId>#<index>` */ reviewDismissed?: string[]; /** 任务 chip: suggestions dismissed (tool use ids), and started (tool use id → the new conversation) */ taskDismissed?: string[]; taskStarted?: Record<string, string>; /** PR 监控条: 自动修 CI on, and the failures it already asked about */ prAutoFix?: boolean; prFixed?: string[]; pinned?: boolean; archived?: boolean; workspaceId?: string; tags?: string[]; providerId?: string; /** sidebar grouping directory when it differs from the cwd (orchestration worktrees) */ groupCwd?: string; /** prompt-cache route key when it is not the session's own id (forks keep their root's) */ cacheKey?: string; /** the model its subagents run on, picked for this provider ('' = the main model) */ subagent?: { providerId: string; model: string }; /** the permission mode it last ran with: a resume without a pick comes back in it (the SDK never says it) */ permissionMode?: PermissionMode; /** 思考用的语言 for this conversation: '' / absent = the setting `ai.thinkingLanguage`, 'off' = none here, 'auto' = the interface language, else a THINKING_LANGUAGES id */ thinkingLanguage?: string; /** a `continueInClaude` source's conversation: the Claude conversation it goes on in */ continuedAs?: string; /** the Claude conversation of a `continuedAs`: what it goes on from, and how many of its messages are in it */ continuedFrom?: string; replayed?: number }
+  pendingTitle?: string; /** 只聊天: started without tools; a resume keeps it that way */ chatOnly?: boolean; /** 保持电脑唤醒 while this conversation is busy */ keepAwake?: boolean; /** 代码审查卡: findings dismissed here, `<toolUseId>#<index>` */ reviewDismissed?: string[]; /** 任务 chip: suggestions dismissed (tool use ids), and started (tool use id → the new conversation) */ taskDismissed?: string[]; taskStarted?: Record<string, string>; /** PR 监控条: 自动修 CI on, and the failures it already asked about */ prAutoFix?: boolean; prFixed?: string[]; pinned?: boolean; archived?: boolean; workspaceId?: string; tags?: string[]; providerId?: string; /** sidebar grouping directory when it differs from the cwd (orchestration worktrees) */ groupCwd?: string; /** prompt-cache route key when it is not the session's own id (forks keep their root's) */ cacheKey?: string; /** the model its subagents run on, picked for this provider ('' = the main model) */ subagent?: { providerId: string; model: string }; /** the permission mode it last ran with: a resume without a pick comes back in it (the SDK never says it) */ permissionMode?: PermissionMode; /** 思考用的语言 for this conversation: '' / absent = the setting `ai.thinkingLanguage`, 'off' = none here, 'auto' = the interface language, else a THINKING_LANGUAGES id */ thinkingLanguage?: string; /** a `continueInClaude` source's conversation: the Claude conversation it goes on in */ continuedAs?: string; /** the Claude conversation of a `continuedAs`: what it goes on from, and how many of its messages are in it */ continuedFrom?: string; replayed?: number; /** 派活 (stage F3): started by a dispatch, and from where */ origin?: 'dispatch'; dispatchFrom?: DispatchFrom; /** 交给常开机器继续 (stage F1): handed to that machine, read-only here */ handedOff?: HandoffInfo; /** the always-on machine's copy: where it came from */ handoffFrom?: HandoffFrom }
 export interface Schedule { id: string; name: string; cwd: string; prompt: string; everyMinutes: number; cron?: string; enabled: boolean; lastRunAt?: number; nextRunAt?: number; sessionId?: string; model?: string; permissionMode?: string; freshSession?: boolean; lastError?: string; runs?: number; /** 手动: only 立即运行 starts it */ manual?: boolean; /** each run in its own worktree (with freshSession) */ worktree?: boolean }
 export interface LimitWindow { label: string; percent: number; resetsAt: string | null; active: boolean; severity?: string }
 // ---- remote access / phones / IM (phase 6) ----
@@ -543,7 +543,7 @@ export type ClientRequest =
   | { kind: 'workspaces.rename'; id: string; name: string }
   | { kind: 'workspaces.reorder'; ids: string[] }
   /** 编辑项目 (stage C2): the name and / or the extra folders (absolute, existing folders) → the updated Workspace */
-  | { kind: 'workspaces.update'; id: string; name?: string; folders?: string[] }
+  | { kind: 'workspaces.update'; id: string; name?: string; folders?: string[]; /** stage F2 (null clears) */ instructions?: string | null; sessionsScope?: 'project' | null; permissionMode?: PermissionMode | null }
   | { kind: 'sessions.meta' }
   | { kind: 'session.setMeta'; sessionId: string; patch: SessionMeta }
   | { kind: 'schedules.list' }
@@ -760,7 +760,9 @@ export type ClientRequest =
   | { kind: 'themes.trialResult'; id: string; png?: string; errors: string[]; avgMs?: number; maxMs?: number; note?: string }
 
   // ---- cross-machine sessions (federation) ----
-  | PeerRequest;
+  | PeerRequest
+  // ---- stage F: local versions of claude.ai features ----
+  | CloudRequest;
 
 /** `via`: serverIds a forwarded request already passed through (federation loop guard). */
 export interface RequestEnvelope { id: string; req: ClientRequest; via?: string[] }
@@ -858,3 +860,32 @@ export type WireUp = { type: 'request'; request: RequestEnvelope };
 // ---------- model gateway (sub-project 4) ----------
 export * from './gateway/types.js';
 import type { GatewayEvent, GatewayLedgerInfo, GatewayRequest } from './gateway/types.js';
+
+// ---- stage F: local versions of claude.ai features (handoff, project page, dispatch, claude.ai import, publish) ----
+export type DispatchFrom = 'phone' | 'im' | 'app';
+export interface ProjectFile { name: string; size: number; mtime: number }
+/** 交给常开机器继续: what went where (the conversation here is read-only from then on) */
+export interface HandoffInfo { id: string; peerId: string; peerName: string; remote: string; branch: string; commit: string; base: string; remoteSessionId?: string; at: number; /** local branches 取回 made */ fetched?: string[] }
+export interface HandoffFrom { id: string; from: string; branch: string; url: string; cwd: string; at: number }
+export type PublishExpiry = '1d' | '7d' | 'never';
+export interface PublishedItem { id: string; name: string; source: string; entry: string; createdAt: number; updatedAt: number; expiresAt: number | null; files: number; bytes: number; peerId?: string; peerName?: string; url?: string }
+export interface ClaudeAiScan { conversations: number; projects: number; docs: number; add: number; update: number; same: number; skipped: number; user?: string }
+export interface ClaudeAiImportResult extends ClaudeAiScan { projectsCreated: number; projectsUpdated: number; filesWritten: number; filesKept: number }
+export type CloudRequest =
+  | { kind: 'projects.files.list'; workspaceId: string }
+  | { kind: 'projects.files.remove'; workspaceId: string; name: string }
+  | { kind: 'dispatch.start'; prompt: string; peer?: string; workspaceId?: string; from?: DispatchFrom }
+  | { kind: 'dispatch.defaults'; peer?: string }
+  | { kind: 'handoff.check'; sessionId: string }
+  | { kind: 'handoff.start'; sessionId: string; peerId: string; prompt?: string }
+  | { kind: 'handoff.receive'; id: string; url: string; branch: string; title?: string; events: unknown[]; permissionMode?: PermissionMode; prompt?: string; from: string }
+  | { kind: 'handoff.publish'; branch: string }
+  | { kind: 'handoff.fetchBack'; sessionId: string }
+  | { kind: 'publish.create'; path: string; expiry: PublishExpiry; id?: string }
+  | { kind: 'publish.list' }
+  | { kind: 'publish.revoke'; id: string }
+  | { kind: 'publish.toPeer'; path: string; expiry: PublishExpiry; peerId: string }
+  | { kind: 'publish.receive'; name: string; entry: string; source: string; expiry: PublishExpiry; files: { rel: string; data: string }[] }
+  | { kind: 'publish.inline'; path: string }
+  | { kind: 'claudeai.scan'; path: string }
+  | { kind: 'claudeai.import'; path: string; folder?: string };

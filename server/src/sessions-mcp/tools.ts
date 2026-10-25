@@ -7,6 +7,7 @@ import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod/v4';
 import type { RunnerState, SessionSummary } from '../protocol.js';
 import { fromMarker, lastTurns, listRows } from './format.js';
+import { inProjectScope } from '../meta/project.js';
 
 export const SESSIONS_SERVER = 'sessions';
 /** Everything but archive_session runs without asking (the official app asks only before archiving). */
@@ -22,6 +23,10 @@ export interface SessionsDeps {
   archive(id: string): Promise<void>;
   /** a scheduled task's conversation: nobody is watching it, so nothing is delivered there (the official app's rule) */
   isScheduled?(id: string): boolean;
+  /** 项目页 (stage F2): the project id a conversation belongs to (undefined = none) */
+  projectOf?(id: string, cwd?: string): string | undefined;
+  /** the project of conversation `id` limits its sessions tools to that project (Workspace.sessionsScope) */
+  restricted?(id: string, cwd?: string): boolean;
 }
 
 let deps: SessionsDeps | null = null;
@@ -51,9 +56,21 @@ export function sendAllowed(id: string, now = Date.now()): boolean {
 const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] });
 const fail = (t: string) => ({ content: [{ type: 'text' as const, text: t }], isError: true });
 
+/** 项目范围 (stage F2): what conversation `me` may see — all, or (restricted / asked) its own project's. */
+export function scopeSessions(all: SessionSummary[], me: string, d: Pick<SessionsDeps, 'projectOf' | 'restricted'>, projectOnly = false): SessionSummary[] {
+  if (!d.projectOf) return all;
+  const cwd = all.find((s) => s.sessionId === me)?.cwd;
+  if (!projectOnly && !d.restricted?.(me, cwd)) return all;
+  const mine = d.projectOf(me, cwd);
+  return all.filter((s) => s.sessionId === me || inProjectScope(mine, d.projectOf!(s.sessionId, s.cwd)));
+}
+
 /** The conversation's own server: `self()` is its id now (a new conversation gets its id from the engine). */
 export function sessionsMcpServer(self: () => string, d: SessionsDeps = deps!) {
-  const find = async (id: string) => (await d.list()).find((s) => s.sessionId === id);
+  // 项目范围 (stage F2): a conversation whose project says so (or a list_sessions asking for it) only sees — and so can
+  // only read / write / rename / archive — the conversations of its own project
+  const scoped = async (projectOnly = false) => scopeSessions(await d.list(), self(), d, projectOnly);
+  const find = async (id: string) => (await scoped()).find((s) => s.sessionId === id);
   const titleOf = (s: SessionSummary | undefined) => s?.customTitle || s?.title || '(untitled)';
   return createSdkMcpServer({
     name: SESSIONS_SERVER,
@@ -62,7 +79,8 @@ export function sessionsMcpServer(self: () => string, d: SessionsDeps = deps!) {
       tool('list_sessions', 'List the other Claude conversations on this computer, most recently active first: id, title, folder, branch, status (working / waiting for the user / idle).', {
         include_archived: z.boolean().optional().describe('also list archived conversations'),
         limit: z.number().int().min(1).max(50).optional().describe('how many (default 20)'),
-      }, async (a) => text(listRows(await d.list(), self(), (id) => d.stateOf(id), { includeArchived: a.include_archived, limit: a.limit }))),
+        scope: z.enum(['all', 'project']).optional().describe("'project': only conversations in this conversation's project"),
+      }, async (a) => text(listRows(await scoped(a.scope === 'project'), self(), (id) => d.stateOf(id), { includeArchived: a.include_archived, limit: a.limit }))),
 
       tool('read_session', 'Read what another conversation has been doing: its last turns (the user\'s messages and the answers, without tool details).', {
         id: z.string().describe('conversation id from list_sessions'),

@@ -140,7 +140,9 @@ export class FederationService extends EventEmitter {
 
   // ---------- peers ----------
   list(): PeerInfo[] {
-    return this.d.store.peers().map((p) => {
+    // 常开机器 (stage F1) first; otherwise the order they were added in
+    const recs = [...this.d.store.peers()].sort((a, b) => Number(!!b.alwaysOn) - Number(!!a.alwaysOn));
+    return recs.map((p) => {
       const c = this.clients.get(p.id);
       const host = p.via === 'ssh' ? this.d.store.remoteHosts().find((h) => h.id === p.hostId) : undefined;
       const state: PeerState = !p.enabled ? 'disabled' : c?.state ?? 'connecting';
@@ -148,6 +150,7 @@ export class FederationService extends EventEmitter {
         id: p.id, name: p.name, url: p.via === 'ssh' ? `ssh://${host?.target ?? '?'}` : p.url, via: p.via, hostId: p.hostId, enabled: p.enabled, addedAt: p.addedAt,
         state, error: p.enabled ? c?.error || undefined : undefined, latencyMs: c?.latencyMs, lastSeenAt: c?.lastSeenAt,
         sessions: this.lists.get(p.id)?.items.length, serverId: c?.remote.serverId ?? p.serverId, version: c?.remote.version,
+        ...(p.alwaysOn ? { alwaysOn: true } : {}),
       };
     });
   }
@@ -294,10 +297,11 @@ export class FederationService extends EventEmitter {
     for (const p of this.d.store.peers()) if (p.via === 'ssh' && p.hostId === hostId && p.enabled) await this.retry(p.id);
   }
 
-  async update(id: string, patch: { name?: string; enabled?: boolean }): Promise<PeerInfo[]> {
+  async update(id: string, patch: { name?: string; enabled?: boolean; alwaysOn?: boolean }): Promise<PeerInfo[]> {
     const cur = this.rec(id);
     if (!cur) throw new Error(tr('没有这台机器'));
-    const rec = { ...cur, ...(patch.name?.trim() ? { name: patch.name.trim().slice(0, 60) } : {}), ...(patch.enabled !== undefined ? { enabled: !!patch.enabled } : {}) };
+    const rec: PeerRecord = { ...cur, ...(patch.name?.trim() ? { name: patch.name.trim().slice(0, 60) } : {}), ...(patch.enabled !== undefined ? { enabled: !!patch.enabled } : {}) };
+    if (patch.alwaysOn !== undefined) { if (patch.alwaysOn) rec.alwaysOn = true; else delete rec.alwaysOn; }
     await this.d.store.setPeer(rec);
     if (patch.enabled !== undefined && patch.enabled !== cur.enabled) this.spawn(rec);
     this.emit('event', { kind: 'peers.changed' } satisfies ServerEvent);
@@ -325,6 +329,19 @@ export class FederationService extends EventEmitter {
     if (!rec.enabled) return Promise.reject(new Error(tr('机器「{name}」已停用', { name: rec.name })));
     if (c.state !== 'online') return Promise.reject(new Error(c.state === 'unauthorized' ? tr('机器「{name}」令牌失效，请重新配对', { name: rec.name }) : tr('机器「{name}」离线', { name: rec.name })));
     return c.request<T>(req, [...via, this.serverId], req.kind === 'session.open' ? OPEN_TIMEOUT : undefined);
+  }
+
+  /**
+   * Stage F: ask peer `peerId` something on this machine's own behalf (派活 / 交接 / 发布 to the always-on machine) —
+   * the reply as the peer gave it, ids not rewritten.
+   */
+  request<T = unknown>(peerId: string, req: ClientRequest, timeout?: number): Promise<T> {
+    const rec = this.rec(peerId);
+    const c = this.clients.get(peerId);
+    if (!rec || !c) return Promise.reject(new Error(tr('没有这台机器（已移除？）')));
+    if (!rec.enabled) return Promise.reject(new Error(tr('机器「{name}」已停用', { name: rec.name })));
+    if (c.state !== 'online') return Promise.reject(new Error(tr('机器「{name}」离线', { name: rec.name })));
+    return c.request<T>(req, [this.serverId], timeout ?? OPEN_TIMEOUT);
   }
 
   /** undefined: not federation's business, the hub handles it as usual. */

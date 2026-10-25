@@ -222,8 +222,11 @@ export class SessionRunner extends EventEmitter {
   /** the project's extra folders (stage C2), read once when the conversation opens: the SDK's additionalDirectories (a respawn keeps them) */
   private extraDirs: string[];
 
-  constructor(params: OpenSessionParams, provider?: SessionProvider, opts: { thinkingLanguage?: string; account?: AccountPrefs; additionalDirectories?: string[] } = {}) {
+  /** 项目页 (stage F2): the project's instructions, read once when the conversation opens (a respawn keeps them) */
+  private projectInstructions = '';
+  constructor(params: OpenSessionParams, provider?: SessionProvider, opts: { thinkingLanguage?: string; account?: AccountPrefs; additionalDirectories?: string[]; projectInstructions?: string } = {}) {
     super();
+    this.projectInstructions = opts.projectInstructions ?? '';
     this.extraDirs = (opts.additionalDirectories ?? []).filter((d) => typeof d === 'string' && !!d);
     this.ownThinkingLanguage = opts.thinkingLanguage ?? '';
     if (opts.account) this.accountPrefs = { windows: familyWindows(opts.account.windows), ...(opts.account.compactAt !== undefined ? { compactAt: opts.account.compactAt } : {}) };
@@ -505,7 +508,7 @@ export class SessionRunner extends EventEmitter {
     // — only when the model is bound (`sub`): a pick that cannot be reached leaves the subagents on the main model, and
     // sending every piece of work to them would only cost more
     const delegate = bare || !sub ? '' : subagentPolicyPrompt(this.subagent);
-    const append = [verify, this.thinkingSection, delegate].filter(Boolean).join('\n\n');
+    const append = [verify, this.thinkingSection, delegate, this.projectInstructions].filter(Boolean).join('\n\n');
     const allowed = bare ? [] : [...webAllowedTools(), ...(Object.keys(computer).length ? computerAllowedTools() : []), ...(Object.keys(sessionsMcp).length ? SESSIONS_ALLOWED : []), ...(Object.keys(previewMcp).length ? PREVIEW_ALLOWED : [])];
     this.preAllowed = new Set(allowed);
     const noEngineSearch = engineSearchOff({ engine: engine.kind, userChoice: 'WEB_SEARCH_ADAPTER' in fenv || userPickedSearchAdapter(this.cwd) });

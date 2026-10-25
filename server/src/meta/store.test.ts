@@ -73,4 +73,23 @@ describe('MetaStore', () => {
     expect(m.workspaces()[0]).toMatchObject({ name: '新名字', folders: [] });
     expect(await m.updateWorkspace('nope', { name: 'x' })).toBeNull();
   });
+
+  it('项目页 (stage F2): instructions, sessions scope and permission mode are stored; null / empty clears them', async () => {
+    const file = await tmpFile();
+    const m = new MetaStore(file);
+    await m.load();
+    const w0 = await m.addWorkspace(path.join(path.dirname(file), 'proj'));
+    const w = await m.updateWorkspace(w0.id, { instructions: 'Use pnpm.', sessionsScope: 'project', permissionMode: 'acceptEdits' });
+    expect(w).toMatchObject({ instructions: 'Use pnpm.', sessionsScope: 'project', permissionMode: 'acceptEdits' });
+    const saved = JSON.parse(await fs.readFile(file, 'utf8')).workspaces[0];
+    expect(saved).toMatchObject({ instructions: 'Use pnpm.', sessionsScope: 'project', permissionMode: 'acceptEdits' });
+    // a name-only update leaves them alone
+    await m.updateWorkspace(w0.id, { name: 'x' });
+    expect(m.workspaces()[0]).toMatchObject({ instructions: 'Use pnpm.', sessionsScope: 'project' });
+    await m.updateWorkspace(w0.id, { instructions: '  ', sessionsScope: null, permissionMode: null });
+    const cleared = m.workspaces()[0];
+    expect(cleared.instructions).toBeUndefined();
+    expect(cleared.sessionsScope).toBeUndefined();
+    expect(cleared.permissionMode).toBeUndefined();
+  });
 });
