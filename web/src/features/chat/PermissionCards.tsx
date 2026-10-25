@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { create } from 'zustand';
 import { useStore } from '@/store';
 import { basename, clsx } from '@/util';
 import type { PermissionRequestEvent, PermissionResponse } from '@shared';
@@ -37,6 +38,20 @@ export function usePrimary(scope: string, requestId: string, fn: () => boolean) 
   }, [scope, requestId]);
 }
 
+/**
+ * What the composer has to say about the question card (C-U2): it sits in the conversation, not under the box, so the
+ * box's note (an Enter it did not take in the card's first moments, words an Enter will answer it with…) reaches it
+ * here, keyed by `primaryKey(scope, requestId)`. In memory only.
+ */
+export const useAskNotes = create<{ notes: Record<string, string> }>(() => ({ notes: {} }));
+export function setAskNote(key: string, note: string | undefined) {
+  const cur = useAskNotes.getState().notes;
+  if ((cur[key] ?? undefined) === note) return;
+  const next = { ...cur };
+  if (note) next[key] = note; else delete next[key];
+  useAskNotes.setState({ notes: next });
+}
+
 /** One answer per request: the buttons stay disabled until the server says it is resolved (or it failed). */
 export function useRespond(p: PermissionRequestEvent) {
   const respond = useStore((s) => s.respondPermission);
@@ -64,7 +79,7 @@ const Hint = ({ hint, note }: { hint: string; note?: string }) => (note ? <span 
  * an Enter it did not take, words that will be queued… (review M-6). The region stays mounted while cards come and
  * go and gets its words a moment after they change, so every change is read out.
  */
-function DockLive({ text }: { text: string }) {
+export function DockLive({ text }: { text: string }) {
   const [said, setSaid] = useState('');
   useEffect(() => {
     const t = setTimeout(() => setSaid(text), 60);

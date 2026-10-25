@@ -3651,17 +3651,22 @@ function driver() {
           const putAsk = (id) => js(`(async () => { const st = window.__store; const o = st.getState().open[${pj}]; st.setState({ open: { ...st.getState().open, [${pj}]: { ...o, pending: [${stageReq(id, 'AskUserQuestion', askInput(true))}], version: o.version + 1 } } }); await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 60))); return true; })()`);
           const clearAsk = () => js(`(() => { const st = window.__store; const o = st.getState().open[${pj}]; st.setState({ open: { ...st.getState().open, [${pj}]: { ...o, pending: [], version: o.version + 1 } } }); })()`);
           const card = '.pane.focused .chat-inner .ask-card';
-          const keyOn = (k, o = {}) => js(`(() => { const t = document.activeElement && document.activeElement.closest('.ask-card') ? document.activeElement : document.querySelector('${card} .ask-opt'); t.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true, cancelable: true, ctrlKey: ${!!o.ctrl}, isComposing: ${!!o.composing} })); return true; })()`);
+          // keys go to whatever has the focus — never to a row picked here (that hid the focus falling to <body>: C-V1)
+          const keyOn = (k, o = {}) => js(`(() => { const t = document.activeElement || document.body; t.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true, cancelable: true, ctrlKey: ${!!o.ctrl}, isComposing: ${!!o.composing} })); return true; })()`);
+          const inCard = () => js(`!!document.activeElement?.closest('${card}')`);
           const page = () => js(`document.querySelector('${card} .ask-page')?.textContent ?? null`);
           if (await exists('.rail .sb-reveal')) await click('.rail .sb-reveal');
           await sleep(300);
           const attnBefore = await count('.sidebar .sb-attn .sb-attn-item');
           await putAsk('smoke-ask-1');
+          // C-U2: the box's Enter in the card's first moments (600 ms) does nothing and the card says why (and reads it out) — right away
+          const soon = await js(`(async () => { const ta = document.querySelector('.pane.focused .composer textarea'); ta.focus(); ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await new Promise((r) => setTimeout(r, 250)); return { note: document.querySelector('${card} [data-id="ask-note"]')?.textContent ?? null, live: document.querySelector('${card} .pd-live[role="status"]')?.textContent ?? null, inCard: !!document.activeElement?.closest('.ask-card') }; })()`);
           await waitFor(`document.querySelectorAll('.sidebar .sb-attn .sb-attn-item').length > ${attnBefore}`, 3000);
           const placed = await js(`(() => { const c = document.querySelector('${card}'); if (!c) return null; const pd = document.querySelector('.pane.focused .chat-inner .plan-dock'); return { inDock: !!c.closest('.pdock'), dock: !!document.querySelector('.pane.focused .composer .pdock'), box: !!document.querySelector('.pane.focused .composer textarea'), beforePlan: !pd || !!(c.compareDocumentPosition(pd) & Node.DOCUMENT_POSITION_FOLLOWING), focusTaken: !!document.activeElement?.closest('.ask-card'), need: document.querySelector('${card} .ask-need')?.textContent ?? null }; })()`);
           const attnDuring = await count('.sidebar .sb-attn .sb-attn-item');
           check('question card: in the conversation (above the plan), not docked; the box stays; it does not take the focus; 需要你回答; the sidebar lists it under 需要你',
             !!placed && !placed.inDock && !placed.dock && placed.box && placed.beforePlan && !placed.focusTaken && placed.need === '需要你回答' && attnDuring > attnBefore, JSON.stringify({ placed, attnBefore, attnDuring }));
+          check('question card: an Enter in its first moments says 「卡片刚出现…」 on the card and in its status line, the focus stays in the box', !!soon.note && soon.note.startsWith('卡片刚出现') && soon.live === soon.note && !soon.inCard, JSON.stringify(soon));
           // the box's empty Enter (after the card's 600 ms): the focus goes into the card, nothing is sent
           await sleep(700);
           const enterInto = await js(`(async () => { const ta = document.querySelector('.pane.focused .composer textarea'); ta.focus(); ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await new Promise((r) => setTimeout(r, 200)); return { inCard: !!document.activeElement?.closest('.ask-card'), sent: window.__permSent.filter((r) => r.requestId === 'smoke-ask-1').length }; })()`);
@@ -3673,10 +3678,25 @@ function driver() {
           await keyOn('Enter');
           await sleep(150);
           const p2 = await page();
+          const focus = { enter: await inCard() };
           await click(`${card} [data-act="prev"]`);
+          await sleep(150);
           const back = { page: await page(), kept: await js(`document.querySelector('${card} .ask-opt[data-index="0"]')?.getAttribute('aria-checked')`) };
+          focus.prev = await inCard();
+          focus.onPick = await js(`document.activeElement === document.querySelector('${card} .ask-opt[data-index="0"]')`);
           await click(`${card} [data-act="next-page"]`);
+          await sleep(150);
+          focus.next = await inCard();
           check('question card: 1 / 2, the key 1 picks the first option, Enter goes on to 2 / 2, ‹ goes back with the pick kept', p1 === '1 / 2' && picked1 === 'true' && p2 === '2 / 2' && back.page === '1 / 2' && back.kept === 'true', JSON.stringify({ p1, picked1, p2, back }));
+          // C-V1: the focus stays in the card on every page change (‹ lands on the page's chosen row), and the keys
+          // still reach it: back with ‹, then Ctrl+Enter goes on again
+          await click(`${card} [data-act="prev"]`);
+          await sleep(150);
+          await keyOn('Enter', { ctrl: true });
+          await sleep(150);
+          focus.ctrlPage = await page();
+          focus.ctrl = await inCard();
+          check('question card: the focus stays in the card after Enter, ‹, ›, Ctrl+Enter (‹ puts it on the chosen row)', focus.enter && focus.prev && focus.onPick && focus.next && focus.ctrl && focus.ctrlPage === '2 / 2', JSON.stringify(focus));
           // the preview of a focused option; 1 and 3 tick (multi), 其它 opens its box with the focus
           await js(`document.querySelector('${card} .ask-opt[data-index="0"]')?.focus()`);
           await sleep(150);
@@ -3707,10 +3727,23 @@ function driver() {
           check('question card: answered → gone from the conversation and from 需要你', !(await exists(card)) && attnAfter < attnDuring, JSON.stringify({ attnDuring, attnAfter }));
           // one skipped, one answered → the skipped one says so; both skipped → deny
           await putAsk('smoke-ask-2');
+          await click(`${card} .ask-opt[data-index="0"]`); // picked, then skipped: the skip wins and the pick goes
           await click(`${card} [data-act="skip"]`);
           await sleep(150);
-          await click(`${card} .ask-opt[data-index="1"]`);
-          await click(`${card} [data-act="submit"]`);
+          const afterSkip = { page: await page(), inCard: await inCard() };
+          await click(`${card} [data-act="prev"]`);
+          await sleep(150);
+          afterSkip.backChecked = await count(`${card} .ask-opt[aria-checked="true"]`);
+          afterSkip.said = await js(`document.querySelector('${card} [data-id="ask-skipped"]')?.textContent ?? null`);
+          await click(`${card} [data-act="next-page"]`);
+          await sleep(150);
+          check('question card: 跳过 goes on with the focus in the card; back on that page nothing is chosen and it says 已跳过 (C-V1, C-V2)', afterSkip.page === '2 / 2' && afterSkip.inCard && afterSkip.backChecked === 0 && afterSkip.said === '已跳过', JSON.stringify(afterSkip));
+          // multi choice: Space ticks the focused row (a real key), Enter goes on — here: submits (C-V3; it used to tick)
+          await js(`document.querySelector('${card} .ask-opt[data-index="1"]')?.focus()`);
+          await key('Space');
+          const ticked = await js(`document.querySelector('${card} .ask-opt[data-index="1"]')?.getAttribute('aria-checked')`);
+          await keyOn('Enter');
+          check('question card: in a multi choice Space ticks the row and Enter goes on (submits on the last page)', ticked === 'true', JSON.stringify({ ticked }));
           await waitFor(`window.__permSent.some((r) => r.requestId === 'smoke-ask-2')`, 3000);
           const sent2 = JSON.parse(await sentFor('smoke-ask-2'));
           await clearAsk();

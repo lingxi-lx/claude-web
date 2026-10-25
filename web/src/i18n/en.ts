@@ -3985,6 +3985,8 @@ export const EN_WEB: Record<string, string> = {
   "需要 user@host": "Needs user@host",
   "需要你": "Needs you",
   "需要你回答": "Needs your answer",
+  "已跳过": "Skipped",
+  "在输入框里空着按 Enter 到卡片上作答": "Press Enter in the empty input box to answer on the card",
   "需要提示词": "A prompt is required",
   "需要权限：{toolName}": "Permission needed: {toolName}",
   "需要的环境变量": "Required environment variables",

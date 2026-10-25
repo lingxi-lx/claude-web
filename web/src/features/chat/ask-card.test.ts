@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { askQuestions, assemble, askKey, answerOf, EMPTY_DRAFT, OTHER, pick, skip, skippedAnswer, step, type AskQ } from './ask-card';
+import { askQuestions, assemble, askKey, answerOf, EMPTY_DRAFT, OTHER, pick, rowEnter, rowFor, skip, skippedAnswer, step, type AskQ } from './ask-card';
 
 const single: AskQ = { question: '用哪个库？', header: '库', options: [{ label: 'zod' }, { label: 'yup', description: '老一点' }], multiSelect: false };
 const multi: AskQ = { question: '要哪些检查？', options: [{ label: 'lint' }, { label: 'test' }, { label: 'build' }], multiSelect: true };
@@ -37,6 +37,38 @@ describe('pick / answerOf', () => {
   });
   it('picking after a skip un-skips', () => {
     expect(pick(single, skip(EMPTY_DRAFT), 'zod').skipped).toBe(false);
+  });
+  it('跳过 clears the page’s picks and 其它 text (C-V2): going back shows nothing chosen, the answer is the skip', () => {
+    const d = skip({ ...pick(multi, EMPTY_DRAFT, 'lint'), otherOn: true, other: 'e2e' });
+    expect(d).toEqual({ ...EMPTY_DRAFT, skipped: true });
+    expect(answerOf(multi, d)).toBe(skippedAnswer());
+    // a new pick after it: only that pick, no longer skipped
+    const again = pick(multi, d, 'test');
+    expect(again).toMatchObject({ picked: ['test'], skipped: false });
+    expect(answerOf(multi, again)).toBe('test');
+    // 其它 after a skip un-skips too
+    expect(pick(single, skip(EMPTY_DRAFT), OTHER).skipped).toBe(false);
+  });
+});
+
+describe('rowFor / rowEnter (focus and Enter on a row)', () => {
+  it('rowFor: the 其它 row when it is on, else the first chosen option, else the first row', () => {
+    expect(rowFor(single, undefined)).toBe(0);
+    expect(rowFor(single, pick(single, EMPTY_DRAFT, 'yup'))).toBe(1);
+    expect(rowFor(multi, pick(multi, pick(multi, EMPTY_DRAFT, 'build'), 'test'))).toBe(1);
+    expect(rowFor(single, pick(single, EMPTY_DRAFT, OTHER))).toBe(2);
+    expect(rowFor(undefined, EMPTY_DRAFT)).toBe(0);
+  });
+  it('single choice: Enter on an option picks it and goes on', () => {
+    expect(rowEnter(single, EMPTY_DRAFT, 1)).toEqual({ t: 'pick-next', label: 'yup' });
+  });
+  it('multi choice: Enter goes to the next question, never ticks (C-V3; Space ticks — the button’s own click)', () => {
+    expect(rowEnter(multi, pick(multi, EMPTY_DRAFT, 'lint'), 2)).toEqual({ t: 'next' });
+    expect(rowEnter(multi, EMPTY_DRAFT, 0)).toEqual({ t: 'next' });
+  });
+  it('其它: the first Enter opens its box, the next one goes on', () => {
+    expect(rowEnter(single, EMPTY_DRAFT, 2)).toEqual({ t: 'other' });
+    expect(rowEnter(multi, { ...EMPTY_DRAFT, otherOn: true, other: 'x' }, 3)).toEqual({ t: 'next' });
   });
 });
 

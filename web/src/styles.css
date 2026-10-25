@@ -2197,7 +2197,7 @@ html.desktop.mac .app.no-sidebar .workbench:not(.gb) .over-head { padding-left: 
 /* ---- redesign phase 5: chat rendering (spec §5.3, mock-session.png) ---- */
 
 /* the question card at the end of the turn (stage C1, AskCard.tsx): one question a page */
-.ask-card { margin: 12px 0; padding: 12px 14px 10px; border: var(--hairline) solid var(--edge-default); border-radius: var(--r-lg); background: var(--surface-1); }
+.ask-card { container-type: inline-size; margin: 12px 0; padding: 12px 14px 10px; border: var(--hairline) solid var(--edge-default); border-radius: var(--r-lg); background: var(--surface-1); }
 .ask-top { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
 .ask-q { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; color: var(--ink-1); line-height: 1.5; }
 .ask-q .badge { font-weight: 400; margin-right: 4px; }
@@ -2205,7 +2205,8 @@ html.desktop.mac .app.no-sidebar .workbench:not(.gb) .over-head { padding-left: 
 .ask-page { min-width: 36px; text-align: center; }
 .ask-main { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .ask-main.with-preview { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-@media (max-width: 560px) { .ask-main.with-preview { grid-template-columns: 1fr; } }
+/* stacked when the card is narrow (a split pane, a phone), not when the window is: a container query (C-U4) */
+@container (max-width: 560px) { .ask-main.with-preview { grid-template-columns: 1fr; } }
 .ask-opts { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .ask-opt { display: flex; gap: 10px; align-items: flex-start; width: 100%; text-align: left; padding: 7px 10px; border-radius: var(--r-md); border: var(--hairline) solid transparent; }
 .ask-opt:hover { background: var(--layer-hover); }
@@ -2224,6 +2225,8 @@ html.desktop.mac .app.no-sidebar .workbench:not(.gb) .over-head { padding-left: 
 .ask-foot kbd { font-size: 11px; opacity: 0.75; margin-left: 4px; }
 .ask-need { display: inline-flex; align-items: center; gap: 6px; color: var(--warn); font-size: 13px; }
 .ask-need .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
+.ask-need.note { color: var(--ink-2); }
+.ask-skipped { margin: 0 0 6px; color: var(--ink-3); font-size: 13px; }
 /* the reading column (.chat-inner / .composer-inner) is 720px wide — see 「chat」 above */
 .msg.user .bubble { font-size: var(--fs-body); line-height: 1.6; border-radius: 18px; padding: 9px 15px; }
 

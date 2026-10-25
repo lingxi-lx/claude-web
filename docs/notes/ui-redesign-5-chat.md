@@ -23,14 +23,16 @@ spec §5.3、§5.11（权限卡）、`mock-session.png`。
 - **计划卡跟着任务走**（`model/turn.ts` 的 `taskPlan`）：以前只看最后一个回合，后台子代理回来续出的 `cont-` 回合里没有 TodoWrite，主 agent 一停下等子代理，计划卡就没了。现在从最后一个回合往前找，经过没有用户消息的回合，直到用户那条消息开始的回合为止。显示条件（`ChatView.tsx` 的 `PlanDock`）：对话在跑、或这个对话还有后台子代理 / 工作流在跑（`background/model.ts` 的 `hasLive`）、或还有没完成的项；三样都没有就收起——用户说「计划不见了才算这次任务跑完了」。
 - **计划只出现一次**：「详细」查看模式会把步骤全部展开，计划那一步的列表和底下的计划卡重复。`PlanCtx` 把计划卡正在显示的那个 TodoWrite 传给 `Steps`，它在详细模式下不自动展开（手点还能开）。
 - **等你回答时不转圈**：Claude 在问问题 / 等确认（`state === 'waiting'` 或有 `pending`）时，计划卡加 `data-waiting`，进行中那一项的转圈停住、变成等待色，悬停提示「等你回答后继续」。
-- **问题卡 Enter**（`PermissionCards.tsx` 的 `enter`）：「其它」输入框里按 Enter = 提交回答；焦点在单选项上按 Enter = 选它并提交；多选项上 Enter 只是勾选。输入法组字时的 Enter 不算（`imeComposing`）。
+- **问题卡 Enter**：已被阶段 C 的问答卡取代（下面「问答卡在对话里」）。现在：单选行上 Enter = 选它并下一题，多选行上 Enter = 下一题（勾选用空格），「其它」输入框里 Enter = 下一题 / 提交；输入法组字时的 Enter 不算（`imeComposing`）。
 - **思考框跟到底**（`useFollowEnd`）：思考正文限高 360px、框内滚动，流式输出时新字长在框底下，得一直手动往下滑。现在流式时框保持在末尾；用户往上滚了就不跟，滚回末尾又开始跟。
 
 ## 问答卡在对话里（阶段 C，2026-10-25）
 
 - AskUserQuestion 不再停靠在输入框上方：`chat/AskCard.tsx` 画在对话末尾（`TurnList` 之后、计划卡 `PlanDock` 之前），输入框上方照旧是 RunCard；别的权限卡照旧停靠（`permission-dock.ts` 的 `splitPending()` 把一个对话的 pending 分成 `dock` / `ask`，Composer 和 PermissionDock 都用它）。逻辑是纯函数 `chat/ask-card.ts`（`askQuestions` / `pick` / `answerOf` / `assemble` / `step` / `askKey`），测试在 `ask-card.test.ts`。
-- 一页一题（`‹ 1 / 3 ›`），翻页不丢答案；↑↓ 移动、1–9 直接选（最后一个数字是「其它」）、Enter（单选行上：选中并翻页；多选行上：勾选）、Ctrl+Enter 下一题 / 最后一题提交；IME 组字时什么都不做；「其它」的输入框里只认 Enter。带 `preview` 的选项获得焦点（或被选中）时旁边显示预览。
-- 答案格式不变：`updatedInput.answers[question] = 标签用 ", " 连接`（多选按选项顺序，「其它」的文字在最后）；跳过的题是 `（用户跳过）`；**全部跳过 = 拒绝**（`denyResponse`，等同原来的「跳过」）。
+- 一页一题（`‹ 1 / 3 ›`），翻页不丢答案；↑↓ 移动、1–9 直接选（最后一个数字是「其它」）、Enter（单选行上：选中并翻页；多选行上：下一题，勾选用空格——行按钮自己的点击；修复 C-V3 前是勾选，`ask-card.ts` 的 `rowEnter`）、Ctrl+Enter 下一题 / 最后一题提交；IME 组字时什么都不做；「其它」的输入框里只认 Enter。带 `preview` 的选项获得焦点时旁边显示预览（焦点真的在卡片里才算，否则显示选中项的预览）；预览和选项并排还是上下叠，看卡片自己的宽度（容器查询 560px），不看窗口。
+- 答案格式不变：`updatedInput.answers[question] = 标签用 ", " 连接`（多选按选项顺序，「其它」的文字在最后）；跳过的题是 `（用户跳过）`；跳过会清掉这一页已选的项和「其它」的字，翻回去显示「已跳过」，再选一项就不算跳过了（修复 C-V2：以前翻回去还显示原来的选择，发出去却是跳过）；**全部跳过 = 拒绝**（`denyResponse`，等同原来的「跳过」）。
 - 防误触：卡片出现时不抢焦点（用户可能在打字）。输入框空着按 Enter（等过 600 ms 冷却，同停靠卡）只把焦点移进卡片（`usePrimary` 注册的是 `focusCard`），不发任何帧；输入框里有字按 Enter 照旧是「用这段话拒绝」（Composer 的 `dockAction`）。
-- 没做的：停靠卡上的「改用排队的这段话回复」和 `dockNote` 提示只在 `PermissionDock` 里画，问答卡没有这两样（排队的那段话在问答卡在场时不会被自动用掉，只是没有那个按钮）。
-- ui-smoke 段 `stage-c-ask`：注入两题的 pending，断言位置、不抢焦点、空 Enter 进卡片、键盘 / 翻页 / 预览 / 其它 / IME、发出的 `permission.respond`、跳过一题 / 全部跳过、侧栏「需要你」。mock 对话不在跑，所以断言的是「输入框还在」而不是 RunCard。
+- 焦点（修复 C-U1 / C-V1）：选项按标签做 key，翻页后是新元素，‹ › 在最后 / 第一页又会变成 disabled——焦点以前掉到 `<body>`，之后什么键都到不了卡片。现在每次翻页（Enter、Ctrl+Enter、‹ ›、跳过）都 bump 一个 `nav`，effect 把焦点放到新一页选中的那行（`rowFor`，没选就第一行）；卡片消失时焦点在里面，就还给这个窗格的输入框（layout effect 的清理里判断，节点那时还在）。
+- 读屏和提示（修复 C-U2）：卡片里有一条 `DockLive`（`role="status"`，同停靠卡），平时读「标题。在输入框里空着按 Enter 到卡片上作答」；Composer 的 `dockNote`（冷却期里的 Enter 没生效、有字时的提示等）在问答卡是那张卡时经 `PermissionCards.tsx` 的 `useAskNotes`（内存里的小 store，键是 `primaryKey(scope, requestId)`）送到卡片，显示在「需要你回答」旁边并读出来。
+- 没做的：停靠卡上的「改用排队的这段话回复」按钮问答卡没有（排队的那段话在问答卡在场时不会被自动用掉，只是没有那个按钮）。
+- ui-smoke 段 `stage-c-ask`：注入两题的 pending，断言位置、不抢焦点、冷却期 Enter 的提示和读屏行、空 Enter 进卡片、Enter / ‹ / › / Ctrl+Enter / 跳过之后焦点还在卡片里、跳过清掉选择并显示「已跳过」、多选空格勾选 Enter 提交、键盘 / 翻页 / 预览 / 其它 / IME、发出的 `permission.respond`、跳过一题 / 全部跳过、侧栏「需要你」。mock 对话不在跑，所以断言的是「输入框还在」而不是 RunCard。按键只发给 `document.activeElement`（以前 `keyOn` 找不到焦点就退回第一行，把焦点丢失盖住了）。

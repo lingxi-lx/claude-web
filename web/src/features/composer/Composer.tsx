@@ -16,7 +16,7 @@ import { parseBtw } from '@/features/chat/side-chat-model';
 import { atQueryAt, pickAt } from './at-mention';
 import { RunCard } from '@/features/chat/RunCard';
 import { BackgroundPill } from '@/features/background/BackgroundPill';
-import { PermissionDock, runDockPrimary } from '@/features/chat/PermissionCards';
+import { PermissionDock, runDockPrimary, setAskNote } from '@/features/chat/PermissionCards';
 import { denyResponse, dockAction, dockDecide, dockKind, isSlashCommand, primaryKey, splitPending, type DockSeen, type DockWhy } from '@/features/chat/permission-dock';
 import { attachmentFolderPath, joinPath, projectRoots } from '@/features/paths';
 import { Icon } from '@/ui/icons';
@@ -456,6 +456,13 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     : seenRef.current?.carried && text.trim() && !isSlashCommand(text) ? DOCK_CARRIED
     : queuedOffer && !text.trim() ? DOCK_REQUEUED[dockKind(docked)]
     : undefined;
+  // the question card is in the conversation: it shows (and announces) this note itself (C-U2)
+  const askNoteKey = docked && !dockReq && askReq ? primaryKey(dockScope, askReq.requestId) : null;
+  useEffect(() => {
+    if (!askNoteKey) return;
+    setAskNote(askNoteKey, dockNote);
+    return () => setAskNote(askNoteKey, undefined);
+  }, [askNoteKey, dockNote]);
 
   const addRef = (d: { id: string; title: string }) => {
     setRefs((r) => (r.some((x) => x.id === d.id) ? r : [...r, d]));

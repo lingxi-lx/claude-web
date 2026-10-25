@@ -34,7 +34,26 @@ export function pick(q: AskQ, d: AskDraft, label: string): AskDraft {
   return { ...d, picked: [label], otherOn: false, skipped: false };
 }
 
-export const skip = (d: AskDraft): AskDraft => ({ ...d, skipped: true });
+/** 跳过 clears the page (C-V2): what was picked before is not shown as chosen while the answer says it was skipped. */
+export const skip = (_d: AskDraft): AskDraft => ({ ...EMPTY_DRAFT, skipped: true });
+
+/** The row the focus goes to on a page: the 其它 row when it is on, else the first chosen option, else the first. */
+export function rowFor(q: AskQ | undefined, d: AskDraft | undefined): number {
+  if (!q || !d) return 0;
+  if (d.otherOn) return q.options.length;
+  return Math.max(0, q.options.findIndex((o) => d.picked.includes(o.label)));
+}
+
+export type RowEnter = { t: 'pick-next'; label: string } | { t: 'other' } | { t: 'next' };
+
+/**
+ * A plain Enter on row `i` (spec C1: Enter 下一题): a single choice is picked and the card goes on; in a multi choice
+ * it goes on with what is ticked (Space ticks — the row button's own click, C-V3); 其它 opens its box the first time.
+ */
+export function rowEnter(q: AskQ, d: AskDraft, i: number): RowEnter {
+  if (i >= q.options.length) return d.otherOn ? { t: 'next' } : { t: 'other' };
+  return q.multiSelect ? { t: 'next' } : { t: 'pick-next', label: q.options[i].label };
+}
 
 export function answerOf(q: AskQ, d: AskDraft | undefined): string | null {
   if (!d) return null;
