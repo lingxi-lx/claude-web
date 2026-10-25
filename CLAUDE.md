@@ -96,6 +96,7 @@ npm run dev          # 开发：server tsx watch + vite :5173（代理 /ws 到 3
 | [cafe](docs/notes/cafe.md) | 后台 · 网吧（2026-10-13） | 等距像素网吧、角色格式、捏角色的 skill 和工具、模拟与渲染 |
 | [ascii-themes](docs/notes/ascii-themes.md) | 字符画主题与过程动画（2026-10-22，用户要求） | 主题包、data-ascii、16 个过程 / 帧表、ProcessGlyph、Worker 背景的沙箱和看门狗、安静区、十套内置、theme-check 脚本、ascii-theme skill 与试跑、设置页画廊、截图办法 |
 | [site](docs/notes/site.md) | 官网（2026-10-22） | site/ 的 Astro 站、文案与覆盖测试、语言跳转、按系统的下载按钮、版本数据、首次加载预算、Pages 发布 |
+| [node-graph](docs/notes/node-graph.md) | 节点图（spec 2026-10-24 D） | ui/node-graph 共用组件；nodegraph 格式、marks / 状态标签；后台指挥台、编排执行图、对话代码块与 Mermaid 切换；动效与 150 张上限；ui.nodegraphHint |
 
 ## 结构
 

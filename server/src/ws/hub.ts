@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import type { WebSocket, WebSocketServer } from 'ws';
 import { CLAUDE_PROVIDER_ID, type ClientRequest, type OpenSessionParams, type RemoteStatus, type ServerEvent, type WireDown, type WireUp } from '../protocol.js';
 import { RunnerPool } from '../runtime/pool.js';
-import { SessionRunner, setPromptSuggestions, setThinkingLanguageSetting } from '../runtime/session-runner.js';
+import { SessionRunner, setNodegraphHint, setPromptSuggestions, setThinkingLanguageSetting } from '../runtime/session-runner.js';
+import { NODEGRAPH_HINT_KEY } from '../runtime/nodegraph-hint.js';
 import { THINKING_LANGUAGE_KEY } from '../runtime/thinking-language.js';
 import { setSessionsMcpEnabled } from '../sessions-mcp/tools.js';
 import { setDesktopSkillsEnabled } from '../runtime/desktop-skills.js';
@@ -647,6 +648,7 @@ export class Hub {
         // takes effect on the next session start — running children keep the servers they were given
         if (req.key === 'memory.mcp') setMemoryMcpEnabled(req.value !== false);
         if (req.key === 'ui.promptSuggestions') setPromptSuggestions(req.value !== false);
+        if (req.key === NODEGRAPH_HINT_KEY) setNodegraphHint(req.value !== false);
         if (req.key === 'sessions.mcp') setSessionsMcpEnabled(req.value !== false);
         if (req.key === 'claude.desktopSkills') setDesktopSkillsEnabled(req.value !== false);
         if (req.key === 'web.mcp') setWebMcpEnabled(req.value !== false);

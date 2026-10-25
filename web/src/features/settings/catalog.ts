@@ -19,7 +19,7 @@ export const SETTINGS_GROUPS: { id: SettingsGroupId; l: string }[] = [
 
 /** One setting row (a meta.json key). */
 export type EntryId =
-  | 'ui.defaultMode' | 'autoContinueOnReset' | 'ui.showThinking' | 'ui.viewMode' | 'ui.infoPanel' | 'ui.sidebarFolded' | 'ui.backdropMotion' | 'ui.backdropInChat' | 'ui.welcomeLayout' | 'ui.autoArchivePr' | 'sessions.mcp' | 'claude.desktopSkills' | 'worktree.dir' | 'worktree.prefix' | 'ui.promptSuggestions' | 'ui.diffMode' | 'ui.inlineDiffs' | 'ui.workbench' | 'ui.autoSave'
+  | 'ui.defaultMode' | 'autoContinueOnReset' | 'ui.showThinking' | 'ui.viewMode' | 'ui.infoPanel' | 'ui.sidebarFolded' | 'ui.backdropMotion' | 'ui.backdropInChat' | 'ui.welcomeLayout' | 'ui.autoArchivePr' | 'sessions.mcp' | 'ui.nodegraphHint' | 'claude.desktopSkills' | 'worktree.dir' | 'worktree.prefix' | 'ui.promptSuggestions' | 'ui.diffMode' | 'ui.inlineDiffs' | 'ui.workbench' | 'ui.autoSave'
   | 'ui.notifications' | 'ui.closeToTray' | 'ui.confirmExit' | 'ui.softwareRender' | 'orchestra.maxParallel' | 'cafe.rate' | 'cafe.sound'
   | 'ai.thinkingLanguage'
   | 'ui.language' | 'ui.theme' | 'ui.zoom' | 'ui.fontSize' | 'ui.density' | 'ui.cjkFont' | 'ui.reduceMotion' | 'ui.haptics';
@@ -113,6 +113,7 @@ const GENERAL: EntryMeta[] = [
   { id: 'worktree.prefix', more: true, block: tr('新对话'), label: tr('{worktree}分支前缀', { worktree: TERMS.worktree }), hint: tr('留空：用 Claude Code 的默认前缀（框里灰色的那个）。比如填 claude/，分支就叫 claude/任务名。'), keywords: tr('worktree branch prefix 分支 前缀 独立副本') },
   { id: 'claude.desktopSkills', block: tr('新对话'), label: tr('用官方桌面版下载的 Anthropic 技能'), hint: tr('这台电脑装了官方 Claude 桌面版的话，它为你的账号下载的技能（Excel、PDF、Word、PPT 等）在这里的对话里也能用，在官方 App 里开始的对话接着聊时不会再「Unknown skill」。改了之后新开的对话生效。'), keywords: tr('skills anthropic-skills xlsx pdf docx pptx desktop 技能 官方 桌面版') },
   { id: 'sessions.mcp', block: tr('新对话'), label: tr('对话之间可以互相看和留言'), hint: tr('Claude 能列出这台电脑上的其它对话、读它们在做什么、给它们发消息、建议另开一个对话做的事；归档别的对话之前会先问你。改了之后新开的对话生效。'), keywords: tr('sessions cross session message 跨对话 其它对话 留言 任务 task chip') },
+  { id: 'ui.nodegraphHint', block: tr('新对话'), label: tr('让 Claude 画可交互的节点图'), hint: tr('告诉 Claude 这里能把 nodegraph 代码块显示成能拖、能改的节点图，适合画流程、依赖、权限和架构。改了之后新开的对话生效。'), keywords: tr('node graph diagram flowchart mermaid 节点图 流程图 架构图') },
   { id: 'ui.promptSuggestions', block: tr('对话显示'), label: tr('下一句提示'), hint: tr('每轮结束后，在空的输入框里用灰字猜你下一句想说什么，按 Tab 采用。改了之后新开的对话生效。'), keywords: tr('prompt suggestion next 提示 建议 下一句 Tab') },
   { id: 'ui.diffMode', block: tr('对话显示'), label: tr('改动的显示方式'), hint: tr('审阅改动时 diff 的默认样式。'), keywords: tr('diff split unified 并排 内联 默认 diff 视图 上下对照 左右并排') },
   { id: 'ui.inlineDiffs', block: tr('对话显示'), label: INLINE_DIFFS_LABEL, hint: tr('每一步改了什么直接在对话里展开。关着时（默认）点那一步，或回合末尾的「改动了 N 个文件」查看。'), keywords: tr('diff inline expand edit 展开 改动 大 diff 内联 默认展开') },

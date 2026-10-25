@@ -1,0 +1,81 @@
+/* spec 2026-10-24 D1 — the shared node graph. Sizes come from layout.ts through the --ng-* variables set inline. */
+.ng { position: relative; overflow: hidden; border-radius: var(--r-lg); color: var(--ink-1); font-family: var(--font); user-select: none;
+  background-color: color-mix(in oklab, var(--bg) 82%, var(--bg-2));
+  background-image: radial-gradient(circle, var(--edge-subtle) 1px, transparent 1.4px);
+  --ng-strong: var(--accent); --ng-error: var(--err); --ng-line: var(--edge-strong); }
+.ng-head { position: absolute; left: 14px; top: 12px; z-index: 2; pointer-events: none; max-width: 60%; }
+.ng-title { font-size: var(--fs-sm); font-weight: 600; }
+.ng-sub { font-size: var(--fs-meta); color: var(--ink-3); margin-top: 2px; }
+.ng-badge { position: absolute; right: 12px; top: 12px; z-index: 2; display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 999px;
+  font-size: var(--fs-meta); font-weight: 600; background: var(--fill-subtle); color: var(--ink-2); transition: background var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out); }
+.ng-badge[data-tone='error'] { background: var(--err-soft); color: color-mix(in oklab, var(--err) 80%, var(--ink-1)); }
+.ng-badge[data-tone='ok'] { background: var(--ok-soft); color: color-mix(in oklab, var(--ok) 80%, var(--ink-1)); }
+.ng-viewport { position: absolute; inset: 0; cursor: grab; touch-action: none; outline: none; }
+.ng-viewport:focus-visible { box-shadow: inset 0 0 0 2px var(--focus-ring); }
+.ng-viewport.panning { cursor: grabbing; }
+.ng-layer { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.ng-layer > svg.ng-edges { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.ng-line { fill: none; stroke: var(--ng-line); stroke-width: 1.6; transition: stroke var(--dur-slow) var(--ease-out); }
+.ng-edge[data-style='dashed'] .ng-line { stroke-dasharray: 5 5; opacity: 0.75; }
+.ng-edge[data-style='strong'] .ng-line { stroke: var(--ng-strong); stroke-width: 2; }
+.ng-edge[data-style='error'] .ng-line { stroke: var(--ng-error); stroke-width: 2; }
+.ng-glow { fill: none; stroke-width: 9; stroke-linecap: round; opacity: 0.2; }
+.ng-edge[data-style='strong'] .ng-glow { stroke: var(--ng-strong); }
+.ng-edge[data-style='error'] .ng-glow { stroke: var(--ng-error); }
+.ng-pulse { fill: var(--ng-line); }
+.ng-edge[data-style='strong'] .ng-pulse { fill: var(--ng-strong); }
+.ng-edge[data-style='error'] .ng-pulse { fill: var(--ng-error); }
+.ng-label rect { fill: var(--surface-elev); stroke: var(--edge-subtle); }
+.ng-label text { fill: var(--ink-3); font-size: 11px; font-family: var(--font); }
+.ng-edge[data-style='error'] .ng-label text { fill: color-mix(in oklab, var(--err) 75%, var(--ink-1)); }
+.ng-card { position: absolute; box-sizing: border-box; border-radius: var(--r-lg); background: var(--surface-1); border: var(--hairline) solid var(--edge-default);
+  box-shadow: var(--elev-1); overflow: hidden; cursor: grab; transition: border-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out); }
+.ng-card[role='button'] { cursor: pointer; }
+.ng-card:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.ng-card.sel { box-shadow: var(--elev-1), 0 0 0 2px var(--accent); }
+.ng-card[data-state='running'] { border-color: var(--ng-strong); box-shadow: var(--elev-1), 0 0 0 3px color-mix(in oklab, var(--ng-strong) 20%, transparent), 0 0 18px color-mix(in oklab, var(--ng-strong) 28%, transparent); }
+.ng-card[data-state='failed'] { border-color: var(--ng-error); }
+.ng-card[data-state='queued'], .ng-card[data-state='stopped'] { opacity: 0.72; }
+.ng-card-h { height: var(--ng-head-h); display: flex; align-items: center; gap: 8px; padding: 0 10px; box-sizing: border-box; }
+.ng-ic { flex: none; width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; font-size: var(--fs-meta); font-weight: 700;
+  color: var(--c, var(--ink-2)); background: color-mix(in oklab, var(--c, var(--ink-3)) 16%, transparent); }
+.ng-tx { min-width: 0; }
+.ng-t { font-size: var(--fs-sm); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ng-s { font-size: var(--fs-micro); color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ng-rows { padding: calc(var(--ng-body-pad) / 2) 10px; border-top: var(--hairline) solid var(--edge-subtle); }
+.ng-row { height: var(--ng-row-h); display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: var(--fs-meta); }
+.ng-row .k { color: var(--ink-3); font-family: var(--mono); flex: none; }
+.ng-row .v { color: var(--ink-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ng-row .select-trigger { height: 22px; min-width: 0; font-size: var(--fs-meta); }
+.ng-list { padding: 0 10px calc(var(--ng-body-pad) / 2); border-top: var(--hairline) solid var(--edge-subtle); }
+.ng-list-h { height: var(--ng-list-head); display: flex; align-items: center; font-size: var(--fs-micro); color: var(--ink-3); }
+.ng-li { height: var(--ng-list-item); display: flex; align-items: center; gap: 6px; font-size: var(--fs-meta); }
+.ng-li > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ng-tag { padding: 0 6px; border-radius: 999px; background: var(--fill-subtle); color: var(--ink-3); font-size: var(--fs-micro); }
+.ng-zoom { position: absolute; right: 10px; bottom: 10px; z-index: 2; display: flex; align-items: center; gap: 2px; padding: 2px; border-radius: 999px;
+  background: var(--surface-elev); box-shadow: var(--elev-1); font-size: var(--fs-meta); }
+.ng-zoom button { width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--ink-2); cursor: pointer; }
+.ng-zoom button:hover { background: var(--fill-subtle); color: var(--ink-1); }
+.ng-zoom-pct { min-width: 44px; text-align: center; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.ng.compact .ng-zoom-pct { min-width: 36px; }
+.ng.compact .ng-head, .ng.compact .ng-badge { display: none; }
+/* motion */
+.ng[data-motion='on'] .ng-card.ng-in { animation: ng-card-in 320ms var(--ease-out) both; }
+.ng[data-motion='on'] .ng-edge.ng-in .ng-line { stroke-dasharray: var(--len); stroke-dashoffset: var(--len); animation: ng-draw 420ms var(--ease-out) forwards; animation-delay: inherit; }
+.ng[data-motion='on'] .ng-edge.ng-in[data-style='dashed'] .ng-line { stroke-dasharray: 5 5; stroke-dashoffset: 0; animation-name: ng-fade; }
+.ng[data-motion='on'] .ng-edge.ng-in .ng-label, .ng[data-motion='on'] .ng-edge.ng-in .ng-pulse { animation: ng-fade 420ms var(--ease-out) both; animation-delay: inherit; }
+.ng[data-motion='on'] .ng-glow { animation: ng-breathe 2.4s ease-in-out infinite; }
+@keyframes ng-card-in { from { opacity: 0; transform: translateY(6px) scale(0.98); } }
+@keyframes ng-draw { to { stroke-dashoffset: 0; } }
+@keyframes ng-fade { from { opacity: 0; } }
+@keyframes ng-breathe { 50% { opacity: 0.32; } }
+:root[data-reduce-motion='1'] .ng, :root[data-reduce-motion='1'] .ng * { animation: none !important; transition: none !important; }
+@media (prefers-reduced-motion: reduce) { .ng, .ng * { animation: none !important; transition: none !important; } }
+/* chat: ```nodegraph blocks and the Mermaid 节点图 / 原图 switch (spec D4) */
+.code.ng-block { padding: 0; background: transparent; border: 0; }
+.ng-foot { display: flex; gap: 12px; align-items: center; padding: 6px 2px 0; font-size: var(--fs-meta); }
+.ng-foot .ng-send { margin-inline-start: auto; }
+.ng-source { margin-top: 6px; }
+.ng-bad { padding: 6px 10px; color: color-mix(in oklab, var(--err) 75%, var(--ink-1)); font-size: var(--fs-meta); }
+.ng-bad .sub { margin-inline-start: 8px; color: var(--ink-3); font-family: var(--mono); }
+.mmd-view { display: flex; gap: 4px; justify-content: flex-end; margin-bottom: 6px; }

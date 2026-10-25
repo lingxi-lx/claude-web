@@ -101,6 +101,11 @@ export function installOrchestra() {
   if (installed) return;
   installed = true;
   const refresh = () => void useOrch.getState().loadAll().catch(() => {});
+  // ui-smoke (spec D3): put a run into the store and open it — no engine needed. Same idea as window.__cwBackground.
+  (window as unknown as { __cwOrch?: unknown }).__cwOrch = {
+    inject: (run: OrchRun) => useOrch.setState((s) => ({ full: { ...s.full, [run.id]: run } })),
+    open: (runId: string) => useOrch.getState().ask('open', runId),
+  };
   ws.on((e: ServerEvent) => {
     if (e.kind === 'hello' || e.kind === 'orchestra.workflows.changed') { refresh(); return; }
     if (e.kind !== 'orchestra.changed') return;

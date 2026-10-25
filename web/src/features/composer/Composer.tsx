@@ -54,7 +54,7 @@ import { BAR_ID } from './ids';
 import { FEATURE_DEFAULTS_KEY, LEGACY_FEATURES_KEY, afterStart, capabilityTags, migrateFeatureDefaults, usable, withoutTag } from './capabilities';
 import { FILL_EVENT, MENTION_EVENT, type FillDetail, type MentionDetail } from './fill';
 import { mentionText } from './at-mention';
-import { QUOTE_EVENT, withQuote, type QuoteDetail } from './quote';
+import { QUOTE_EVENT, withLine, withQuote, type QuoteDetail } from './quote';
 import { applyStarter, initialCwd } from '@/features/home/model';
 import { usePageOpen } from '@/features/sections';
 import { composerCovered } from './covered';
@@ -506,7 +506,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
       const p = g.panes[pane.paneId];
       if (g.focusedPaneId !== pane.paneId || !p || (p.activeTileId ?? p.tiles[0]?.id) !== pane.tileId) return;
       d.handled = true;
-      onChangeRef.current(withQuote(textRef.current, d.text));
+      onChangeRef.current((d.plain ? withLine : withQuote)(textRef.current, d.text));
       requestAnimationFrame(() => { const el = ta.current; if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } });
     };
     window.addEventListener(QUOTE_EVENT, on);

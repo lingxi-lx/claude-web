@@ -76,8 +76,6 @@
 .bg-queue-more { fill: var(--ink-3); font-size: 11px; font-weight: 600; }
 
 /* the screen → everyone at work: dashes flowing towards them; a result handed in flashes back up the line */
-.bg-flow { fill: none; stroke: var(--c); stroke-width: 1.6; stroke-linecap: round; stroke-dasharray: 4 6; animation: bg-flow 1s linear infinite; }
-@keyframes bg-flow { to { stroke-dashoffset: -20; } }
 .bg-flash { fill: none; stroke: var(--c); stroke-width: 2.4; stroke-linecap: round; stroke-dasharray: 18 120; stroke-dashoffset: -82; opacity: 0; animation: bg-flash 1.1s var(--ease-out) forwards; }
 @keyframes bg-flash { 0% { opacity: 1; stroke-dashoffset: -82; } 75% { opacity: 1; } 100% { opacity: 0; stroke-dashoffset: 0; } }
 
@@ -92,34 +90,9 @@
 .bg-char:focus-visible .bg-ring { opacity: 1; stroke: var(--focus-ring); }
 .bg-char-name { fill: color-mix(in oklab, var(--c) 70%, var(--ink-1)); font-size: 12.5px; font-weight: 600; text-anchor: middle; }
 
-/* ---- the 指挥台 (CommandGraph.tsx) ---- */
-.bg-graph { min-width: 0; }
-.bg-graph-svg { display: block; width: 100%; height: auto; font-family: var(--font); user-select: none; -webkit-user-select: none; }
-.bg-orbit { fill: none; stroke: var(--edge-subtle); stroke-width: 1; }
-.bg-edge { stroke: var(--c); stroke-width: 1.2; stroke-linecap: round; }
-.bg-edge.is-done { opacity: 0.45; }
-.bg-edge:is(.is-queued, .is-stopped) { stroke: var(--edge-strong); stroke-dasharray: 2 4; }
-.bg-edge.is-failed { stroke: var(--err); stroke-dasharray: 3 3; opacity: 0.6; }
-.bg-hub rect { fill: var(--surface-elev); stroke: var(--accent); stroke-width: 1.2; }
-.bg-hub-name { fill: var(--accent-text); font-size: 11px; font-weight: 600; text-anchor: middle; }
-.bg-hub-sub { fill: var(--ink-3); font-size: 9px; text-anchor: middle; }
-.bg-node { cursor: pointer; outline: none; }
-.bg-node.shell { cursor: default; }
-.bg-node:focus-visible { outline: none; }
-.bg-node-dot { fill: var(--c); }
-.bg-node:is(.is-queued, .is-stopped) .bg-node-dot { opacity: 0.4; }
-.bg-node.is-failed .bg-node-dot { stroke: var(--err); stroke-width: 2.2; }
-.bg-node-mark { fill: none; stroke: var(--bg); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.bg-node-glow { fill: var(--c); opacity: 0.2; animation: bg-halo 1.8s ease-in-out infinite; }
-@keyframes bg-halo { 0%, 100% { opacity: 0.12; } 50% { opacity: 0.32; } }
-.bg-node-label { fill: color-mix(in oklab, var(--c) 70%, var(--ink-1)); font-weight: 600; text-anchor: middle; }
-.bg-node:is(.is-queued, .is-stopped) .bg-node-label { fill: var(--ink-4); font-weight: 400; }
-.bg-node.is-failed .bg-node-label { fill: var(--err); }
-.bg-node.shell .bg-node-label { fill: var(--ink-3); font-weight: 400; }
-.bg-node-ring { fill: none; stroke: var(--focus-ring); stroke-width: 1.6; opacity: 0; transition: opacity var(--dur-fast) var(--ease-out); }
-.bg-node:hover .bg-node-ring { opacity: 1; stroke: var(--edge-strong); }
-.bg-node:focus-visible .bg-node-ring { opacity: 1; stroke: var(--focus-ring); }
-.bg-graph-more { fill: var(--ink-4); font-size: 9.5px; text-anchor: end; }
+/* ---- the 指挥台 (CommandGraph.tsx): a node graph (ui/node-graph, spec 2026-10-24 D2), its own reduced-motion rules ---- */
+.bg-graph { position: relative; min-width: 0; }
+.bg-graph-more { text-align: end; font-size: var(--fs-micro); color: var(--ink-4); padding: 4px 6px 0; }
 
 /* ---- the cards (AgentCards.tsx): the one at work glows in its colour ---- */
 .bg-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: var(--sp-2); }
@@ -166,13 +139,13 @@ button.bg-feed-row:hover { background: var(--layer-hover); }
 @keyframes bg-feed-in { from { opacity: 0; transform: translateY(-4px); } }
 
 /* ---- 减少动画 (the setting, or the system's): nobody bobs or walks, no line flows or flashes, nothing pulses ---- */
-:root[data-reduce-motion='1'] :is(.bg-bob, .bg-flow, .bg-beat, .bg-node-glow, .bg-feed-new, .bg-bar.indet > span, .bg-machine.on .bg-cursor, .bg-machine.on .bg-machine-led) { animation: none; }
+:root[data-reduce-motion='1'] :is(.bg-bob, .bg-beat, .bg-feed-new, .bg-bar.indet > span, .bg-machine.on .bg-cursor, .bg-machine.on .bg-machine-led) { animation: none; }
 :root[data-reduce-motion='1'] :is(.bg-walk, .bg-place) { transition: none; }
 :root[data-reduce-motion='1'] .bg-beat { stroke-dasharray: none; }
 :root[data-reduce-motion='1'] .bg-flash { display: none; }
 :root[data-reduce-motion='1'] button.bg-card:active { transform: none; }
 @media (prefers-reduced-motion: reduce) {
-  :root :is(.bg-bob, .bg-flow, .bg-beat, .bg-node-glow, .bg-feed-new, .bg-bar.indet > span, .bg-machine.on .bg-cursor, .bg-machine.on .bg-machine-led) { animation: none; }
+  :root :is(.bg-bob, .bg-beat, .bg-feed-new, .bg-bar.indet > span, .bg-machine.on .bg-cursor, .bg-machine.on .bg-machine-led) { animation: none; }
   :root :is(.bg-walk, .bg-place) { transition: none; }
   :root .bg-beat { stroke-dasharray: none; }
   :root .bg-flash { display: none; }

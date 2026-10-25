@@ -24,32 +24,8 @@
 }
 
 /* graph */
-.orch-graph { overflow: auto; padding: 4px 10px 8px; }
+.orch-graph { overflow: hidden; padding: 0; }
 .orch-graph.empty { color: var(--ink-4); font-size: var(--fs-meta); padding: 10px; }
-.orch-canvas { position: relative; }
-.orch-canvas > svg { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
-.orch-canvas .edge { fill: none; stroke: var(--edge-strong); stroke-width: 1.5; }
-.orch-canvas .edge.st-done { stroke: color-mix(in oklab, var(--ok) 70%, transparent); }
-.orch-canvas .edge.st-running { stroke: var(--info); stroke-dasharray: 4 4; animation: orch-dash 0.8s linear infinite; }
-.orch-canvas .edge.st-failed, .orch-canvas .edge.st-skipped { stroke: color-mix(in oklab, var(--err) 45%, transparent); }
-@keyframes orch-dash { to { stroke-dashoffset: -8; } }
-.orch-card { position: absolute; display: flex; align-items: center; gap: 7px; padding: 6px 8px; text-align: left; border: var(--hairline) solid var(--edge-default); border-radius: var(--r-lg); background: var(--surface-1); box-shadow: var(--elev-1); cursor: pointer; color: var(--ink-1); transition: border-color var(--dur-2) var(--ease-out), background var(--dur-2) var(--ease-out); }
-.orch-card:hover { border-color: var(--edge-strong); }
-.orch-card.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-.orch-card .ic { width: 24px; height: 24px; flex: none; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--r-md); background: var(--surface-2); color: var(--ink-3); }
-.orch-card .tx { display: flex; flex-direction: column; min-width: 0; }
-.orch-card .t { font-size: var(--fs-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.orch-card .s { font-size: var(--fs-micro); color: var(--ink-4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.orch-card.k-approval .ic { color: var(--warn); }
-.orch-card.k-compare .ic { color: var(--info); }
-.orch-card.st-running { border-color: color-mix(in oklab, var(--info) 60%, transparent); }
-.orch-card.st-running .ic { background: color-mix(in oklab, var(--info) 16%, transparent); color: var(--info); animation: pulse 1.4s infinite; }
-.orch-card.st-waiting { border-color: var(--warn); background: var(--warn-soft); }
-.orch-card.st-waiting .ic { color: var(--warn); }
-.orch-card.st-done .ic { background: var(--ok-soft); color: var(--ok); }
-.orch-card.st-failed { border-color: color-mix(in oklab, var(--err) 55%, transparent); }
-.orch-card.st-failed .ic { background: var(--err-soft); color: var(--err); }
-.orch-card.st-skipped, .orch-card.st-cancelled { opacity: 0.55; }
 
 /* status pill */
 .orch .pill { display: inline-flex; align-items: center; padding: 0 7px; line-height: 18px; border-radius: var(--r-pill); font-size: var(--fs-micro); background: var(--surface-2); color: var(--ink-3); flex: none; }

@@ -396,7 +396,7 @@ describe('the whole interface: 对话 not 会话, no implementation words by def
   /** Values, not text (the scanner cannot tell): [file, the whole literal, why]. A new one fails until listed here. */
   const WORKTREE_CODE: [string, string, string][] = [
     ['features/composer/branch-guard.ts', '/.claude/worktrees/', 'a path matched against folders'],
-    ['features/orchestra/Graph.tsx', 'worktree', "compared: n.workspace === 'worktree'"],
+    ['features/orchestra/orch-graph.ts', 'worktree', "compared: n.workspace === 'worktree'"],
     ['features/orchestra/WorkflowEditor.tsx', 'worktree', 'the <option> value and its type'],
     ['features/sidebar/entries.ts', 'worktree', 'an entry id (PROJECT_MENU)'],
     ['features/sidebar/entries.ts', 'project:worktree', 'an entry id (LEGACY)'],

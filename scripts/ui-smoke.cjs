@@ -144,7 +144,40 @@ function seedHome(home) {
     rline({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_r_task', content: 'Shown to the user as a task chip.' }] } }, 13),
     rline({ type: 'assistant', message: { id: 'msg_r4', type: 'message', role: 'assistant', model: 'claude-smoke', content: [{ type: 'text', text: 'smoke: suggested.' }], stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 } } }, 14),
   ].map((x) => JSON.stringify(x)).join('\n') + '\n');
-  return { repo, sid, toolsSid, reviewSid, transcript: path.join(proj, `${sid}.jsonl`) };
+  // a fourth (spec 2026-10-24 D4): the mp4's node graph (keep the same as web/src/ui/node-graph/sample.ts), a mermaid
+  // flowchart the node graph can read, and a broken ```nodegraph block
+  const graphSid = '5a0e0e0e-0000-4000-8000-00000000c0f1';
+  const NG_SAMPLE = {
+    title: 'Access settings', subtitle: 'Who can read the customers bucket', badge: { count: 'error', text: '{n} open path', okText: 'No open paths' },
+    nodes: [
+      { id: 'anyone', title: 'Anyone', subtitle: 'Public internet' }, { id: 'admin', title: 'Admin', subtitle: '2 people' }, { id: 'backup', title: 'Nightly backup', subtitle: 'paused' },
+      { id: 'link', title: 'Share link', subtitle: 's3://acme-customers', rows: [
+        { id: 'read', label: 'read', value: 'Anyone', options: [{ value: 'Anyone', marks: { 'e-open': 'error' } }, { value: 'Admin', marks: { 'e-open': 'dashed' } }] },
+        { id: 'write', label: 'write', value: 'Admin', options: ['Admin', 'Team'] }] },
+      { id: 'bucket', title: 'customers', subtitle: 'S3 bucket', list: { title: '4 reads this week', items: [{ text: 'Lisbon', tags: ['PT', '2h'] }, { text: 'Austin', tags: ['US', '1d'] }, { text: 'Osaka', tags: ['JP', '3d'] }, { text: 'Berlin', tags: ['DE', '5d'] }] } },
+    ],
+    edges: [
+      { id: 'e-open', from: 'anyone', to: 'link', label: 'public', style: 'error' }, { id: 'e-admin', from: 'admin', to: 'link', label: 'member' },
+      { id: 'e-read', from: 'link', to: 'bucket', fromRow: 'read', label: 'read' }, { id: 'e-write', from: 'link', to: 'bucket', fromRow: 'write', label: 'write' },
+      { id: 'e-backup', from: 'backup', to: 'bucket', label: 'paused', style: 'dashed' },
+    ],
+  };
+  const graphText = [
+    'Here is who can read the bucket:', '', '```nodegraph', JSON.stringify(NG_SAMPLE, null, 1), '```', '',
+    'The request path:', '', '```mermaid', 'flowchart LR', '  A[Client] -->|HTTPS| B(API)', '  B -.-> C{{Cache}}', '  B ==> D[(Orders DB)]', '```', '',
+    'And a broken one:', '', '```nodegraph', '{"nodes": [', '```',
+  ].join('\n');
+  pu = null; un = 60;
+  const gb = { ...base, sessionId: graphSid };
+  const gline = (o, s) => { const uuid = `00000000-0000-4000-8000-0000000c0f${String(++un).padStart(2, '0')}`; const l = { ...gb, parentUuid: pu, uuid, timestamp: at(s), ...o }; pu = uuid; return l; };
+  // staged outside the projects folder and copied in by the node-graph phase: one more sidebar row earlier makes the
+  // list overflow, and the 显示 → 分组方式 check (its menu closes when the list it sits in scrolls) would trip on it
+  const graphStage = path.join(home, `${graphSid}.jsonl`);
+  fs.writeFileSync(graphStage, [
+    gline({ type: 'user', message: { role: 'user', content: 'smoke: draw who can read the bucket' } }, 0),
+    gline({ type: 'assistant', message: { id: 'msg_g1', type: 'message', role: 'assistant', model: 'claude-smoke', content: [{ type: 'text', text: graphText }], stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 } } }, 4),
+  ].map((x) => JSON.stringify(x)).join('\n') + '\n');
+  return { repo, sid, toolsSid, reviewSid, graphSid, graphStage, graphDest: path.join(proj, `${graphSid}.jsonl`), transcript: path.join(proj, `${sid}.jsonl`) };
 }
 
 async function startServer(home, out, extraEnv) {
@@ -237,13 +270,16 @@ async function runner() {
     SMOKE_SID: seed?.sid ?? '',
     SMOKE_TOOLS_SID: seed?.toolsSid ?? '',
     SMOKE_REVIEW_SID: seed?.reviewSid ?? '',
+    SMOKE_GRAPH_SID: seed?.graphSid ?? '',
+    SMOKE_GRAPH_STAGE: seed?.graphStage ?? '',
+    SMOKE_GRAPH_DEST: seed?.graphDest ?? '',
     // the server's data dir (the temp HOME's): checks that read what the server wrote (the canonical mirror)
     SMOKE_DATA: home ? path.join(home, '.claude-web') : '',
     // the mock ACP agent (phase 5: a real permission request) runs under this node, not Electron
     SMOKE_NODE: process.execPath,
     SMOKE_SHOW: arg('--show', false) ? '1' : '',
     SMOKE_INVENTORY: JSON.stringify(inv),
-  }, (idle + 520) * 1000);
+  }, (idle + 600) * 1000); // (+80 s: the node-graph phase of stage D)
   let r = null;
   try { r = JSON.parse(fs.readFileSync(result, 'utf8')); } catch { /* electron died */ }
   let failed = !r || code !== 0;
@@ -3086,9 +3122,10 @@ function driver() {
         await click('.pane.focused .composer .bg-pill');
         const up = await waitFor(`!!document.querySelector('.bg-page:not([hidden]) .cafe-canvas') && document.querySelectorAll('.bg-page .cafe-person').length >= 5`, 10000);
         await sleep(600);
+        await waitFor(`document.querySelectorAll('.bg-page .bg-graph .ng-card').length >= 9`, 8000);   // the node graph is its own chunk (spec D2)
         const sidSel = JSON.stringify(JSON.stringify(E.SMOKE_SID));
-        const page = await js(`(() => { const p = document.querySelector('.bg-page'); return { title: p.querySelector('.over-title h2')?.textContent, desc: p.querySelector('.over-sub, .over-desc')?.textContent ?? '', cards: p.querySelectorAll('.bg-card:not(.bg-card-more)').length, chars: p.querySelectorAll('.cafe-person').length, admin: !!p.querySelector('.cafe-person[aria-label^="网管"]'), lit: (() => { const c = p.querySelector('.cafe-canvas'); const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0, k = 0; for (let i = 0; i < d.length; i += 4 * 97) { k++; if (d[i] + d[i + 1] + d[i + 2] > 60) n++; } return Math.round((n / k) * 100); })(), nodes: p.querySelectorAll('.bg-graph-svg .bg-node').length, feed: p.querySelector('.bg-feed')?.textContent ?? '', chips: p.querySelectorAll('.bg-chips .bg-chip').length, rail: !!document.querySelector('.rail [data-id="background"].on'), side: !!document.querySelector('.sb-sect:not([hidden]) .bg-side .bg-srow.active[data-sid=' + ${sidSel} + ']') }; })()`);
-        check('the pill opens 后台 on this conversation: five cards (three of a workflow, a sub-agent, a command), four guests and the admin in the cafe (the picture drawn), a node each in the graph, the feed, a chip per task', up && page.title && page.title !== '后台' && /运行中/.test(page.desc) && page.cards === 5 && page.chars === 5 && page.admin && page.lit > 15 && page.nodes >= 4 && /alpha/.test(page.feed) && page.chips === 4 && page.rail && page.side, JSON.stringify(page));
+        const page = await js(`(() => { const p = document.querySelector('.bg-page'); return { title: p.querySelector('.over-title h2')?.textContent, desc: p.querySelector('.over-sub, .over-desc')?.textContent ?? '', cards: p.querySelectorAll('.bg-card:not(.bg-card-more)').length, chars: p.querySelectorAll('.cafe-person').length, admin: !!p.querySelector('.cafe-person[aria-label^="网管"]'), lit: (() => { const c = p.querySelector('.cafe-canvas'); const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0, k = 0; for (let i = 0; i < d.length; i += 4 * 97) { k++; if (d[i] + d[i + 1] + d[i + 2] > 60) n++; } return Math.round((n / k) * 100); })(), nodes: p.querySelectorAll('.bg-graph .ng-card').length, edges: p.querySelectorAll('.bg-graph .ng-edge').length, strong: p.querySelector('.bg-graph .ng-edge[data-edge="wf|wf1|p1>wf1|w1"]')?.dataset.style, feed: p.querySelector('.bg-feed')?.textContent ?? '', chips: p.querySelectorAll('.bg-chips .bg-chip').length, rail: !!document.querySelector('.rail [data-id="background"].on'), side: !!document.querySelector('.sb-sect:not([hidden]) .bg-side .bg-srow.active[data-sid=' + ${sidSel} + ']') }; })()`);
+        check('the pill opens 后台 on this conversation: five cards (three of a workflow, a sub-agent, a command), four guests and the admin in the cafe (the picture drawn), a node each in the graph, the feed, a chip per task', up && page.title && page.title !== '后台' && /运行中/.test(page.desc) && page.cards === 5 && page.chars === 5 && page.admin && page.lit > 15 && page.nodes === 9 && page.edges === 8 && page.strong === 'strong' && /alpha/.test(page.feed) && page.chips === 4 && page.rail && page.side, JSON.stringify(page));
         const bgErr = await noBoundary('.bg-page');
         check('后台 without error boundary', !bgErr, bgErr);
         await shot('background-page');
@@ -3139,6 +3176,13 @@ function driver() {
           await sleep(500);
         }
         phase = 'background';
+        // spec D2: an agent card in the 指挥台 opens that agent's conversation beside the board (pointerdown / up, no drag)
+        await js(`(() => { const c = document.querySelector('.bg-page .bg-graph .ng-card[data-node="wf1|w1"]'); const r = c.getBoundingClientRect(); const o = { bubbles: true, button: 0, pointerId: 7, clientX: r.left + 10, clientY: r.top + 10 }; c.dispatchEvent(new PointerEvent('pointerdown', o)); c.dispatchEvent(new PointerEvent('pointerup', o)); })()`);
+        const cardDrawer = await waitFor(`/alpha/.test(document.querySelector('.bg-page .bg-drawer .bg-drawer-title .n')?.textContent ?? '')`, 4000);
+        check('指挥台: an agent card opens its conversation in the drawer', cardDrawer);
+        await js(`document.querySelector('.bg-page').focus()`);
+        await key('Escape');
+        await waitFor(`!document.querySelector('.bg-page .bg-drawer')`, 3000);
         await js(`document.querySelector('.bg-page .cafe-person[aria-label^="alpha"]').click()`);
         const drawer = await waitFor(`/alpha/.test(document.querySelector('.bg-page .bg-drawer .bg-drawer-title .n')?.textContent ?? '')`, 4000);
         check('a guest in the cafe opens their own conversation beside the board', drawer);
@@ -3156,7 +3200,7 @@ function driver() {
         const pageGone = await waitFor(`document.querySelector('.bg-page').hidden === true && !!document.querySelector('.rail [data-id="chat"].on')`, 3000);
         check('Esc closes the drawer first, then the page', drawerGone && pageGone, JSON.stringify({ drawerGone, pageGone }));
         await js(`window.__store.getState().dispatchLayout({ t: 'dock.show', panel: 'tasks' })`);
-        const tasks = (await waitFor(`!!document.querySelector('.dock-panel[data-panel="tasks"]:not([hidden]) .bg-tasks .bg-graph-svg')`, 5000)) && await js(`(() => { const p = document.querySelector('.dock-panel[data-panel="tasks"] .bg-tasks'); return { tasks: p.querySelectorAll('.bg-ttask').length, agents: p.querySelectorAll('.bg-tagent').length, stops: p.querySelectorAll('.bg-ttask .btn.danger').length }; })()`);
+        const tasks = (await waitFor(`!!document.querySelector('.dock-panel[data-panel="tasks"]:not([hidden]) .bg-tasks .bg-graph .ng-card')`, 5000)) && await js(`(() => { const p = document.querySelector('.dock-panel[data-panel="tasks"] .bg-tasks'); return { tasks: p.querySelectorAll('.bg-ttask').length, agents: p.querySelectorAll('.bg-tagent').length, stops: p.querySelectorAll('.bg-ttask .btn.danger').length }; })()`);
         check('右侧面板 → 任务: the small graph, the three tasks (a Stop each) and the workflow\'s agents', tasks && tasks.tasks === 3 && tasks.agents === 3 && tasks.stops === 3, JSON.stringify(tasks));
         await shot('background-tasks');
         await js(`window.__store.getState().dispatchLayout({ t: 'dock.show', panel: 'cafe' })`);
@@ -3241,6 +3285,121 @@ function driver() {
         const fileMenuGone = await waitFor(`!document.querySelector('.file-menu:not(.leaving)')`, 3000);
         check('文件右键: a file path\'s context menu has 复制路径 / 在资源管理器中显示, Esc closes it', !!fl && fileMenu && fileMenuGone, JSON.stringify({ fl, fileMenu, fileMenuGone }));
         await js(`window.__store.getState().setSetting('ui.viewMode', 'normal')`);
+      }
+      // ---- stage D of 2026-10-24 (spec desktop-parity D): the node graph — a ```nodegraph block in an answer (the mp4's
+      // picture), drag / pan / zoom / wheel / reduced motion, a dropdown re-marking an edge, 把改动发给 Claude, a broken
+      // block, a Mermaid flowchart's 节点图 / 原图, and the orchestra's run view
+      if (E.SMOKE_READONLY !== '1' && E.SMOKE_GRAPH_SID) {
+        phase = 'node-graph';
+        const gsid = JSON.stringify(E.SMOKE_GRAPH_SID);
+        const G = '.pane.focused .ng-chat';
+        await js(`window.__store.getState().dispatchLayout({ t: 'dock.set', patch: { open: false } })`);
+        fs.copyFileSync(E.SMOKE_GRAPH_STAGE, E.SMOKE_GRAPH_DEST);
+        await waitFor(`!!document.querySelector('.sidebar [data-sid=' + ${JSON.stringify(JSON.stringify(E.SMOKE_GRAPH_SID))} + ']')`, 15000);
+        await js(`window.__store.getState().loadHistory(${gsid})`);
+        const drawn = await waitFor(`document.querySelectorAll('${G} .ng-card').length === 5`, 10000);
+        await js(`document.querySelector('${G}')?.scrollIntoView({ block: 'center' })`);
+        await sleep(900);
+        const first = drawn && await js(`(() => { const r = document.querySelector('${G}'); const b = r.querySelector('.ng-badge');
+          return { title: r.querySelector('.ng-title')?.textContent, badge: b?.textContent, tone: b?.dataset.tone, open: r.querySelector('.ng-edge[data-edge="e-open"]')?.dataset.style,
+            dashed: r.querySelector('.ng-edge[data-edge="e-backup"]')?.dataset.style, labels: r.querySelectorAll('.ng-label').length, list: r.querySelectorAll('.ng-card[data-node="bucket"] .ng-li').length,
+            motion: r.querySelector('.ng').dataset.motion, dots: r.querySelectorAll('.ng-edge[data-style="error"] animateMotion').length, pct: r.querySelector('.ng-zoom-pct')?.textContent }; })()`);
+        check('```nodegraph: title, red badge 「1 open path」, error / dashed edges, 5 labels, the list under a card, − N% + control', !!first && first.title === 'Access settings' && /1 open path/.test(first.badge) && first.tone === 'error' && first.open === 'error' && first.dashed === 'dashed' && first.labels === 5 && first.list === 4 && /^\d+%$/.test(first.pct), JSON.stringify(first));
+        check('the red path carries a travelling dot while motion is on', !!first && first.motion === 'on' && first.dots >= 1, JSON.stringify(first));
+        await shot('node-graph-sample');
+        if (drawn) {
+          // 减少动画 (the in-app setting): no travelling dot, no breathing glow
+          await js(`window.__store.getState().setSetting('ui.reduceMotion', true)`);
+          const off = await waitFor(`document.querySelector('${G} .ng').dataset.motion === 'off'`, 3000);
+          const rm = await js(`({ dots: document.querySelectorAll('${G} animateMotion').length, anim: getComputedStyle(document.querySelector('${G} .ng-glow')).animationName })`);
+          check('减少动画: no travelling dot, no breathing glow', off && rm.dots === 0 && rm.anim === 'none', JSON.stringify(rm));
+          await js(`window.__store.getState().setSetting('ui.reduceMotion', false)`);
+          await waitFor(`document.querySelector('${G} .ng').dataset.motion === 'on'`, 3000);
+          // − N% +, then the wheel (the shared A3 rule: taken over the graph, Shift left to the page)
+          const pctOf = () => js(`parseInt(document.querySelector('${G} .ng-zoom-pct').textContent, 10)`);
+          const p0 = await pctOf();
+          await click(`${G} .ng-zoom-in`); await sleep(100); const p1 = await pctOf();
+          await click(`${G} .ng-zoom-out`); await sleep(100); const p2 = await pctOf();
+          check('zoom control: + is about ×1.2, − comes back', Math.abs(p1 - Math.round(p0 * 1.2)) <= 1 && Math.abs(p2 - p0) <= 1, `${p0} ${p1} ${p2}`);
+          const vp = await js(`(() => { const r = document.querySelector('${G} .ng-viewport').getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+          await js(`(() => { window.__ngWheel = []; window.__ngWheelOn = (e) => window.__ngWheel.push(e.defaultPrevented); addEventListener('wheel', window.__ngWheelOn, { passive: true }); })()`);
+          const wheelAt = async (x, y, deltaY, modifiers) => { wc.sendInputEvent({ type: 'mouseMove', x, y }); wc.sendInputEvent({ type: 'mouseWheel', x, y, deltaX: 0, deltaY, ...(modifiers ? { modifiers } : {}) }); await sleep(250); };
+          await wheelAt(vp.x, vp.y, 120);
+          const p3 = await pctOf();
+          await wheelAt(vp.x, vp.y, 120, ['shift']);
+          const wheel = await js(`(() => { removeEventListener('wheel', window.__ngWheelOn, { passive: true }); return window.__ngWheel; })()`);
+          check('wheel over the graph zooms (taken); Shift+wheel is left to the page (A3 rule)', p3 !== p0 && wheel.length >= 2 && wheel[0] === true && wheel[wheel.length - 1] === false, `${p0}→${p3} ${JSON.stringify(wheel)}`);
+          await js(`document.querySelector('${G}')?.scrollIntoView({ block: 'center' })`);
+          await sleep(300);
+          // drag a card, drag the canvas, double-click empty space
+          const drag = async (from, dx, dy) => {
+            wc.sendInputEvent({ type: 'mouseMove', x: from.x, y: from.y });
+            wc.sendInputEvent({ type: 'mouseDown', x: from.x, y: from.y, button: 'left', clickCount: 1 });
+            for (let i = 1; i <= 6; i++) { wc.sendInputEvent({ type: 'mouseMove', x: Math.round(from.x + (dx * i) / 6), y: Math.round(from.y + (dy * i) / 6), button: 'left', modifiers: ['leftButtonDown'] }); await sleep(40); }
+            wc.sendInputEvent({ type: 'mouseUp', x: from.x + dx, y: from.y + dy, button: 'left', clickCount: 1 }); await sleep(250);
+          };
+          const cardAt = () => js(`(() => { const r = document.querySelector('${G} .ng-card[data-node="anyone"] .ng-card-h').getBoundingClientRect(); return { x: Math.round(r.left + 20), y: Math.round(r.top + r.height / 2) }; })()`);
+          const dOpen = () => js(`document.querySelector('${G} .ng-edge[data-edge="e-open"] .ng-line').getAttribute('d')`);
+          const c0 = await cardAt(), d0 = await dOpen();
+          await drag(c0, 80, 40);
+          const c1 = await cardAt(), d1 = await dOpen();
+          check('drag a card: it follows the mouse and its edge follows the card', c1.x - c0.x > 40 && c1.y - c0.y > 20 && d1 !== d0, `${JSON.stringify(c0)} → ${JSON.stringify(c1)}`);
+          const t0 = await js(`document.querySelector('${G} .ng-layer').style.transform`);
+          // an empty point of the canvas: scan its lower-left area for one that hits the viewport itself
+          const blank = await js(`(() => { const v = document.querySelector('${G} .ng-viewport'); const r = v.getBoundingClientRect(); for (let y = r.bottom - 12; y > r.top + 40; y -= 16) for (let x = r.left + 12; x < r.left + r.width / 2; x += 16) { const el = document.elementFromPoint(x, y); if (el === v || el?.classList.contains('ng-layer') || el?.closest?.('svg.ng-edges')) return { x: Math.round(x), y: Math.round(y) }; } return null; })()`);
+          if (blank) await drag(blank, 60, 0);
+          const t1 = await js(`document.querySelector('${G} .ng-layer').style.transform`);
+          check('drag empty canvas: it pans', !!blank && t1 !== t0, `${JSON.stringify(blank)} ${t0} → ${t1}`);
+          if (blank) {
+            wc.sendInputEvent({ type: 'mouseDown', x: blank.x, y: blank.y, button: 'left', clickCount: 1 });
+            wc.sendInputEvent({ type: 'mouseUp', x: blank.x, y: blank.y, button: 'left', clickCount: 1 });
+            wc.sendInputEvent({ type: 'mouseDown', x: blank.x, y: blank.y, button: 'left', clickCount: 2 });
+            wc.sendInputEvent({ type: 'mouseUp', x: blank.x, y: blank.y, button: 'left', clickCount: 2 }); await sleep(300);
+          }
+          const dBack = await dOpen();
+          check('double-click empty space: the card goes back', dBack === d0, dBack);
+          // the dropdown re-marks the red path; the badge follows; 把改动发给 Claude fills the input
+          await click(`${G} .ng-card[data-node="link"] .ng-row[data-row="read"] .select-trigger`);
+          const menu = await waitFor(`!!document.querySelector('.select-popover .select-option')`, 3000);
+          if (menu) await js(`[...document.querySelectorAll('.select-popover .select-option')].find((o) => o.textContent.trim() === 'Admin')?.click()`);
+          await waitFor(`document.querySelector('${G} .ng-badge').dataset.tone === 'ok'`, 3000);
+          const after = await js(`({ badge: document.querySelector('${G} .ng-badge').textContent, open: document.querySelector('${G} .ng-edge[data-edge="e-open"]').dataset.style, send: !!document.querySelector('${G} .ng-send') })`);
+          check('dropdown read → Admin: the red path turns dashed, the badge says 「No open paths」, 把改动发给 Claude appears', menu && /No open paths/.test(after.badge) && after.open === 'dashed' && after.send, JSON.stringify(after));
+          await shot('node-graph-sample-ok');
+          if (after.send) await click(`${G} .ng-send`);
+          await sleep(200);
+          const draft = await js(`document.querySelector('.pane.focused .composer textarea')?.value ?? ''`);
+          check('把改动发给 Claude fills the input with one sentence (not sent)', /read/.test(draft) && /Anyone/.test(draft) && /Admin/.test(draft) && !/^>/.test(draft), draft);
+          await js(`window.__store.getState().saveDraft(${gsid}, '')`);
+        }
+        // a broken block, and the Mermaid flowchart
+        const badBlock = await js(`(() => { const b = document.querySelector('.pane.focused .ng-bad'); return { text: b?.textContent ?? '', code: b?.previousElementSibling?.textContent ?? '' }; })()`);
+        check('broken ```nodegraph: the code stays, plus 「这张图格式有误」 and where', /这张图格式有误/.test(badBlock.text) && badBlock.code.includes('"nodes"'), JSON.stringify(badBlock));
+        const mmView = await waitFor(`!!document.querySelector('.pane.focused .mmd-view') && document.querySelectorAll('.pane.focused .ng-mermaid .ng-card').length === 4`, 10000);
+        const mm = await js(`({ cards: document.querySelectorAll('.pane.focused .ng-mermaid .ng-card').length, dashed: document.querySelector('.pane.focused .ng-mermaid .ng-edge[data-style="dashed"]') !== null, label: [...document.querySelectorAll('.pane.focused .ng-mermaid .ng-label text')].some((t) => t.textContent === 'HTTPS') })`);
+        check('mermaid flowchart: drawn as a node graph by default (4 cards, dashed -.->, |HTTPS| label)', mmView && mm.cards === 4 && mm.dashed && mm.label, JSON.stringify(mm));
+        if (mmView) await js(`document.querySelector('.pane.focused .mmd-view [data-view="raw"]').click()`);
+        const raw = await waitFor(`!!document.querySelector('.pane.focused .mermaid-svg svg')`, 15000);
+        check("节点图 / 原图: 原图 shows Mermaid's own picture", raw);
+        const ngErr = await noBoundary('.pane.focused');
+        check('node graph in the conversation without error boundary', !ngErr, ngErr);
+        // the orchestra's run view (spec D3): a run put into the store, no engine
+        const at = Date.now();
+        const orun = (b) => ({ id: 'smoke-run', workflowId: 'smoke-wf', name: 'smoke 编排', cwd: E.SMOKE_REPO, input: '', startedAt: at - 60000, state: b === 'failed' ? 'failed' : 'running',
+          workflow: [['plan', []], ['build', ['plan']], ['check', ['build']]].map(([id, dependsOn]) => ({ id, kind: 'task', title: id, agent: 'claude', prompt: 'p', dependsOn, workspace: 'shared' })),
+          nodes: { plan: { state: 'done', sessionIds: [], startedAt: at - 50000, finishedAt: at - 30000 }, build: { state: b, sessionIds: [], startedAt: at - 20000, ...(b === 'failed' ? { finishedAt: at - 1000 } : {}) }, check: { state: 'pending', sessionIds: [] } } });
+        await js(`(() => { window.__cwOrch.inject(${JSON.stringify(orun('running'))}); window.__cwOrch.open('smoke-run'); })()`);
+        const OG = '.dock-panel[data-panel="orchestra"]:not([hidden]) .orch-graph';
+        const orchUp = await waitFor(`document.querySelectorAll('${OG} .ng-card').length === 3`, 8000);
+        const og = await js(`({ run: document.querySelector('${OG} .ng-card[data-node="build"]')?.dataset.state, edge: document.querySelector('${OG} .ng-edge[data-edge="plan>build"]')?.dataset.style })`);
+        check('orchestra run view: the running step glows, the edge into it is strong', orchUp && og.run === 'running' && og.edge === 'strong', JSON.stringify(og));
+        await shot('node-graph-orchestra');
+        await js(`window.__cwOrch.inject(${JSON.stringify(orun('failed'))})`);
+        const red = await waitFor(`document.querySelector('${OG} .ng-edge[data-edge="plan>build"]')?.dataset.style === 'error'`, 3000);
+        check('orchestra: a failed step turns its edge red', red);
+        await js(`window.__store.getState().dispatchLayout({ t: 'dock.close', panel: 'orchestra', workbench: false })`);
+        await js(`window.__store.getState().dispatchLayout({ t: 'dock.set', patch: { open: false } })`);
+        await sleep(200);
       }
       if (E.SMOKE_READONLY !== '1' && E.SMOKE_TOOLS_SID) {
         phase = 'chat-turns';

@@ -3,7 +3,7 @@
 // (REFERENCE_EVENT): the composer of the focused pane's front tile takes it — a right click focuses the pane it lands
 // in (Pane.tsx onMouseDownCapture), so that is the conversation the text was picked from.
 export const QUOTE_EVENT = 'cw:composer-quote';
-export interface QuoteDetail { text: string; handled: boolean }
+export interface QuoteDetail { text: string; handled: boolean; /** a plain line, not a > quote (把改动发给 Claude) */ plain?: boolean }
 
 /** `text` as a Markdown quote: every line `> `, blank lines kept as `>`, outer blank lines and trailing spaces dropped. */
 export function quoteMarkdown(text: string): string {
@@ -24,6 +24,19 @@ export function withQuote(cur: string, text: string): string {
 /** False: no input box took it (no conversation in front). */
 export function quoteInComposer(text: string): boolean {
   const detail: QuoteDetail = { text, handled: false };
+  window.dispatchEvent(new CustomEvent<QuoteDetail>(QUOTE_EVENT, { detail }));
+  return detail.handled;
+}
+
+/** 把改动发给 Claude (spec D4): a plain sentence after the draft, not a > quote. */
+export function withLine(cur: string, text: string): string {
+  const head = cur.replace(/\s+$/, '');
+  return `${head}${head ? '\n\n' : ''}${text.trim()}`;
+}
+
+/** Like quoteInComposer, but the text goes in as a plain line. False: no input box took it. */
+export function insertInComposer(text: string): boolean {
+  const detail: QuoteDetail = { text, handled: false, plain: true };
   window.dispatchEvent(new CustomEvent<QuoteDetail>(QUOTE_EVENT, { detail }));
   return detail.handled;
 }
