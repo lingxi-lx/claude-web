@@ -9,14 +9,15 @@
 //   · the same conversation changed to low → the next request says "low", and the process was not restarted;
 //   · 深度编排 turned on → the next request carries the ultracode reminder; picked before the conversation starts
 //     (the welcome page) → its first request does;
-//   · gpt-4o (no parameter) + high → no effort field, the turn's user message carries "Reasoning depth: high.";
+//   · gpt-4o + high → reasoning_effort "high" too (2026-10-26: every model on an OpenAI-format relay gets it), and no
+//     prompt reminder;
 //   · a relay that refuses reasoning_effort (400 naming it) → the turn is answered anyway, the provider remembers the
 //     model as prompt-only, the next turn goes the prompt way;
 //   · the Claude path refusing output_config.effort: an unnamed 400 → answered, not recorded, and after two of them
 //     this process goes the prompt way; one naming it → answered, recorded, the next turn the prompt way;
-//   · a Gemini model on an OpenAI-format relay → the prompt way, no reasoning_effort / thinking switches (a Claude-named
-//     id there is mapped to the provider's haiku / sonnet / opus model, so it is not a cross-format case);
-//   · the prompt-way reminder goes with the user's message once, not again after each tool call;
+//   · a Gemini model on an OpenAI-format relay → reasoning_effort at its nearest level (xhigh → high);
+//   · the prompt-way reminder (a model recorded as refusing the parameter) goes with the user's message once, not again
+//     after each tool call;
 //   · a Gemini-format provider, gemini-3-pro + high → generationConfig.thinkingConfig.thinkingLevel "high";
 //   · 自动判断 + deepseek-flash running a Bash command → the classifier request goes with thinking off and tool_choice
 //     naming classify_result, the command runs without a permission prompt.
@@ -224,12 +225,12 @@ async function main() {
   const d4 = mainOf('openai', 'DS-FOUR');
   check('深度编排 picked before the conversation starts (welcome page) → its first request carries the reminder', d4.length > 0 && d4.every((h) => turnText(h).includes('Ultracode is on for this session') && h.body.reasoning_effort === 'max'), d4.map((h) => `${h.body.reasoning_effort} ${turnText(h).includes('Ultracode is on')}`).join(' | '));
 
-  // ---- a model without the parameter: the prompt way ----
+  // ---- a model nobody describes: the parameter all the same (2026-10-26) ----
   const g4 = await openOn(O.id, 'gpt-4o', { effort: 'high' });
   await turn(g4.sessionId, 'GPT-ONE 你好');
   const gm = mainOf('openai', 'GPT-ONE');
-  check('gpt-4o + high → no effort field in the body', gm.length > 0 && gm.every((h) => !('reasoning_effort' in h.body) && !('reasoning' in h.body)), gm.map((h) => Object.keys(h.body).join('/')).join(' | ').slice(0, 200));
-  check('… and the turn\'s user message carries "Reasoning depth: high."', gm.length > 0 && gm.every((h) => turnText(h).includes('Reasoning depth: high.')));
+  check('gpt-4o + high → reasoning_effort "high" in the body', gm.length > 0 && gm.every((h) => h.body.reasoning_effort === 'high'), gm.map((h) => Object.keys(h.body).join('/')).join(' | ').slice(0, 200));
+  check('… and no prompt reminder', gm.length > 0 && gm.every((h) => !turnText(h).includes('Reasoning depth')));
 
   // ---- an OpenAI-format relay that serves a Claude model: the picked id goes out, not the sonnet family's mapping ----
   const C = await req({ kind: 'providers.upsert', provider: { name: '中转C', type: 'openai', baseUrl: `${up}/v1`, apiKey: RELAY_KEY, defaultModel: 'deepseek-flash', models: ['deepseek-flash', 'claude-sonnet-5'], responsesApi: false } });
@@ -270,12 +271,13 @@ async function main() {
   const oc = await openOn(O.id, 'gemini-3-pro', { effort: 'xhigh' });
   await turn(oc.sessionId, 'OC-ONE 你好');
   const ocm = mainOf('openai', 'OC-ONE');
-  check('gemini-3-pro on an OpenAI-format relay (a model of another format): no reasoning_effort, no thinking switches, the prompt way', ocm.length > 0 && ocm.every((h) => !('reasoning_effort' in h.body) && !('thinking' in h.body) && !('enable_thinking' in h.body) && turnText(h).includes('Reasoning depth: very high.')), ocm.map((h) => Object.keys(h.body).join('/')).join(' | ').slice(0, 200));
-  const gt = await openOn(O.id, 'gpt-4o', { effort: 'high', permissionMode: 'bypassPermissions' });
+  check('gemini-3-pro on an OpenAI-format relay: reasoning_effort at its nearest level (xhigh → high), no prompt reminder', ocm.length > 0 && ocm.every((h) => h.body.reasoning_effort === 'high' && !turnText(h).includes('Reasoning depth')), ocm.map((h) => `${h.body.reasoning_effort}`).join(' | ').slice(0, 200));
+  // qwen-e2e was recorded above as refusing the parameter: the prompt way
+  const gt = await openOn(O.id, 'qwen-e2e', { effort: 'high', permissionMode: 'bypassPermissions' });
   const gtr = await turn(gt.sessionId, 'AUTO-BASH GPT-TOOLS 运行一条命令');
   // the next-prompt suggestion after the turn carries the whole conversation too (and may or may not be in by now)
   const suggestion = (h) => JSON.stringify((h.body.messages ?? []).at(-1)?.content ?? '').includes('[SUGGESTION MODE');
-  const gtLast = hits.filter((h) => h.fmt === 'openai' && h.body.model === 'gpt-4o' && h.body.stream === true && JSON.stringify(h.body.messages ?? []).includes('GPT-TOOLS') && !suggestion(h)).at(-1);
+  const gtLast = hits.filter((h) => h.fmt === 'openai' && h.body.model === 'qwen-e2e' && h.body.stream === true && JSON.stringify(h.body.messages ?? []).includes('GPT-TOOLS') && !suggestion(h)).at(-1);
   const reminders = (JSON.stringify(gtLast?.body.messages ?? []).match(/Reasoning depth: high\./g) ?? []).length;
   check('the reminder goes with the user\'s message once, not again after the tool call', /auto:done/.test(gtr.result?.result ?? '') && (gtLast?.body.messages ?? []).at(-1)?.role === 'tool' && reminders === 1, `reminders=${reminders} · ${String(gtr.result?.result ?? '(no result)').slice(0, 40)}`);
 

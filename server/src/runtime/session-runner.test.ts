@@ -1105,15 +1105,18 @@ describe('SessionRunner: the engine follows the model, effort on ccb, per-turn c
     eng.kind = 'ccb';
     try {
       queries.length = 0;
-      const ds = { id: 'ds', name: 'DeepSeek', type: 'openai', baseUrl: 'https://api.deepseek.invalid', apiKey: 'k', models: ['deepseek-flash', 'gpt-4o', 'gpt-image-2'], modelEfforts: { 'deepseek-flash': { levels: ['low', 'high', 'max'], default: 'high' } } } as any;
+      const ds = { id: 'ds', name: 'DeepSeek', type: 'openai', baseUrl: 'https://api.deepseek.invalid', apiKey: 'k', models: ['deepseek-flash', 'gpt-4o', 'qwen-plus', 'gpt-image-2'], modelEfforts: { 'deepseek-flash': { levels: ['low', 'high', 'max'], default: 'high' } }, promptEffortModels: ['qwen-plus'] } as any;
       const a = new SessionRunner({ sessionId: 'caps1', cwd: '/x', model: 'deepseek-flash' } as any, ds);
       await tick();
       const caps = JSON.parse(queries[0].options.env.CLAUDE_WEB_MODEL_CAPS);
       expect(caps['deepseek-flash']).toEqual({ levels: ['low', 'high', 'max'], default: 'high', reasoning: true });
-      expect(caps['gpt-4o']).toBeUndefined();
+      // 2026-10-26: every model on an OpenAI-format profile gets reasoning_effort until it refuses it
+      expect(caps['gpt-4o']).toEqual({ levels: ['low', 'medium', 'high'], reasoning: true });
+      expect(caps['qwen-plus']).toEqual({ native: false });
       const byId = Object.fromEntries((a.info.models ?? []).map((m) => [m.value, m]));
       expect(byId['deepseek-flash']).toMatchObject({ supportsEffort: true, supportedEffortLevels: ['low', 'high', 'max'], effortMode: 'native' });
-      expect(byId['gpt-4o']).toMatchObject({ supportsEffort: true, supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'], effortMode: 'prompt' });
+      expect(byId['gpt-4o']).toMatchObject({ supportsEffort: true, supportedEffortLevels: ['low', 'medium', 'high'], effortMode: 'native' });
+      expect(byId['qwen-plus']).toMatchObject({ supportsEffort: true, supportedEffortLevels: ['low', 'medium', 'high'], effortMode: 'prompt' });
       expect(a.info.supportsUltracode).toBe(true);
       await a.close();
     } finally {

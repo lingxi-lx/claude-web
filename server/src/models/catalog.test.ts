@@ -121,8 +121,12 @@ describe('what each model can do (same rules as the engine: claude-web-engine ef
     expect(modelCaps({ ...ds, promptEffortModels: ['deepseek-flash'] }, 'deepseek-flash').native).toBe(false);
   });
 
-  it('a model without the parameter: five levels through the prompt', () => {
-    expect(modelCaps({ type: 'openai' }, 'gpt-4o')).toEqual({ levels: ['low', 'medium', 'high', 'xhigh', 'max'], reasoning: false, native: false });
+  it('2026-10-26: every model on an OpenAI-format profile gets reasoning_effort (the standard three levels when nobody describes it)', () => {
+    expect(modelCaps({ type: 'openai' }, 'gpt-4o')).toEqual({ levels: ['low', 'medium', 'high'], reasoning: false, native: true });
+    expect(modelCaps({ type: 'openai' }, 'qwen-plus')).toMatchObject({ native: true });
+    expect(modelCaps({ type: 'openai', promptEffortModels: ['gpt-4o'] }, 'gpt-4o').native).toBe(false);
+    // Gemini / Grok profiles: the engine picks those targets by name only
+    expect(modelCaps({ type: 'gemini' }, 'gemini-2.0-flash')).toMatchObject({ native: false });
   });
 
   it('the table: Claude, OpenAI reasoning models, DeepSeek, Gemini, grok-3-mini', () => {
@@ -132,11 +136,10 @@ describe('what each model can do (same rules as the engine: claude-web-engine ef
     // 2026-10-23: a relay's log showed gpt-6-astra with no 推理强度 — the rule stopped at gpt-5
     expect(modelCaps({ type: 'openai' }, 'gpt-6-astra')).toMatchObject({ levels: ['low', 'medium', 'high'], native: true, reasoning: true });
     expect(modelCaps({ type: 'openai' }, 'gpt-10')).toMatchObject({ native: true });
-    expect(modelCaps({ type: 'openai' }, 'gpt-4o')).toMatchObject({ native: false, reasoning: false });
     expect(modelCaps({ type: 'openai' }, 'deepseek-v4-pro')).toMatchObject({ levels: ['low', 'high', 'max'], default: 'high', native: true });
     // 2026-10-26: kimi-k3.1-pro through a NewAPI relay never got reasoning_effort
     for (const m of ['kimi-k3.1-pro', 'moonshot/kimi-k2.5', 'kimi-k2-thinking', 'kimi-k2.6-turbo']) expect(modelCaps({ type: 'openai' }, m)).toMatchObject({ levels: ['low', 'medium', 'high'], native: true, reasoning: true });
-    expect(modelCaps({ type: 'openai' }, 'kimi-k2-0905-preview')).toMatchObject({ native: false, reasoning: false });
+    expect(modelCaps({ type: 'openai' }, 'kimi-k2-0905-preview')).toMatchObject({ levels: ['low', 'medium', 'high'], native: true, reasoning: false });
     expect(JSON.parse(webCapsEnv({ type: 'openai' }, ['kimi-k3.1-pro']))['kimi-k3.1-pro']).toEqual({ levels: ['low', 'medium', 'high'], reasoning: true });
     expect(modelCaps({ type: 'gemini' }, 'gemini-3-pro')).toMatchObject({ levels: ['low', 'high'], native: true });
     expect(modelCaps({ type: 'gemini' }, 'gemini-2.5-flash')).toMatchObject({ levels: ['low', 'medium', 'high', 'xhigh', 'max'], native: true });
@@ -144,15 +147,17 @@ describe('what each model can do (same rules as the engine: claude-web-engine ef
     expect(modelCaps({ type: 'grok' }, 'grok-4')).toMatchObject({ native: false });
   });
 
-  it('a non-Claude model on a Claude-format relay: native only when the list declares levels', () => {
-    expect(modelCaps({ type: 'anthropic' }, 'glm-4.6').native).toBe(false);
+  it('a non-Claude model on a Claude-format relay: native (a thinking budget) — refusing it is remembered', () => {
+    expect(modelCaps({ type: 'anthropic' }, 'glm-4.6').native).toBe(true);
+    expect(modelCaps({ type: 'anthropic', promptEffortModels: ['glm-4.6'] }, 'glm-4.6').native).toBe(false);
     expect(modelCaps({ type: 'anthropic', modelEfforts: { 'glm-4.6': { levels: ['low', 'high'] } } }, 'glm-4.6').native).toBe(true);
   });
 
-  it('a reasoning model on a Claude-format relay gets the budget (native); through the model gateway only Claude does', () => {
+  it('a reasoning model on a Claude-format relay gets the budget (native); through the model gateway every model does (the gateway carries it over)', () => {
     expect(modelCaps({ type: 'anthropic' }, 'deepseek-chat')).toMatchObject({ reasoning: true, native: true });
-    expect(modelCaps({ type: 'gateway' }, 'gpt-5')).toMatchObject({ native: false });
-    expect(modelCaps({ type: 'gateway' }, 'deepseek-chat')).toMatchObject({ native: false });
+    expect(modelCaps({ type: 'gateway' }, 'gpt-5')).toMatchObject({ native: true });
+    expect(modelCaps({ type: 'gateway' }, 'deepseek-chat')).toMatchObject({ native: true });
+    expect(modelCaps({ type: 'gateway' }, 'cn:auto')).toMatchObject({ native: true });
     expect(modelCaps({ type: 'gateway' }, 'claude-sonnet-4-6')).toMatchObject({ native: true });
   });
 
@@ -170,22 +175,24 @@ describe('what each model can do (same rules as the engine: claude-web-engine ef
     }
   });
 
-  it('the engine variable: a model of another format gets {native:false} — no levels, no "reasons" (no DeepSeek-style switches)', () => {
+  it('the engine variable: every model on an OpenAI-format / Claude-format / gateway profile is marked as reasoning, so the engine sends the parameter', () => {
     const relay = { type: 'openai' as const };
     const env = JSON.parse(webCapsEnv(relay, ['claude-sonnet-4-6', 'gemini-3-pro', 'deepseek-flash', 'gpt-4o']));
-    expect(env['claude-sonnet-4-6']).toEqual({ native: false });
-    expect(env['gemini-3-pro']).toEqual({ native: false });
+    expect(env['claude-sonnet-4-6']).toEqual({ levels: ['low', 'medium', 'high', 'max'], reasoning: true });
+    expect(env['gemini-3-pro']).toEqual({ levels: ['low', 'high'], reasoning: true });
     expect(env['deepseek-flash']).toMatchObject({ reasoning: true });
-    expect(env['gpt-4o']).toBeUndefined();
-    expect(JSON.parse(webCapsEnv({ type: 'gateway' }, ['gpt-5']))['gpt-5']).toEqual({ native: false });
+    expect(env['gpt-4o']).toEqual({ levels: ['low', 'medium', 'high'], reasoning: true });
+    expect(JSON.parse(webCapsEnv({ type: 'gateway' }, ['gpt-5']))['gpt-5']).toEqual({ levels: ['low', 'medium', 'high'], reasoning: true });
+    expect(JSON.parse(webCapsEnv({ type: 'anthropic' }, ['glm-4.6']))['glm-4.6']).toEqual({ levels: ['low', 'medium', 'high', 'xhigh', 'max'], reasoning: true });
     expect(JSON.parse(webCapsEnv(relay, ['gpt-6-astra']))['gpt-6-astra']).toEqual({ levels: ['low', 'medium', 'high'], reasoning: true });
     expect(JSON.parse(webCapsEnv({ type: 'anthropic' }, ['claude-sonnet-4-6']))['claude-sonnet-4-6']).toEqual({ levels: ['low', 'medium', 'high', 'max'], reasoning: true });
   });
 
-  it('the engine variable: only what we know (an unknown model keeps the engine on its own name rules)', () => {
+  it('the engine variable: a model recorded as refusing goes through the prompt; on Gemini / Grok an unknown model keeps the engine on its own name rules', () => {
     const env = JSON.parse(webCapsEnv({ ...ds, promptEffortModels: ['gpt-x'] }, ['deepseek-flash', 'gpt-4o', 'gpt-x']));
     expect(env['deepseek-flash']).toEqual({ levels: ['low', 'high', 'max'], default: 'high', reasoning: true });
-    expect(env['gpt-4o']).toBeUndefined();
+    expect(env['gpt-4o']).toEqual({ levels: ['low', 'medium', 'high'], reasoning: true });
     expect(env['gpt-x']).toEqual({ native: false });
+    expect(JSON.parse(webCapsEnv({ type: 'grok' }, ['grok-4']))['grok-4']).toBeUndefined();
   });
 });

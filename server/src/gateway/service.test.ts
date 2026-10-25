@@ -248,6 +248,21 @@ describe('translation through the service', () => {
     expect(up.model).toBe('gpt-4.1');
     expect(ledger[0]).toMatchObject({ ok: true, model: 'gpt-4.1', input: 4, output: 1, gateway: { inbound: 'anthropic', outbound: 'openai' } });
   });
+  it('2026-10-26: the thinking strength carries over (a Claude thinking budget → reasoning_effort); a member that refuses it gets the request again without, and is remembered', async () => {
+    const ok = JSON.stringify({ id: 'c1', object: 'chat.completion', model: 'gpt-4.1', choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }], usage: { prompt_tokens: 4, completion_tokens: 1 } });
+    let refuse = true;
+    O.handler.fn = (_q, res, body) => {
+      if (refuse && /reasoning_effort/.test(body)) { refuse = false; return res.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: { message: 'Unrecognized request argument supplied: reasoning_effort' } })); }
+      res.writeHead(200, { 'content-type': 'application/json' }).end(ok);
+    };
+    const thinking = { ...msg, max_tokens: 20000, thinking: { type: 'enabled', budget_tokens: 16384 } };
+    const r = await call('/mixed/v1/messages', thinking);
+    expect(r.status).toBe(200);
+    expect(O.hits.map((h) => JSON.parse(h.body).reasoning_effort)).toEqual(['high', undefined]);
+    O.hits.length = 0;
+    await call('/mixed/v1/messages', thinking);
+    expect(O.hits.map((h) => JSON.parse(h.body).reasoning_effort)).toEqual([undefined]);
+  });
   it('unsupported direction → 400 naming it', async () => {
     // OpenAI Responses in, a Gemini member: no such direction
     if (!meta.provider('g')) { const p = await meta.upsertProvider({ name: 'P-g', type: 'gemini', baseUrl: B.url, apiKey: 'sk-g' }); p.id = 'g'; }

@@ -286,7 +286,6 @@ export const OPENAI_REASONING = /^(o[134]|gpt-(?:[5-9]|[1-9]\d))/;
  * kimi-k3.1-pro through a NewAPI relay never got `reasoning_effort`, so its strength was only ever in the prompt.
  */
 const KIMI_REASONING = /kimi-k(?:2[.-]?(?:[5-9]|thinking)|[3-9])/;
-const openAIReasons = (model: string) => { const b = baseName(model); return OPENAI_REASONING.test(b) || KIMI_REASONING.test(b) || b.includes('deepseek') || b.includes('qwq') || b.includes('reasoner'); };
 
 /** What the table knows about a model by name (nothing = undefined). */
 function tableCaps(model: string): { levels: ClaudeEffort[]; default?: ClaudeEffort } | undefined {
@@ -316,36 +315,41 @@ export function modelCaps(p: CapsProvider | undefined, model: string): ModelCaps
   const id = aliases?.[model] ?? aliases?.[plainId(model)] ?? plainId(model);
   const declared = p?.modelEfforts?.[model] ?? p?.modelEfforts?.[id];
   const table = tableCaps(id);
-  const levels = declared?.levels?.length ? declared.levels : table?.levels ?? CLAUDE_ORDER;
-  const def = declared?.default ?? table?.default;
-  const isClaude = claudeVersion(id) !== undefined;
-  const reasoning = !!declared?.levels?.length || !!table;
   const type = p?.type ?? 'anthropic';
+  // an OpenAI-format model nobody describes: the standard reasoning_effort values
+  const levels = declared?.levels?.length ? declared.levels : table?.levels ?? (type === 'openai' ? OPENAI_LEVELS : CLAUDE_ORDER);
+  const def = declared?.default ?? table?.default;
+  const reasoning = !!declared?.levels?.length || !!table;
   const lower = id.toLowerCase();
   let native: boolean;
-  // a Claude-format endpoint: Claude by version, another model that reasons gets a thinking budget (DeepSeek /anthropic…);
-  // the model gateway turns other models' requests into another format and drops the parameter
-  if (type === 'anthropic' || type === 'claude-account') native = isClaude || reasoning;
-  else if (type === 'gateway') native = isClaude;
-  else if (type === 'openai') native = !!declared?.levels?.length || openAIReasons(id);
+  // 2026-10-26 user report: a relay's log showed which requests carried reasoning_effort, and every model our table
+  // did not know (Kimi) never did. So every model on a Claude-format, OpenAI-format or gateway profile gets the
+  // parameter; a model that refuses it is remembered (promptEffortModels) and goes through the prompt from then on.
+  // Gemini and Grok stay by name: the engine picks those targets by name only, and their other models take none.
+  if (type === 'anthropic' || type === 'claude-account' || type === 'gateway' || type === 'openai') native = true;
   else if (type === 'gemini') native = lower.includes('gemini-3') || lower.includes('gemini-2.5');
   else native = lower.includes('grok-3-mini');
   if (p?.promptEffortModels?.includes(model) || p?.promptEffortModels?.includes(id)) native = false;
   return { levels, ...(def ? { default: def } : {}), reasoning, native };
 }
 
+const OPENAI_LEVELS: ClaudeEffort[] = ['low', 'medium', 'high'];
+const NATIVE_FOR_ALL = new Set<ProviderType>(['anthropic', 'claude-account', 'gateway', 'openai']);
+
 /**
- * `CLAUDE_WEB_MODEL_CAPS` for a session: our `modelCaps` verdict for every model the list or the table knows — the
- * ones this format sends natively get their levels and "reasons"; the others (a Claude or Gemini model on an
- * OpenAI-format relay, a non-Claude model through the gateway, one recorded as refusing) get `{native:false}`: the
- * prompt way, and no DeepSeek-style thinking switches. A model neither knows is left out (the engine's own name rules
- * cover the same names as the table; `reasoning:false` would switch off its MiMo detection).
+ * `CLAUDE_WEB_MODEL_CAPS` for a session: our `modelCaps` verdict for every model — the ones this format sends
+ * natively get their levels and "reasons" (the engine sends the parameter only for a model marked so; on an
+ * OpenAI-format profile that also turns on the DeepSeek-style thinking switches, which the engine drops for the rest of
+ * the process when a model refuses them); the others (one recorded as refusing, a Gemini / Grok model the engine has
+ * no target for) get `{native:false}`: the prompt way. On Gemini / Grok profiles a model neither the list nor the table
+ * knows is left out (the engine's own name rules cover the same names; `reasoning:false` would switch off its MiMo
+ * detection).
  */
 export function webCapsEnv(p: CapsProvider | undefined, models: string[]): string {
   const out: Record<string, { levels?: ClaudeEffort[]; default?: ClaudeEffort; reasoning?: boolean; native?: boolean }> = {};
   for (const model of new Set(models.filter(Boolean))) {
     const declared = p?.modelEfforts?.[model];
-    const known = !!declared?.levels?.length || !!tableCaps(plainId(model)) || !!p?.promptEffortModels?.includes(model);
+    const known = NATIVE_FOR_ALL.has(p?.type ?? 'anthropic') || !!declared?.levels?.length || !!tableCaps(plainId(model)) || !!p?.promptEffortModels?.includes(model);
     if (!known) continue;
     const c = modelCaps(p, model);
     out[model] = c.native ? { levels: c.levels, ...(c.default ? { default: c.default } : {}), reasoning: true } : { native: false };

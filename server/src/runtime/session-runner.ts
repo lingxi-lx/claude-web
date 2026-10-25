@@ -376,8 +376,10 @@ export class SessionRunner extends EventEmitter {
       return { value, displayName, description, supportsEffort, supportedEffortLevels: supportsEffort ? own : [], effortMode: 'native' };
     }
     const levels: EffortLevel[] = reported?.levels?.length && !this.provider ? reported.levels : c.levels;
-    const supportsEffort = onOurs || c.native;
-    return { value, displayName, description, supportsEffort, supportedEffortLevels: supportsEffort ? levels : [], effortMode: c.native ? 'native' : 'prompt' };
+    // the official binary sends strength only for models it knows itself (our table) and has no prompt way
+    const native = onOurs ? c.native : c.native && c.reasoning;
+    const supportsEffort = onOurs || native;
+    return { value, displayName, description, supportsEffort, supportedEffortLevels: supportsEffort ? levels : [], effortMode: native ? 'native' : 'prompt' };
   }
 
   /**

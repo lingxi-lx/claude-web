@@ -26,9 +26,10 @@ import {
   DEFAULT_BASE, PROTOCOL_LABEL, buildOutbound, inboundStreamRenderer, isPassthrough, joinUrl, outboundOf, outboundStreamParser, parseInbound,
   parseOutboundResponse, renderInboundError, renderInboundResponse, sniffUsage, supported, upstreamErrorMessage, type Outbound, type OutboundOpts,
 } from './convert.js';
-import { CACHE_KEY_MAX, addMissing, affinityHeaders, cacheKeyOf, forcesTool, isParamRejection, mentionsCacheKey, refusesForcedTool, thinkingOff } from './cache.js';
+import { CACHE_KEY_MAX, addMissing, affinityHeaders, cacheKeyOf, forcesTool, isParamRejection, mentionsCacheKey, mentionsEffort, refusesForcedTool, thinkingOff } from './cache.js';
 import { CacheShim, SHIM_PREFIX } from './shim.js';
 import { isSubAlias } from '../models/subagent.js';
+import { modelCaps, nearestLevel } from '../models/catalog.js';
 import type { SplitMain, SplitSub } from './split.js';
 import { UpstreamError, decoded, decoder, errorHeaders, forwardHeaders, passthroughHeaders, readText, replaceTopLevelString, responseHeaders, sendUpstream, translatedHeaders, waitDrain, withTimeout, type UpstreamResponse } from './upstream.js';
 import { tr } from '../i18n/index.js';
@@ -145,6 +146,8 @@ export class GatewayService extends EventEmitter {
   private limiter = new RateLimiter();
   /** conversations already told that their prompt passed a sidecar's inline limit (@see HEAVY_PROMPT_BYTES) */
   private heavyNotified = new Set<string>();
+  /** member id + model ids whose upstream refused the strength parameter (see `noEffortBody`) */
+  private effortRefused = new Set<string>();
   private usageTimer: NodeJS.Timeout;
   /** The stable loopback data plane, separate from the app's ephemeral main listener. */
   private local: GatewayListener;
@@ -1078,6 +1081,7 @@ export class GatewayService extends EventEmitter {
     // translated requests carry prompt caching the client could not have put there (cache.ts)
     let retryBody: Buffer | null = null; // the same request without prompt_cache_key, for an upstream that rejects it
     let noThinkingBody: Buffer | null = null; // the same request with thinking off, for a model that refuses a forced tool call
+    let noEffortBody: Buffer | null = null; // the same request without the strength parameter, for a model that refuses it
     let errText: string | undefined; // an error body already read
     try {
       if (pass) {
@@ -1092,6 +1096,10 @@ export class GatewayService extends EventEmitter {
         headers = passthroughHeaders(ctx.req.rawHeaders, outbound, p.apiKey);
       } else {
         const ir = { ...this.irOf(ctx), model, stream: route.stream };
+        // thinking strength: only for a member model that takes it natively, at the nearest level it has
+        const caps = modelCaps(p, model);
+        const effortKey = `${p.id} ${model}`;
+        ir.effort = ir.effort && caps.native && !this.effortRefused.has(effortKey) ? nearestLevel(ir.effort, caps.levels) : undefined;
         const opts: OutboundOpts = outbound === 'anthropic'
           ? { cacheTtl: group.cache1h || p.cache1h ? '1h' : undefined, systemPrefix: p.auth === 'oauth' ? CLAUDE_CODE_SYSTEM_PREFIX : undefined }
           : outbound === 'openai' ? { promptCacheKey: !p.noPromptCacheKey, cacheControl: p.cacheControlFormat === 'anthropic' } : {};
@@ -1108,6 +1116,10 @@ export class GatewayService extends EventEmitter {
         if (outbound === 'openai' && ir.cacheKey) {
           addMissing(headers, affinityHeaders(ir.cacheKey.slice(0, CACHE_KEY_MAX), p.type === 'grok'));
           if (out.body.prompt_cache_key) retryBody = Buffer.from(JSON.stringify(buildOutbound(outbound, ir, { ...opts, promptCacheKey: false }).body));
+        }
+        if (ir.effort) {
+          const plain = buildOutbound(outbound, { ...ir, effort: undefined }, opts).body;
+          if (JSON.stringify(plain) !== JSON.stringify(out.body)) noEffortBody = Buffer.from(JSON.stringify(plain));
         }
         // a forced tool call (自动判断's safety check): a thinking model that refuses it gets it with thinking off
         if (outbound === 'openai' && forcesTool(out.body) && out.body.thinking?.type !== 'disabled') {
@@ -1143,11 +1155,15 @@ export class GatewayService extends EventEmitter {
       up = await sendUpstream(url, { method: 'POST', headers, body, signal: ctx.signal, headerTimeoutMs: waitMs, agentFor });
       // an upstream that may not know prompt_cache_key: this request once more without it; the profile only
       // remembers when the error named the field (a retry that happens to work proves nothing about the key)
-      if ((retryBody || noThinkingBody) && isParamRejection(up.status)) {
+      if ((retryBody || noThinkingBody || noEffortBody) && isParamRejection(up.status)) {
         let text = '';
         try { text = await readText(up.body, 1024 * 1024); } catch { /* keep empty */ }
         if (noThinkingBody && refusesForcedTool(text)) {
           up = await sendUpstream(url, { method: 'POST', headers, body: noThinkingBody, signal: ctx.signal, headerTimeoutMs: waitMs, agentFor });
+        } else if (noEffortBody && mentionsEffort(text)) {
+          // remembered for this member and model until the server restarts; the client never sees the failure
+          this.effortRefused.add(`${p.id} ${model}`);
+          up = await sendUpstream(url, { method: 'POST', headers, body: noEffortBody, signal: ctx.signal, headerTimeoutMs: waitMs, agentFor });
         } else if (retryBody) {
           if (mentionsCacheKey(text)) void this.deps.meta.upsertProvider({ id: p.id, noPromptCacheKey: true }, { mustExist: true }).catch(() => { /* next request tries again */ });
           up = await sendUpstream(url, { method: 'POST', headers, body: retryBody, signal: ctx.signal, headerTimeoutMs: waitMs, agentFor });

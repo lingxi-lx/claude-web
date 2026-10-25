@@ -3,7 +3,7 @@
 // untouched); the outbound side (IR → request, response / stream → IR) is for the cache shim, which turns
 // ccb's gpt-* chat/completions into /v1/responses (shim.ts).
 // Shapes per platform.openai.com (responses, streaming events `response.*`).
-import { newId, safeJson, type IrEvent, type IrMessage, type IrPart, type IrRequest, type IrResponse, type IrStop, type IrTool, type IrUsage, type StreamParser, type StreamRenderer } from './ir.js';
+import { newId, safeJson, effortOf, type IrEvent, type IrMessage, type IrPart, type IrRequest, type IrResponse, type IrStop, type IrTool, type IrUsage, type StreamParser, type StreamRenderer } from './ir.js';
 import { dataUrlImage, usageIn, wantsCompletionTokens } from './openai-chat.js';
 import { sse } from './sse.js';
 import { CACHE_KEY_MAX } from './cache.js';
@@ -62,6 +62,7 @@ export function parseRequest(body: any): IrRequest {
     temperature: body.temperature ?? undefined,
     topP: body.top_p ?? undefined,
     stream: !!body.stream,
+    effort: effortOf(body.reasoning?.effort),
   };
 }
 

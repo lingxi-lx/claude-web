@@ -52,9 +52,11 @@ export function claudeEffortView(i: { agent: AgentKind; providers: Provider[]; p
   if (!provider) return { levels: effortLevels(i.agent, i.model || undefined), defaultLevel: catalogDefault, ultracode };
   const model = providerModelId(provider, i.model || undefined);
   const caps = modelCaps(provider, model);
-  const levels: EffortLevel[] = i.runtime === 'claude' && !caps.native ? [] : caps.levels;
+  // the official binary sends strength only for models it knows itself (our table) and has no prompt way
+  const native = i.runtime === 'claude' ? caps.native && caps.reasoning : caps.native;
+  const levels: EffortLevel[] = i.runtime === 'claude' && !native ? [] : caps.levels;
   const fallback = catalogDefault && catalogDefault !== 'ultra' && levels.length ? nearestLevel(catalogDefault as ClaudeEffort, levels as ClaudeEffort[]) : undefined;
-  return { levels, defaultLevel: caps.default ?? fallback, mode: caps.native ? 'native' : 'prompt', ultracode };
+  return { levels, defaultLevel: caps.default ?? fallback, mode: native ? 'native' : 'prompt', ultracode };
 }
 
 export interface ChipTextInput {

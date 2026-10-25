@@ -1,5 +1,6 @@
 // Anthropic Messages API ⇄ IR. Shapes per docs.anthropic.com (Messages, streaming events).
-import { newId, safeJson, mergeAlternating, type IrEvent, type IrMessage, type IrPart, type IrRequest, type IrResponse, type IrStop, type IrTool, type IrUsage, type StreamParser, type StreamRenderer } from './ir.js';
+import { claudeVersion } from '../models/catalog.js';
+import { newId, safeJson, mergeAlternating, effortOf, effortOfBudget, type IrEvent, type IrMessage, type IrPart, type IrRequest, type IrResponse, type IrStop, type IrTool, type IrUsage, type StreamParser, type StreamRenderer } from './ir.js';
 import { sse } from './sse.js';
 import { stripBillingHeader } from './cache.js';
 import { tr } from '../i18n/index.js';
@@ -62,6 +63,7 @@ export function parseRequest(body: any): IrRequest {
     topK: body.top_k,
     stop: Array.isArray(body.stop_sequences) && body.stop_sequences.length ? body.stop_sequences : undefined,
     stream: !!body.stream,
+    effort: effortOf(body.output_config?.effort) ?? (body.thinking?.type === 'enabled' ? effortOfBudget(body.thinking.budget_tokens) : undefined),
   };
 }
 
@@ -107,6 +109,9 @@ export function renderRequest(r: IrRequest, opts: AnthropicRenderOpts = {}): any
   if (r.topK !== undefined) out.top_k = r.topK;
   if (r.stop?.length) out.stop_sequences = r.stop;
   if (r.stream) out.stream = true;
+  // Claude 4.6+ takes the level on its own. No thinking switch: a translated history has no signed thinking blocks,
+  // and Claude refuses thinking on a turn whose earlier tool call has none in front of it.
+  if (r.effort) { const v = claudeVersion(r.model); if (v !== undefined && v >= 4.6) out.output_config = { effort: r.effort }; }
   return out;
 }
 

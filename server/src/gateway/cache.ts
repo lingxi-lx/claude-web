@@ -36,6 +36,8 @@ export function addMissing(headers: Record<string, string>, extra: Record<string
 
 /** An upstream 400 that is about the cache key (so dropping it and retrying is the fix). */
 export const mentionsCacheKey = (text: string) => /prompt_cache_key/i.test(text);
+/** An error naming a strength parameter the gateway added (reasoning_effort, thinkingConfig / Level / Budget, output_config). */
+export const mentionsEffort = (text: string) => /reasoning[_.]?effort|thinking[_.]?(?:config|level|budget)|output_config/i.test(text);
 /** Status codes where a request we decorated with prompt_cache_key is retried once without it. */
 export const isParamRejection = (status: number) => status === 400 || status === 422;
 

@@ -1,7 +1,8 @@
 // Protocol-neutral intermediate representation for cross-protocol translation.
 // Inbound parsers produce IrRequest; outbound renderers consume it. Upstream responses come back as
 // IrResponse (non-stream) or a sequence of IrEvent (stream) and are rendered in the inbound shape.
-// Thinking / reasoning in requests is dropped on purpose: signatures never survive a provider change. Responses carry
+// Thinking / reasoning blocks in requests are dropped on purpose: signatures never survive a provider change (the
+// requested strength does carry over: `IrRequest.effort`). Responses carry
 // it one way (an OpenAI-format upstream's reasoning_content → an Anthropic-format client's thinking block, unsigned).
 import crypto from 'node:crypto';
 
@@ -36,11 +37,29 @@ export interface IrRequest {
   stop?: string[];
   stream: boolean;
   /**
+   * Thinking strength the client asked for, in whatever form its format has (Claude `output_config.effort` or a
+   * thinking budget, `reasoning_effort`, Responses `reasoning.effort`, Gemini `thinkingConfig`). The service keeps it
+   * only for a member model that takes it natively and snaps it to that model's levels before rendering.
+   */
+  effort?: IrEffort;
+  /**
    * The client's session identity (cache.ts `cacheKeyOf`): Anthropic outbound sends it as
    * `metadata.user_id`, OpenAI outbound as `prompt_cache_key` — both are what relays route a cache on.
    */
   cacheKey?: string;
 }
+
+export type IrEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+const EFFORTS: readonly IrEffort[] = ['low', 'medium', 'high', 'xhigh', 'max'];
+/** The engine's budgets per level (effortPlan.ts); a budget in between maps to the level it reaches. */
+export const EFFORT_BUDGET: Record<IrEffort, number> = { low: 2048, medium: 8192, high: 16384, xhigh: 32768, max: 63999 };
+export const effortOf = (v: unknown): IrEffort | undefined => {
+  if (typeof v !== 'string') return undefined;
+  const s = v.toLowerCase();
+  return s === 'minimal' ? 'low' : (EFFORTS as readonly string[]).includes(s) ? (s as IrEffort) : undefined;
+};
+export const effortOfBudget = (n: unknown): IrEffort | undefined =>
+  typeof n !== 'number' || !(n > 0) ? undefined : EFFORTS.find((l) => n <= EFFORT_BUDGET[l]) ?? 'max';
 
 export type IrStop = 'end' | 'max_tokens' | 'tool_use' | 'stop_sequence' | 'refusal';
 

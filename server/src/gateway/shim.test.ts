@@ -478,7 +478,8 @@ describe('cache shim: Codex (/v1/responses in) on an openai profile', () => {
     expect(U.hits.map((h) => h.url)).toEqual(['/v1/responses', '/v1/chat/completions']);
     const chat = JSON.parse(U.hits[1].body);
     expect(chat).toMatchObject({ model: 'deepseek-chat', stream: true, stream_options: { include_usage: true }, prompt_cache_key: 'thread-1' });
-    expect(chat.reasoning_effort).toBeUndefined(); // not an o-series / gpt-5 model: chat relays may reject it
+    // every model gets the strength (2026-10-26); DeepSeek's levels are low / high / max, so medium → high
+    expect(chat.reasoning_effort).toBe('high');
     expect(chat.messages).toEqual([
       { role: 'system', content: 'You are Codex.\n\n<permissions>…</permissions>' },
       { role: 'user', content: 'fix the bug' },

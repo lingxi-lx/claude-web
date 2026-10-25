@@ -476,3 +476,29 @@ describe('OpenAI-compatible usage shapes (cached tokens are inside prompt_tokens
     expect(noWrite.usage.prompt_tokens_details).toEqual({ cached_tokens: 10 });
   });
 });
+
+describe('thinking strength across formats (2026-10-26: every model gets it)', () => {
+  it('parsed from each format', () => {
+    const a = (extra: any) => parseInbound('anthropic', { model: 'm', max_tokens: 9, messages: [], ...extra }, { stream: false }).effort;
+    expect(a({ thinking: { type: 'enabled', budget_tokens: 16384 } })).toBe('high');
+    expect(a({ thinking: { type: 'enabled', budget_tokens: 3000 } })).toBe('medium');
+    expect(a({ thinking: { type: 'adaptive' }, output_config: { effort: 'max' } })).toBe('max');
+    expect(a({ thinking: { type: 'adaptive' } })).toBeUndefined();
+    expect(a({})).toBeUndefined();
+    expect(parseInbound('openai', { model: 'm', messages: [], reasoning_effort: 'minimal' }, { stream: false }).effort).toBe('low');
+    expect(parseInbound('responses', { model: 'm', input: 'x', reasoning: { effort: 'xhigh' } }, { stream: false }).effort).toBe('xhigh');
+    expect(parseInbound('gemini', { contents: [], generationConfig: { thinkingConfig: { thinkingBudget: 8192 } } }, { stream: false, model: 'g' }).effort).toBe('medium');
+    expect(parseInbound('gemini', { contents: [], generationConfig: { thinkingConfig: { thinkingLevel: 'HIGH' } } }, { stream: false, model: 'g' }).effort).toBe('high');
+  });
+  it('rendered in each format', () => {
+    const ir = (model: string, effort: any) => ({ model, messages: [{ role: 'user' as const, parts: [{ type: 'text' as const, text: 'hi' }] }], stream: false, maxTokens: 9, effort });
+    expect(buildOutbound('openai', ir('kimi-k3.1-pro', 'high')).body.reasoning_effort).toBe('high');
+    expect(buildOutbound('openai', ir('gpt-4o', undefined)).body.reasoning_effort).toBeUndefined();
+    expect(buildOutbound('gemini', ir('gemini-3-pro', 'low')).body.generationConfig.thinkingConfig).toEqual({ thinkingLevel: 'low' });
+    expect(buildOutbound('gemini', ir('gemini-2.5-flash', 'max')).body.generationConfig.thinkingConfig).toEqual({ thinkingBudget: 24576 });
+    const claude = buildOutbound('anthropic', ir('claude-sonnet-4-6', 'max')).body;
+    expect(claude.output_config).toEqual({ effort: 'max' });
+    expect(claude.thinking).toBeUndefined(); // a translated history has no signed thinking blocks
+    expect(buildOutbound('anthropic', ir('claude-3-7-sonnet', 'high')).body.output_config).toBeUndefined();
+  });
+});

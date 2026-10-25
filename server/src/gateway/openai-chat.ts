@@ -1,5 +1,5 @@
 // OpenAI Chat Completions ⇄ IR. Shapes per platform.openai.com (chat/completions, chat.completion.chunk).
-import { newId, safeJson, type IrEvent, type IrMessage, type IrPart, type IrRequest, type IrResponse, type IrStop, type IrTool, type IrUsage, type StreamParser, type StreamRenderer } from './ir.js';
+import { newId, safeJson, effortOf, type IrEvent, type IrMessage, type IrPart, type IrRequest, type IrResponse, type IrStop, type IrTool, type IrUsage, type StreamParser, type StreamRenderer } from './ir.js';
 import { sse } from './sse.js';
 import { CACHE_KEY_MAX } from './cache.js';
 import { tr } from '../i18n/index.js';
@@ -57,6 +57,7 @@ export function parseRequest(body: any): IrRequest {
     topP: body.top_p ?? undefined,
     stop: stop?.length ? stop : undefined,
     stream: !!body.stream,
+    effort: effortOf(body.reasoning_effort),
   };
 }
 
@@ -105,6 +106,7 @@ export function renderRequest(r: IrRequest, opts: ChatRenderOpts = {}): any {
   if (r.temperature !== undefined) out.temperature = r.temperature;
   if (r.topP !== undefined) out.top_p = r.topP;
   if (r.stop?.length) out.stop = r.stop;
+  if (r.effort) out.reasoning_effort = r.effort;
   if (r.tools?.length) {
     out.tools = r.tools.map((t) => ({ type: 'function', function: { name: t.name, ...(t.description ? { description: t.description } : {}), parameters: t.schema } }));
     if (r.toolChoice) out.tool_choice = r.toolChoice.type === 'tool' ? { type: 'function', function: { name: r.toolChoice.name } } : r.toolChoice.type === 'any' ? 'required' : r.toolChoice.type;

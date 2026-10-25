@@ -82,11 +82,13 @@ describe('智能程度 on every provider and model (claude-web-engine)', () => {
     expect(effortCaption(null, v.defaultLevel, v.mode)).toContain('（原生）');
   });
 
-  it('gpt-4o has no parameter: five segments, through the prompt', () => {
+  it('2026-10-26: every OpenAI-format model gets the parameter (three standard levels); one recorded as refusing goes through the prompt', () => {
     const v = view('ds', 'gpt-4o');
-    expect(v.levels).toEqual(['low', 'medium', 'high', 'xhigh', 'max']);
-    expect(v.mode).toBe('prompt');
-    expect(effortCaption('high', v.defaultLevel, v.mode)).toContain('（通过提示词）');
+    expect(v.levels).toEqual(['low', 'medium', 'high']);
+    expect(v.mode).toBe('native');
+    const refused = claudeEffortView({ agent: 'claude', providers: [{ ...ds, promptEffortModels: ['gpt-4o'] } as Provider], providerId: 'ds', model: 'gpt-4o' });
+    expect(refused.mode).toBe('prompt');
+    expect(effortCaption('high', refused.defaultLevel, refused.mode)).toContain('（通过提示词）');
     expect(EFFORT_PROMPT_TITLE).toBe('这个模型没有思考强度参数，通过提示词告诉它想多深');
   });
 

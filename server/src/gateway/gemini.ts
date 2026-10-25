@@ -1,5 +1,5 @@
 // Gemini generateContent / streamGenerateContent ⇄ IR. Shapes per ai.google.dev (v1beta, camelCase JSON).
-import { newId, linkToolNames, mergeAlternating, resultText, type IrEvent, type IrMessage, type IrPart, type IrRequest, type IrResponse, type IrStop, type IrTool, type IrUsage, type StreamParser, type StreamRenderer } from './ir.js';
+import { newId, linkToolNames, mergeAlternating, resultText, effortOf, effortOfBudget, EFFORT_BUDGET, type IrEvent, type IrMessage, type IrPart, type IrRequest, type IrResponse, type IrStop, type IrTool, type IrUsage, type StreamParser, type StreamRenderer } from './ir.js';
 import { sse } from './sse.js';
 import { tr } from '../i18n/index.js';
 
@@ -85,6 +85,7 @@ export function parseRequest(body: any, model: string, stream: boolean): IrReque
   const allowed: string[] = fc?.allowedFunctionNames ?? fc?.allowed_function_names ?? [];
   const mode = String(fc?.mode ?? '').toUpperCase();
   const g = body.generationConfig ?? body.generation_config ?? {};
+  const think = g.thinkingConfig ?? g.thinking_config;
   return {
     model,
     system: system || undefined,
@@ -97,6 +98,7 @@ export function parseRequest(body: any, model: string, stream: boolean): IrReque
     topK: g.topK ?? g.top_k,
     stop: g.stopSequences ?? g.stop_sequences,
     stream,
+    effort: effortOf(think?.thinkingLevel ?? think?.thinking_level) ?? effortOfBudget(think?.thinkingBudget ?? think?.thinking_budget),
   };
 }
 
@@ -122,6 +124,8 @@ export function renderRequest(r: IrRequest): any {
   if (r.topP !== undefined) g.topP = r.topP;
   if (r.topK !== undefined) g.topK = r.topK;
   if (r.stop?.length) g.stopSequences = r.stop;
+  // the engine's effortPlan.ts: Gemini 3 takes a level (low / high), 2.5 a budget (Flash tops out lower)
+  if (r.effort) g.thinkingConfig = /gemini-3/i.test(r.model) ? { thinkingLevel: r.effort } : { thinkingBudget: Math.min(EFFORT_BUDGET[r.effort], /flash/i.test(r.model) ? 24576 : 32768) };
   if (Object.keys(g).length) out.generationConfig = g;
   return out;
 }

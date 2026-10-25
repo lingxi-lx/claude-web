@@ -32,6 +32,7 @@ import { StringDecoder } from 'node:string_decoder';
 import type { MetaStore } from '../meta/store.js';
 import type { LedgerEntry, Provider } from '../protocol.js';
 import { openaiBase } from '../providers/service.js';
+import { modelCaps, nearestLevel } from '../models/catalog.js';
 import * as C from './openai-chat.js';
 import * as R from './openai-responses.js';
 import { DEFAULT_BASE, joinUrl, upstreamErrorMessage } from './convert.js';
@@ -462,15 +463,13 @@ export class CacheShim {
     const ir = R.parseRequest(json);
     const customTools = new Set((ir.tools ?? []).filter((t) => t.custom).map((t) => t.name));
     const key = typeof json.prompt_cache_key === 'string' && json.prompt_cache_key ? json.prompt_cache_key : ctx.cacheKey;
-    const build = (decorate: boolean) => {
-      const b = C.renderRequest({ ...ir, model, stream, cacheKey: key }, { promptCacheKey: decorate && !!key });
-      // o-series / gpt-5 on a chat-only relay: the effort Codex asked for, in chat's field
-      const effort = json.reasoning?.effort;
-      if (typeof effort === 'string' && C.wantsCompletionTokens(model)) b.reasoning_effort = effort;
-      return Buffer.from(JSON.stringify(b));
-    };
+    // the effort Codex asked for, in chat's field, for every model that takes it natively (the undecorated retry drops it)
+    const caps = modelCaps(ctx.p, model);
+    const effort = ir.effort && caps.native ? nearestLevel(ir.effort, caps.levels) : undefined;
     ctx.keyed = !!key && !ctx.p.noPromptCacheKey;
-    const up = await this.send(ctx, joinUrl(ctx.base, '/v1/chat/completions') + ctx.search, build(ctx.keyed), ctx.keyed ? build(false) : null, stream);
+    const build = (decorate: boolean) =>
+      Buffer.from(JSON.stringify(C.renderRequest({ ...ir, model, stream, cacheKey: key, effort: decorate ? effort : undefined }, { promptCacheKey: decorate && ctx.keyed })));
+    const up = await this.send(ctx, joinUrl(ctx.base, '/v1/chat/completions') + ctx.search, build(true), ctx.keyed || effort ? build(false) : null, stream);
     if (!up) return;
     if (up.status < 200 || up.status >= 300) {
       if (original) {
