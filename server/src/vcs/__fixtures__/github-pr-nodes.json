@@ -1,0 +1,8 @@
+[
+  { "id": "PR_fork", "number": 40, "title": "fork", "url": "https://github.com/acme/app/pull/40", "state": "OPEN", "isDraft": false, "isCrossRepository": true, "mergeable": "MERGEABLE", "reviewDecision": null, "autoMergeRequest": null, "baseRefName": "main", "commits": { "nodes": [] } },
+  { "id": "PR_kwDO1", "number": 12, "title": "Retry uploads", "url": "https://github.com/acme/app/pull/12", "state": "OPEN", "isDraft": false, "isCrossRepository": false, "mergeable": "CONFLICTING", "reviewDecision": "CHANGES_REQUESTED", "autoMergeRequest": { "enabledAt": "2026-10-22T00:00:00Z" }, "baseRefName": "main",
+    "commits": { "nodes": [ { "commit": { "oid": "abc123", "statusCheckRollup": { "contexts": { "nodes": [
+      { "__typename": "CheckRun", "name": "test", "status": "COMPLETED", "conclusion": "FAILURE", "detailsUrl": "https://github.com/acme/app/actions/runs/7/job/1", "checkSuite": { "workflowRun": { "databaseId": 7 } } },
+      { "__typename": "StatusContext", "context": "ci/lint", "state": "SUCCESS", "targetUrl": "https://ci/1" }
+    ] } } } } ] } }
+]
