@@ -1,5 +1,6 @@
 import type { NodeGraphData } from './schema';
 import type { Picks } from './marks';
+import type { FitOpts } from './viewport';
 
 export interface NodeGraphProps {
   graph: NodeGraphData;
@@ -24,4 +25,9 @@ export interface NodeGraphProps {
   /** none → rows only show text */
   onPick?: (key: string, value: string) => void;
   className?: string;
+  /** how the graph is fitted (zoom range, room kept at the top / bottom, start at the top left when it cannot fit) */
+  fit?: FitOpts;
+  /** in a scrolling column (a chat reply, the orchestra panel): the wheel zooms only once the graph was clicked or
+   *  focused; until then it scrolls the page (review D5) */
+  embedded?: boolean;
 }

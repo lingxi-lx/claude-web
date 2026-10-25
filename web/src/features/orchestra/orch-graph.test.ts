@@ -28,4 +28,9 @@ describe('orchestra graph', () => {
     expect(g.nodes[2].state).toBe('stopped');
     expect(g.nodes[1].icon).toBe('close');
   });
+  it('a card says its whole title on hover; an id like constructor is a node like any other (review D5 / D1)', () => {
+    const g = orchestraGraph([task('constructor'), task('b', ['constructor'])], { b: run('running') }, 0);
+    expect(g.nodes.map((n) => [n.tip, n.state])).toEqual([['CONSTRUCTOR', undefined], ['B', 'running']]);
+    expect(g.edges.map((e) => e.id)).toEqual(['constructor>b']);
+  });
 });
