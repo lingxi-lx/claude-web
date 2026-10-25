@@ -10,3 +10,10 @@
 - `server/src/im/router.test.ts` 用假 adapter / pool 覆盖路由逻辑；`server/ws-phase6.mjs` 端到端跑远程监听 + 配对 + 设备令牌 + 隧道失败路径 + IM 配置。
 - vitest 只认 `src/**/*.test.ts`；server 的 `tsconfig` 现在排除测试与 `__mocks__`，不然 `npm run build` 会把测试编译进 `dist/` 然后 vitest 连 dist 里的副本一起跑（mock 路径不存在 → 超时）。
 - **按真实时间计时的测试单独一组、最后跑**（`server/vitest.config.ts` 的 `REAL_TIME`：`relay-link` / `signal` / `p2p` 三个文件，`projects` + `sequence.groupOrder: 1`）：转发每秒 20 包的节奏、几秒内处理完的洪泛、有上限的连接用时，和整套并行跑在一起时被抢 CPU，每次全量都挂 4 个，单独跑次次通过。新写的这类测试放进这张表，别放宽断言。
+
+## 派活：从手机 / IM 交代任务（阶段 F3，2026-10-25）
+
+- 手机壳（`web/src/shell/`）只是装 app 的框，派活在 app 里：手机布局侧栏抽屉「派活」、命令面板「派活…」（`web/src/features/cloud/CloudDialogs.tsx` DispatchDialog）。一句任务 + 机器（本机 / peer）+ 项目，默认 `settings['dispatch.last']`（还在的才用）。
+- 服务端 `server/src/dispatch/`：`dispatch.start` → 项目文件夹、**项目的权限模式**（项目页「派活用的权限模式」= `Workspace.permissionMode`；没设就不传，pool 用 `ui.defaultMode`）开新对话、meta `origin: 'dispatch'` + `dispatchFrom`（远程连接来的算 'phone'）、发出任务；`peer` → `federation.request(peer, dispatch.start)`，回 `peer_<id>~<sid>`。侧栏行标「从手机派来 / 从 IM 派来」。
+- 通知：hub 在派来的对话 result（做完 / 出错）和权限请求时广播 `notice`（`notify: true`），手机和桌面都收到；授权卡照常推到所有窗口（含手机）。
+- IM：`/dispatch [项目名:] <任务>`（中文别名 `isDispatchCommand`，冒号全角半角都行，项目名不分大小写，对不上就整句当任务），开新对话、绑定这个聊天、按项目权限模式，结果和授权按钮照旧回到聊天。

@@ -79,3 +79,13 @@
 - 「立即运行」碰上对话正忙 / 失败，不再改下一次的定时，也不说「1 分钟后重试」（手动任务没有定时器去重试）。
 - 跨对话的生成文件：同一个文件路径写法不同（大小写、斜杠）只列一次。菜单数字键不数 + 菜单里的「频道」输入框。
 - 已知限制（没改）：preview_start 的审批卡只显示配置名，不显示要跑的命令；选了「总是允许」后，Claude 改了 launch.json 再起也不会再问。
+
+## 发布：产物的本机分享链接（阶段 F5，2026-10-25）
+
+- 入口：文件右键「发布…」、生成的文件列表每行的分享按钮、命令面板「已发布的文件」。`server/src/publish/core.ts`（纯）+ `service.ts`；界面 `web/src/features/cloud/CloudDialogs.tsx`（PublishDialog / PublishedDialog）。
+- 快照：页面本身 + 它用相对路径引用的、在同一文件夹里的文件（`localRefs` / `snapshotFiles`，最多 200 个、50 MB）复制进 `~/.claude-web/published/<id>/`；`index.json` 在 published 根上（不在任何快照目录里）。id = `randomBytes(16)` 的十六进制。重新发布 = 同 id 换快照（先写 `<id>.tmp-*` 再改名）。
+- 路由 `/p/<id>/<path>` 在 HTTP handler **最前面**（主监听和远程监听共用一个 handler，所以局域网也能开），不看令牌也不接受令牌；`/p/` 开头的一切都归它：不是活快照里的文件一律 404（不会掉到静态文件把 app 的 index.html 给出去）。用 **原始 `req.url`** 判断（`new URL()` 会把 `/p/<id>/../x` 规范成 `/p/x`）；`resolveInside`：解码后拒绝 `..` 段、空字节、绝对 / 盘符路径，`resolve` + `realpath` 后必须在快照目录里（符号链接 / junction 出界拒绝），只给文件。
+- 响应头 `PUBLISH_HEADERS`：`Content-Security-Policy: sandbox allow-scripts allow-popups`（没有 allow-same-origin → 不透明 origin，读不到 app 的存储，连 `/ws` 时 Origin 是 `null` 被 originOk 拒）、`X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、`Cache-Control: no-store`。
+- 有效期 1 天 / 7 天 / 永久；过期的请求即 404 并清掉，`list()` 和启动后每小时 `sweep()`。撤回删目录。局域网链接只在远程监听开着时给（`remote.status().running` + 第一个局域网地址）。
+- 发布到常开机器：`publish.toPeer` 把同样的文件 base64 发给 peer 的 `publish.receive`（相对路径逐段检查），链接是 peer 自己的地址（`via === 'direct'` 时）；撤回会请对方也撤。导出成单个 HTML：`inlineHtml` 把本地 css / js / 图片内联，写到 `~/.claude-web/exports/<名字>.html`（不写进用户的文件夹），路径复制到剪贴板。
+- 调试：`node server/ws-phase38.mjs [port] [token]`。
