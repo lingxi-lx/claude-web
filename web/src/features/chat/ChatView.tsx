@@ -29,7 +29,8 @@ import { Icon } from '@/ui/icons';
 import { blockRemoteOpen } from '@/features/remote-guard';
 import { openChangedFile } from '@/features/workbench/right-panel';
 import { VerifyChip } from '@/features/browser/VerifyChip';
-import { waitingToolIds } from './permission-dock';
+import { splitPending, waitingToolIds } from './permission-dock';
+import { AskCard } from './AskCard';
 import { ArrivalCtx, LiveCtx, StepStartCtx, TurnTouchCtx, WaitingCtx } from './turn-context';
 import { externalLive, readsFromOutside } from '@/store/external';
 import { withExplanation } from '@errors';
@@ -609,7 +610,7 @@ const TurnView = memo(function TurnView({ turn, last, live, version, sessionId, 
  * the version without the frames of streamed deltas — those only write into the last turn (a background subagent's
  * deltas into an earlier one show with its next whole message).
  */
-function TurnList({ items, version, settled, live, waiting, sessionId, cwd }: { items: Item[]; version: number; settled: number; live: boolean; waiting: boolean; sessionId: string; cwd: string }) {
+function TurnList({ items, version, settled, live, waiting, sessionId, cwd, ask, scope }: { items: Item[]; version: number; settled: number; live: boolean; waiting: boolean; sessionId: string; cwd: string; ask?: PermissionRequestEvent; scope: string }) {
   const turns = useMemo(() => groupTurns(items), [items, version]);
   const view = useViewMode();
   const bg = hasLive(useBgSession(sessionId));
@@ -621,6 +622,8 @@ function TurnList({ items, version, settled, live, waiting, sessionId, cwd }: { 
       {/* keyed by the conversation too: a fork has its parent's message ids, and a turn's view (what it saw of its
           end, whether the user opened it) belongs to one conversation */}
       {turns.map((t, i) => <TurnView key={`${sessionId}|${t.id}|${view}`} turn={t} last={i === turns.length - 1} live={live} version={i === turns.length - 1 ? version : settled} sessionId={sessionId} cwd={cwd} />)}
+      {/* the question card at the end of the turn, above the plan (stage C1) */}
+      {ask && <AskCard key={ask.requestId} p={ask} sessionId={sessionId} scope={scope} />}
       {plan && <PlanDock t={plan} going={going} waiting={waiting} />}
     </PlanCtx.Provider>
   );
@@ -666,6 +669,9 @@ export function ChatView() {
   useEffect(() => { sidRef.current = active?.sessionId; setOlder({ busy: false }); }, [active?.sessionId]);
   const pane = usePaneCtx();
   const pending = active?.pending ?? NO_PENDING;
+  const ask = useMemo(() => splitPending(pending).ask, [pending]);
+  // the composer's pane + tile, as its `dockScope`: the composer's empty Enter moves the focus into the card
+  const askScope = pane ? `${pane.paneId}|${pane.tileId}` : 'none';
   // the same Set while its ids are the same: a new one each version redrew every step of every turn (context consumers
   // are not stopped by TurnView's memo)
   const waitingRef = useRef<Set<string>>(undefined);
@@ -767,7 +773,7 @@ export function ChatView() {
         <WaitingCtx.Provider value={waiting}>
           <LiveCtx.Provider value={live}>
             <ArrivalCtx.Provider value={arrival}>
-              <TurnList items={active.conv.items} version={version} settled={settled} live={live} waiting={active.state === 'waiting' || pending.length > 0} sessionId={sid} cwd={active.cwd || listCwd || ''} />
+              <TurnList items={active.conv.items} version={version} settled={settled} live={live} waiting={active.state === 'waiting' || pending.length > 0} sessionId={sid} cwd={active.cwd || listCwd || ''} ask={ask} scope={askScope} />
             </ArrivalCtx.Provider>
           </LiveCtx.Provider>
         </WaitingCtx.Provider>

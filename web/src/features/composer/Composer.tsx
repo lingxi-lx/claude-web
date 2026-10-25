@@ -4,7 +4,7 @@ import { useScopedSession, useStore } from '@/store';
 import { ws } from '@/ws/client';
 import { desktop } from '@/desktop';
 import { clsx, shortModel } from '@/util';
-import { parsePeerId, type AgentKind, type AttachmentRef, type EffortLevel, type PeerInfo, type PermissionMode, type SessionFeatures } from '@shared';
+import { parsePeerId, type AgentKind, type AttachmentRef, type EffortLevel, type PeerInfo, type PermissionMode, type PermissionRequestEvent, type SessionFeatures } from '@shared';
 import { MachineChip } from './MachineChip';
 import { bundleParts, compressImage, expandDataTransfer, fmtSize, isLongPaste, pasteAsAttachment, uploadAttachment, type DroppedFile, type PendingBundle, type PendingImage } from '@/model/attachments';
 import { pickFolderFiles } from '@/model/attachment-filter';
@@ -17,7 +17,7 @@ import { atQueryAt, pickAt } from './at-mention';
 import { RunCard } from '@/features/chat/RunCard';
 import { BackgroundPill } from '@/features/background/BackgroundPill';
 import { PermissionDock, runDockPrimary } from '@/features/chat/PermissionCards';
-import { denyResponse, dockAction, dockDecide, dockKind, isSlashCommand, primaryKey, type DockSeen, type DockWhy } from '@/features/chat/permission-dock';
+import { denyResponse, dockAction, dockDecide, dockKind, isSlashCommand, primaryKey, splitPending, type DockSeen, type DockWhy } from '@/features/chat/permission-dock';
 import { attachmentFolderPath } from '@/features/paths';
 import { Icon } from '@/ui/icons';
 import { imeComposing } from '@/ui/ime';
@@ -68,6 +68,8 @@ const REMOTE_ATTACH = tr('附件在本机，远端读不到，请粘贴内容（
 const REMOTE_GOAL = tr('其它机器上的对话不能在这里设定目标（目标由本机驱动）。可以到那台机器上设定，或先「交给本机的 Agent 继续」');
 const NO_FEATURES: SessionFeatures = {};
 const isFeatures = (v: unknown): v is SessionFeatures => !!v && typeof v === 'object' && !Array.isArray(v);
+
+const NO_PENDING_LOCAL: PermissionRequestEvent[] = [];
 
 /** The agent's name in a docked card's words: 「告诉 Claude 换个做法」, 「告诉 Codex …」. */
 function agentWord(info: { agent?: string; agentName?: string } | undefined): string {
@@ -389,7 +391,9 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   // card's main button (允许一次 ↵). What exactly Enter does is `dockAction` (review I3: not in a card's first 600 ms,
   // not on key repeat, words from before the card are queued as before, slash commands are sent, a plan wants
   // Ctrl+Enter). Attachments without words are still an ordinary message (queued, never an approval).
-  const docked = !welcome && !disabled && active ? active.pending[0] : undefined;
+  // the question card is in the conversation (stage C1), the others dock; the box keys behave the same for both
+  const { dock: dockReq, ask: askReq } = splitPending(active?.pending ?? NO_PENDING_LOCAL);
+  const docked = !welcome && !disabled && active ? dockReq ?? askReq : undefined;
   const dockAgent = agentWord(active?.info);
   const hasAttachments = imgs.length > 0 || atts.length > 0 || bundles.length > 0 || files.length > 0 || refs.length > 0;
   // 插话 takes words only (what the button always sent); attachments and slash commands wait their turn in the queue
@@ -1118,7 +1122,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
         {/* 后台: a workflow / sub-agent / background command still going — the pill opens the 后台 page on it */}
         {active && !welcome && <BackgroundPill sessionId={active.sessionId} />}
         {/* a docked card takes the run card's place (spec §4.2: 「等确认时被权限卡替代」) */}
-        {active && !welcome && (docked
+        {active && !welcome && (docked && dockReq
           ? <PermissionDock sessionId={active.sessionId} reason={text} onReasonUsed={() => onChange('')} scope={dockScope} note={dockNote} onDenyQueued={queuedOffer ? denyQueued : undefined} />
           : <RunCard sessionId={active.sessionId} />)}
         <div className={clsx('composer-box', under && 'one-line')} data-state={face} onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>

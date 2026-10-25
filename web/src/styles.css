@@ -2168,6 +2168,35 @@ html.desktop.mac .app.no-sidebar .workbench:not(.gb) .over-head { padding-left: 
 :root[data-reduce-motion='1'] .app.mobile .rpanel, :root[data-reduce-motion='1'] .conn-banner { animation: none; }
 
 /* ---- redesign phase 5: chat rendering (spec §5.3, mock-session.png) ---- */
+
+/* the question card at the end of the turn (stage C1, AskCard.tsx): one question a page */
+.ask-card { margin: 12px 0; padding: 12px 14px 10px; border: var(--hairline) solid var(--edge-default); border-radius: var(--r-lg); background: var(--surface-1); }
+.ask-top { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+.ask-q { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; color: var(--ink-1); line-height: 1.5; }
+.ask-q .badge { font-weight: 400; margin-right: 4px; }
+.ask-pager { flex: none; display: inline-flex; align-items: center; gap: 2px; color: var(--ink-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+.ask-page { min-width: 36px; text-align: center; }
+.ask-main { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.ask-main.with-preview { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+@media (max-width: 560px) { .ask-main.with-preview { grid-template-columns: 1fr; } }
+.ask-opts { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ask-opt { display: flex; gap: 10px; align-items: flex-start; width: 100%; text-align: left; padding: 7px 10px; border-radius: var(--r-md); border: var(--hairline) solid transparent; }
+.ask-opt:hover { background: var(--layer-hover); }
+.ask-opt.sel { background: var(--layer-selected); border-color: var(--edge-default); }
+.ask-opt .opt-mark { flex: none; margin-top: 2px; color: var(--ink-3); }
+.ask-opt.sel .opt-mark { color: var(--ink-1); }
+.ask-opt .opt-mark.box { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border: 1.5px solid currentColor; border-radius: 4px; }
+.ask-txt { display: flex; flex-direction: column; min-width: 0; }
+.ask-l { font-weight: 600; color: var(--ink-1); font-size: 14px; display: inline-flex; align-items: center; gap: 6px; }
+.ask-n { font-size: 11px; font-weight: 400; color: var(--ink-4); min-width: 16px; text-align: center; }
+.ask-d { color: var(--ink-3); font-size: 13px; }
+.ask-other { margin: 4px 0 0 34px; width: calc(100% - 34px); padding: 6px 10px; border-radius: var(--r-md); background: var(--surface-0); font-size: 14px; }
+.ask-preview { margin: 0; padding: 8px 10px; font-size: 12px; border-radius: var(--r-md); background: var(--surface-0); border: var(--hairline) solid var(--edge-subtle); overflow: auto; max-height: 320px; white-space: pre; }
+.ask-foot { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.ask-foot .grow { flex: 1; }
+.ask-foot kbd { font-size: 11px; opacity: 0.75; margin-left: 4px; }
+.ask-need { display: inline-flex; align-items: center; gap: 6px; color: var(--warn); font-size: 13px; }
+.ask-need .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
 /* the reading column (.chat-inner / .composer-inner) is 720px wide — see 「chat」 above */
 .msg.user .bubble { font-size: var(--fs-body); line-height: 1.6; border-radius: 18px; padding: 9px 15px; }
 

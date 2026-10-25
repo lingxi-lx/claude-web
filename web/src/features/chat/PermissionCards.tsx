@@ -9,12 +9,12 @@ import { JsonTree } from './tools/McpTool';
 import { Icon } from '@/ui/icons';
 import { DOCK_DENY_QUEUED, DOCK_HINT, DOCK_STATUS } from '@/ui/terms';
 import { useLeaveGhost, type GhostOpts } from '@/ui/ghost';
-import { SITE_TOOL, alwaysDetails, alwaysLabel, denyResponse, dockKind, permissionTitle, primaryKey } from './permission-dock';
+import { SITE_TOOL, alwaysDetails, alwaysLabel, denyResponse, dockKind, permissionTitle, primaryKey, splitPending } from './permission-dock';
 import { ACCESS_NOTE, accessAsk } from '@/features/computer/computer-tools';
 import { tr } from '@/i18n';
-import { imeComposing } from '@/ui/ime';
 
-// The card a permission request, an AskUserQuestion or an ExitPlanMode docks above the composer (redesign phase 5,
+// The card a permission request or an ExitPlanMode docks above the composer (redesign phase 5; an AskUserQuestion is
+// a card in the conversation since stage C1, AskCard.tsx,
 // spec §5.3 / §5.11): one at a time, 「还有 N 条」 when more wait. The old 「拒绝理由 / 修改意见」 field is the composer
 // itself — sending there denies with those words (Composer + `dockAction`), and an empty Enter is this card's main
 // button, registered here by the composer's pane + request id. Mission Control, IM and the sidebar answer through
@@ -26,7 +26,7 @@ const primaries = new Map<string, () => boolean>();
 export function runDockPrimary(key: string): boolean {
   return primaries.get(key)?.() ?? false;
 }
-function usePrimary(scope: string, requestId: string, fn: () => boolean) {
+export function usePrimary(scope: string, requestId: string, fn: () => boolean) {
   const ref = useRef(fn);
   ref.current = fn;
   useEffect(() => {
@@ -38,7 +38,7 @@ function usePrimary(scope: string, requestId: string, fn: () => boolean) {
 }
 
 /** One answer per request: the buttons stay disabled until the server says it is resolved (or it failed). */
-function useRespond(p: PermissionRequestEvent) {
+export function useRespond(p: PermissionRequestEvent) {
   const respond = useStore((s) => s.respondPermission);
   const [busy, setBusy] = useState(false);
   const send = (r: PermissionResponse) => {
@@ -232,78 +232,6 @@ function PlanApproval({ p, agent, more, reason, onReasonUsed, scope, note, onDen
   );
 }
 
-function AskQuestion({ p, agent, more, reason, onReasonUsed, scope, note, onDenyQueued }: CardProps) {
-  const { busy, send } = useRespond(p);
-  const qs: any[] = (p.input.questions as any[]) ?? [];
-  const [sel, setSel] = useState<Record<string, string[]>>({});
-  const [other, setOther] = useState<Record<string, string>>({});
-  const toggle = (q: any, label: string) => {
-    setSel((s) => {
-      const cur = s[q.question] ?? [];
-      if (q.multiSelect) return { ...s, [q.question]: cur.includes(label) ? cur.filter((x) => x !== label) : [...cur, label] };
-      return { ...s, [q.question]: [label] };
-    });
-  };
-  const done = (s: Record<string, string[]>) => qs.every((q) => (s[q.question]?.length ?? 0) > 0 || other[q.question]?.trim());
-  const complete = done(sel);
-  const submit = (s: Record<string, string[]> = sel) => {
-    if (!done(s)) return false;
-    const answers: Record<string, string> = {};
-    for (const q of qs) {
-      const o = other[q.question]?.trim();
-      const chosen = s[q.question] ?? [];
-      answers[q.question] = o ? [...chosen, o].join(', ') : chosen.join(', ');
-    }
-    return send({ behavior: 'allow', updatedInput: { ...p.input, answers } });
-  };
-  usePrimary(scope, p.requestId, () => submit());
-  const skip = () => { if (send(denyResponse(p, reason)) && reason.trim()) onReasonUsed(); };
-  // Enter in the card answers (2026-10-19 user: typed an answer, Enter did nothing): in the 其它 field, or on a
-  // single-choice option — that option chosen and sent; on a multi-choice option it only ticks it (Space too)
-  const enter = (e: React.KeyboardEvent, q?: any, label?: string) => {
-    if (e.key !== 'Enter' || e.shiftKey || imeComposing(e.nativeEvent)) return;
-    e.preventDefault();
-    if (q && label && q.multiSelect) { toggle(q, label); return; }
-    if (!q || !label) { submit(); return; }
-    // chosen in any case; sent once every question has an answer (with more than one, Enter is how you go through them)
-    const next = { ...sel, [q.question]: [label] };
-    if ((sel[q.question] ?? [])[0] !== label) toggle(q, label);
-    if (done(next)) submit(next);
-  };
-  return (
-    <>
-      <Head p={p} agent={agent} more={more} />
-      <div className="pd-body pd-scroll">
-        {qs.map((q) => (
-          <div key={q.question} className="pd-q">
-            <div className="pd-qt">{q.header && <span className="badge">{q.header}</span>} {q.question}</div>
-            {q.options.map((o: any) => {
-              const on = !!sel[q.question]?.includes(o.label);
-              return (
-                <button key={o.label} className={clsx('q-opt', on && 'sel')} role={q.multiSelect ? 'checkbox' : 'radio'} aria-checked={on} onClick={() => toggle(q, o.label)} onKeyDown={(e) => enter(e, q, o.label)}>
-                  <span className="opt-mark"><Icon name={on ? 'checkCircle' : 'circle'} size={14} /></span>
-                  <span className="q-txt">
-                    <span className="q-l">{o.label}</span>
-                    {o.description && <span className="d">{o.description}</span>}
-                    {o.preview && <pre>{o.preview}</pre>}
-                  </span>
-                </button>
-              );
-            })}
-            <input className="pd-other" placeholder={tr('其它（自定义回答）')} value={other[q.question] ?? ''} onChange={(e) => setOther((s) => ({ ...s, [q.question]: e.target.value }))} onKeyDown={(e) => enter(e)} />
-          </div>
-        ))}
-      </div>
-      <div className="pd-actions">
-        <Hint hint={DOCK_HINT.ask(agent)} note={note} />
-        <DenyQueued p={p} busy={busy} onDenyQueued={onDenyQueued} />
-        <button className="btn" data-act="deny" disabled={busy} onClick={skip}>{tr('跳过')}</button>
-        <button className="btn primary pd-main" data-act="allow" disabled={busy || !complete} onClick={() => submit()} title={tr('提交回答（选好之后在空输入框按 Enter 也是）')}>{tr('提交回答')} <Enter /></button>
-      </div>
-    </>
-  );
-}
-
 /**
  * The card as it leaves (UI refresh §6: out in 180ms): answered here, in Mission Control or from IM, or followed by
  * the next request — an inert copy of it fades out where it was (ui/ghost.ts), under another class (`pdock-out`, the
@@ -329,10 +257,10 @@ export function PermissionDock({ sessionId, reason, onReasonUsed, scope, note, o
   // the card's element as state (a callback ref): the leaving copy is taken from it by a child's cleanup, when a
   // plain ref is already detached
   const [dock, setDock] = useState<HTMLElement | null>(null);
-  const p = o?.pending[0];
+  const { dock: p } = splitPending(o?.pending ?? []);
   if (!o || !p) return null;
   const agent = o.info?.agent && o.info.agent !== 'claude' ? o.info.agentName ?? o.info.agent : 'Claude';
-  const props: CardProps = { p, agent, cwd: o.cwd, more: o.pending.length - 1, reason, onReasonUsed, scope, note, onDenyQueued };
+  const props: CardProps = { p, agent, cwd: o.cwd, more: o.pending.filter((x) => dockKind(x) !== 'ask').length - 1, reason, onReasonUsed, scope, note, onDenyQueued };
   const kind = dockKind(p);
   const title = permissionTitle(p, agent);
   return (
@@ -340,7 +268,7 @@ export function PermissionDock({ sessionId, reason, onReasonUsed, scope, note, o
       <DockLive text={note ?? `${title}。${DOCK_STATUS[kind]}`} />
       {/* before the card: its cleanup must run first, while the card's own nodes are still there */}
       <CardLeave key={`leave:${p.requestId}`} dock={dock} />
-      {kind === 'ask' ? <AskQuestion key={p.requestId} {...props} /> : kind === 'plan' ? <PlanApproval key={p.requestId} {...props} /> : kind === 'access' ? <AccessRequest key={p.requestId} {...props} /> : p.toolName === SITE_TOOL ? <SiteRequest key={p.requestId} {...props} /> : <ToolPermission key={p.requestId} {...props} />}
+      {kind === 'plan' ? <PlanApproval key={p.requestId} {...props} /> : kind === 'access' ? <AccessRequest key={p.requestId} {...props} /> : p.toolName === SITE_TOOL ? <SiteRequest key={p.requestId} {...props} /> : <ToolPermission key={p.requestId} {...props} />}
     </div>
   );
 }
