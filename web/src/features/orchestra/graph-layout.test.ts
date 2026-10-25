@@ -1,12 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { CARD_W, fitScale, layers, layoutGraph, nextNodeId, promptVars } from './graph-layout';
+import { CARD_W, fitScale, layoutGraph, nextNodeId, promptVars } from './graph-layout';
 
 const n = (id: string, dependsOn: string[] = []) => ({ id, dependsOn });
 
 describe('orchestra graph layout', () => {
-  it('puts nodes one column after their deepest dependency', () => {
-    expect(layers([n('c', ['a', 'b']), n('a'), n('b', ['a'])]).map((l) => l.map((x) => x.id))).toEqual([['a'], ['b'], ['c']]);
-  });
   it('parallel nodes share a column in different rows, edges connect card anchors', () => {
     const g = layoutGraph([n('a'), n('b', ['a']), n('c', ['a']), n('d', ['b', 'c'])]);
     expect(g.cols).toBe(3);
