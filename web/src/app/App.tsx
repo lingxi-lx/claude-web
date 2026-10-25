@@ -46,6 +46,7 @@ import { installSettingsClose } from '@/features/settings/close-on-nav';
 import { pushBackLayer } from '@/ui/back-layer';
 import { installPhoneSheet, sheetEnter, sheetTakesEscape, toggleSheetDetent, useSheetLeaving } from '@/ui/phone-sheet';
 import { drawerEnter, installPhoneDrawer, usePhoneDrawer } from '@/ui/phone-drawer';
+import { imeComposing } from '@/ui/ime';
 import { tr } from '@/i18n';
 import { applyUiSettings, resolveTheme, DEFAULT_THEME } from '@/features/settings/ui-settings';
 import { setSafeMode } from '@/themes/apply';
@@ -285,6 +286,7 @@ export function App() {
       }
       const id = matchBrowserKey(e);
       if (!id) return;
+      if (id === 'files.search' && imeComposing(e)) return;
       // on desktop the menu accelerators own the Ctrl-only chords; browser-only (Alt) chords still run here
       if (desktop && (e.ctrlKey || e.metaKey) && !e.altKey && !['pane.splitRight', 'pane.splitDown', 'pane.zoom', 'dock.toggle', 'dock.minimize', 'view.cycle', 'side', 'menu.effort', 'pane.close', 'shortcuts'].includes(id) && !id.startsWith('panel.') && !/^group\.jump/.test(id)) return;
       e.preventDefault();

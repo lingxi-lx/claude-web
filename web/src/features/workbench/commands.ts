@@ -13,6 +13,7 @@ import { tr } from '@/i18n';
 import { nextViewMode, normViewMode, viewModeLabel } from '@/features/chat/view-mode';
 import { openSideChat } from '@/features/chat/side-chat';
 import { navGo } from './nav-history';
+import { openExplorer } from './right-panel';
 
 export function runCommand(id: string): boolean {
   const st = useStore.getState();
@@ -93,6 +94,7 @@ export function runCommand(id: string): boolean {
       d({ t: 'tile.patch', paneId: at.paneId, tileId: at.tileId, patch: t.wb !== 'live' ? { wb: 'live', view: 'trajectory' } : { view: t.view === 'chat' ? 'trajectory' : 'chat' } });
       return true;
     }
+    case 'files.search': openExplorer('search'); return true;
     case 'group.new': d({ t: 'group.new' }); return true;
     case 'group.close': d({ t: 'group.close', id: st.layout.activeGroupId }); return true;
     case 'group.next': d({ t: 'group.next', dir: 1 }); return true;

@@ -511,6 +511,7 @@ function buildMenu() {
         cmd(tr('新对话'), 'CmdOrCtrl+N', 'new'),
         cmd(tr('命令面板'), 'CmdOrCtrl+K', 'palette'),
         cmd(tr('搜索对话'), 'CmdOrCtrl+P', 'palette'),
+        cmd(tr('搜索文件'), 'CmdOrCtrl+Shift+F', 'files.search'),
         { type: 'separator' },
         cmd(tr('中断当前轮'), 'CmdOrCtrl+Shift+C', 'interrupt'),
         cmd(tr('结束当前对话的进程'), 'CmdOrCtrl+Shift+Q', 'close'),

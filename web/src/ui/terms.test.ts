@@ -77,7 +77,8 @@ describe('empty states: one sentence (spec §5.8)', () => {
   it('「还没有 X。Y 之后会出现在这里。」 everywhere, in interface words', () => {
     for (const [k, e] of Object.entries(EMPTY)) {
       const t = emptyText(e);
-      expect(t, k).toMatch(/^还没有[^。]+。[^。]+之后(，[^。]+)?会出现在这里。$/);
+      // stage E4: an entry with its own `line` says it as is (本对话的文件)
+      if (!('line' in e)) expect(t, k).toMatch(/^还没有[^。]+。[^。]+之后(，[^。]+)?会出现在这里。$/);
       expect(t, k).not.toMatch(IMPL);
       expect(t, k).not.toMatch(/会话/);
     }

@@ -100,13 +100,14 @@ export const LOGIN_IN_TERMINAL = tr('终端里在运行 claude auth login：按�
 export const CLAUDE_LOGIN_CMD = 'claude auth login';
 
 /**
- * Empty states say one thing the same way (spec §5.8): 「还没有 X。Y 之后会出现在这里。」 — with at most one button next
+ * Empty states say one thing the same way (spec §5.8): 「还没有 X。Y 之后会出现在这里。」 — with one or two buttons next
  * to it. `subject` names what appears when that is not X itself (「…打开一个对话之后，它的改动会出现在这里。」).
  */
-export interface EmptyTerm { what: string; when: string; subject?: string }
+export interface EmptyTerm { what: string; when: string; subject?: string; /** stage E4: said as is instead of the template */ line?: string }
 /** English nouns come capitalised from the catalogs (they are also headings): in the middle of a sentence they are not. */
 const inSentence = (s: string) => (getLocale() === 'en' && /^[A-Z][a-z]/.test(s) && !/^(Claude|Codex|Git|GitHub)\b/.test(s) ? s[0].toLowerCase() + s.slice(1) : s);
 export function emptyText(e: EmptyTerm): string {
+  if (e.line) return e.line;
   const what = inSentence(e.what);
   return e.subject ? tr('还没有{what}。{when}之后，{subject}会出现在这里。', { what, when: e.when, subject: e.subject }) : tr('还没有{what}。{when}之后会出现在这里。', { what, when: e.when });
 }
@@ -117,6 +118,9 @@ export const EMPTY = {
   reviewUncommitted: { what: tr('未提交的改动'), when: tr('项目里的文件有了改动') },
   reviewStaged: { what: tr('暂存的改动'), when: tr('在「未提交的改动」里暂存文件') },
   filesNoChat: { what: tr('打开对话'), when: tr('打开一个对话'), subject: tr('它所在项目的文件') },
+  // stage E4: 本对话的文件 with none yet; a conversation without a folder
+  filesSession: { what: tr('文件'), when: tr('Claude 读文件或改文件'), line: tr('Claude 读过和改过的文件会显示在这里') },
+  filesNoFolder: { what: tr('打开的文件夹'), when: tr('打开一个文件夹'), subject: tr('文件夹里的文件') },
   artifacts: { what: tr('生成的文件'), when: tr('Claude 新建了文件') },
   tasksNoChat: { what: tr('打开对话'), when: tr('打开一个对话'), subject: tr('它的子代理、后台任务和计划') },
   tasks: { what: tr('子代理或后台任务'), when: tr('Claude 派出子代理、在后台跑命令') },

@@ -115,3 +115,11 @@
 .rec-dot .rec-red { width: 8px; height: 8px; border-radius: 50%; background: var(--red); animation: rec-blink 1.2s ease-in-out infinite; }
 @keyframes rec-blink { 50% { opacity: 0.35; } }
 @media (prefers-reduced-motion: reduce) { .rec-dot .rec-red { animation: none; } }
+
+/* 文件 → 本对话的文件 (stage E4) */
+.fv-touched-list { display: flex; flex-direction: column; padding: 2px 0 6px; }
+.fv-touched-it { display: flex; align-items: center; gap: 6px; padding: 3px 10px 3px 22px; text-align: left; font-size: 12.5px; color: var(--text-1); border-radius: var(--r-sm, 4px); }
+.fv-touched-it:hover { background: var(--hover, rgba(127, 127, 127, 0.1)); }
+.fv-touched-it .grow { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fv-touched .empty-state .es-act { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.fv-touched .empty-state kbd { margin-left: 4px; font-size: 11px; opacity: 0.75; }

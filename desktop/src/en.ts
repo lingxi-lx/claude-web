@@ -55,6 +55,7 @@ export const EN_DESKTOP: Record<string, string> = {
   "打开数据目录": "Open data folder",
   "打开本地 HTML 文件": "Open a local HTML file",
   "搜索对话": "Search conversations",
+  "搜索文件": "Search files",
   "放大 / 还原分屏": "Maximize / restore split view",
   "放大界面": "Zoom in",
   "新分组": "New group",
