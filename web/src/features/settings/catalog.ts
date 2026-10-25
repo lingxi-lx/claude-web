@@ -19,7 +19,7 @@ export const SETTINGS_GROUPS: { id: SettingsGroupId; l: string }[] = [
 
 /** One setting row (a meta.json key). */
 export type EntryId =
-  | 'ui.defaultMode' | 'autoContinueOnReset' | 'ui.showThinking' | 'ui.viewMode' | 'ui.infoPanel' | 'ui.sidebarFolded' | 'ui.backdropMotion' | 'ui.backdropInChat' | 'ui.welcomeLayout' | 'ui.autoArchivePr' | 'sessions.mcp' | 'claude.desktopSkills' | 'worktree.dir' | 'worktree.prefix' | 'ui.promptSuggestions' | 'ui.diffMode' | 'ui.inlineDiffs' | 'ui.workbench' | 'ui.autoSave'
+  | 'ui.defaultMode' | 'autoContinueOnReset' | 'ui.showThinking' | 'ui.viewMode' | 'ui.infoPanel' | 'ui.sidebarFolded' | 'ui.backdropMotion' | 'ui.backdropInChat' | 'ui.welcomeLayout' | 'ui.autoArchivePr' | 'vcs.gitlabHosts' | 'vcs.resolveOnReply' | 'sessions.mcp' | 'claude.desktopSkills' | 'worktree.dir' | 'worktree.prefix' | 'ui.promptSuggestions' | 'ui.diffMode' | 'ui.inlineDiffs' | 'ui.workbench' | 'ui.autoSave'
   | 'ui.notifications' | 'ui.closeToTray' | 'ui.confirmExit' | 'ui.softwareRender' | 'orchestra.maxParallel' | 'cafe.rate' | 'cafe.sound'
   | 'ai.thinkingLanguage'
   | 'ui.language' | 'ui.theme' | 'ui.zoom' | 'ui.fontSize' | 'ui.density' | 'ui.cjkFont' | 'ui.reduceMotion' | 'ui.haptics';
@@ -109,6 +109,8 @@ const GENERAL: EntryMeta[] = [
   { id: 'ui.backdropInChat', block: tr('对话显示'), label: tr('对话里的淡背景'), hint: tr('用字符画主题时，对话后面也垫一层很淡、很慢的背景；关掉就是纯色。'), keywords: tr('background backdrop ascii theme conversation dim 背景 字符画 主题 对话 淡') },
   { id: 'ui.sidebarFolded', block: tr('对话显示'), label: tr('侧栏的项目和文件夹默认收起'), hint: tr('打开时只露出标题；你点开的那几个会一直开着，当前对话所在的也会打开。搜索时全部展开。'), keywords: tr('sidebar folders projects collapse expand 侧栏 折叠 收起 展开 项目 文件夹') },
   { id: 'ui.autoArchivePr', block: tr('对话显示'), label: tr('PR 合并或关闭后自动归档对话'), hint: tr('对话分支的 PR 合并或关闭、对话也没在跑时，把对话归档（从侧栏收起，随时能找回）。'), keywords: tr('pr pull request archive merge 归档 合并 自动') },
+  { id: 'vcs.gitlabHosts', block: tr('PR 与 MR'), label: tr('自建 GitLab 的地址'), hint: tr('一行一个（比如 git.example.com）。这些地址上的仓库，对话上方显示 MR 和流水线。gitlab.com 不用填。下面可以给每个地址存一个访问令牌；装了 glab 并登录过的不用存。'), keywords: tr('gitlab mr merge request pipeline token glab 自建 令牌 流水线') },
+  { id: 'vcs.resolveOnReply', block: tr('PR 与 MR'), label: tr('回复评论后顺手标为已解决'), hint: tr('自动处理评论推送后，在评论下回复「已在某次提交修改」的同时把这条讨论标为已解决。'), keywords: tr('pr review comment resolve thread 评论 解决 回复') },
   { id: 'worktree.dir', more: true, block: tr('新对话'), label: tr('{worktree}放在哪', { worktree: TERMS.worktree }), hint: tr('留空：放在项目自己的 .claude 文件夹里（Claude Code 的默认）。填一个文件夹：新的放到那里，名字是「项目名-任务名」。项目根目录的 {file} 里列出、又被 git 忽略的文件（比如 .env）会拷进去。', { file: '.worktreeinclude' }), keywords: tr('worktree location folder 位置 目录 独立副本 .worktreeinclude') },
   { id: 'worktree.prefix', more: true, block: tr('新对话'), label: tr('{worktree}分支前缀', { worktree: TERMS.worktree }), hint: tr('留空：用 Claude Code 的默认前缀（框里灰色的那个）。比如填 claude/，分支就叫 claude/任务名。'), keywords: tr('worktree branch prefix 分支 前缀 独立副本') },
   { id: 'claude.desktopSkills', block: tr('新对话'), label: tr('用官方桌面版下载的 Anthropic 技能'), hint: tr('这台电脑装了官方 Claude 桌面版的话，它为你的账号下载的技能（Excel、PDF、Word、PPT 等）在这里的对话里也能用，在官方 App 里开始的对话接着聊时不会再「Unknown skill」。改了之后新开的对话生效。'), keywords: tr('skills anthropic-skills xlsx pdf docx pptx desktop 技能 官方 桌面版') },

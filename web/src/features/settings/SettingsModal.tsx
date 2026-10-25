@@ -43,6 +43,7 @@ import { tr, trAs } from '@/i18n';
 import { CustomCssSection } from './CustomCssSection';
 import { VIEW_MODES, viewModeLabel } from '@/features/chat/view-mode';
 import { LocalEnvEditor } from './LocalEnvEditor';
+import { GitlabSection } from './GitlabSection';
 import { thinkingLanguageOptions } from './thinking-language';
 
 export { Row } from './controls';
@@ -57,6 +58,8 @@ const CONTROLS: Record<EntryId, (e: EntryMeta) => ReactNode> = {
   'ui.showThinking': (e) => <Toggle k={e.id} label={e.label} />,
   'ui.viewMode': (e) => <Select k={e.id} def="normal" label={e.label} options={VIEW_MODES.map((id) => ({ id, l: viewModeLabel(id) }))} />,
   'ui.autoArchivePr': (e) => <Toggle k={e.id} label={e.label} />,
+  'vcs.gitlabHosts': (e) => <GitlabSection label={e.label} />,
+  'vcs.resolveOnReply': (e) => <Toggle k={e.id} label={e.label} />,
   'ui.infoPanel': (e) => <Toggle k={e.id} label={e.label} def />,
   'ui.sidebarFolded': (e) => <Toggle k={e.id} label={e.label} def />,
   // default on; while unset, an old 新对话页的动态背景 = 关 shows (and acts) as off — the same rule the page uses

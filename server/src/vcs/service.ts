@@ -102,7 +102,7 @@ export class VcsService {
     const listed = this.listedGitlab().map((x) => x.trim().toLowerCase()).filter(Boolean);
     const saved = this.o.tokens?.hosts() ?? [];
     const hosts: { host: string; saved: boolean; glab: boolean }[] = [];
-    for (const h of [...new Set([...listed, ...saved])]) hosts.push({ host: h, saved: saved.includes(h), glab: await this.glabReady(h) });
+    for (const h of [...new Set(['gitlab.com', ...listed, ...saved])]) hosts.push({ host: h, saved: saved.includes(h), glab: await this.glabReady(h) });
     return { hosts };
   }
 

@@ -1940,6 +1940,15 @@ html.desktop body > .menu, html.desktop .menu.cm, html.desktop .menu.dirmenu, ht
 .sp-row-wrap.reveal { background: color-mix(in oklab, var(--accent) 10%, transparent); }
 .sp-row-wrap > .err-boundary { margin: 8px 16px; }
 .sp-row { display: flex; align-items: center; gap: var(--sp-4); min-height: 56px; padding: 12px 16px; }
+/* 设置 → PR 与 MR (stage E2): self-hosted GitLab addresses and a token per host */
+.gl-sec { display: grid; gap: 8px; width: min(360px, 100%); }
+.gl-sec textarea { resize: vertical; min-height: 56px; }
+.gl-hosts { display: grid; gap: 6px; }
+.gl-host { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 8px; }
+.gl-host .gl-h { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-small); }
+.gl-host .gl-st { color: var(--ink-3); font-size: var(--fs-micro); }
+.gl-host input { grid-column: 1; min-width: 0; }
+.gl-host .btn { justify-self: end; }
 .sp-row .grow { flex: 1; min-width: 0; }
 .sp-row .l { font-size: 14px; color: var(--ink-1); }
 .sp-row .sub { margin-top: 2px; font-size: 13px; line-height: 1.5; color: var(--ink-3); }
