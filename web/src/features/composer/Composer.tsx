@@ -61,6 +61,9 @@ import { composerCovered } from './covered';
 import { glowing, sendFace } from './send-state';
 import { dateLocale, tr } from '@/i18n';
 import { ProcessGlyph } from '@/themes/ProcessGlyph';
+import { onRecorded, openPicker, type PendingRecording } from '@/features/recording/recorder';
+import { extractKeyframes } from '@/features/recording/extract';
+import { fmtDuration } from '@/features/recording/keyframes';
 
 // sessions on another machine: uploads land on this machine's disk, out of the remote agent's reach
 const REMOTE_ATTACH = tr('附件在本机，远端读不到，请粘贴内容（图片可以直接发）');
@@ -138,6 +141,8 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   const [atts, setAtts] = useState<AttachmentRef[]>([]); // inline text attachments
   // a picture with its words, one chip (the browser's 页面标注): handed over through the store's inbox
   const [bundles, setBundles] = useState<PendingBundle[]>([]);
+  // 录屏 (stage E3): finished recordings of this box, uploaded with keyframes on send
+  const [recordings, setRecordings] = useState<PendingRecording[]>([]);
   const [files, setFiles] = useState<DroppedFile[]>([]); // uploaded on send
   const [refs, setRefs] = useState<{ id: string; title: string }[]>([]); // referenced sessions → <session-ref /> markers on send
   const pane = usePaneCtx();
@@ -388,7 +393,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   };
 
   const busy = !welcome && !!active && (active.state === 'running' || active.state === 'waiting' || active.state === 'starting');
-  const canSend = (text.trim().length > 0 || imgs.length > 0 || atts.length > 0 || bundles.length > 0 || files.length > 0 || refs.length > 0) && !starting && !upload && !disabled;
+  const canSend = (text.trim().length > 0 || imgs.length > 0 || atts.length > 0 || bundles.length > 0 || files.length > 0 || refs.length > 0 || recordings.length > 0) && !starting && !upload && !disabled;
   // a permission / question / plan card docked above the box (redesign phase 5): words typed here are its 拒绝理由 /
   // 修改意见 — sending them denies with them (the old card's reason field, same response); an empty Enter presses the
   // card's main button (允许一次 ↵). What exactly Enter does is `dockAction` (review I3: not in a card's first 600 ms,
@@ -398,7 +403,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   const { dock: dockReq, ask: askReq } = splitPending(active?.pending ?? NO_PENDING_LOCAL);
   const docked = !welcome && !disabled && active ? dockReq ?? askReq : undefined;
   const dockAgent = agentWord(active?.info);
-  const hasAttachments = imgs.length > 0 || atts.length > 0 || bundles.length > 0 || files.length > 0 || refs.length > 0;
+  const hasAttachments = imgs.length > 0 || atts.length > 0 || bundles.length > 0 || files.length > 0 || refs.length > 0 || recordings.length > 0;
   // 插话 takes words only (what the button always sent); attachments and slash commands wait their turn in the queue
   const canSteer = busy && !docked && !!active && canSend && !!text.trim() && !hasAttachments && !isSlashCommand(text);
   const steerNow = () => {
@@ -542,6 +547,26 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   /** a phone: a tick under the finger as a message leaves the box (UI refresh §8 触感) */
   const sendTick = () => { if (useStore.getState().mobile) haptic('tap'); };
 
+  // 录屏: this box's own recordings (the welcome page's are 'welcome'); the built-in browser's go elsewhere
+  const recTarget = welcome ? 'welcome' : active?.sessionId ?? '';
+  useEffect(() => onRecorded((r) => { if (r.target === recTarget) setRecordings((cur) => [...cur, r]); }), [recTarget]);
+  /** each recording: the video uploaded into the conversation's folder, its keyframes as pictures, a line saying so */
+  const sendRecordings = async (sid: string, recs: PendingRecording[]) => {
+    const images: { mediaType: string; data: string }[] = [];
+    const refs2: AttachmentRef[] = [];
+    const lines: string[] = [];
+    let failedFrames = false;
+    for (const r of recs) {
+      const up = await uploadAttachment(sid, r.blob, `recordings/rec-${r.start}.${r.ext}`);
+      refs2.push({ kind: 'file', name: tr('录屏 {d}.{ext}', { d: fmtDuration(r.ms), ext: r.ext }), path: up.path, size: up.size });
+      lines.push(tr('（附了一段录屏，视频在 {path}；下面的图片是从里面挑的关键帧）', { path: up.path }));
+      try { images.push(...(await extractKeyframes(r.blob, r.ms))); } catch { failedFrames = true; }
+    }
+    if (failedFrames) toast(tr('没能从录屏里取出图片，只发了视频的位置'));
+    return { images, atts: refs2, prefix: lines.join('\n') };
+  };
+  const withPrefix = (prefix: string, body: string) => (prefix ? (body ? `${prefix}\n${body}` : prefix) : body);
+
   const doSend = async () => {
     if (!canSend) return;
     const act = docked ? dockAction(docked, { text, attachments: hasAttachments, seen: seenRef.current, now: Date.now() }) : 'send';
@@ -610,7 +635,10 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
         // what is asked for anew for every conversation (操控电脑) is off again for the next one
         if (!foreign && isFeatures(storedFeatures) && afterStart(storedFeatures) !== storedFeatures) setFeatures(afterStart(storedFeatures));
         const uploaded = files.length ? await uploadAll(id) : [];
-        await send(id, withRefs(t), im, false, [...atts, ...uploaded]);
+        const recs = recordings;
+        const rec = recs.length ? await sendRecordings(id, recs) : { images: [], atts: [], prefix: '' };
+        setRecordings([]);
+        await send(id, withPrefix(rec.prefix, withRefs(t)), [...im, ...rec.images], false, [...atts, ...uploaded, ...rec.atts]);
         setRefs([]);
         setWSub(null); // a pick here is for that conversation; the next one starts on the default again
         saveDraft('welcome', '');
@@ -631,14 +659,17 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     setAtts([]);
     setBundles([]);
     setRefs([]);
+    setRecordings([]);
     setDraft(active.sessionId, '');
-    const sentImgs = imgs, sentAtts = atts, sentBundles = bundles, sentRefs = refs;
+    const sentImgs = imgs, sentAtts = atts, sentBundles = bundles, sentRefs = refs, sentRecs = recordings;
     const full = withRefs(t);
     // a 页面标注 goes as its picture (after the pasted ones) and its words as a text attachment
     const parts = bundles.map(bundleParts);
     let uploaded: AttachmentRef[];
+    let rec: { images: { mediaType: string; data: string }[]; atts: AttachmentRef[]; prefix: string } = { images: [], atts: [], prefix: '' };
     try {
       uploaded = files.length ? await uploadAll(active.sessionId) : [];
+      if (sentRecs.length) rec = await sendRecordings(active.sessionId, sentRecs);
     } catch (e: any) {
       // nothing was sent: put the message back instead of silently dropping what the user typed
       toast(e.message);
@@ -649,13 +680,14 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
       setAtts((cur) => (cur.length ? cur : sentAtts));
       setBundles((cur) => (cur.length ? cur : sentBundles));
       setRefs((cur) => (cur.length ? cur : sentRefs));
+      setRecordings((cur) => (cur.length ? cur : sentRecs));
       return;
     }
     try {
       setFiles([]);
       const sid = active.sessionId;
       const before = useStore.getState().open[sid]?.queue.length ?? 0;
-      await send(sid, full, [...im, ...parts.map((p) => p.image)], false, [...atts, ...parts.map((p) => p.text), ...uploaded]);
+      await send(sid, withPrefix(rec.prefix, full), [...im, ...parts.map((p) => p.image), ...rec.images], false, [...atts, ...parts.map((p) => p.text), ...uploaded, ...rec.atts]);
       if (requeue && seenRef.current?.requestId === docked?.requestId) {
         const q = useStore.getState().open[sid]?.queue ?? [];
         const mine = q.length > before ? q[q.length - 1] : undefined;
@@ -904,7 +936,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   const claudeHere = welcome ? !foreign : sessionAgent === 'claude';
   const sessionFeatures = info?.features ?? NO_FEATURES;
   const tags = welcome ? (claudeHere && !wChatOnly ? capabilityTags(featDefaults, capEnv) : []) : capabilityTags(sessionFeatures, capEnv);
-  const hasChips = imgs.length > 0 || atts.length > 0 || bundles.length > 0 || files.length > 0 || refs.length > 0 || !!upload || tags.length > 0 || (welcome && (!!wWorktree || wChatOnly)) || (!welcome && liveChatOnly);
+  const hasChips = imgs.length > 0 || atts.length > 0 || bundles.length > 0 || files.length > 0 || refs.length > 0 || recordings.length > 0 || !!upload || tags.length > 0 || (welcome && (!!wWorktree || wChatOnly)) || (!welcome && liveChatOnly);
   const insertSlash = () => { const v = text.startsWith('/') ? text : `/${text}`; onChange(v); requestAnimationFrame(() => { const el = ta.current; if (el) { el.focus(); el.setSelectionRange(1, 1); } }); };
   const insertGoal = () => { const v = text.trim() ? `/goal ${text.trim()}` : '/goal '; onChange(v); requestAnimationFrame(() => { const el = ta.current; if (el) { el.focus(); el.setSelectionRange(v.length, v.length); } }); };
 
@@ -913,7 +945,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     <PlusMenu claude={claudeHere} live={!welcome} remote={remote} disabled={disabled}
       features={welcome ? featDefaults : sessionFeatures} onFeatures={setFeatures} selfId={welcome ? undefined : active?.sessionId}
       chatOnly={welcome ? wChatOnly : undefined} onChatOnly={welcome && claudeHere && !wPeer ? setWChatOnly : undefined}
-      onFiles={() => fileInput.current?.click()} onFolder={() => folderInput.current?.click()} onReference={addRef} onGoal={insertGoal} onSlash={insertSlash} sessionId={!welcome && claudeHere ? active?.sessionId : undefined} />
+      onFiles={() => fileInput.current?.click()} onFolder={() => folderInput.current?.click()} onReference={addRef} onGoal={insertGoal} onSlash={insertSlash} onRecord={desktop?.captureSources && !remote ? () => openPicker(recTarget) : undefined} sessionId={!welcome && claudeHere ? active?.sessionId : undefined} />
   );
   // one round button that changes in place (UI refresh §6 「发送键」): faint with nothing to send, ink with something,
   // the stop square while a turn is in flight. Both glyphs are always there and cross-fade on `data-state`
@@ -1181,6 +1213,9 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
               ))}
               {files.filter((f) => !f.rel.includes('/')).map((f, i) => (
                 <span key={`f${i}`} className="att-chip" title={f.file.name}><Icon name="attach" size={12} /> {f.file.name} <span className="sz">{fmtSize(f.file.size)}</span><button aria-label={tr('移除')} onClick={() => setFiles((s) => s.filter((x) => x !== f))}><Icon name="close" size={10} /></button></span>
+              ))}
+              {recordings.map((r) => (
+                <span key={r.id} className="att-chip att-rec" data-att="recording"><Icon name="monitor" size={12} /> {tr('录屏 · {d}', { d: fmtDuration(r.ms) })} <span className="sz">{fmtSize(r.blob.size)}</span><button aria-label={tr('移除')} onClick={() => setRecordings((s) => s.filter((x) => x.id !== r.id))}><Icon name="close" size={10} /></button></span>
               ))}
               {upload && <span className="att-chip"><span className="spinner" /> {tr('上传 {done}/{total} · {name}', { done: upload.done + 1, total: upload.total, name: upload.name })}</span>}
             </div>

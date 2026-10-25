@@ -13,6 +13,10 @@ contextBridge.exposeInMainWorld('desktop', {
   version: process.env.CLAUDE_WEB_VERSION ?? '',
   platform: process.platform,
   pickDir: () => ipcRenderer.invoke('desktop:pickDir'),
+  // 录屏 (stage E3): our own source picker, then the chosen source for the next getDisplayMedia
+  captureSources: () => ipcRenderer.invoke('desktop:capture:sources'),
+  chooseCapture: (pick: unknown) => ipcRenderer.invoke('desktop:capture:choose', pick),
+  pickFile: () => ipcRenderer.invoke('desktop:pickFile'),
   showAppMenu: (x: number, y: number) => ipcRenderer.send('desktop:appMenu', { x, y }),
   openPath: (p: string) => ipcRenderer.invoke('desktop:openPath', p),
   openExternal: (url: string) => ipcRenderer.invoke('desktop:openExternal', url),

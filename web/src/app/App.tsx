@@ -16,11 +16,13 @@ import { ConnectModelHost } from '@/features/providers/ConnectModel';
 import { UpdatePrompt } from '@/features/update/UpdatePrompt';
 import { SettingsModal } from '@/features/settings/SettingsModal';
 import { Onboarding } from '@/features/onboarding/Onboarding';
-import { desktop } from '@/desktop';
+import { desktop, isDesktop } from '@/desktop';
 import { Icon } from '@/ui/icons';
 import { installOrchestra } from '@/features/orchestra/state';
 import { ErrorBoundary } from '@/ui/ErrorBoundary';
 import { Toasts } from '@/ui/Toasts';
+import { SourcePicker } from '@/features/recording/SourcePicker';
+import { RecordingIndicator } from '@/features/recording/RecordingIndicator';
 import { chromeVisibility, workbenchOn } from '@/model/layout';
 import { captionHeightAt, captionRow } from '@/features/workbench/tab-row';
 import { installZoom, useZoom } from '@/ui/zoom';
@@ -312,6 +314,7 @@ export function App() {
         <ErrorBoundary area={tr('右侧面板')}><Dock /></ErrorBoundary>
       </div>
       <ErrorBoundary area={tr('通知')} floating><Toasts /></ErrorBoundary>
+      {isDesktop && <ErrorBoundary area={tr('录屏')} floating><SourcePicker /><RecordingIndicator /></ErrorBoundary>}
       <ErrorBoundary area={tr('命令面板')} floating><CommandPalette /></ErrorBoundary>
       <ErrorBoundary area={tr('快捷键')} floating><ShortcutsModal /></ErrorBoundary>
       <ErrorBoundary area={tr('更新内容')} floating><WhatsNewModal /></ErrorBoundary>
