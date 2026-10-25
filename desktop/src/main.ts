@@ -9,7 +9,7 @@ import { MacSelfUpdate } from './mac-update';
 import { execFileSync } from 'node:child_process';
 import { captureGuest, drawGuest, hostedGuest } from './browser-capture';
 import { guestDebug } from './guest-debug';
-import { BROWSER_PARTITIONS, Downloads, browserPartition, cleanVp, clearBrowsingData, emulate, emulatedUa, forgetGuest, guestKeyOf, importCookies, safeName } from './guest-tools';
+import { BROWSER_PARTITIONS, LOCAL_PARTITION, Downloads, browserPartition, cleanVp, clearBrowsingData, emulate, emulatedUa, forgetGuest, guestKeyOf, importCookies, safeName } from './guest-tools';
 import { geminiForget, geminiLogin, geminiRefresh } from './gemini-login';
 import { cleanUserAgent } from './user-agent';
 import { userAgentFor } from './sign-in-ua';
@@ -20,6 +20,7 @@ import { SCHEME, linkFromArgv, parseDeepLink, type DeepLink } from './deep-link'
 import { menuItems } from './context-menu';
 import { CrashGuard, allowNavigation, externalAllowed, sameOrigin, windowOpenAction } from './nav-guard';
 import { FileGuard, guardSession } from './file-guard';
+import { fromOurWindow, openablePath, type IpcAsker } from './ipc-guard';
 
 const isMac = process.platform === 'darwin';
 
@@ -312,14 +313,17 @@ function createWindow(url: string | null, winId = 'main', bounds?: Bounds, hidde
     prefs.nodeIntegration = false;
     prefs.contextIsolation = true;
     (prefs as { disablePopups?: boolean }).disablePopups = false;
-    // the guest's profile gets the file: guard before its first request (whatever partition it names)
-    guardSession(session.fromPartition(params.partition || (prefs as { partition?: string }).partition || ''), fileGuard);
+    // the guest's profile gets the file: guard before its first request. A <webview> naming no profile would run in
+    // the app's own session (and put the guard on it): every one of ours names one, so such a tag is not attached
+    const partition = params.partition || (prefs as { partition?: string }).partition || '';
+    if (!partition) { _e.preventDefault(); mainLog('a <webview> with no partition was not attached'); return; }
+    guardSession(session.fromPartition(partition), fileGuard);
     // a tab that opens straight onto Google's sign-in starts loading before did-attach-webview below: it is born
     // with the user agent the sign-in takes (sign-in-ua.ts)
     if (params.src && userAgentFor(params.src, HONEST_UA, app.userAgentFallback) === HONEST_UA) params.useragent = HONEST_UA;
   });
   win.webContents.on('did-attach-webview', (_e, guest) => {
-    guardSession(guest.session, fileGuard);
+    if (guest.session !== session.defaultSession) guardSession(guest.session, fileGuard);
     downloads.watch(guest.session);
     const guestId = guest.id;
     guest.once('destroyed', () => { fileGuard.forget(guestId); forgetGuest(guestId); });
@@ -797,6 +801,8 @@ function scheduleUpdateChecks() {
 }
 
 // ---------- IPC ----------
+/** The asker is the top frame of one of the app's own windows — never a <webview> guest (ipc-guard.ts). */
+const ours = (e: IpcAsker): boolean => fromOurWindow(e, (sender) => liveWins().some(([, w]) => w.webContents === sender));
 ipcMain.on('desktop:appMenu', (e, at: { x: number; y: number }) => {
   const w = BrowserWindow.fromWebContents(e.sender);
   const m = Menu.getApplicationMenu();
@@ -813,7 +819,11 @@ ipcMain.handle('desktop:deepLink:take', (e) => {
   pendingLink = null;
   return l;
 });
-ipcMain.handle('desktop:openPath', (_e, p: string) => shell.openPath(p));
+// a local path only: a network path (\hostshare) would make Windows connect and hand over the user's NTLM credentials
+ipcMain.handle('desktop:openPath', (e, p: unknown) => {
+  if (!ours(e) || !openablePath(p)) { mainLog(`openPath refused: ${String(p).slice(0, 200)}`); return tr('打不开这个路径'); }
+  return shell.openPath(p);
+});
 // only a web page / mail / phone number reaches the OS (nav-guard.ts externalAllowed); anything else is logged, not opened
 ipcMain.handle('desktop:openExternal', async (_e, url: string) => {
   if (externalAllowed(url)) return shell.openExternal(url);
@@ -848,7 +858,7 @@ ipcMain.handle('desktop:zoom:set', (e, v: unknown) => {
 ipcMain.handle('desktop:browser:capture', (e, id: unknown) => captureGuest(e.sender, id));
 // the app is about to open a page on this machine in its built-in browser (a page Claude wrote: auto-open.ts); only
 // our own windows can say so (a guest page has no preload)
-ipcMain.handle('desktop:browser:allowFile', (e, url: unknown) => !!BrowserWindow.fromWebContents(e.sender) && fileGuard.allowOnce(url));
+ipcMain.handle('desktop:browser:allowFile', (e, url: unknown) => ours(e) && fileGuard.allowOnce(url));
 // the browser panel's tools (guest-tools.ts). Only for a page the asking window hosts.
 // 视口: draw a tab's page as a phone / tablet / desktop, or as the panel again (null)
 ipcMain.handle('desktop:browser:emulate', async (e, id: unknown, vp: unknown) => {
@@ -864,10 +874,19 @@ ipcMain.handle('desktop:browser:debug', async (e, id: unknown, q: unknown) => {
   if (!guest) return { error: tr('这个页面不在这个窗口里') };
   return guestDebug(guest, q);
 });
+// a page stuck in a script (browser_eval `while (1) {}`) answers nothing, not even a reload: its renderer is ended and
+// the page loaded again (host.ts, after the op's limit)
+ipcMain.handle('desktop:browser:recover', (e, id: unknown) => {
+  const guest = hostedGuest(e.sender, id);
+  if (!guest) return false;
+  try { guest.forcefullyCrashRenderer(); } catch { /* already gone */ }
+  setTimeout(() => { try { if (!guest.isDestroyed()) guest.reload(); } catch { /* closed meanwhile */ } }, 100);
+  return true;
+});
 // 保存截图: the page as it is drawn, full size, as a PNG where the user says. The path saved, null when the user
 // cancelled, false when nothing could be drawn or written.
 ipcMain.handle('desktop:browser:saveShot', async (e, id: unknown, name: unknown) => {
-  const w = BrowserWindow.fromWebContents(e.sender);
+  const w = ours(e) ? BrowserWindow.fromWebContents(e.sender) : null;
   const img = w ? await drawGuest(e.sender, id) : null;
   if (!w || !img) return false;
   const file = safeName(typeof name === 'string' && name ? name : 'screenshot.png').replace(/(\.png)?$/i, '.png');
@@ -877,7 +896,7 @@ ipcMain.handle('desktop:browser:saveShot', async (e, id: unknown, name: unknown)
 });
 // 打开本地 HTML 文件…: the file the user picks (the page then asks allowFile for it like any other file it opens)
 ipcMain.handle('desktop:browser:pickHtml', async (e) => {
-  const w = BrowserWindow.fromWebContents(e.sender);
+  const w = ours(e) ? BrowserWindow.fromWebContents(e.sender) : null;
   if (!w) return null;
   const r = await dialog.showOpenDialog(w, { title: tr('打开本地 HTML 文件'), properties: ['openFile'], filters: [{ name: 'HTML', extensions: ['html', 'htm'] }] });
   return r.canceled ? null : r.filePaths[0] ?? null;
@@ -886,23 +905,23 @@ ipcMain.handle('desktop:browser:pickHtml', async (e) => {
 // come parsed from the panel (the user's file is read there); their values are never logged.
 ipcMain.handle('desktop:browser:importCookies', async (e, partition: unknown, cookies: unknown) => {
   const p = browserPartition(partition);
-  if (!BrowserWindow.fromWebContents(e.sender) || !p) return false;
+  if (!ours(e) || !p) return false;
   const ses = session.fromPartition(p);
   guardSession(ses, fileGuard);
   return importCookies(ses, cookies);
 });
 ipcMain.handle('desktop:browser:clearData', async (e, partition: unknown) => {
   const p = browserPartition(partition);
-  if (!BrowserWindow.fromWebContents(e.sender) || !p) return false;
+  if (!ours(e) || !p) return false;
   try { await clearBrowsingData(session.fromPartition(p)); return true; } catch (err) { mainLog(`clearData: ${(err as Error).message}`); return false; }
 });
 // the downloads bar's 打开 / 在文件夹中显示: only a file a download of the built-in browser saved
 ipcMain.handle('desktop:download:open', async (e, p: unknown) => {
-  if (!BrowserWindow.fromWebContents(e.sender) || !downloads.owns(p)) return false;
+  if (!ours(e) || !downloads.owns(p)) return false;
   return (await shell.openPath(p as string)) === '';
 });
 ipcMain.handle('desktop:download:show', (e, p: unknown) => {
-  if (!BrowserWindow.fromWebContents(e.sender) || !downloads.owns(p)) return false;
+  if (!ours(e) || !downloads.owns(p)) return false;
   shell.showItemInFolder(p as string);
   return true;
 });
@@ -955,7 +974,7 @@ if (gotLock) app.whenReady().then(async () => {
   initLanguage(app.getLocale()); // before any window, menu or dialog is worded
   // the built-in browser's profiles (web features/browser/state.ts) are guarded before any page; any other profile a
   // <webview> names gets it as it attaches (createWindow)
-  for (const p of BROWSER_PARTITIONS) guardSession(session.fromPartition(p), fileGuard);
+  for (const p of [...BROWSER_PARTITIONS, LOCAL_PARTITION]) guardSession(session.fromPartition(p), fileGuard);
   // the window first (on the splash), then the server: see splashUrl
   const hidden = process.argv.includes('--hidden');
   const main = createWindow(null, 'main', undefined, hidden);

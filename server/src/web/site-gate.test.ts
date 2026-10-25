@@ -65,6 +65,8 @@ describe('siteAllowed: is a host on the allowed-sites list', () => {
     expect(hostOfUrl('file:///C:/x.html')).toBe('');
     expect(hostOfUrl('about:blank')).toBe('');
     expect(hostOfUrl('not a url')).toBe('');
+    // a blob: page belongs to its origin (ops.ts hostOf says the same)
+    expect(hostOfUrl('blob:https://Bank.example/0b1c-2d')).toBe('bank.example');
   });
 });
 

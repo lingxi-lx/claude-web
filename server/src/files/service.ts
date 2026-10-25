@@ -33,11 +33,15 @@ function looksBinary(buf: Buffer): boolean {
  * `\/host/s`, `\\\host`), the extended / device forms (`\\?\UNC\host\s`, `\\.\UNC\…`, `\\?\GLOBALROOT\Device\Mup\…`).
  * Touching one makes Windows connect to that machine over SMB and hand it the user's NTLM credentials, from a path the
  * page sent (a link the model wrote — prompt-injectable — or a file tab). Anything under `\\?\` / `\\.\` other than a
- * local drive's `\\?\C:\…` counts too: a raw volume (`\\.\C:`) or a pipe is no file to open here either.
+ * local drive's `\\?\C:\…` counts too: a raw volume (`\\.\C:`) or a pipe is no file to open here either. The NT
+ * object prefix `\??\` (Win32 passes it through as is: `\??\UNC\host\s`) reads as `\\?\`.
  */
+/** Backslashes only, with a leading `\??\` written as `\\?\`. */
+const winSeps = (p: string): string => p.replace(/\//g, '\\').replace(/^\\\?\?\\/, '\\\\?\\');
+
 export function isUncPath(p: string): boolean {
   if (typeof p !== 'string') return false;
-  const s = p.replace(/\//g, '\\');
+  const s = winSeps(p);
   if (!s.startsWith('\\\\')) return false;
   return !/^\\\\[?.]\\[A-Za-z]:\\/.test(s);
 }
@@ -51,8 +55,8 @@ export function isUncPath(p: string): boolean {
  */
 function uncSegments(p: string): string[] | null {
   if (!isUncPath(p)) return null;
-  let s = p.replace(/\//g, '\\');
-  const ext = /^\\\\[?.]\\UNC\\/i.exec(s);
+  let s = winSeps(p);
+  const ext =/^\\\\[?.]\\UNC\\/i.exec(s);
   if (ext) s = '\\\\' + s.slice(ext[0].length);
   else if (/^\\\\[?.](\\|$)/.test(s)) return null;
   const out: string[] = [];

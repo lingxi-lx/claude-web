@@ -39,9 +39,12 @@ export function normHost(h: string | undefined | null): string {
   return s.replace(/\.+$/, '');
 }
 
-/** The host of a page's address ('' for one without: about:blank, data:, file:). */
+/** The host of a page's address ('' for one without: about:blank, data:, file:); a blob: page is its origin's. */
 export function hostOfUrl(url: string | undefined): string {
-  try { return normHost(new URL(String(url ?? '')).hostname); } catch { return ''; }
+  try {
+    const u = new URL(String(url ?? ''));
+    return u.protocol === 'blob:' ? hostOfUrl(u.pathname) : normHost(u.hostname);
+  } catch { return ''; }
 }
 
 /**

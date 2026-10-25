@@ -24,6 +24,13 @@ describe('network paths', () => {
     // a raw volume / device is not a file either
     expect(isUncPath('\\\\.\\C:')).toBe(true);
     expect(isUncPath('\\\\.\\pipe\\x')).toBe(true);
+    // stage B fix wave (S8): the NT object prefix `\??\` — Win32 passes such a path through as is
+    expect(isUncPath('\\??\\UNC\\host\\s')).toBe(true);
+    expect(isUncPath('/??/UNC/host/s')).toBe(true);
+    expect(isUncPath('\\??\\GLOBALROOT\\Device\\Mup\\host\\s')).toBe(true);
+    expect(isUncPath('\\??\\C:\\a.txt')).toBe(false);
+    expect(uncAllowed('\\??\\UNC\\evil\\s\\x', ['\\\\nas\\proj'], true)).toBe(false);
+    expect(uncAllowed('\\??\\UNC\\nas\\proj\\x', ['\\\\nas\\proj'], true)).toBe(true);
   });
   it('isUncPath: local paths, including the extended-length local form, are not', () => {
     expect(isUncPath('C:\\a')).toBe(false);

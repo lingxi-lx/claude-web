@@ -302,6 +302,10 @@ export class WebService extends EventEmitter {
     }
     const host = this.currentHost();
     if (host && this.d.gate && MUTATING_OPS.has(op)) return this.gated(host, sessionId, op, args);
+    if (host && op === 'tabs') {
+      // another tab may be the one its tools work in now: where it is is asked again before the next change (site gate)
+      try { return await this.command(host, sessionId, op, args); } finally { this.lastUrl.delete(sessionId); }
+    }
     if (host) return this.seen(sessionId, await this.command(host, sessionId, op, args));
     if (!READ_ONLY_OPS.has(op)) throw new Error(needsDesktop(op));
     if (op === 'open') return { page: this.window(await this.fetchPage(sessionId, String(args.url)), 0, DEFAULT_CHARS) };
@@ -346,7 +350,9 @@ export class WebService extends EventEmitter {
         if (answer === 'always' && op !== 'eval' && site) await this.allowSite(site);
       }
       try {
-        return this.seen(sessionId, await this.command(host, sessionId, op, { ...args, ...(site ? { site } : {}) }));
+        // always the site it was judged on — '' for a page without a host — so the window, which compares it with the
+        // tab's REAL address, refuses the op when the tab is elsewhere (a page can forge what it reports, or navigate itself)
+        return this.seen(sessionId, await this.command(host, sessionId, op, { ...args, site }));
       } catch (e) {
         const msg = String((e as Error)?.message ?? '');
         if (!msg.startsWith(SITE_CHANGED) || round >= 1) throw e;
@@ -597,6 +603,9 @@ function tabsArgs(a: Record<string, unknown>): Record<string, unknown> {
   if (action === 'switch' && !id) throw new Error(tr('browser_tabs 的 switch 需要参数 id（browser_tabs "list" 列出的编号）'));
   const url = typeof a.url === 'string' && a.url.trim() ? a.url.trim() : undefined;
   if (action === 'new' && url && !/^https?:\/\//i.test(url)) throw new Error(tr('只能打开 http / https 地址：{url}', { url: url.slice(0, 200) }));
+  // the same refusals as browser_open (cloud metadata, link-local, an address with a user name / password in it)
+  const why = action === 'new' && url ? urlRefusal(url, { reach: 'browser' }) : null;
+  if (why) throw new Error(why);
   return { action, ...(id && (action === 'switch' || action === 'close') ? { id } : {}), ...(url && action === 'new' ? { url } : {}) };
 }
 

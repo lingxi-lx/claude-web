@@ -115,6 +115,8 @@ export async function emulate(guest: WebContents, vp: Vp | null, o: { base: stri
  * only these: never the app's own session (''), never a Gemini sign-in's profile.
  */
 export const BROWSER_PARTITIONS = ['persist:cw-browser', 'persist:cw-agent', 'cw-session'] as const;
+/** Local pages (file:) open in this in-memory profile, apart from every login (web state.ts LOCAL_PARTITION); guarded at app ready. */
+export const LOCAL_PARTITION = 'cw-local';
 export const browserPartition = (p: unknown): string | null => (typeof p === 'string' && (BROWSER_PARTITIONS as readonly string[]).includes(p) ? p : null);
 
 export interface CookieDetails { url: string; name: string; value: string; domain?: string; path?: string; secure?: boolean; httpOnly?: boolean; expirationDate?: number }

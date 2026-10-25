@@ -51,6 +51,7 @@ contextBridge.exposeInMainWorld('desktop', {
   onGuestKey: on('desktop:guestKey'),
   guestEmulate: (id: number, vp: unknown) => ipcRenderer.invoke('desktop:browser:emulate', id, vp),
   guestDebug: (id: number, q: unknown) => ipcRenderer.invoke('desktop:browser:debug', id, q),
+  guestRecover: (id: number) => ipcRenderer.invoke('desktop:browser:recover', id),
   onGuestDownload: on('desktop:guestDownload'),
   openDownload: (p: string) => ipcRenderer.invoke('desktop:download:open', p),
   showDownload: (p: string) => ipcRenderer.invoke('desktop:download:show', p),

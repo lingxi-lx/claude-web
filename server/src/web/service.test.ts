@@ -895,6 +895,54 @@ describe('WebService: 允许的网站 — the gate before a page is changed', ()
     web.dropConnection(w.key);
   });
 
+  it('a page with no host (about:blank): the op still carries the site it was judged on (\'\'), so the window can refuse it if the tab is really elsewhere', async () => {
+    const { web, asked } = gated('once');
+    let where = 'about:blank';
+    const w = autoWin(web, (c) => {
+      if (c.op === 'read') return page(where);
+      // the window compares the site with the tab's REAL address (host.ts / ops.ts refusal)
+      const real = (() => { try { return new URL(where).hostname; } catch { return ''; } })();
+      if (c.args.site !== real) throw new Error('cw-site-changed:' + where);
+      return page(where);
+    });
+    await web.tool('conv-9', 'browser_click', { ref: '1' });
+    expect(w.got[1].args).toEqual({ ref: '1', site: '' });
+    expect(asked).toEqual([]);
+    // the page navigated itself to a logged-in site: the server's idea is stale, the window refuses, the user is asked
+    where = 'https://bank.example/';
+    const r = await web.tool('conv-9', 'browser_click', { ref: '2' });
+    expect(r.isError).toBeFalsy();
+    expect(asked).toEqual([{ sid: 'conv-9', req: { host: 'bank.example', op: 'click', tool: 'browser_click' } }]);
+    expect(w.got.at(-1)!.args).toEqual({ ref: '2', site: 'bank.example' });
+    web.dropConnection(w.key);
+  });
+
+  it('browser_tabs (switch / new / close) forgets where the tab was: the next change probes again', async () => {
+    const { web, asked } = gated('once', { 'web.browser.allowedSites': ['a.example'] });
+    let where = 'https://a.example/';
+    const w = autoWin(web, (c) => (c.op === 'tabs' ? { tabs: [{ id: 'b1', url: '', title: '', active: true }] } : page(where)));
+    await web.tool('conv-10', 'browser_click', { ref: '1' });
+    expect(w.ops()).toEqual(['read', 'click']);
+    await web.tool('conv-10', 'browser_tabs', { action: 'switch', id: 'b1' });
+    where = 'https://bank.example/';
+    await web.tool('conv-10', 'browser_click', { ref: '1' });
+    expect(w.ops()).toEqual(['read', 'click', 'tabs', 'read', 'click']);
+    expect(asked).toEqual([{ sid: 'conv-10', req: { host: 'bank.example', op: 'click', tool: 'browser_click' } }]);
+    web.dropConnection(w.key);
+  });
+
+  it('browser_tabs new is refused for an address browser_open would refuse (metadata, link-local, user:pass)', async () => {
+    const { web } = gated('once');
+    const w = autoWin(web, () => ({ tabs: [] }));
+    for (const url of ['http://169.254.169.254/latest/meta-data/', 'http://metadata.google.internal/', 'https://user:pw@shop.example/', 'http://[fe80::1]/']) {
+      const r = await web.tool('conv-11', 'browser_tabs', { action: 'new', url });
+      expect(r.isError, url).toBe(true);
+    }
+    expect(w.got).toEqual([]);
+    expect((await web.tool('conv-11', 'browser_tabs', { action: 'new', url: 'https://shop.example/' })).isError).toBeFalsy();
+    web.dropConnection(w.key);
+  });
+
   it('the user has taken over the browser: the window refuses the probe, and nobody is asked', async () => {
     const { web, asked } = gated('once');
     const w = autoWin(web, () => { throw new Error('用户接管了浏览器。'); });
