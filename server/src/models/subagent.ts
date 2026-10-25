@@ -84,8 +84,9 @@ export function splitSupport(o: { mainType: SplitKind; subType: SplitKind }): bo
   const anthropicWire = o.mainType === 'anthropic' || o.mainType === 'gateway' || o.mainType === 'claude' || o.mainType === 'claude-account';
   if (o.subType === 'claude-account') return anthropicWire;
   if (o.subType === 'claude') return o.mainType === 'anthropic' || o.mainType === 'gateway';
-  // a gateway profile is a group of members itself, not one the route can send to
-  return o.subType !== 'gateway';
+  // a gateway profile goes to its whole group (2026-10-26 user report: WorkBuddy's models live only in the gateway, so
+  // a conversation on another provider could not give them to its subagents)
+  return true;
 }
 
 /**

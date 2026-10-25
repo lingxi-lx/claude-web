@@ -330,7 +330,9 @@ export class SessionRunner extends EventEmitter {
     const mainType: SplitKind = this.provider?.type ?? (this.account ? 'claude-account' : 'claude');
     const t = providerKey(pick.providerId) === 'claude' ? { type: 'claude' as const } : splitTarget(pick.providerId);
     if (!t || !splitSupport({ mainType, subType: t.type })) return null;
-    const sub: SplitSub = t.type === 'claude' ? { kind: 'account' } : t.type === 'claude-account' ? { kind: 'account', token: t.token } : { kind: 'provider', providerId: pick.providerId };
+    const groupId = 'groupId' in t ? t.groupId : undefined;
+    if (t.type === 'gateway' && !groupId) return null;
+    const sub: SplitSub = t.type === 'claude' ? { kind: 'account' } : t.type === 'claude-account' ? { kind: 'account', token: t.token } : groupId ? { kind: 'gateway', groupId } : { kind: 'provider', providerId: pick.providerId };
     const v = mainType === 'openai' ? 'OPENAI_BASE_URL' : mainType === 'grok' ? 'GROK_BASE_URL' : mainType === 'gemini' ? 'GEMINI_BASE_URL' : 'ANTHROPIC_BASE_URL';
     const defaults: Record<string, string> = { OPENAI_BASE_URL: 'https://api.openai.com/v1', GROK_BASE_URL: 'https://api.x.ai/v1', GEMINI_BASE_URL: 'https://generativelanguage.googleapis.com/v1beta', ANTHROPIC_BASE_URL: 'https://api.anthropic.com' };
     // the account: claude.ai, or the relay the user set up in their settings files / environment (2026-10-19 user

@@ -11,18 +11,22 @@ export interface SplitMain {
   rekey?: string;
 }
 /** Where the subagents' requests go: a provider profile (translated, its key), or Anthropic with an account's login. */
-export type SplitSub = { kind: 'provider'; providerId: string } | { kind: 'account'; token?: string /* absent: the engine's own login */ };
+export type SplitSub =
+  | { kind: 'provider'; providerId: string }
+  | { kind: 'account'; token?: string /* absent: the engine's own login */ }
+  /** a gateway profile: its whole group (members, failover, account pools such as WorkBuddy) serves the subagents */
+  | { kind: 'gateway'; groupId: string };
 
 interface SplitHook {
   endpoint(main: SplitMain, sub: SplitSub, model: string): string | null;
   /** a provider profile a subagent pick names: its kind, and for another account the token it logs in with */
-  target(providerId: string): { type: ProviderType; token?: string } | null;
+  target(providerId: string): { type: ProviderType; token?: string; groupId?: string } | null;
 }
 let hook: SplitHook | null = null;
 export function setSplitHook(f: SplitHook | null) { hook = f; }
 export function splitEndpoint(main: SplitMain, sub: SplitSub, model: string): string | null {
   return hook?.endpoint(main, sub, model) ?? null;
 }
-export function splitTarget(providerId: string): { type: ProviderType; token?: string } | null {
+export function splitTarget(providerId: string): { type: ProviderType; token?: string; groupId?: string } | null {
   return hook?.target(providerId) ?? null;
 }

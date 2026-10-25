@@ -62,7 +62,8 @@ describe('a subagent model of another provider', () => {
     for (const sub of ['anthropic', 'openai', 'gemini', 'grok'] as const) {
       for (const main of ['anthropic', 'openai', 'gemini', 'grok', 'gateway', 'claude', 'claude-account'] as const) expect(splitSupport({ mainType: main, subType: sub })).toBe(true);
     }
-    expect(splitSupport({ mainType: 'anthropic', subType: 'gateway' })).toBe(false);
+    // a gateway profile: its group serves the subagents, whatever the conversation runs on
+    for (const main of ['anthropic', 'openai', 'gemini', 'grok', 'gateway', 'claude', 'claude-account'] as const) expect(splitSupport({ mainType: main, subType: 'gateway' })).toBe(true);
     // another account's token: any Anthropic-wire main
     for (const main of ['anthropic', 'gateway', 'claude', 'claude-account'] as const) expect(splitSupport({ mainType: main, subType: 'claude-account' })).toBe(true);
     for (const main of ['openai', 'gemini', 'grok'] as const) expect(splitSupport({ mainType: main, subType: 'claude-account' })).toBe(false);

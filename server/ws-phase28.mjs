@@ -195,6 +195,18 @@ async function suite(runtime) {
   await req({ kind: 'session.close', sessionId: o3.sessionId }).catch(() => {});
   await req({ kind: 'settings.set', key: 'subagentModel', value: null });
 
+  // ---- a gateway profile's model for the subagents (2026-10-26 user report: WorkBuddy's models live only in the
+  // gateway, and a conversation on another provider could not hand them to its subagents) ----
+  const grp = await req({ kind: 'gateway.groups.upsert', group: { name: `e2e-sub-${runtime}`, strategy: 'failover', members: [{ providerId: B.id }] } });
+  const G = await req({ kind: 'providers.upsert', provider: { name: `网关${runtime}`, type: 'gateway', baseUrl: '', gatewayGroupId: grp.id } });
+  const o6 = await req({ kind: 'session.open', params: { cwd: proj, providerId: A.id, model: 'claude-sonnet-4-6', permissionMode: 'default', subagentModel: full(G.id, 'small-model') } });
+  check('a gateway profile’s model as the subagent pick', o6.info?.subagentModel === full(G.id, 'small-model'), JSON.stringify(o6.info?.subagentModel));
+  const t6 = await agentTurn(o6.sessionId);
+  check('… the main requests keep the conversation’s own key', /^claude-sonnet-4-6/.test(t6.main ?? '') && /relay-key-e2e/.test(t6.mainAuth ?? ''), JSON.stringify(t6));
+  check('… the subagent’s go through the gateway group to its member, with the member’s key and the real model id', t6.sub === 'small-model' && /other-key-e2e/.test(t6.subAuth ?? '') && t6.result === 'success', JSON.stringify(t6));
+  await req({ kind: 'session.close', sessionId: o6.sessionId }).catch(() => {});
+  await req({ kind: 'gateway.groups.remove', id: grp.id }).catch(() => {});
+
   // ---- the account through a relay of the user's own (~/.claude/settings.json env), another provider's model for
   // the subagents (2026-10-19 user report: the pick was ignored, the subagents ran on what the relay maps haiku to).
   // Such a conversation runs on the official binary unless it has a flag only ours knows (session-runner plan()):

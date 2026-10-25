@@ -452,9 +452,10 @@ export class ProviderService {
     return out;
   }
   /** A profile a subagent pick names (gateway/split.ts): its kind, another account's token; null when missing / unreadable. */
-  subagentTarget(id: string): { type: Provider['type']; token?: string } | null {
+  subagentTarget(id: string): { type: Provider['type']; token?: string; groupId?: string } | null {
     const p = this.meta.provider(id);
     if (!p) return null;
+    if (p.type === 'gateway') return p.gatewayGroupId ? { type: p.type, groupId: p.gatewayGroupId } : null;
     if (p.type !== 'claude-account') return { type: p.type };
     try { return { type: p.type, token: this.plainKey(p) }; } catch { return null; }
   }

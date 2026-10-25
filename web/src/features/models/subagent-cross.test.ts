@@ -8,13 +8,16 @@ const P = (id: string, type: Provider['type'], extra: Partial<Provider> = {}) =>
 describe('subagents on any model', () => {
   const providers = [P('relay', 'anthropic'), P('ds', 'openai'), P('gem', 'gemini'), P('gw', 'gateway'), P('other', 'anthropic'), P('acct', 'claude-account')];
   it('every provider the split route can reach, whatever the conversation runs on (the account included where it can be)', () => {
-    expect(crossProviders(providers, 'relay')).toEqual(['ds', 'gem', 'other', 'acct', 'claude']);
+    // the gateway profile too: account pools such as WorkBuddy only exist in it
+    expect(crossProviders(providers, 'relay')).toEqual(['ds', 'gem', 'gw', 'other', 'acct', 'claude']);
     // the account: every provider, another account too
-    expect(crossProviders(providers, 'claude')).toEqual(['relay', 'ds', 'gem', 'other', 'acct']);
+    expect(crossProviders(providers, 'claude')).toEqual(['relay', 'ds', 'gem', 'gw', 'other', 'acct']);
     // an OpenAI-format conversation: providers only (no account login can be passed on from it)
-    expect(crossProviders(providers, 'ds')).toEqual(['relay', 'gem', 'other']);
+    expect(crossProviders(providers, 'ds')).toEqual(['relay', 'gem', 'gw', 'other']);
     // another account: providers and other accounts, not this machine's login
-    expect(crossProviders(providers, 'acct')).toEqual(['relay', 'ds', 'gem', 'other']);
+    expect(crossProviders(providers, 'acct')).toEqual(['relay', 'ds', 'gem', 'gw', 'other']);
+    // a gateway conversation: the other providers
+    expect(crossProviders(providers, 'gw')).toEqual(['relay', 'ds', 'gem', 'other', 'acct', 'claude']);
   });
   it('the chip names the provider when it is not the conversation’s own', () => {
     expect(subagentLabel({ providers, providerId: 'relay', model: crossValue('ds', 'deepseek-chat') })).toBe('N-ds / deepseek-chat');

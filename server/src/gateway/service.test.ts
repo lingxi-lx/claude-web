@@ -517,6 +517,23 @@ describe('subagent split (/gateway/~s/…): the subagents on the picked model, t
     expect(JSON.parse(B.hits[1].body).thinking.display).toBeUndefined();
   });
 
+  it('a gateway group as the subagent target: the alias goes through the group (its members, failover); main requests pass on', async () => {
+    await gw.upsertGroup({ id: 'pool', name: 'Pool', strategy: 'failover', members: [{ providerId: 'a' }, { providerId: 'b' }] });
+    const ep = gw.splitEndpoint({ base: B.url }, { kind: 'gateway', groupId: 'pool' }, 'deepseek-chat')!;
+    expect(JSON.parse(await (await post(`${ep}/v1/messages`, JSON.stringify({ ...msg, model: 'claude-sonnet-4-5' }), anth)).text()).content[0].text).toBe('from B');
+    const r = await post(`${ep}/v1/messages`, JSON.stringify({ ...msg, model: 'cw-sub/deepseek-chat' }), anth);
+    expect(JSON.parse(await r.text()).content[0].text).toBe('from A');
+    expect(JSON.parse(A.hits[0].body).model).toBe('deepseek-chat');
+    // the first member down: the group fails over to the next one
+    A.handler.fn = (_q, res) => res.writeHead(500, { 'content-type': 'application/json' }).end(JSON.stringify({ type: 'error', error: { type: 'api_error', message: 'down' } }));
+    const r2 = await post(`${ep}/v1/messages`, JSON.stringify({ ...msg, model: 'cw-sub/deepseek-chat' }), anth);
+    expect(JSON.parse(await r2.text()).content[0].text).toBe('from B');
+    expect(JSON.parse(B.hits.at(-1)!.body).model).toBe('deepseek-chat');
+    // a group that is gone
+    const gone = gw.splitEndpoint({ base: B.url }, { kind: 'gateway', groupId: 'nope' }, 'deepseek-chat')!;
+    expect((await post(`${gone}/v1/messages`, JSON.stringify({ ...msg, model: 'cw-sub/deepseek-chat' }), anth)).status).toBe(404);
+  });
+
   it('an account main: its requests go to Anthropic with the engine’s login; a provider subagent never sees that login', async () => {
     gw.anthropicBase = B.url;
     try {

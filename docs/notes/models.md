@@ -47,7 +47,7 @@
   不再报「刚刚换了供应商」。
 - **哪些组合能接**（`splitSupport`，前后端同一份）：任何供应商的模型在任何主对话下都行（网关翻译；gemini→openai 这个方向是这次加的）；
   另一个账号（`claude-account`，用它存的令牌）只能在 Anthropic 格式的主对话下（供应商 / 网关 / 账号）；**本机登录**只能在 Anthropic 格式
-  的供应商主对话下；网关档案不能当子代理目标（它自己就是一组成员）。不能接的不出现在菜单里。
+  的供应商主对话下；网关档案也能当子代理目标（2026-10-26 用户报告：WorkBuddy 的模型只在网关里，主模型换到 super-nb.me 这类中转后子代理菜单里整组不见了——以前 `splitSupport` 拒了 `gateway`）：`SplitSub` 多一种 `{ kind: 'gateway', groupId }`（`providers.subagentTarget` 给出档案的 `gatewayGroupId`），`serveSplit` 把别名请求交给**那个真组**跑（成员、故障转移、账号池都照组的规则，冷却也记在组上），组没了回 404。phase 28 两个引擎各有一轮。不能接的不出现在菜单里。
 - **分流路由改成「主请求原样转」**（`GatewayService.serveSplit`）：地址 `/gateway/~s/<token>/k/<key>/…`，key 在路径里（Authorization 留给
   引擎自己的登录）。不是别名的请求 → `main.base + 路径`，带引擎自己的头和凭据（账号的 OAuth、缓存垫片的 key、Gemini 的 x-goog-api-key 都
   原样过去，`forwardHeaders`），回包原样回去；是别名的 → 账号：转 api.anthropic.com（另一个账号就换成它的令牌并补 oauth beta），供应商：

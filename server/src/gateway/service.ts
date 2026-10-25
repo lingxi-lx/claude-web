@@ -826,7 +826,10 @@ export class GatewayService extends EventEmitter {
     if (!route || route.op === 'models') return this.sendError(res, 'anthropic', 404, tr('网关不支持这个接口：{method} {rest}', { method: req.method, rest }));
     // an engine on an account login: its login beta is not the provider's business (its key is swapped by passthroughHeaders)
     for (let i = 0; i + 1 < req.rawHeaders.length; i += 2) if (req.rawHeaders[i].toLowerCase() === 'anthropic-beta') req.rawHeaders[i + 1] = req.rawHeaders[i + 1].split(',').map((s) => s.trim()).filter((s) => s && s !== 'oauth-2025-04-20').join(',');
-    const group: GatewayGroup = { id: `${SPLIT_PREFIX}:${token}:sub`, name: tr('子代理'), strategy: 'failover', members: [{ providerId: split.sub.providerId, model: split.model }] };
+    const pool = split.sub.kind === 'gateway' ? this.group(split.sub.groupId) : undefined;
+    if (split.sub.kind === 'gateway' && !pool) return this.sendError(res, 'anthropic', 404, tr('没有这个网关组：{v}', { v: split.sub.groupId }));
+    const subId = split.sub.kind === 'provider' ? split.sub.providerId : '';
+    const group: GatewayGroup = pool ?? { id: `${SPLIT_PREFIX}:${token}:sub`, name: tr('子代理'), strategy: 'failover', members: [{ providerId: subId, model: split.model }] };
     const params = new URLSearchParams(url.search);
     params.delete('key');
     const parsed = json ?? {};
@@ -836,7 +839,8 @@ export class GatewayService extends EventEmitter {
     } finally {
       // one member and no one to switch to: an upstream error goes back to the engine as it came (it retries on its
       // own); a cool-down here would refuse the next requests with an error the engine never got from its provider
-      this.states.reset(group.id, split.sub.providerId);
+      // a gateway group keeps its own cool-downs: it has members to switch between
+      if (!pool) this.states.reset(group.id, subId);
     }
   }
 
