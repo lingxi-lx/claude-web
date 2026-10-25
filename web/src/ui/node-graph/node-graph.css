@@ -71,3 +71,11 @@
 @keyframes ng-breathe { 50% { opacity: 0.32; } }
 :root[data-reduce-motion='1'] .ng, :root[data-reduce-motion='1'] .ng * { animation: none !important; transition: none !important; }
 @media (prefers-reduced-motion: reduce) { .ng, .ng * { animation: none !important; transition: none !important; } }
+/* chat: ```nodegraph blocks and the Mermaid 节点图 / 原图 switch (spec D4) */
+.code.ng-block { padding: 0; background: transparent; border: 0; }
+.ng-foot { display: flex; gap: 12px; align-items: center; padding: 6px 2px 0; font-size: var(--fs-meta); }
+.ng-foot .ng-send { margin-inline-start: auto; }
+.ng-source { margin-top: 6px; }
+.ng-bad { padding: 6px 10px; color: color-mix(in oklab, var(--err) 75%, var(--ink-1)); font-size: var(--fs-meta); }
+.ng-bad .sub { margin-inline-start: 8px; color: var(--ink-3); font-family: var(--mono); }
+.mmd-view { display: flex; gap: 4px; justify-content: flex-end; margin-bottom: 6px; }

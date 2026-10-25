@@ -9,6 +9,7 @@ import { BLANK_CHECK_MS, BLANK_REPORTS_MAX, blankMessage, blankProblem, browserO
 import { tr } from '@/i18n';
 
 const MermaidBlock = lazy(() => import('./MermaidBlock'));
+const NodegraphBlock = lazy(() => import('./NodegraphBlock'));   // spec 2026-10-24 D4
 
 /** Where a code block may run: only the conversation's own view passes this (a tool card or side chat does not). */
 export interface CodeRunContext { sessionId?: string; cwd?: string }
@@ -102,7 +103,7 @@ export interface CodeBlockProps {
 /** How long the copy button shows its check (UI refresh §6). */
 const COPIED_MS = 1400;
 
-function useCopy() {
+export function useCopy() {
   const [ok, setOk] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
@@ -157,13 +158,14 @@ export const CodeBlock = memo(function CodeBlock({ code, lang, title, startLine 
   const shown = truncated ? lines.slice(0, maxLines).join('\n') : text;
   const body = useMemo(() => highlight(shown, l), [shown, l]);
   const isMermaid = lang === 'mermaid';
+  const isGraph = lang === 'nodegraph';
   const label = title ?? (l && l !== 'plaintext' ? l : lang || '');
   // a block with text that shows none: redraw once, then plain text, then say so in server.log (code-blank.ts)
   const preRef = useRef<HTMLPreElement>(null);
   const [fix, setFix] = useState<BlankFix>(0);
   const seen = useRef<(Pick<BlankInfo, 'translated' | 'foreignTags' | 'foreignAttrs'> & { problem: BlankProblem }) | null>(null);
   const settled = useRef(false);
-  const guarded = !(isMermaid && !streaming);
+  const guarded = !((isMermaid || isGraph) && !streaming);
   const shownLines = truncated ? maxLines : lines.length;
   useEffect(() => {
     const pre = preRef.current;
@@ -188,6 +190,12 @@ export const CodeBlock = memo(function CodeBlock({ code, lang, title, startLine 
     watch.observe(pre, { childList: true, subtree: true, characterData: true, attributes: true });
     return () => { clearTimeout(t); watch.disconnect(); };
   }, [guarded, shown, shownLines, l, lineNumbers, wrap, fix, streaming, lang, lines.length, text.length]);
+  // a finished ```nodegraph block is drawn (streaming: the code as usual, like Mermaid); its own footer has copy / source
+  if (isGraph && !streaming) return (
+    <div ref={rootRef} className={clsx('code', 'ng-block', className)}>
+      <Suspense fallback={<pre className="code-body">{text}</pre>}><NodegraphBlock key={text} source={text} /></Suspense>
+    </div>
+  );
   return (
     <div ref={rootRef} className={clsx('code', wrap && 'wrap', className)}>
       <div className="code-head">
