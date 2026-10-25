@@ -40,8 +40,10 @@ export function fenceFor(text: string): string {
 export const prWord = (pr: Pick<BranchPr, 'host'>): 'PR' | 'MR' => (pr.host === 'gitlab' ? 'MR' : 'PR');
 export const prLabel = (pr: Pick<BranchPr, 'host' | 'number'>): string => (pr.host === 'gitlab' ? `MR !${pr.number}` : `PR #${pr.number}`);
 
-const attr = (v: string) => v.replace(/"/g, '&quot;');
-const neutral = (s: string) => s.replace(/<\/pr-comment/gi, '<\\/pr-comment');
+const oneLine = (v: string) => String(v ?? '').replace(/[\r\n\u2028\u2029]+/g, ' ');
+/** An attribute value: one line, no quote or angle bracket (an author / path cannot end the tag or open another). */
+const attr = (v: string) => oneLine(v).replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const neutral = (s: string) => s.replace(/<\/?pr-comment/gi, (m) => m.replace('<', '<\\'));
 
 /** The message for a batch: what it is, that it is data, then each comment framed and fenced. */
 export function commentsMessage(pr: BranchPr, batch: readonly PrComment[]): string {
@@ -53,22 +55,46 @@ export function commentsMessage(pr: BranchPr, batch: readonly PrComment[]): stri
   ];
   batch.forEach((c, i) => {
     const where = c.path ? `${c.path}${c.line ? `:${c.line}` : ''}` : tr('（整个 {word}）', { word });
-    const attrs = [`author="${attr(c.author)}"`, c.path ? `file="${attr(c.path)}"` : '', c.line ? `line="${c.line}"` : '', `url="${attr(c.url)}"`].filter(Boolean).join(' ');
+    const line = Number.isFinite(Number(c.line)) && c.line ? String(Math.trunc(Number(c.line))) : '';
+    const attrs = [`author="${attr(c.author)}"`, c.path ? `file="${attr(c.path)}"` : '', line ? `line="${line}"` : '', `url="${attr(c.url)}"`].filter(Boolean).join(' ');
     const body = neutral(c.body);
     const f = fenceFor(body);
-    const part = ['', `### ${i + 1}. ${c.author} · ${where}`, `<pr-comment ${attrs}>`, `${f}text`, body, f, '</pr-comment>'];
+    // the heading is outside the frame: one line, nothing that reads as a tag
+    const part = ['', neutral(`### ${i + 1}. ${oneLine(c.author)} · ${oneLine(where)}`).replace(/[<>]/g, ' '), `<pr-comment ${attrs}>`, `${f}text`, body, f];
     if (c.diff) {
-      const df = fenceFor(c.diff);
-      part.push(tr('附近的 diff：'), `${df}diff`, c.diff, df);
+      // the diff hunk is the reviewer's branch content too: inside the frame, neutralised like the body
+      const diff = neutral(c.diff);
+      const df = fenceFor(diff);
+      part.push(tr('附近的 diff：'), `${df}diff`, diff, df);
     }
+    part.push('</pr-comment>');
     out.push(part.join('\n'));
   });
   return out.join('\n');
 }
 
-/** After a push (the head moved) on a still-open PR, the batch sent before it gets its reply. */
+type Sent = NonNullable<SessionMeta['prCommentsSent']>;
+
+/** No batch waiting (an empty one, not undefined: a patch goes over JSON, where an undefined key is no change). */
+export const NO_BATCH: Sent = { ids: [], sha: '', at: 0 };
+
+/**
+ * A turn of the conversation ended while a batch waits: no new local commit since the batch went (HEAD is still
+ * `sent.head`) → nothing will be pushed for it, let it go so auto-handling goes on; a new commit → the reply waits for
+ * that commit to reach the PR. null = no change.
+ */
+export function afterTurn(sent: SessionMeta['prCommentsSent'], head: string): Sent | null {
+  if (!sent || !sent.ids.length || !head) return null;
+  if (!sent.head || head === sent.head) return NO_BATCH;
+  return head === sent.commit ? null : { ...sent, commit: head };
+}
+
+/**
+ * After a push (the head moved) on a still-open PR, the batch sent before it gets its reply — only once the
+ * conversation made a commit after the batch (`commit`); the caller checks that commit is in the PR's head.
+ */
 export function shouldReply(sent: SessionMeta['prCommentsSent'], pr: BranchPr): boolean {
-  return !!sent && sent.ids.length > 0 && !!pr.sha && pr.sha !== sent.sha && pr.state === 'open';
+  return !!sent && sent.ids.length > 0 && !!sent.commit && !!pr.sha && pr.sha !== sent.sha && pr.state === 'open';
 }
 
 /** The reply under a handled comment (the server appends REPLY_MARK). */

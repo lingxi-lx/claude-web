@@ -33,3 +33,27 @@ describe('VcsService.target with vcs.gitlabHosts', () => {
     expect((await v.target('', 'https://ghe.corp/acme/app')).provider).toBe('github');
   });
 });
+
+describe('VcsService token lookup (fix E-I1)', () => {
+  const store = (m: Record<string, string>) => ({ get: async (h: string) => m[h] ?? '', hosts: () => Object.keys(m) }) as any;
+  const withEnv = async (vars: Record<string, string | undefined>, fn: () => Promise<void>) => {
+    const old: Record<string, string | undefined> = {};
+    for (const k of Object.keys(vars)) { old[k] = process.env[k]; if (vars[k] === undefined) delete process.env[k]; else process.env[k] = vars[k]; }
+    try { await fn(); } finally { for (const k of Object.keys(old)) { if (old[k] === undefined) delete process.env[k]; else process.env[k] = old[k]; } }
+  };
+  it('a token saved for the host beats the environment', async () => {
+    await withEnv({ GH_TOKEN: 'env-gh', GITLAB_TOKEN: 'env-gl', CW_FAKE_FORGE_FILE: undefined }, async () => {
+      const v = new VcsService({} as any, { tokens: store({ 'github.com': 'saved-gh', 'gitlab.com': 'saved-gl' }) });
+      expect(await (v as any).lookupToken({ provider: 'github', host: 'github.com', owner: 'o', repo: 'r' })).toBe('saved-gh');
+      expect(await (v as any).lookupToken({ provider: 'gitlab', host: 'gitlab.com', owner: 'o', repo: 'r' })).toBe('saved-gl');
+    });
+  });
+  it('GITLAB_TOKEN never goes to a host that only has gitlab in its name', async () => {
+    await withEnv({ GITLAB_TOKEN: 'env-gl', GITLAB_HOST: undefined, CW_FAKE_FORGE_FILE: undefined }, async () => {
+      const v = new VcsService({} as any, { tokens: store({}) });
+      (v as any).glabReady = async () => false;
+      expect(await (v as any).lookupToken({ provider: 'gitlab', host: 'gitlab.evil.example', owner: 'o', repo: 'r' })).toBe('');
+      expect(await (v as any).lookupToken({ provider: 'gitlab', host: 'gitlab.com', owner: 'o', repo: 'r' })).toBe('env-gl');
+    });
+  });
+});

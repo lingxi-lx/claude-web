@@ -3,7 +3,7 @@ import mr from './__fixtures__/gitlab-mr.json';
 import mrList from './__fixtures__/gitlab-mr-list.json';
 import jobs from './__fixtures__/gitlab-jobs.json';
 import ghNodes from './__fixtures__/github-pr-nodes.json';
-import { forgeOf, mapGithubPr, mapGitlabMr, pickGithubPr, pickGitlabMr, summarizeGitlabJobs, traceTail } from './forge-map';
+import { envTokenFor, forgeOf, mapGithubPr, mapGitlabMr, pickGithubPr, pickGitlabMr, summarizeGitlabJobs, traceTail } from './forge-map';
 
 describe('forgeOf', () => {
   it('gitlab.com, a listed self-hosted address (any case, port ignored), or a name that says gitlab', () => {
@@ -12,6 +12,27 @@ describe('forgeOf', () => {
     expect(forgeOf('gitlab.internal', [])).toBe('gitlab');
     expect(forgeOf('github.com', ['git.corp.example'])).toBe('github');
     expect(forgeOf('ghe.corp', [])).toBe('github');
+  });
+});
+
+describe('envTokenFor', () => {
+  const env = { GH_TOKEN: 'gh', GITHUB_TOKEN: 'ghx', GITLAB_TOKEN: 'gl', GH_ENTERPRISE_TOKEN: 'ghe' };
+  it('GH_TOKEN / GITHUB_TOKEN only for github.com; never for another host that is on GitHub', () => {
+    expect(envTokenFor('github', 'github.com', env)).toBe('gh');
+    expect(envTokenFor('github', 'GitHub.com:443', { GITHUB_TOKEN: 'ghx' })).toBe('ghx');
+    expect(envTokenFor('github', 'evil.example', env)).toBe('');
+    expect(envTokenFor('github', 'ghe.corp', { GH_TOKEN: 'gh' })).toBe('');
+  });
+  it('GH_ENTERPRISE_TOKEN only for GH_HOST', () => {
+    expect(envTokenFor('github', 'ghe.corp', { ...env, GH_HOST: 'https://ghe.corp/' })).toBe('ghe');
+    expect(envTokenFor('github', 'other.corp', { ...env, GH_HOST: 'ghe.corp' })).toBe('');
+  });
+  it('GITLAB_TOKEN only for gitlab.com or GITLAB_HOST — not any host whose name says gitlab', () => {
+    expect(envTokenFor('gitlab', 'gitlab.com', env)).toBe('gl');
+    expect(envTokenFor('gitlab', 'gitlab.evil.example', env)).toBe('');
+    expect(envTokenFor('gitlab', 'mygitlab.io', env)).toBe('');
+    expect(envTokenFor('gitlab', 'git.corp', { ...env, GITLAB_HOST: 'https://git.corp' })).toBe('gl');
+    expect(envTokenFor('gitlab', 'gitlab.com', { ...env, GITLAB_HOST: 'git.corp' })).toBe('gl');
   });
 });
 

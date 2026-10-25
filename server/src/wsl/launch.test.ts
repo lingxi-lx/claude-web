@@ -18,8 +18,17 @@ describe('rewriteFlagPaths', () => {
 });
 
 describe('wslArgv', () => {
-  it('-d, --cd, then the CLI after --', () => {
-    expect(wslArgv({ distro: 'Ubuntu', cwd: '/home/me/proj', cli: 'claude', args: ['-p'] })).toEqual(['-d', 'Ubuntu', '--cd', '/home/me/proj', '--', 'claude', '-p']);
+  it('-d, --cd, then --exec a login sh that execs the CLI with "$@" (no second shell parse of the arguments)', () => {
+    expect(wslArgv({ distro: 'Ubuntu', cwd: '/home/me/proj', cli: 'claude', args: ['-p'] })).toEqual(['-d', 'Ubuntu', '--cd', '/home/me/proj', '--exec', 'sh', '-lc', 'exec claude "$@"', 'claude', '-p']);
+  });
+  it('quotes, backslashes, $ and backticks in arguments arrive unchanged, each its own argv entry', () => {
+    const nasty = ['--mcp-config', '{"mcpServers":{"a":{"command":"C:\\x","args":["$(id)"]}}}', '--append-system-prompt', 'a `whoami` $HOME "q" \n; rm -rf ~', "it's"];
+    const argv = wslArgv({ distro: 'Ubuntu', cwd: '/home/me/$(id)', cli: 'claude', args: nasty });
+    expect(argv.slice(0, 9)).toEqual(['-d', 'Ubuntu', '--cd', '/home/me/$(id)', '--exec', 'sh', '-lc', 'exec claude "$@"', 'claude']);
+    expect(argv.slice(9)).toEqual(nasty);
+    // the only script the shell parses is our constant: the arguments never become part of it
+    expect(argv[7]).toBe('exec claude "$@"');
+    expect(argv).not.toContain('--');
   });
 });
 

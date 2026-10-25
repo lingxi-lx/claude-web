@@ -44,7 +44,8 @@ export class WslService {
 
   known(distro: string): boolean { return typeof distro === 'string' && this.names.includes(distro); }
 
-  private async ensureKnown(distro: string) {
+  /** Throws unless this is one of the listed distros (the terminal / a conversation names one). */
+  async ensureKnown(distro: string) {
     if (!this.available()) throw new Error(tr('WSL 只在 Windows 上可用'));
     if (!this.known(distro)) await this.list();
     if (!this.known(distro)) throw new Error(tr('没有这个 WSL 发行版：{d}', { d: String(distro).slice(0, 80) }));
@@ -53,7 +54,7 @@ export class WslService {
   /** Home, whether claude is on its PATH, whether Windows interop is on (20 s; cached until the next check / install). */
   async check(distro: string): Promise<WslDistro> {
     await this.ensureKnown(distro);
-    const r = await this.run(['-d', distro, '--', 'sh', '-lc', WSL_CHECK_SCRIPT], { timeoutMs: 20_000 });
+    const r = await this.run(['-d', distro, '--exec', 'sh', '-lc', WSL_CHECK_SCRIPT], { timeoutMs: 20_000 });
     const d: WslDistro = { name: distro, ...parseWslCheck(r.stdout.toString('utf8')) };
     this.checks.set(distro, d);
     return d;
@@ -76,7 +77,7 @@ export class WslService {
   /** Only the shown command, in a login shell of that distro (10 minutes). */
   async install(distro: string): Promise<{ code: number | null; tail: string }> {
     await this.ensureKnown(distro);
-    const r = await this.run(['-d', distro, '--', 'bash', '-lc', INSTALL_CMD], { timeoutMs: 600_000 });
+    const r = await this.run(['-d', distro, '--exec', 'bash', '-lc', INSTALL_CMD], { timeoutMs: 600_000 });
     this.checks.delete(distro);
     const all = `${r.stdout.toString('utf8')}${r.stderr ? `\n${r.stderr}` : ''}`;
     return { code: r.code, tail: all.slice(-4000) };

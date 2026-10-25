@@ -13,7 +13,7 @@ import { Icon } from '@/ui/icons';
 import { tr } from '@/i18n';
 import { Popover } from '@/features/composer/Popover';
 import { ciFixMessage, fixKey, newFailures, prSettled } from './pr-bar-model';
-import { autoCandidates, commentsMessage, externalComments, nextBatch, prLabel, rememberDone, replyText, shouldReply } from './pr-comments-model';
+import { afterTurn, autoCandidates, commentsMessage, externalComments, nextBatch, NO_BATCH, prLabel, rememberDone, replyText, shouldReply } from './pr-comments-model';
 import { PrComments } from './PrComments';
 
 const POLL_MS = 60_000;
@@ -22,12 +22,25 @@ const NONE_C: PrComment[] = [];
 
 // One bar per conversation does the work, whichever on-screen one asked first: it polls, and only it auto-fixes or
 // auto-archives (a conversation can sit in two panes; hidden tabs stay mounted). The others draw what it found.
+// Across windows the server's lease picks one (below).
 /** also read by 总览 (MissionPanel): what the bars found, by conversation */
 export const usePrs = create<{ bySession: Record<string, BranchPr | null> }>(() => ({ bySession: {} }));
 /** the PR's open comments, by conversation (stage E1) */
 export const useComments = create<{ bySession: Record<string, PrComment[]> }>(() => ({ bySession: {} }));
 const owners = new Map<string, symbol>();
 const claim = (sid: string, me: symbol) => { const o = owners.get(sid); if (o && o !== me) return false; owners.set(sid, me); return true; };
+// …and one window per conversation (fix E-I3): the server's lease (`vcs.autoLease`, renewed each poll) says which
+// window acts; this one trusts its grant a little less long than the server keeps it
+const WINDOW = globalThis.crypto?.randomUUID?.() ?? `w${Math.random().toString(36).slice(2)}${Date.now()}`;
+const LEASE_TRUST_MS = 120_000;
+const leasedUntil = new Map<string, number>();
+const leased = (sid: string) => (leasedUntil.get(sid) ?? 0) > Date.now();
+const letGo = (sid: string) => {
+  if (!leasedUntil.delete(sid)) return;
+  ws.request({ kind: 'vcs.autoLease', sessionId: sid, holder: WINDOW, release: true }).catch(() => { /* runs out by itself */ });
+};
+/** The conversation folder's HEAD commit ('' = unknown). */
+const localHead = (cwd: string) => ws.request<{ hash: string }[]>({ kind: 'git.log', cwd, n: 1 }).then((l) => l?.[0]?.hash ?? '', () => '');
 // asked already in this window, before meta.json's `prFixed` comes back round (two renders a frame apart must not both send)
 const sentFix = new Set<string>();
 // comments handed over from this window, before `prCommentsDone` comes back round
@@ -60,12 +73,16 @@ export function PrBar({ sessionId, visible = true }: { sessionId: string; visibl
   const on = visible && !remote && !!cwd;
   const ext = useMemo(() => externalComments(cs, done, !!autoComments), [cs, done, autoComments]);
 
-  useEffect(() => () => { if (owners.get(sessionId) === me) owners.delete(sessionId); }, [sessionId, me]);
-  useEffect(() => { if (!visible && owners.get(sessionId) === me) owners.delete(sessionId); }, [visible, sessionId, me]);
+  useEffect(() => () => { if (owners.get(sessionId) === me) { owners.delete(sessionId); letGo(sessionId); } }, [sessionId, me]);
+  useEffect(() => { if (!visible && owners.get(sessionId) === me) { owners.delete(sessionId); letGo(sessionId); } }, [visible, sessionId, me]);
+  /** this bar does the conversation's automatic actions: the window's one bar for it, in the window holding the lease */
+  const acts = useCallback(() => owners.get(sessionId) === me && leased(sessionId), [sessionId, me]);
 
   const refresh = useCallback(async () => {
     if (!on || !claim(sessionId, me)) return;
     try {
+      const l = await ws.request<{ ok: boolean }>({ kind: 'vcs.autoLease', sessionId, holder: WINDOW }).catch(() => ({ ok: false }));
+      if (l?.ok) leasedUntil.set(sessionId, Date.now() + LEASE_TRUST_MS); else leasedUntil.delete(sessionId);
       const r = (await ws.request({ kind: 'vcs.prForBranch', cwd: cwd! })) as { pr?: BranchPr };
       const next = r.pr ?? null;
       if (next?.state === 'open') sawOpen.add(sessionId);
@@ -87,7 +104,7 @@ export function PrBar({ sessionId, visible = true }: { sessionId: string; visibl
 
   // 自动修 CI / 自动修流水线: a check failed on the pushed commit and the conversation is not busy — ask it once
   useEffect(() => {
-    if (!pr || !autoFix || !idle || owners.get(sessionId) !== me) return;
+    if (!pr || !autoFix || !idle || !acts()) return;
     const fs = newFailures(pr, asked).filter((x) => !sentFix.has(fixKey(pr, x)));
     if (!fs.length) return;
     const keys = fs.map((x) => fixKey(pr, x));
@@ -104,29 +121,57 @@ export function PrBar({ sessionId, visible = true }: { sessionId: string; visibl
       }
       await st.send(sessionId, ciFixMessage(pr, fs, logs));
     })().catch((e) => st.toast(String(e?.message ?? e)));
-  }, [pr, autoFix, idle, asked, sessionId, me, cwd]);
+  }, [pr, autoFix, idle, asked, sessionId, acts, cwd]);
 
-  // 自动处理评论: trusted reviewers' new comments, five at a time, while idle and no batch is waiting for its push
+  // 自动处理评论: trusted reviewers' new comments, five at a time, while idle and no batch is waiting for its push.
+  // Marked handled only once the conversation took the message; the local HEAD then is what the turn's end compares to.
   useEffect(() => {
-    if (!pr || pr.state !== 'open' || !autoComments || !idle || (sent && sent.ids.length > 0) || owners.get(sessionId) !== me) return;
+    if (!pr || !cwd || pr.state !== 'open' || !autoComments || !idle || (sent && sent.ids.length > 0) || !acts()) return;
     const batch = nextBatch(autoCandidates(cs, done, autoComments), sentComments);
     if (!batch.length) return;
     const ids = batch.map((c) => c.id);
     ids.forEach((id) => sentComments.add(id));
     const st = useStore.getState();
-    void st.setSessionMeta(sessionId, { prCommentsDone: rememberDone(done, ids), prCommentsSent: { ids, sha: pr.sha, at: Date.now() } });
-    st.send(sessionId, commentsMessage(pr, batch)).catch((e) => {
+    void (async () => {
+      const head = await localHead(cwd);
+      await st.send(sessionId, commentsMessage(pr, batch));
+      const doneNow = useStore.getState().sessionMeta[sessionId]?.prCommentsDone ?? done;
+      await st.setSessionMeta(sessionId, { prCommentsDone: rememberDone(doneNow, ids), prCommentsSent: { ids, sha: pr.sha, at: Date.now(), head } });
+    })().catch((e) => {
       ids.forEach((id) => sentComments.delete(id));
       st.toast(String(e?.message ?? e));
     });
-  }, [pr, autoComments, idle, sent, cs, done, sessionId, me]);
+  }, [pr, cwd, autoComments, idle, sent, cs, done, sessionId, acts]);
 
-  // after the push (the head moved): a reply under each handled comment, once; a failure is said once, not retried
+  // a turn ended while a batch waits (fix E-I2): no new local commit → let the batch go (nothing will be pushed for
+  // it, and later pushes are not its fix); a new commit → the reply waits for that commit to reach the PR
   useEffect(() => {
-    if (!pr || !cwd || !idle || !shouldReply(sent, pr) || owners.get(sessionId) !== me || replying.has(sessionId)) return;
+    if (!idle || !cwd || !sent || !sent.ids.length || !acts()) return;
+    void (async () => {
+      const head = await localHead(cwd);
+      const next = afterTurn(useStore.getState().sessionMeta[sessionId]?.prCommentsSent, head);
+      if (next) await useStore.getState().setSessionMeta(sessionId, { prCommentsSent: next });
+    })();
+  }, [idle, cwd, sent, sessionId, acts]);
+
+  // 自动处理评论 turned off: a batch still waiting is let go (no late replies)
+  useEffect(() => {
+    if (autoComments || !sent || !sent.ids.length || owners.get(sessionId) !== me) return;
+    void useStore.getState().setSessionMeta(sessionId, { prCommentsSent: NO_BATCH });
+  }, [autoComments, sent, sessionId, me]);
+
+  // after the push (the head moved to one containing the conversation's commit): a reply under each handled comment,
+  // once; a failure is said once, not retried
+  useEffect(() => {
+    if (!pr || !cwd || !idle || !shouldReply(sent, pr) || !acts() || replying.has(sessionId)) return;
     replying.add(sessionId);
     const st = useStore.getState();
     void (async () => {
+      const commit = sent!.commit!;
+      if (pr.sha !== commit) {
+        const log = await ws.request<{ hash: string }[]>({ kind: 'git.log', cwd, n: 200, rev: pr.sha }).catch(() => []);
+        if (!log?.some((e) => e.hash === commit)) return; // not pushed yet (or someone else's head): keep waiting
+      }
       let failed = '';
       for (const id of sent!.ids) {
         const c = cs.find((x) => x.id === id);
@@ -137,21 +182,20 @@ export function PrBar({ sessionId, visible = true }: { sessionId: string; visibl
           if (resolveOnReply && c.kind === 'thread') await ws.request({ kind: 'vcs.resolveComment', cwd, number: pr.number, comment: ref });
         } catch (e: any) { failed ||= String(e?.message ?? e); }
       }
-      // an empty batch, not undefined: a patch goes over JSON, where an undefined key is no change at all
-      await st.setSessionMeta(sessionId, { prCommentsSent: { ids: [], sha: '', at: 0 } });
+      await st.setSessionMeta(sessionId, { prCommentsSent: NO_BATCH });
       if (failed) st.toast(tr('没能回复评论：{msg}', { msg: failed }));
     })().finally(() => replying.delete(sessionId));
-  }, [pr, cwd, idle, sent, cs, resolveOnReply, sessionId, me]);
+  }, [pr, cwd, idle, sent, cs, resolveOnReply, sessionId, acts]);
 
   // 自动归档: a PR seen open here is now merged / closed, nothing running
   useEffect(() => {
-    if (!autoArchive || !idle || !prSettled(pr) || !sawOpen.has(sessionId) || owners.get(sessionId) !== me) return;
+    if (!autoArchive || !idle || !prSettled(pr) || !sawOpen.has(sessionId) || !acts()) return;
     sawOpen.delete(sessionId);
     const merged = pr!.state === 'merged';
     ws.request({ kind: 'library.archive', sessionIds: [sessionId], archived: true })
       .then(() => useStore.getState().toast(merged ? tr('PR #{n} 已合并，对话已归档', { n: pr!.number }) : tr('PR #{n} 已关闭，对话已归档', { n: pr!.number }), true))
       .catch((e) => useStore.getState().toast(String(e?.message ?? e)));
-  }, [autoArchive, idle, pr, sessionId, me]);
+  }, [autoArchive, idle, pr, sessionId, acts]);
 
   if (!pr || remote) return null;
   const c = pr.checks;

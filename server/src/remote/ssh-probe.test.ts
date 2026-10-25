@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifySshProbe, sshProbeArgs } from './ssh-probe';
+import { addedHostKey, classifySshProbe, keygenFingerprints, knownHostSpec, sshProbeArgs } from './ssh-probe';
 
 describe('sshProbeArgs', () => {
   it('batch mode, a short timeout, then the health check on the remote loopback', () => {
@@ -11,6 +11,23 @@ describe('sshProbeArgs', () => {
   });
   it('a target that ssh would read as an option is refused', () => {
     expect(() => sshProbeArgs({ target: '-oProxyCommand=calc' })).toThrow();
+  });
+});
+
+describe('first trust of a host key (E-minor)', () => {
+  it('ssh saying it added the key is noticed, whatever the login did', () => {
+    expect(addedHostKey("Warning: Permanently added 'box' (ED25519) to the list of known hosts.\r\n{\"version\":\"1\"}")).toBe(true);
+    expect(addedHostKey('{"version":"1"}')).toBe(false);
+  });
+  it('the known_hosts name ssh-keygen -F looks up: the host, [host]:port off port 22', () => {
+    expect(knownHostSpec('me@box.example', undefined)).toBe('box.example');
+    expect(knownHostSpec('box', 22)).toBe('box');
+    expect(knownHostSpec('me@10.0.0.2', 2222)).toBe('[10.0.0.2]:2222');
+  });
+  it('the fingerprint out of ssh-keygen -l -F', () => {
+    const out = '# Host box found: line 12\nbox ED25519 SHA256:abcDEF0123456789+/xyz\n# Host box found: line 13\n|1|hashed= RSA SHA256:rsaKey000\n';
+    expect(keygenFingerprints(out)).toEqual([{ type: 'ED25519', fingerprint: 'SHA256:abcDEF0123456789+/xyz' }, { type: 'RSA', fingerprint: 'SHA256:rsaKey000' }]);
+    expect(keygenFingerprints('')).toEqual([]);
   });
 });
 

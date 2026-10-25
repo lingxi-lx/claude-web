@@ -19,8 +19,15 @@ export function rewriteFlagPaths(args: string[], distro: string): string[] {
   });
 }
 
+/**
+ * `wsl.exe -d D -- cmd args` joins the arguments and hands them to the distro's shell, which parses them again (JSON
+ * in --mcp-config mangled, `$` / backticks in folder names expanded). `--exec` runs a program with the arguments as
+ * they are; a login `sh` puts the user's PATH (~/.local/bin) in place and execs the CLI with "$@" — the only text a
+ * shell parses is this constant script.
+ */
 export function wslArgv(o: { distro: string; cwd: string; cli: string; args: string[] }): string[] {
-  return ['-d', o.distro, '--cd', o.cwd, '--', o.cli, ...o.args];
+  if (!/^[\w./-]+$/.test(o.cli)) throw new Error(`bad CLI name: ${o.cli}`);
+  return ['-d', o.distro, '--cd', o.cwd, '--exec', 'sh', '-lc', `exec ${o.cli} "$@"`, o.cli, ...o.args];
 }
 
 /** Variables that only make sense on Windows: never handed to Linux. */

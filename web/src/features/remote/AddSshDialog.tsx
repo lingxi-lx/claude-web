@@ -7,7 +7,8 @@ import { ws } from '@/ws/client';
 import { tr } from '@/i18n';
 import { imeComposing } from '@/ui/ime';
 
-type Probe = { ssh: 'ok'; serverUp: boolean; version?: string } | { ssh: 'auth' | 'unreachable' | 'hostkey' | 'no-ssh' | 'error'; detail: string };
+type HostKey = { type: string; fingerprint: string };
+type Probe = ({ ssh: 'ok'; serverUp: boolean; version?: string } | { ssh: 'auth' | 'unreachable' | 'hostkey' | 'no-ssh' | 'error'; detail: string }) & { newHostKeys?: HostKey[] };
 
 export function probeText(p: Probe): string {
   switch (p.ssh) {
@@ -83,6 +84,12 @@ export function AddSshDialog({ onClose, onJoined }: { onClose: () => void; onJoi
           </>
         )}
         {probe && <div className={probe.ssh === 'ok' ? 'sub ssh-ok' : 'err'} role="status" data-probe={probe.ssh}>{probeText(probe)}</div>}
+        {probe?.newHostKeys?.length ? (
+          <div className="sub ssh-hostkey" data-act="ssh-new-hostkey">
+            <div>{tr('第一次连这台机器，已记下它的主机密钥。请和那台机器上的指纹核对（ssh-keygen -lf /etc/ssh/ssh_host_*_key.pub）：')}</div>
+            {probe.newHostKeys.map((k) => <div key={k.fingerprint} className="mono">{k.type} {k.fingerprint}</div>)}
+          </div>
+        ) : null}
         {step3 && (
           <>
             <label className="fld"><span>{tr('启动命令')}</span><input className="field mono" value={startCommand} onChange={(e) => setStartCommand(e.target.value)} spellCheck={false} /></label>

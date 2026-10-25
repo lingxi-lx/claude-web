@@ -64,7 +64,8 @@ import { composerCovered } from './covered';
 import { glowing, sendFace } from './send-state';
 import { dateLocale, tr } from '@/i18n';
 import { ProcessGlyph } from '@/themes/ProcessGlyph';
-import { onRecorded, openPicker, type PendingRecording } from '@/features/recording/recorder';
+import { onRecorded, openPicker } from '@/features/recording/recorder';
+import { framesState, withFrames, withoutFrame, type ComposerRecording } from '@/features/recording/pending';
 import { extractKeyframes } from '@/features/recording/extract';
 import { fmtDuration } from '@/features/recording/keyframes';
 // review X1: the SSH dialog loads when it is opened
@@ -148,8 +149,9 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   const [atts, setAtts] = useState<AttachmentRef[]>([]); // inline text attachments
   // a picture with its words, one chip (the browser's 页面标注): handed over through the store's inbox
   const [bundles, setBundles] = useState<PendingBundle[]>([]);
-  // 录屏 (stage E3): finished recordings of this box, uploaded with keyframes on send
-  const [recordings, setRecordings] = useState<PendingRecording[]>([]);
+  // 录屏 (stage E3): finished recordings of this box, uploaded with keyframes on send (the keyframes are taken at once
+  // and shown under the chip, each removable: what is sent is what was seen)
+  const [recordings, setRecordings] = useState<ComposerRecording[]>([]);
   const [files, setFiles] = useState<DroppedFile[]>([]); // uploaded on send
   const [refs, setRefs] = useState<{ id: string; title: string }[]>([]); // referenced sessions → <session-ref /> markers on send
   const pane = usePaneCtx();
@@ -582,9 +584,13 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
 
   // 录屏: this box's own recordings (the welcome page's are 'welcome'); the built-in browser's go elsewhere
   const recTarget = welcome ? 'welcome' : active?.sessionId ?? '';
-  useEffect(() => onRecorded((r) => { if (r.target === recTarget) setRecordings((cur) => [...cur, r]); }), [recTarget]);
+  useEffect(() => onRecorded((r) => {
+    if (r.target !== recTarget) return;
+    setRecordings((cur) => [...cur, r]);
+    extractKeyframes(r.blob, r.ms).then((fs) => setRecordings((cur) => withFrames(cur, r.id, fs)), () => setRecordings((cur) => withFrames(cur, r.id, null)));
+  }), [recTarget]);
   /** each recording: the video uploaded into the conversation's folder, its keyframes as pictures, a line saying so */
-  const sendRecordings = async (sid: string, recs: PendingRecording[]) => {
+  const sendRecordings = async (sid: string, recs: ComposerRecording[]) => {
     const images: { mediaType: string; data: string }[] = [];
     const refs2: AttachmentRef[] = [];
     const lines: string[] = [];
@@ -592,8 +598,14 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     for (const r of recs) {
       const up = await uploadAttachment(sid, r.blob, `recordings/rec-${r.start}.${r.ext}`);
       refs2.push({ kind: 'file', name: tr('录屏 {d}.{ext}', { d: fmtDuration(r.ms), ext: r.ext }), path: up.path, size: up.size });
-      lines.push(tr('（附了一段录屏，视频在 {path}；下面的图片是从里面挑的关键帧）', { path: up.path }));
-      try { images.push(...(await extractKeyframes(r.blob, r.ms))); } catch { failedFrames = true; }
+      // the frames shown under the chip (the user may have removed some); still being taken: take them now
+      let frames: { mediaType: string; data: string }[] = [];
+      const st = framesState(r);
+      if (st === 'ready') frames = r.frames!;
+      else if (st === 'pending') { try { frames = await extractKeyframes(r.blob, r.ms); } catch { failedFrames = true; } }
+      else failedFrames = true;
+      lines.push(frames.length ? tr('（附了一段录屏，视频在 {path}；下面的图片是从里面挑的关键帧）', { path: up.path }) : tr('（附了一段录屏，视频在 {path}）', { path: up.path }));
+      images.push(...frames);
     }
     if (failedFrames) toast(tr('没能从录屏里取出图片，只发了视频的位置'));
     return { images, atts: refs2, prefix: lines.join('\n') };
@@ -1279,7 +1291,20 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
                 <span key={`f${i}`} className="att-chip" title={f.file.name}><Icon name="attach" size={12} /> {f.file.name} <span className="sz">{fmtSize(f.file.size)}</span><button aria-label={tr('移除')} onClick={() => setFiles((s) => s.filter((x) => x !== f))}><Icon name="close" size={10} /></button></span>
               ))}
               {recordings.map((r) => (
-                <span key={r.id} className="att-chip att-rec" data-att="recording"><Icon name="monitor" size={12} /> {tr('录屏 · {d}', { d: fmtDuration(r.ms) })} <span className="sz">{fmtSize(r.blob.size)}</span><button aria-label={tr('移除')} onClick={() => setRecordings((s) => s.filter((x) => x.id !== r.id))}><Icon name="close" size={10} /></button></span>
+                <span key={r.id} className="att-rec-wrap">
+                  <span className="att-chip att-rec" data-att="recording"><Icon name="monitor" size={12} /> {tr('录屏 · {d}', { d: fmtDuration(r.ms) })} <span className="sz">{fmtSize(r.blob.size)}</span><button aria-label={tr('移除')} onClick={() => setRecordings((s) => s.filter((x) => x.id !== r.id))}><Icon name="close" size={10} /></button></span>
+                  {framesState(r) === 'pending' && <span className="att-rec-note"><span className="spinner" /> {tr('正在取关键帧…')}</span>}
+                  {r.frames && r.frames.length > 0 && (
+                    <span className="att-rec-frames" role="list" aria-label={tr('随录屏发送的关键帧')}>
+                      {r.frames.map((f, i) => (
+                        <span key={i} className="att-rec-frame" role="listitem">
+                          <img src={`data:${f.mediaType};base64,${f.data}`} alt={tr('关键帧 {n}', { n: i + 1 })} />
+                          <button aria-label={tr('去掉这张关键帧')} onClick={() => setRecordings((s) => withoutFrame(s, r.id, i))}><Icon name="close" size={10} /></button>
+                        </span>
+                      ))}
+                    </span>
+                  )}
+                </span>
               ))}
               {upload && <span className="att-chip"><span className="spinner" /> {tr('上传 {done}/{total} · {name}', { done: upload.done + 1, total: upload.total, name: upload.name })}</span>}
             </div>

@@ -3,7 +3,19 @@ import net from 'node:net';
 import { EventEmitter } from 'node:events';
 import type { RemoteHost, TunnelInfo } from '../protocol.js';
 import { tr } from '../i18n/index.js';
-import { classifySshProbe, sshProbeArgs, type SshProbe } from './ssh-probe.js';
+import { addedHostKey, classifySshProbe, keygenFingerprints, knownHostSpec, sshProbeArgs, type NewHostKey, type SshProbe } from './ssh-probe.js';
+
+/** The fingerprints known_hosts now has for this host (`ssh-keygen -l -F`; none if it cannot be read). */
+function hostKeyFingerprints(spec: string): Promise<NewHostKey[]> {
+  return new Promise((resolve) => {
+    let out = '';
+    const timer = setTimeout(() => { try { p.kill(); } catch { /* gone */ } resolve([]); }, 5_000);
+    const p = spawn('ssh-keygen', ['-l', '-F', spec], { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+    p.stdout?.on('data', (d) => { out += String(d); });
+    p.on('error', () => { clearTimeout(timer); resolve([]); });
+    p.on('close', () => { clearTimeout(timer); resolve(keygenFingerprints(out)); });
+  });
+}
 
 /**
  * SSH port-forward manager: `ssh -N -L 127.0.0.1:<local>:127.0.0.1:<remotePort> user@host` makes a claude-web
@@ -60,7 +72,15 @@ export class TunnelManager extends EventEmitter {
     return new Promise((resolve) => {
       let output = '';
       let done = false;
-      const finish = (r: { code: number | null; enoent?: boolean }) => { if (done) return; done = true; clearTimeout(timer); resolve(classifySshProbe({ ...r, output })); };
+      const finish = (r: { code: number | null; enoent?: boolean }) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        const res = classifySshProbe({ ...r, output });
+        // first trust (accept-new just wrote the key): say which key, so the user can compare it with the machine's own
+        if (!addedHostKey(output)) return resolve(res);
+        void hostKeyFingerprints(knownHostSpec(h.target, h.sshPort)).then((keys) => resolve(keys.length ? { ...res, newHostKeys: keys } : res));
+      };
       const child = spawn('ssh', args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
       const timer = setTimeout(() => { output += '\nConnection timed out'; try { child.kill(); } catch { /* gone */ } finish({ code: 255 }); }, 20_000);
       child.stdout?.on('data', (d) => { output += String(d); });

@@ -7,11 +7,11 @@ import { tr } from '../i18n/index.js';
 import { hunkAround, PermissionCache, REPLY_MARK } from './comments.js';
 import { fakeForgeOn, fakeOrigin } from './fake-forge.js';
 import type { Forge, ForgeApi, Target } from './forge.js';
-import { forgeOf } from './forge-map.js';
+import { envTokenFor, forgeOf } from './forge-map.js';
 import { GithubForge } from './github-forge.js';
 import { GitlabForge } from './gitlab-forge.js';
 import type { VcsTokenStore } from './token-store.js';
-import { isWslUnc } from '../wsl/paths.js';
+import { wslSafeDirArgs } from '../wsl/paths.js';
 
 const execFileAsync = promisify(execFile);
 const isWin = process.platform === 'win32';
@@ -23,8 +23,9 @@ export type { Target } from './forge.js';
 
 /**
  * GitHub / GitLab issues and PR/MR boards, and the PR bar (spec E2: one Forge interface for both). Auth, in order:
- * GH_TOKEN / GITHUB_TOKEN / GITLAB_TOKEN → a token saved in settings (VcsTokenStore, never on the wire) → GitLab: a
- * logged-in `glab` (calls go through `glab api`, so glab refreshes its own OAuth) → GitHub: `gh auth token`.
+ * a token saved in settings for the host (VcsTokenStore, never on the wire) → GH_TOKEN / GITHUB_TOKEN (github.com
+ * only), GH_ENTERPRISE_TOKEN (GH_HOST only), GITLAB_TOKEN (gitlab.com / GITLAB_HOST only) → GitLab: a logged-in
+ * `glab` (calls go through `glab api`, so glab refreshes its own OAuth) → GitHub: `gh auth token`.
  */
 export class VcsService {
   private tokens = new Map<string, { token: string; at: number }>();
@@ -77,11 +78,12 @@ export class VcsService {
   private async lookupToken(t: Target): Promise<string> {
     // the fake forge of e2e / ui-smoke: only what the test saved, never this machine's own logins
     const fake = fakeForgeOn();
-    const env = fake ? '' : t.provider === 'github' ? process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN : process.env.GITLAB_TOKEN;
-    if (env) return env;
+    // the token the user saved for this very host first; an environment token only for its own host (fix E-I1)
     const saved = this.o.tokens ? await this.o.tokens.get(t.host).catch(() => '') : '';
     if (saved) return saved;
     if (fake) return '';
+    const env = envTokenFor(t.provider, t.host, process.env);
+    if (env) return env;
     if (t.provider === 'gitlab') return (await this.glabReady(t.host)) ? VIA_GLAB : '';
     try { return (await execFileAsync(isWin ? 'gh.exe' : 'gh', ['auth', 'token', '-h', t.host], { windowsHide: true, timeout: 15_000 })).stdout.trim(); } catch { return ''; /* not logged in */ }
   }
@@ -292,7 +294,7 @@ export class VcsService {
   async prForBranch(cwd: string): Promise<{ pr?: BranchPr; why?: string }> {
     if (!cwd || !path.isAbsolute(cwd)) return { why: 'not-a-repo' };
     let branch = '';
-    try { branch = (await execFileAsync('git', [...(isWslUnc(cwd) ? ['-c', 'safe.directory=*'] : []), 'rev-parse', '--abbrev-ref', 'HEAD'], { cwd, windowsHide: true, timeout: 10_000 })).stdout.trim(); } catch { return { why: 'not-a-repo' }; }
+    try { branch = (await execFileAsync('git', [...wslSafeDirArgs(cwd), 'rev-parse', '--abbrev-ref', 'HEAD'], { cwd, windowsHide: true, timeout: 10_000 })).stdout.trim(); } catch { return { why: 'not-a-repo' }; }
     if (!branch || branch === 'HEAD') return { why: 'detached' };
     let t: Target;
     try { t = await this.target(cwd); } catch { return { why: 'no-remote' }; }

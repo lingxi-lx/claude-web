@@ -20,7 +20,7 @@ describe('WslService', () => {
     } });
     expect((await w.list()).map((d) => d.name)).toEqual(['Ubuntu']);
     expect(await w.check('Ubuntu')).toEqual({ name: 'Ubuntu', home: '/home/me', claude: false, interop: true });
-    expect(calls[1].slice(0, 4)).toEqual(['-d', 'Ubuntu', '--', 'sh']);
+    expect(calls[1].slice(0, 5)).toEqual(['-d', 'Ubuntu', '--exec', 'sh', '-lc']); // --exec: the script is not parsed by the distro's shell twice
     expect(w.roots()).toEqual(['\\\\wsl.localhost\\Ubuntu', '\\\\wsl$\\Ubuntu']);
     expect(w.projectsRoot('Ubuntu')).toBe('\\\\wsl.localhost\\Ubuntu\\home\\me\\.claude\\projects');
     await expect(w.check('Nope')).rejects.toThrow();
@@ -30,6 +30,12 @@ describe('WslService', () => {
     const w = new WslService({ platform: 'win32', run: async (args) => { calls.push(args); return args[0] === '-l' ? out('Ubuntu\n') : out('done'); } });
     await w.list();
     await w.install('Ubuntu');
-    expect(calls.at(-1)).toEqual(['-d', 'Ubuntu', '--', 'bash', '-lc', 'curl -fsSL https://claude.ai/install.sh | bash']);
+    expect(calls.at(-1)).toEqual(['-d', 'Ubuntu', '--exec', 'bash', '-lc', 'curl -fsSL https://claude.ai/install.sh | bash']);
+  });
+  it('E-minor: ensureKnown (the terminal asks it) refuses a distro this computer does not list', async () => {
+    const w = new WslService({ platform: 'win32', run: async (args) => (args[0] === '-l' ? out('Ubuntu\n') : out('')) });
+    await expect(w.ensureKnown('Ubuntu')).resolves.toBeUndefined();
+    await expect(w.ensureKnown('--help')).rejects.toThrow();
+    await expect(new WslService({ platform: 'linux', run: async () => out('') }).ensureKnown('Ubuntu')).rejects.toThrow();
   });
 });

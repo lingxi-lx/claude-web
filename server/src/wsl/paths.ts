@@ -48,3 +48,20 @@ export function wslToWin(p: string, distro: string): string {
   const segs = p.split('/').filter(Boolean);
   return `\\\\wsl.localhost\\${distro}\\${segs.join('\\')}`;
 }
+
+/**
+ * `git -c safe.directory=…` for a folder inside a distro (its files belong to the Linux user, so Git for Windows
+ * calls the repository unsafe): this folder and the folders above it — where the repository's top can be — never `*`.
+ * Both spellings Git for Windows uses for a UNC path (`%(prefix)///host/share/…` and `//host/share/…`).
+ */
+export function wslSafeDirArgs(cwd: string): string[] {
+  const m = typeof cwd === 'string' ? WSL_UNC.exec(cwd.replace(/\//g, '\\')) : null;
+  const segs = m ? resolveSegs(m[3] ?? '') : null;
+  if (!m || !segs) return [];
+  const out: string[] = [];
+  for (let n = segs.length; n >= 1; n--) {
+    const p = `//${m[1]}/${m[2]}/${segs.slice(0, n).join('/')}`;
+    out.push('-c', `safe.directory=%(prefix)/${p}`, '-c', `safe.directory=${p}`);
+  }
+  return out;
+}

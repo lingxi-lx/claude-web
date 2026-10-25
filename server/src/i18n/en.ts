@@ -647,6 +647,7 @@ export const EN_SERVER: Record<string, string> = {
   "未授权。请在电脑上 Claude Web → 设置 → IM 机器人 生成配对码，然后发送：/pair 123456\n（你的 id：{userId}）": "Not authorized. On your computer, open Claude Web → Settings → IM bots to generate a pairing code, then send: /pair 123456\n(your id: {userId})",
   "未登录 GitHub：运行 `gh auth login`，或设置 GH_TOKEN": "Not logged in to GitHub: run `gh auth login`, or set GH_TOKEN",
   "未登录 GitLab：运行 `glab auth login`，或设置 GITLAB_TOKEN": "Not logged in to GitLab: run `glab auth login`, or set GITLAB_TOKEN",
+  "这个 MR 的最新提交还没有流水线，GitLab 会立刻合并；等流水线开始后再打开": "The MR's latest commit has no pipeline yet, so GitLab would merge it right away; turn this on once the pipeline has started",
   "未知 agent：{kind}": "Unknown agent: {kind}",
   "未知传输方式 {transport}": "Unknown transport {transport}",
   "未知供应商": "Unknown provider",

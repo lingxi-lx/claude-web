@@ -18,7 +18,7 @@ import { ZOOM_STEPS, cleanZoom, fitWindow, minWindow, nextZoom, scaleCaption, tr
 import { getLocale, initLanguage, tr } from './i18n.js';
 import { SCHEME, linkFromArgv, parseDeepLink, type DeepLink } from './deep-link';
 import { menuItems } from './context-menu';
-import { PendingPicks, listSources, type CapturePick } from './capture';
+import { PendingPicks, SourceCache, displayMediaGrant, listSources, oneAtATime, type CapturePick } from './capture';
 import { CrashGuard, allowNavigation, externalAllowed, sameOrigin, windowOpenAction } from './nav-guard';
 import { FileGuard, guardSession } from './file-guard';
 import { fromOurWindow, openablePath, type IpcAsker } from './ipc-guard';
@@ -814,17 +814,20 @@ ipcMain.on('desktop:appMenu', (e, at: { x: number; y: number }) => {
 });
 // 录屏 (spec E3): our own picker lists sources, the page chooses one, the next getDisplayMedia of that window gets it
 const picks = new PendingPicks();
-const listed = new Map<number, Set<string>>(); // window → source ids it was shown (a pick must be one of them)
+// window → the sources it was shown (a pick must be one of them; getDisplayMedia is answered from here, fix E-I4)
+const listed = new SourceCache<Electron.DesktopCapturerSource>();
+const listedWatch = new Set<number>();
+const enumerate = oneAtATime(); // one desktopCapturer enumeration at a time
 ipcMain.handle('desktop:capture:sources', async (e) => {
   if (!ours(e)) return [];
-  const list = await listSources(desktopCapturer, BrowserWindow);
-  listed.set(e.sender.id, new Set(list.map((s) => s.id)));
-  return list;
+  const id = e.sender.id;
+  if (!listedWatch.has(id)) { listedWatch.add(id); e.sender.once('destroyed', () => { listed.drop(id); listedWatch.delete(id); }); }
+  return enumerate(() => listSources(desktopCapturer, BrowserWindow, (shown) => listed.set(id, shown)));
 });
 ipcMain.handle('desktop:capture:choose', (e, p: CapturePick) => {
   if (!ours(e) || !p || typeof p !== 'object') return false;
   if (p.kind === 'source') {
-    if (typeof p.id !== 'string' || !listed.get(e.sender.id)?.has(p.id)) return false;
+    if (typeof p.id !== 'string' || !listed.has(e.sender.id, p.id)) return false;
     picks.set(e.sender.id, { kind: 'source', id: p.id });
     return true;
   }
@@ -1013,18 +1016,15 @@ if (gotLock) app.whenReady().then(async () => {
   // <webview> names gets it as it attaches (createWindow)
   for (const p of [...BROWSER_PARTITIONS, LOCAL_PARTITION]) guardSession(session.fromPartition(p), fileGuard);
   // 录屏: a getDisplayMedia gets the source its window picked in our picker a moment ago, or nothing
+  // (fix E-I4 / E-I5): only the window's top frame, and the source from what our picker listed — no second enumeration
   session.defaultSession.setDisplayMediaRequestHandler((req, cb) => {
-    void (async () => {
+    try {
       const wc = req.frame ? webContents.fromFrame(req.frame) : undefined;
-      const p = wc ? picks.take(wc.id) : undefined;
-      if (!p) return cb({});
-      if (p.kind === 'guest') {
-        const g = webContents.fromId(p.webContentsId);
-        return g && !g.isDestroyed() ? cb({ video: g.mainFrame }) : cb({});
-      }
-      const src = (await desktopCapturer.getSources({ types: ['screen', 'window'] })).find((s) => s.id === p.id);
-      return src ? cb({ video: src }) : cb({});
-    })().catch(() => cb({}));
+      cb(displayMediaGrant({
+        senderId: wc?.id, fromMainFrame: !!wc && req.frame === wc.mainFrame, picks, sources: listed,
+        guestFrame: (id) => { const g = webContents.fromId(id); return g && !g.isDestroyed() ? g.mainFrame : undefined; },
+      }) as Electron.Streams);
+    } catch { cb({}); }
   });
   // the window first (on the splash), then the server: see splashUrl
   const hidden = process.argv.includes('--hidden');

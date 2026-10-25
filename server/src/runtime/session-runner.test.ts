@@ -53,6 +53,27 @@ vi.mock('node:child_process', async (orig) => {
   return { ...real, spawn: (cmd: string, args: string[], opts: any) => { spawned.push({ cmd, args, opts }); const c: any = new EventEmitter(); c.stderr = new EventEmitter(); c.stderr.setEncoding = () => {}; return c; } };
 });
 
+// E-minor: a \\wsl.localhost path never reaches the real disk here (it would wake WSL's file server, seconds per touch,
+// or fail on a machine without WSL): every fs call on one answers "not there" at once, as for a folder with no settings
+const wslTouches = vi.hoisted(() => ({ n: 0 }));
+const isWslPath = vi.hoisted(() => (p: unknown) => typeof p === 'string' && /^[\\/]{2}wsl(\.localhost|\$)[\\/]/i.test(p));
+const enoent = vi.hoisted(() => (p: string) => Object.assign(new Error('ENOENT: no such file or directory, ' + p), { code: 'ENOENT' }));
+vi.mock('node:fs', async (orig) => {
+  const real: any = await orig();
+  const sync = ['existsSync', 'statSync', 'lstatSync', 'readFileSync', 'readdirSync', 'accessSync', 'realpathSync', 'openSync'];
+  const out: any = { ...real };
+  for (const k of sync) out[k] = (p: any, ...a: any[]) => { if (isWslPath(p)) { wslTouches.n++; if (k === 'existsSync') return false; throw enoent(p); } return real[k](p, ...a); };
+  out.promises = { ...real.promises };
+  for (const k of ['stat', 'lstat', 'readFile', 'readdir', 'access', 'realpath', 'open']) out.promises[k] = (p: any, ...a: any[]) => { if (isWslPath(p)) { wslTouches.n++; return Promise.reject(enoent(p)); } return real.promises[k](p, ...a); };
+  return { ...out, default: out };
+});
+vi.mock('node:fs/promises', async (orig) => {
+  const real: any = await orig();
+  const out: any = { ...real };
+  for (const k of ['stat', 'lstat', 'readFile', 'readdir', 'access', 'realpath', 'open']) out[k] = (p: any, ...a: any[]) => { if (isWslPath(p)) { wslTouches.n++; return Promise.reject(enoent(p)); } return real[k](p, ...a); };
+  return { ...out, default: out };
+});
+
 const { SessionRunner } = await import('./session-runner.js');
 const tick = () => new Promise((r) => setTimeout(r, 10));
 
@@ -66,13 +87,12 @@ describe('SessionRunner', () => {
     expect(o.pathToClaudeCodeExecutable).toBe('claude');
     o.spawnClaudeCodeProcess({ command: 'claude', args: ['-p'], env: {}, cwd: 'x' });
     expect(spawned[0].cmd).toBe('wsl.exe');
-    expect(spawned[0].args).toEqual(['-d', 'Ubuntu', '--cd', '/home/me/p', '--', 'claude', '-p']);
+    expect(spawned[0].args).toEqual(['-d', 'Ubuntu', '--cd', '/home/me/p', '--exec', 'sh', '-lc', 'exec claude "$@"', 'claude', '-p']);
     expect(spawned[0].opts.windowsHide).toBe(true);
     expect(r.info.wsl).toEqual({ distro: 'Ubuntu', dropped: [] });
     await r.close();
-    // the runner's real fs looks at the \\wsl.localhost cwd (it wakes WSL's file server: ~6 s alone, 40–80 s under the
-    // full parallel `npm test` after the stage D/E/F merge), so this one gets the long timeout the git tests have
-  }, 120_000);
+    expect(wslTouches.n).toBeGreaterThan(0); // the runner did look at the folder — through the stub, not the real disk
+  });
 
   it('extra project folders go to the SDK as additionalDirectories; none → the option is absent', async () => {
     queries.length = 0;

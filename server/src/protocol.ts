@@ -389,7 +389,7 @@ export interface SessionMeta {
   pinnedMsgs?: { id: string; text: string }[];
   /** a rename made while the conversation's process ran (server/src/meta/store.ts) */
   /** stage E1 自动处理评论: when the switch went on (0 / absent = off), comment ids already handed over (newest 200), the batch waiting for a push */
-  prAutoComments?: number; prCommentsDone?: string[]; prCommentsSent?: { ids: string[]; sha: string; at: number };
+  prAutoComments?: number; prCommentsDone?: string[]; prCommentsSent?: { ids: string[]; sha: string; at: number; /** local HEAD when the batch went, and the commit made after it (fix E-I2) */ head?: string; commit?: string };
   /** stage E5: the machine it runs on (WSL); stage E3: the built-in browser's recordings (newest 20) */
   env?: SessionEnv; browserRecordings?: { path: string; start: number; end: number }[];
   pendingTitle?: string; /** 只聊天: started without tools; a resume keeps it that way */ chatOnly?: boolean; /** 保持电脑唤醒 while this conversation is busy */ keepAwake?: boolean; /** 代码审查卡: findings dismissed here, `<toolUseId>#<index>` */ reviewDismissed?: string[]; /** 任务 chip: suggestions dismissed (tool use ids), and started (tool use id → the new conversation) */ taskDismissed?: string[]; taskStarted?: Record<string, string>; /** PR 监控条: 自动修 CI on, and the failures it already asked about */ prAutoFix?: boolean; prFixed?: string[]; pinned?: boolean; archived?: boolean; workspaceId?: string; tags?: string[]; providerId?: string; /** sidebar grouping directory when it differs from the cwd (orchestration worktrees) */ groupCwd?: string; /** prompt-cache route key when it is not the session's own id (forks keep their root's) */ cacheKey?: string; /** the model its subagents run on, picked for this provider ('' = the main model) */ subagent?: { providerId: string; model: string }; /** the permission mode it last ran with: a resume without a pick comes back in it (the SDK never says it) */ permissionMode?: PermissionMode; /** 思考用的语言 for this conversation: '' / absent = the setting `ai.thinkingLanguage`, 'off' = none here, 'auto' = the interface language, else a THINKING_LANGUAGES id */ thinkingLanguage?: string; /** a `continueInClaude` source's conversation: the Claude conversation it goes on in */ continuedAs?: string; /** the Claude conversation of a `continuedAs`: what it goes on from, and how many of its messages are in it */ continuedFrom?: string; replayed?: number; /** 派活 (stage F3): started by a dispatch, and from where */ origin?: 'dispatch'; dispatchFrom?: DispatchFrom; /** 交给常开机器继续 (stage F1): handed to that machine, read-only here */ handedOff?: HandoffInfo; /** the always-on machine's copy: where it came from */ handoffFrom?: HandoffFrom }
@@ -724,6 +724,8 @@ export type ClientRequest =
   | { kind: 'vcs.replyComment'; cwd: string; number: number; comment: PrCommentRef; body: string }
   | { kind: 'vcs.resolveComment'; cwd: string; number: number; comment: PrCommentRef }
   | { kind: 'vcs.failureLog'; cwd: string; jobId: number }
+  /** PR 监控条: the window that does a conversation's automatic actions (fix E-I3); release = its bar left the screen */
+  | { kind: 'vcs.autoLease'; sessionId: string; holder: string; release?: boolean }
   | { kind: 'vcs.tokens.list' }
   | { kind: 'vcs.tokens.set'; host: string; token: string | null }
   | { kind: 'vcs.create'; cwd: string; repo?: string; title: string; body?: string; isPr?: boolean; head?: string; base?: string; draft?: boolean; labels?: string[] }

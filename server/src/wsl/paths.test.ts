@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isWslUnc, parseWslUnc, toWslPath, wslToWin } from './paths';
+import { isWslUnc, parseWslUnc, toWslPath, wslSafeDirArgs, wslToWin } from './paths';
 
 describe('parseWslUnc', () => {
   it('both host names, either slash, any case', () => {
@@ -42,5 +42,22 @@ describe('wslToWin', () => {
   });
   it('round-trips', () => {
     for (const p of ['/home/me/a b/c', '/mnt/c/x/y', '/opt']) expect(toWslPath(wslToWin(p, 'Ubuntu'), 'Ubuntu')).toBe(p);
+  });
+});
+
+describe('wslSafeDirArgs (E-minor)', () => {
+  it('the folder and the ones above it inside the distro, never *', () => {
+    const a = wslSafeDirArgs(String.raw`\\wsl.localhost\Ubuntu\home\me\p`);
+    expect(wslSafeDirArgs('//wsl.localhost/Ubuntu/home/me/p')).toEqual(a);
+    expect(a).not.toContain('safe.directory=*');
+    expect(a).toEqual([
+      '-c', 'safe.directory=%(prefix)///wsl.localhost/Ubuntu/home/me/p', '-c', 'safe.directory=//wsl.localhost/Ubuntu/home/me/p',
+      '-c', 'safe.directory=%(prefix)///wsl.localhost/Ubuntu/home/me', '-c', 'safe.directory=//wsl.localhost/Ubuntu/home/me',
+      '-c', 'safe.directory=%(prefix)///wsl.localhost/Ubuntu/home', '-c', 'safe.directory=//wsl.localhost/Ubuntu/home',
+    ]);
+  });
+  it('not a WSL path: nothing', () => {
+    expect(wslSafeDirArgs(String.raw`C:\repo`)).toEqual([]);
+    expect(wslSafeDirArgs(String.raw`\\nas\share\x`)).toEqual([]);
   });
 });
