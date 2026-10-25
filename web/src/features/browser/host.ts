@@ -6,11 +6,12 @@ import type { BrowserAnswer, BrowserCommand, ServerEvent } from '@shared';
 import { ws } from '@/ws/client';
 import { useStore } from '@/store';
 import { showPanel } from '@/features/workbench/right-panel';
-import { agentTabsOf, refusal, runOp } from './ops';
+import { agentTabsOf, hostOf, refusal, runOp, withLimit } from './ops';
 import { pageOf } from './guest';
 import { checkPage } from './auto-verify';
 import { searchPage } from './search-page';
-import { agentCurrentOf, agentTab, closeTab, cookiesMode, frontTab, guestElOf, hasWebview, newTab, partitionsFor, patchTab, setAgentCurrent, setPartitionSource, tabOf, takenOverBy, useBrowser } from './state';
+import { agentCurrentOf, agentTab, closeTab, cookiesMode, frontTab, guestElOf, guestOf, hasWebview, isTakenOver, newTab, partitionsFor, patchTab, setAgentCurrent, setPartitionSource, tabOf, useBrowser } from './state';
+import { desktop } from '@/desktop';
 import { loadable } from './url';
 import { tr } from '@/i18n';
 
@@ -41,13 +42,68 @@ async function inFront(tabId: string): Promise<void> {
   await sleep(150);
 }
 
-/** One operation, in the tab this conversation's Agent works in (its first `open` makes the tab and shows the browser). */
+/** How long one operation may take here before it is given up on (the server waits 30 s: service.ts COMMAND_TIMEOUT_MS). */
+export const OP_LIMIT_MS = 28_000;
+/** browser_eval: the page's own limit is 10 s for a promise (ops.ts EVAL_TIMEOUT_MS); a script that never yields is stopped here. */
+export const EVAL_LIMIT_MS = 15_000;
+
+/** The operations of each conversation running now: 接管 aborts them (they stop before their next step). */
+const running = new Map<string, Set<AbortController>>();
+function stopRunning(sessionId: string): void {
+  for (const ctl of running.get(sessionId) ?? []) ctl.abort();
+  // what a tab of the conversation is loading stops too
+  for (const t of useBrowser.getState().tabs) {
+    if (t.agent !== sessionId) continue;
+    try { guestOf(t.id)?.stop(); } catch { /* not attached */ }
+  }
+}
+// 接管 cancels what the conversation's Agent is doing in the browser right now
+useBrowser.subscribe((s, p) => {
+  if (s.takenOver === p.takenOver) return;
+  for (const sid of s.takenOver) if (!p.takenOver.includes(sid)) stopRunning(sid);
+});
+
+/**
+ * One operation, in the tab this conversation's Agent works in (its first `open` makes the tab and shows the browser).
+ * Given up on after OP_LIMIT_MS (EVAL_LIMIT_MS for a script — the page is then ended and loaded again): a page that
+ * never answers must not hold the conversation's queue.
+ */
 export async function carryOut(c: BrowserCommand): Promise<BrowserAnswer> {
+  if (c.op === 'search') return carryOutNow(c, new AbortController().signal);
+  const ctl = new AbortController();
+  const mine = running.get(c.sessionId) ?? new Set<AbortController>();
+  running.set(c.sessionId, mine);
+  mine.add(ctl);
+  const eval_ = c.op === 'eval';
+  try {
+    return await withLimit(carryOutNow(c, ctl.signal), eval_ ? EVAL_LIMIT_MS : OP_LIMIT_MS, () => {
+      ctl.abort();
+      const tab = agentTab(c.sessionId);
+      if (tab) patchTab(tab.id, { busy: false });
+      const el = tab ? guestElOf(tab.id) : undefined;
+      if (!el) return;
+      try {
+        if (eval_ && desktop?.guestRecover) void desktop.guestRecover(el.getWebContentsId()).catch(() => {});
+        else el.stop();
+      } catch { /* not attached */ }
+    });
+  } finally {
+    mine.delete(ctl);
+    if (!mine.size && running.get(c.sessionId) === mine) running.delete(c.sessionId);
+  }
+}
+
+async function carryOutNow(c: BrowserCommand, signal: AbortSignal): Promise<BrowserAnswer> {
   // 保留 Cookie: Claude's pages are in the profile the mode gives it (an open tab keeps the one it was made in)
   const agentPartition = partitionsFor(cookiesMode(useStore.getState().settings)).agent;
   // a search has a page of its own, off screen: it must not replace what the conversation has open
   if (c.op === 'search') return { search: await searchPage(String(c.args?.url ?? ''), agentPartition) };
-  if (c.op === 'tabs') return tabsOp(c, agentPartition);
+  if (c.op === 'tabs') {
+    // 接管: only the list (a new / switched / closed tab would move the user's page from under them)
+    const why = refusal('tabs', c.args ?? {}, { takenOver: isTakenOver(c.sessionId), url: '' });
+    if (why) throw new Error(why);
+    return tabsOp(c, agentPartition, signal);
+  }
   let tab = agentTab(c.sessionId);
   if (!tab) {
     if (c.op !== 'open') throw new Error(tr('这个对话还没有打开网页：先用 browser_open 打开一个网址。'));
@@ -56,21 +112,23 @@ export async function carryOut(c: BrowserCommand): Promise<BrowserAnswer> {
     showPanel('browser');
     tab = tabOf(id)!;
   }
-  // 接管 / a file: page / the tab moved to another site than the server checked: refused before the page is touched
-  const why = refusal(c.op, c.args ?? {}, { takenOver: takenOverBy(useBrowser.getState().tabs, c.sessionId), url: pageOf(tab.id).url() || tab.url });
+  // 接管 / a file: page / not checked by the server, or checked for another site than the tab is REALLY on (the
+  // webview's own address, never what the page says): refused before the page is touched
+  const why = refusal(c.op, c.args ?? {}, { takenOver: isTakenOver(c.sessionId), url: pageOf(tab.id).url() || tab.url });
   if (why) throw new Error(why);
   // a tab opened by browser_tabs "new" without an address has no page yet
   if (!tab.src && c.op !== 'open') throw new Error(tr('这个标签还没有打开网页：先用 browser_open 打开一个网址。'));
-  return inTab(tab.id, c.op, c.args ?? {});
+  return inTab(tab.id, c.op, c.args ?? {}, signal);
 }
 
-async function inTab(id: string, op: BrowserCommand['op'], args: Record<string, unknown>): Promise<BrowserAnswer> {
+async function inTab(id: string, op: BrowserCommand['op'], args: Record<string, unknown>, signal: AbortSignal): Promise<BrowserAnswer> {
   await onScreen(id);
   // mouse and keyboard by position go by what is drawn, and answer with a picture of it
   if (op === 'screenshot' || op === 'computer' || op === 'hover' || op === 'drag') await inFront(id);
   patchTab(id, { busy: true });
   try {
-    return await runOp(pageOf(id), op, args);
+    // runOp answers with the webview's own address and title (a page can make its agent report any)
+    return await runOp(pageOf(id), op, args, { signal });
   } finally {
     patchTab(id, { busy: false });
   }
@@ -80,7 +138,7 @@ async function inTab(id: string, op: BrowserCommand['op'], args: Record<string, 
  * browser_tabs: the tabs this conversation's Agent opened — never the user's own, nor another conversation's. `list`,
  * `switch` the one its tools work in, open a `new` one (http / https only), `close` one (default: the current one).
  */
-async function tabsOp(c: BrowserCommand, partition: string): Promise<BrowserAnswer> {
+async function tabsOp(c: BrowserCommand, partition: string, signal: AbortSignal): Promise<BrowserAnswer> {
   const sid = c.sessionId;
   const a = c.args ?? {};
   const list = () => agentTabsOf(useBrowser.getState().tabs, sid, agentTab(sid)?.id);
@@ -107,7 +165,7 @@ async function tabsOp(c: BrowserCommand, partition: string): Promise<BrowserAnsw
       showPanel('browser');
       setAgentCurrent(sid, id);
       if (!url) return { tabs: list(), note: tr('新开了标签 [{id}]，之后的浏览器工具都在它里面；用 browser_open 打开网址。', { id }) };
-      const r = await inTab(id, 'open', { url });
+      const r = await inTab(id, 'open', { url }, signal);
       return { ...r, tabs: list(), note: `${tr('新开了标签 [{id}]，之后的浏览器工具都在它里面。', { id })}${r.note ?? ''}` };
     }
     case 'close': {
@@ -158,4 +216,9 @@ export function installBrowserHost(): () => void {
 }
 
 // for scripts/browser-smoke.cjs: drive an operation without a server in between, and look at the tabs
-(window as unknown as { __cwBrowser?: unknown }).__cwBrowser = { carryOut, state: useBrowser, canHost: hasWebview, checkPage: (tabId: string) => checkPage(pageOf(tabId)) };
+// (`siteOf`: the host the server's site check would judge for the conversation's tab now — the scripts send it as `site`
+// the way the server does, service.ts gated)
+(window as unknown as { __cwBrowser?: unknown }).__cwBrowser = {
+  carryOut, state: useBrowser, canHost: hasWebview, checkPage: (tabId: string) => checkPage(pageOf(tabId)),
+  siteOf: (sessionId: string) => { const t = agentTab(sessionId); return t ? hostOf(pageOf(t.id).url() || t.url) : ''; },
+};

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BrowserPage } from '@shared';
-import { CONSOLE_MAX, GLANCE_CHARS, NETWORK_MAX, OPEN_CHARS, SNAPSHOT_CHARS, WAIT_MAX_MS, WHEEL_NOTCH, agentTabsOf, outlineText, parseKey, parseModifiers, runOp, toView, refusal, TAKEN_OVER, SITE_CHANGED, hostOf, evalSource, looksLikeBody, EVAL_MAX_CHARS, type MouseAct, type PageHandle } from './ops';
+import { CONSOLE_MAX, GLANCE_CHARS, NETWORK_MAX, OPEN_CHARS, SNAPSHOT_CHARS, WAIT_MAX_MS, WHEEL_NOTCH, agentTabsOf, outlineText, parseKey, parseModifiers, runOp, toView, refusal, redactUrl, TAKEN_OVER, NOT_CHECKED, SITE_CHANGED, hostOf, evalSource, evalForm, looksLikeBody, withLimit, EVAL_MAX_CHARS, type MouseAct, type PageHandle } from './ops';
 
 /** A page that records what it was asked, in order. */
 function fakePage(o: { text?: string; url?: string; idle?: boolean; canBack?: boolean; onClick?: (p: Fake) => void; typed?: { submitted?: boolean; enter?: boolean }; scroll?: { moved: number; top: number; max: number; length: number }; picture?: { width: number; height: number } | null; view?: { width: number; height: number } } = {}) {
@@ -333,6 +333,20 @@ describe('console / network / structure / wait / viewport (stage B task 6)', () 
     expect(list[0].url.length).toBeLessThanOrEqual(501);
   });
 
+  it('network / console: the values of secret-looking query parameters never reach the model (S9); the rest is kept', async () => {
+    expect(redactUrl('https://a.test/cb?code=abc123&state=xyz')).toBe('https://a.test/cb?code=…&state=xyz');
+    expect(redactUrl('https://a.test/#access_token=t0k&token_type=bearer')).toBe('https://a.test/#access_token=…&token_type=bearer');
+    expect(redactUrl('https://s3.example/o?X-Amz-Signature=deadbeef&X-Amz-Credential=AKIA%2F1&X-Amz-Date=2026')).toBe('https://s3.example/o?X-Amz-Signature=…&X-Amz-Credential=…&X-Amz-Date=2026');
+    expect(redactUrl('https://a.test/q?API_KEY=1&apikey=2&key=3&sig=4&signature=5&id_token=6&refresh_token=7&password=8&secret=9&session=10&auth=11&X-Goog-Signature=12&page=2'))
+      .toBe('https://a.test/q?API_KEY=…&apikey=…&key=…&sig=…&signature=…&id_token=…&refresh_token=…&password=…&secret=…&session=…&auth=…&X-Goog-Signature=…&page=2');
+    // nothing to hide, or not a URL: as it was
+    expect(redactUrl('https://a.test/search?q=cats&keyboard=1')).toBe('https://a.test/search?q=cats&keyboard=1');
+    expect(redactUrl('data:text/plain,hi')).toBe('data:text/plain,hi');
+    const p = devPage({ debug: (op) => ({ entries: op === 'network' ? [{ method: 'GET', url: 'https://a.test/cb?code=SECRET1' }] : [{ level: 'error', text: 'x', at: 1, url: 'https://a.test/app.js?token=SECRET2' }] }) });
+    expect(JSON.stringify((await go(p, 'network')).network)).not.toContain('SECRET1');
+    expect(JSON.stringify((await go(p, 'console')).console)).not.toContain('SECRET2');
+  });
+
   it('snapshot: the outline of the shell as indented lines with the refs click takes, the page agent asked first', async () => {
     const nodes = [{ depth: 0, role: 'banner', name: '' }, { depth: 1, role: 'heading', name: 'Shop', level: 1 }, { depth: 1, role: 'link', name: 'Cart', ref: 'kqz3' }, { depth: 0, role: 'main', name: '' }, { depth: 1, role: 'textbox', name: 'Search', ref: 'kqz4', value: 'shoes', states: ['focused'] }, { depth: 1, role: 'checkbox', name: 'Remember', ref: 'kqz5', states: ['checked'] }, { depth: 2, role: 'option', name: '', more: 12 }, { depth: 1, role: 'button', name: '', ref: 'kqz6' }];
     const p = devPage({ debug: () => ({ nodes, truncated: false }) });
@@ -496,9 +510,83 @@ describe('hover / drag / select / eval, the cursor, 接管 (stage B task 7)', ()
     for (const op of ['click', 'type', 'key', 'scroll', 'computer', 'hover', 'drag', 'select', 'eval'] as const) expect(refusal(op, {}, o), op).toBe(TAKEN_OVER);
     expect(TAKEN_OVER).toContain('用户接管了浏览器');
     expect(refusal('read', { probe: true }, o)).toBe(TAKEN_OVER);
-    for (const op of ['read', 'find', 'open', 'snapshot', 'screenshot', 'console', 'network', 'wait', 'back', 'viewport'] as const) expect(refusal(op, {}, o), op).toBeNull();
+    // stage B fix wave (A2): only reading goes while taken over — open / back / viewport / tabs new·switch·close moved the
+    // user's page or tab from under them, so they are refused now (this list used to include open, back, viewport)
+    for (const op of ['read', 'find', 'snapshot', 'screenshot', 'console', 'network', 'wait'] as const) expect(refusal(op, {}, o), op).toBeNull();
+    for (const op of ['open', 'back', 'viewport'] as const) expect(refusal(op, {}, o), op).toBe(TAKEN_OVER);
+    expect(refusal('tabs', { action: 'list' }, o)).toBeNull();
+    for (const action of ['new', 'switch', 'close']) expect(refusal('tabs', { action }, o), action).toBe(TAKEN_OVER);
+    expect(refusal('computer', { action: 'screenshot' }, o)).toBeNull();
+    expect(refusal('computer', { action: 'left_click', site: 'a.test' }, o)).toBe(TAKEN_OVER);
+    expect(TAKEN_OVER).toMatch(/打开网址/);
     // 交还: the same ops go again
-    expect(refusal('click', {}, { takenOver: false, url: 'https://a.test/' })).toBeNull();
+    expect(refusal('click', { site: 'a.test' }, { takenOver: false, url: 'https://a.test/' })).toBeNull();
+    expect(refusal('open', {}, { takenOver: false, url: 'https://a.test/' })).toBeNull();
+  });
+
+  it('a page-changing op the server did not check (no site) is refused: the window never trusts the server\'s idea of the page (S1)', () => {
+    const o = { takenOver: false, url: 'https://bank.example/' };
+    for (const op of ['click', 'type', 'key', 'scroll', 'hover', 'drag', 'select', 'eval'] as const) expect(refusal(op, {}, o), op).toBe(NOT_CHECKED);
+    expect(refusal('computer', { action: 'left_click' }, o)).toBe(NOT_CHECKED);
+    // a picture or a pause is not a change: never asked about, so no site
+    expect(refusal('computer', { action: 'screenshot' }, o)).toBeNull();
+    expect(refusal('computer', { action: 'wait' }, o)).toBeNull();
+    // the server judged a page with no host ('') and the tab is on one: refused with the real address
+    expect(refusal('click', { site: '' }, o)).toBe(`${SITE_CHANGED}https://bank.example/`);
+    expect(refusal('click', { site: '' }, { takenOver: false, url: 'about:blank' })).toBeNull();
+    // a blob: page is its origin's site
+    expect(hostOf('blob:https://Bank.example/0b1c')).toBe('bank.example');
+    expect(refusal('click', { site: '' }, { takenOver: false, url: 'blob:https://bank.example/0b1c' })).toBe(`${SITE_CHANGED}blob:https://bank.example/0b1c`);
+  });
+
+  it('every answer says the page the tab is REALLY on, not what the page agent reported (S1: a page can forge location)', async () => {
+    const p = fakePage();
+    const forged = { ...p, call: async (fn: string, arg: Record<string, unknown>) => {
+      const r = await p.call(fn, arg) as { page?: BrowserPage };
+      return r.page ? { ...r, page: { ...r.page, url: 'https://forged.example/', title: 'Forged' } } : r;
+    } };
+    for (const op of ['read', 'find', 'snapshot'] as const) {
+      const a = await runOp(forged as unknown as PageHandle, op, op === 'find' ? { query: 'x' } : {}, quick);
+      expect(a.page?.url, op).toBe('https://a.test/');
+      expect(a.page?.title, op).toBe('T');
+    }
+    const c = await runOp(forged as unknown as PageHandle, 'click', { ref: 'e1', site: 'a.test' }, quick);
+    expect(c.page?.url).toBe('https://a.test/');
+  });
+
+  it('an op is stopped between its steps when the user takes over (A3): a long drag does not finish', async () => {
+    const { p } = page7();
+    const ctl = new AbortController();
+    let moves = 0;
+    const mouse0 = p.mouse;
+    p.mouse = async (e: MouseAct) => { await mouse0(e); if (e.type === 'move' && ++moves === 3) ctl.abort(); };
+    await expect(runOp(p as unknown as PageHandle, 'drag', { from: 'a', to: 'b', site: 'a.test' }, { ...quick, signal: ctl.signal })).rejects.toThrow(TAKEN_OVER);
+    expect(p.log.filter((l) => l.startsWith('up'))).toEqual([]);
+    expect(moves).toBe(3);
+    // already aborted: nothing is done at all
+    const q = fakePage();
+    const done = new AbortController(); done.abort();
+    await expect(runOp(q as unknown as PageHandle, 'click', { ref: 'e1', site: 'a.test' }, { ...quick, signal: done.signal })).rejects.toThrow(TAKEN_OVER);
+    expect(q.log).toEqual([]);
+  });
+
+  it('withLimit: an op that never answers is given up on, the queue goes on (A5)', async () => {
+    let late = 0;
+    await expect(withLimit(new Promise(() => {}), 20, () => { late++; })).rejects.toThrow(/卡住/);
+    expect(late).toBe(1);
+    expect(await withLimit(Promise.resolve(3), 20, () => { late++; })).toBe(3);
+    expect(late).toBe(1);
+  });
+
+  it('evalForm: the script is decided once, before it runs — an expression or a function body (A4)', () => {
+    expect(evalForm('document.title')).toBe(false);
+    expect(evalForm('await fetch("/x").then((r) => r.status)')).toBe(false);
+    expect(evalForm('return 1')).toBe(true);
+    expect(evalForm('const a = 1; a + 1')).toBe(true);
+    expect(evalForm('location.href = "/x"; 1')).toBe(true);
+    expect(evalForm('if (x) { y() }')).toBe(true);
+    // neither parses: run once as written, the page reports the syntax error
+    expect(evalForm('a = ;')).toBe(true);
   });
 
   it('a file: page is never driven; an op checked for another site says where the tab is now', () => {

@@ -50,28 +50,66 @@ export const EVAL_TIMEOUT_MS = 10_000;
 
 /** Ops that change the page: refused while the user has taken over the browser (and asked about by the server). */
 export const MUTATING: ReadonlySet<BrowserOp> = new Set<BrowserOp>(['click', 'type', 'key', 'scroll', 'computer', 'hover', 'drag', 'select', 'eval']);
-export const TAKEN_OVER = tr('用户接管了浏览器。在用户点「交还」之前，不能在页面上点击、输入或运行脚本（读页面可以）；等用户交还，或者问用户要怎么做。');
+export const TAKEN_OVER = tr('用户接管了浏览器。在用户点「交还」之前，不能在页面上点击、输入、打开网址、切换标签页或运行脚本（读页面可以）；等用户交还，或者问用户要怎么做。');
+/** A page-changing op that did not come through the server's site check (server/src/web/service.ts gated). */
+export const NOT_CHECKED = tr('这个操作没有经过网站检查，没有执行。');
 /** The server's word for "this tab is on another site than the one I checked" (server/src/web/service.ts SITE_CHANGED). */
 export const SITE_CHANGED = 'cw-site-changed:';
+/** While the user has taken over, only these go (reading the page; browser_tabs only to list). */
+const TAKEOVER_OK: ReadonlySet<BrowserOp> = new Set<BrowserOp>(['read', 'find', 'snapshot', 'screenshot', 'console', 'network', 'wait', 'tabs']);
+/** The ops the server asks about and sends with the `site` it judged: page-changing ones but a picture or a pause. */
+export const isGated = (op: BrowserOp, args: Record<string, unknown>): boolean => MUTATING.has(op) && !(op === 'computer' && (args.action === 'screenshot' || args.action === 'wait'));
 
 /**
  * Whether the window refuses an op before it touches the page: the user has taken over the conversation's browser
- * (a page-changing op, or the server's probe for one); a page-changing op on a local file (never driven); an op
- * checked for another site than the tab's now (the server judges the new one).
+ * (anything but reading — and the server's probe for a change); a page-changing op on a local file (never driven);
+ * a page-changing op the server did not check (no `site`), or checked for another site than the one the tab is
+ * REALLY on — `url` is the webview's own address, never what the page reported (the server judges the new one).
  */
 export function refusal(op: BrowserOp, args: Record<string, unknown>, o: { takenOver: boolean; url: string }): string | null {
-  const probe = op === 'read' && args.probe === true;
-  if (o.takenOver && (MUTATING.has(op) || probe)) return TAKEN_OVER;
+  if (o.takenOver) {
+    const probe = op === 'read' && args.probe === true;
+    const picture = op === 'computer' && args.action === 'screenshot';
+    const listing = op !== 'tabs' || args.action === 'list';
+    if (probe || !(TAKEOVER_OK.has(op) || picture) || !listing) return TAKEN_OVER;
+  }
   if (!MUTATING.has(op)) return null;
   if (/^file:/i.test(o.url)) return tr('不能在本机文件（file:）的页面上点击、输入或运行脚本：这类页面只给你读。');
-  const site = typeof args.site === 'string' ? args.site : '';
-  if (site && hostOf(o.url) !== site.toLowerCase()) return `${SITE_CHANGED}${o.url}`;
+  if (!isGated(op, args)) return null;
+  if (typeof args.site !== 'string') return NOT_CHECKED;
+  if (hostOf(o.url) !== args.site.toLowerCase()) return `${SITE_CHANGED}${o.url}`;
   return null;
 }
 
-/** A page's host as the server compares it (site-gate.ts normHost): lower case, no brackets, no trailing dot. */
+/** A page's host as the server compares it (site-gate.ts hostOfUrl): lower case, no brackets, no trailing dot; a blob: page is its origin's. */
 export function hostOf(url: string): string {
-  try { return new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, ''); } catch { return ''; }
+  try {
+    const u = new URL(url);
+    if (u.protocol === 'blob:') return hostOf(u.pathname);
+    return u.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '');
+  } catch { return ''; }
+}
+
+/** Gives up on `p` after `ms` (`onLate` runs once then): an op that never answers — a page stuck in a loop — does not hold the queue. */
+export function withLimit<T>(p: Promise<T>, ms: number, onLate: () => void): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      try { onLate(); } catch { /* best effort */ }
+      reject(new Error(tr('内置浏览器没有在 {s} 秒内做完这一步（页面可能卡住了），已经停下。', { s: Math.max(1, Math.round(ms / 1000)) })));
+    }, ms);
+    p.then((v) => { clearTimeout(timer); resolve(v); }, (e) => { clearTimeout(timer); reject(e); });
+  });
+}
+
+/**
+ * browser_eval: whether the script runs as a function body (true) or an expression (false) — decided here, once,
+ * by parsing (never running) it, so a script with side effects is never run twice. A script with its own `return`
+ * is a body; one that parses as an expression is one; else a body (if that does not parse either, the page says so).
+ */
+export function evalForm(script: string): boolean {
+  if (looksLikeBody(script)) return true;
+  const AsyncFn = Object.getPrototypeOf(async () => {}).constructor as new (body: string) => unknown;
+  try { new AsyncFn(`return (\n${script}\n);`); return false; } catch { return true; }
 }
 
 /**
@@ -137,7 +175,23 @@ const str = (v: unknown) => (typeof v === 'string' ? v : v == null ? '' : String
  *  untrusted-content markers, so it carries this side's own words only (no element names, no addresses). */
 const at = (ref: unknown) => `[${str(ref).trim().replace(/^\[|\]$/g, '').slice(0, 24)}]`;
 
-export interface OpTimes { pause?: number; settle?: number; computerSettle?: number; poll?: number }
+/** `signal`: aborted when the user takes over — the op stops before its next step (TAKEN_OVER). */
+export interface OpTimes { pause?: number; settle?: number; computerSettle?: number; poll?: number; signal?: AbortSignal }
+
+/** The page, with every step it is asked for checked against `signal` first (url / title / show are not steps). */
+function stoppable(page: PageHandle, signal: AbortSignal): PageHandle {
+  return new Proxy(page, {
+    get(target, key) {
+      const v = Reflect.get(target, key, target) as unknown;
+      if (typeof v !== 'function') return v;
+      if (key === 'url' || key === 'title' || key === 'show') return (v as (...a: unknown[]) => unknown).bind(target);
+      return async (...a: unknown[]) => {
+        if (signal.aborted) throw new Error(TAKEN_OVER);
+        return (v as (...a: unknown[]) => unknown).apply(target, a);
+      };
+    },
+  });
+}
 
 /** What browser_console / browser_network hand on at most (the newest; the server cuts the lines to its own budget). */
 export const CONSOLE_MAX = 100;
@@ -153,13 +207,28 @@ const cutTo = (s: string, max: number) => (s.length > max ? `${s.slice(0, max)}�
 const objects = (v: unknown): Record<string, unknown>[] => (Array.isArray(v) ? v.filter((e): e is Record<string, unknown> => !!e && typeof e === 'object') : []);
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : undefined);
 
+/** Query / fragment parameters whose values are secrets (sign-in codes, tokens, keys, signed-URL signatures), lower case. */
+const SECRET_PARAMS: ReadonlySet<string> = new Set(['code', 'token', 'access_token', 'id_token', 'refresh_token', 'key', 'api_key', 'apikey', 'sig', 'signature', 'x-amz-signature', 'x-amz-credential', 'x-amz-security-token', 'x-goog-signature', 'x-goog-credential', 'password', 'passwd', 'secret', 'client_secret', 'session', 'sessionid', 'auth']);
+/**
+ * An address as browser_network / browser_console hand it to the model: the value of a secret-looking parameter
+ * (SECRET_PARAMS, in the query or the fragment) becomes `…`; everything else is kept as written.
+ */
+export function redactUrl(url: string): string {
+  if (!/^(https?|wss?):/i.test(url)) return url;
+  return url.replace(/([?&#;])([^=&#;]+)=([^&#;]*)/g, (m, sep: string, name: string, value: string) => {
+    let n = name;
+    try { n = decodeURIComponent(name); } catch { /* as written */ }
+    return value && SECRET_PARAMS.has(n.toLowerCase()) ? `${sep}${name}=…` : m;
+  });
+}
+
 /** The shell's console log, checked: errors and warnings only when asked; the newest CONSOLE_MAX, each cut. */
 export function consoleEntries(raw: unknown, errorsOnly: boolean): BrowserConsoleEntry[] {
   const out: BrowserConsoleEntry[] = [];
   for (const e of objects(raw)) {
     const level = str(e.level) || 'log';
     if (errorsOnly && level !== 'error' && level !== 'warning') continue;
-    const url = str(e.url);
+    const url = redactUrl(str(e.url));
     out.push({ level: level.slice(0, 20), text: cutTo(str(e.text), 1000), at: num(e.at) ?? 0, ...(url ? { url: cutTo(url, 500) } : {}) });
   }
   return out.slice(-CONSOLE_MAX);
@@ -174,7 +243,7 @@ export function networkEntries(raw: unknown, failedOnly: boolean): BrowserNetwor
     if (failedOnly && !failed && !(status !== undefined && status >= 400)) continue;
     const ms = num(e.ms);
     const type = str(e.type);
-    out.push({ method: (str(e.method) || 'GET').slice(0, 20), url: cutTo(str(e.url), 500), ...(status !== undefined ? { status } : {}), ...(ms !== undefined ? { ms } : {}), ...(type ? { type: type.slice(0, 40) } : {}), ...(failed ? { failed: cutTo(failed, 200) } : {}) });
+    out.push({ method: (str(e.method) || 'GET').slice(0, 20), url: cutTo(redactUrl(str(e.url)), 500), ...(status !== undefined ? { status } : {}), ...(ms !== undefined ? { ms } : {}), ...(type ? { type: type.slice(0, 40) } : {}), ...(failed ? { failed: cutTo(failed, 200) } : {}) });
   }
   return out.slice(-NETWORK_MAX);
 }
@@ -222,6 +291,13 @@ export function agentTabsOf(tabs: BrowserTab[], sessionId: string, current: stri
  * given a moment, then read back as a glance — the model sees what its action did without asking again.
  */
 export async function runOp(page: PageHandle, op: BrowserOp, args: Record<string, unknown>, t: OpTimes = {}): Promise<BrowserAnswer> {
+  if (t.signal?.aborted) throw new Error(TAKEN_OVER);
+  const a = await runStep(t.signal ? stoppable(page, t.signal) : page, op, args, t);
+  // where the tab is, from the webview itself: a page can make its agent report any location / title
+  return a.page ? { ...a, page: { ...a.page, url: page.url(), title: page.title() } } : a;
+}
+
+async function runStep(page: PageHandle, op: BrowserOp, args: Record<string, unknown>, t: OpTimes): Promise<BrowserAnswer> {
   const pause = t.pause ?? 250;
   const settleMs = t.settle ?? ACTION_SETTLE_MS;
   const glance = async (note: string): Promise<BrowserAnswer> => {

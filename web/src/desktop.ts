@@ -56,6 +56,8 @@ export interface DesktopBridge {
   guestEmulate?(id: number, vp: { w: number; h: number; touch: boolean; mobile: boolean } | null): Promise<boolean>;
   /** Claude's browser_console / browser_network / browser_snapshot: what the page's DevTools protocol has (desktop/src/guest-debug.ts); `{error}` when it cannot be read. */
   guestDebug?(id: number, q: { op: 'console' | 'network' | 'snapshot' }): Promise<unknown>;
+  /** a page stuck in a script: its renderer is ended and the page loaded again. False: not this window's page. */
+  guestRecover?(id: number): Promise<boolean>;
   /** a download of one of this window's pages, as it goes (features/browser/panel-logic.ts `DownloadRow`) */
   onGuestDownload?(cb: (e: import('@/features/browser/panel-logic').DownloadRow) => void): () => void;
   /** open / show a file one of those downloads saved (the shell refuses any other path). False: it did not. */

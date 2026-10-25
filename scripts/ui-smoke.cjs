@@ -3695,7 +3695,11 @@ window.desktop = {
         const bjs = (code) => bwc.executeJavaScript(code, true);
         const bwait = async (code, ms = 15_000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await bjs(code).catch(() => false)) return true; await sleep(150); } return false; };
         let bseq = 0;
-        const op = (sessionId, o, args = {}) => bjs(`window.__cwBrowser.carryOut(${JSON.stringify({ id: `b${++bseq}`, sessionId, op: o, args })}).then((a) => ({ ok: true, a }), (e) => ({ ok: false, error: String(e && e.message || e) }))`);
+        // as the server sends it: a page-changing op carries the `site` its check judged (service.ts gated) — the tab's own host
+        const op = (sessionId, o, args = {}) => bjs(`(() => { const c = ${JSON.stringify({ id: `b${++bseq}`, sessionId, op: o, args })}; const B = window.__cwBrowser;
+          const gated = ['click', 'type', 'key', 'scroll', 'hover', 'drag', 'select', 'eval'].includes(c.op) || (c.op === 'computer' && !['screenshot', 'wait'].includes(c.args.action));
+          if (gated && !('site' in c.args)) c.args.site = B.siteOf(c.sessionId);
+          return B.carryOut(c); })().then((a) => ({ ok: true, a }), (e) => ({ ok: false, error: String(e && e.message || e) }))`);
         const bkey = async (keyCode) => { bwc.sendInputEvent({ type: 'keyDown', keyCode }); bwc.sendInputEvent({ type: 'keyUp', keyCode }); await sleep(250); };
         const openMore = async () => { await bjs(`document.querySelector('.bw [data-id=more]').click()`); return bwait(`!!document.querySelector('.cm-ref [data-act]')`, 3000); };
         const tabSel = (id) => `.bw-view[data-tab="${id}"]`;

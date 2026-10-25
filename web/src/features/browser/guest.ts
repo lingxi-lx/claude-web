@@ -3,7 +3,7 @@
 // server reads pages itself.
 import { desktop } from '@/desktop';
 import agentSrc from './page-agent.js?raw';
-import { evalSource, looksLikeBody, parseKey, type MouseAct, type PageHandle, type Picture } from './ops';
+import { evalForm, evalSource, parseKey, type MouseAct, type PageHandle, type Picture } from './ops';
 import { markCursor } from './cursor';
 import { viewportOf, type ViewportId } from './viewport';
 import { guestOf, patchTab, tabOf, waitGuest, type WebviewEl } from './state';
@@ -27,6 +27,22 @@ async function idle(el: WebviewEl, ms: number): Promise<boolean> {
     if (Date.now() >= end) return false;
     await sleep(120);
   }
+}
+
+/**
+ * Whether a script can be run in the page now: the <webview> is attached and has a page. A tab whose load was refused
+ * (a file: page the app did not open) or never started has the address '' — running a script there takes the APP's
+ * window down with it (Electron: "Cannot destructure property 'preloadScripts' of 'binding.startupData'").
+ */
+export function scriptable(el: WebviewEl | null | undefined): el is WebviewEl {
+  if (!el) return false;
+  try { el.getWebContentsId(); return el.getURL() !== ''; } catch { return false; }
+}
+const NOT_SCRIPTABLE = () => tr('这个标签页现在没有打开的页面（没打开，或者被拒绝打开了），不能在里面操作。');
+/** Every script the app runs in a page goes through here (scriptable() first). */
+function runIn<T>(el: WebviewEl, code: string): Promise<T> {
+  if (!scriptable(el)) return Promise.reject(new Error(NOT_SCRIPTABLE()));
+  return el.executeJavaScript<T>(code);
 }
 
 /** How much longer a page that is still loading is waited for when something has to be asked of it. */
@@ -96,7 +112,7 @@ export function pageOf(tabId: string): PageHandle {
     await askable(el);
     // the agent script answers {ok, value} | {ok: false, error}: a throw inside the page would otherwise arrive as
     // Electron's own wording
-    const r = await el.executeJavaScript<{ ok: boolean; value?: T; error?: string }>(
+    const r = await runIn<{ ok: boolean; value?: T; error?: string }>(el,
       `${agentSrc}\n;(() => { try { return { ok: true, value: window.__cwAgent[${JSON.stringify(fn)}](${JSON.stringify(arg)}) }; } catch (e) { return { ok: false, error: String((e && e.message) || e) }; } })()`,
     );
     if (!r || !r.ok) throw new Error(r?.error || tr('页面没有回应这个操作。'));
@@ -129,12 +145,15 @@ export function pageOf(tabId: string): PageHandle {
     async evaluate(script) {
       const el = await need();
       await askable(el);
-      const run = (asBody: boolean) => el.executeJavaScript<{ ok: boolean; value?: string; error?: string }>(evalSource(script, asBody));
+      // expression or function body is decided before it runs (evalForm parses, never runs): the script runs once —
+      // a script that navigates or posts must not be run a second time because its first run did not answer
       let r: { ok: boolean; value?: string; error?: string } | undefined;
-      if (looksLikeBody(script)) r = await run(true);
-      else {
-        // an expression first; statements without a return do not parse as one — then as a function body
-        try { r = await run(false); } catch { r = await run(true).catch((e) => { throw new Error(tr('脚本有语法错误：{why}', { why: String((e as Error)?.message ?? e).slice(0, 300) })); }); }
+      try {
+        r = await runIn<{ ok: boolean; value?: string; error?: string }>(el, evalSource(script, evalForm(script)));
+      } catch (e) {
+        const why = String((e as Error)?.message ?? e).slice(0, 300);
+        if (/SyntaxError/i.test(why)) throw new Error(tr('脚本有语法错误：{why}', { why }));
+        throw new Error(tr('脚本没有返回结果（它可能让页面跳转或刷新了；脚本只运行了一次）：{why}', { why }));
       }
       if (!r) throw new Error(tr('页面没有回应这个操作。'));
       if (!r.ok) throw new Error(r.error === 'timeout' ? tr('脚本 10 秒内没有结束。') : tr('脚本出错：{why}', { why: String(r.error ?? '').slice(0, 500) }));
@@ -199,7 +218,7 @@ export function pageOf(tabId: string): PageHandle {
     async peek<T>(fn: 'has', arg: Record<string, unknown>, ms: number): Promise<T | undefined> {
       // no askable(): a wait must not stop a page that is loading — the answer just comes once it can (or not in time)
       const el = await need();
-      const asked = el.executeJavaScript<{ ok: boolean; value?: T }>(
+      const asked = runIn<{ ok: boolean; value?: T }>(el,
         `${agentSrc}
 ;(() => { try { return { ok: true, value: window.__cwAgent[${JSON.stringify(fn)}](${JSON.stringify(arg)}) }; } catch (e) { return { ok: false }; } })()`,
       ).then((r) => (r?.ok ? r.value : undefined), () => undefined);
@@ -232,7 +251,7 @@ export async function pickIn(tabId: string, n: number): Promise<PickAnswer> {
   const el = guestOf(tabId);
   if (!el) return null;
   try {
-    const r = await el.executeJavaScript<PickAnswer>(`${agentSrc}\n;window.__cwAgent.pick(${JSON.stringify({ n })})`);
+    const r = await runIn<PickAnswer>(el, `${agentSrc}\n;window.__cwAgent.pick(${JSON.stringify({ n })})`);
     if (!r || typeof r !== 'object') return null;
     if ('cancel' in r) return { cancel: 'esc' };
     return typeof r.selector === 'string' && typeof r.html === 'string' && r.rect && r.styles ? r : null;
@@ -243,7 +262,7 @@ export async function pickIn(tabId: string, n: number): Promise<PickAnswer> {
 export function stopPicking(tabId: string, clear: boolean): Promise<void> {
   const el = guestOf(tabId);
   if (!el) return Promise.resolve();
-  return el.executeJavaScript(`${agentSrc}\n;window.__cwAgent.${clear ? 'unpick' : 'pickStop'}()`).then(() => {}, () => {});
+  return runIn(el, `${agentSrc}\n;window.__cwAgent.${clear ? 'unpick' : 'pickStop'}()`).then(() => {}, () => {});
 }
 
 /** Selected text of a tab's page (for 「发给对话」); '' when there is none or the page cannot be asked. */
@@ -251,6 +270,6 @@ export async function selectionOf(tabId: string): Promise<string> {
   const el = guestOf(tabId);
   if (!el) return '';
   try {
-    return String((await el.executeJavaScript<string>(`${agentSrc}\n;window.__cwAgent.selection()`)) ?? '');
+    return String((await runIn<string>(el, `${agentSrc}\n;window.__cwAgent.selection()`)) ?? '');
   } catch { return ''; }
 }

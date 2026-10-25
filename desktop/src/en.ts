@@ -50,6 +50,7 @@ export const EN_DESKTOP: Record<string, string> = {
   "开发模式不检查更新": "Updates aren't checked in development mode",
   "引用到输入框": "Quote in the input box",
   "总览（Mission Control）": "Overview (Mission Control)",
+  "打不开这个路径": "Can't open this path",
   "打开": "Open",
   "打开数据目录": "Open data folder",
   "打开本地 HTML 文件": "Open a local HTML file",

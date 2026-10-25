@@ -551,7 +551,7 @@ function PageMenu({ tab, close, external, onSites }: { tab: BrowserTab; close: (
 function AgentStrip({ tab }: { tab: BrowserTab }) {
   const title = useStore((s) => s.sessions.find((x) => x.sessionId === tab.agent)?.title);
   const loadHistory = useStore((s) => s.loadHistory);
-  const taken = tab.takenOver === true;
+  const taken = useBrowser((s) => !!tab.agent && s.takenOver.includes(tab.agent));
   return (
     <div className={clsx('bw-agent', tab.busy && !taken && 'busy', taken && 'taken')} data-id="agent-strip" data-taken={taken ? 'true' : undefined}>
       <Icon name={taken ? 'user' : 'sparkle'} size={13} />

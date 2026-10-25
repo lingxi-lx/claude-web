@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { AGENT_PARTITION, SESSION_PARTITION, USER_PARTITION, browsingPartitions, cookiesMode, newTab, openUrl, partitionsFor, setPartitionSource, tabOf, useBrowser, userPartition } from './state';
+import { AGENT_PARTITION, LOCAL_PARTITION, SESSION_PARTITION, USER_PARTITION, browsingPartitions, cookiesMode, isTakenOver, newTab, openUrl, partitionsFor, setPartitionSource, setTakenOver, tabOf, useBrowser, userPartition } from './state';
 
 describe('keep cookies: which profile the user and Claude browse in', () => {
   it('web.browser.cookies when it is one of the three', () => {
@@ -43,7 +43,33 @@ describe('a tab takes the profile of the moment its page is made', () => {
     expect(openUrl('https://b.com/')).toBe(id);
     expect(tabOf(id)!.partition).toBe(SESSION_PARTITION);
   });
-  it('what 清除浏览数据 clears: the mode\'s profiles and those open tabs still use', () => {
+  it('a local page (file:) opens in the in-memory cw-local profile, never next to the logins (S7)', () => {
+    expect(LOCAL_PARTITION).toBe('cw-local');
+    expect(tabOf(newTab({ url: 'file:///C:/site/index.html' }))!.partition).toBe(LOCAL_PARTITION);
+    const blankId = newTab();
+    expect(openUrl('file:///C:/site/a.html')).toBe(blankId);
+    expect(tabOf(blankId)!.partition).toBe(LOCAL_PARTITION);
+    expect(tabOf(newTab({ url: 'https://a.com/' }))!.partition).toBe(USER_PARTITION);
+  });
+  it('接管 is the conversation\'s, not its tabs\': a tab opened after 接管 is covered, 交还 lifts it (A1)', () => {
+    useBrowser.setState({ takenOver: [] });
+    newTab({ url: 'https://a.com/', agent: 's1', partition: AGENT_PARTITION });
+    setTakenOver('s1', true);
+    expect(isTakenOver('s1')).toBe(true);
+    expect(isTakenOver('s2')).toBe(false);
+    const before = useBrowser.getState().takenOver;
+    setTakenOver('s1', true);
+    expect(useBrowser.getState().takenOver).toBe(before);
+    // the conversation's next tab (browser_tabs new) is under the same 接管
+    newTab({ url: 'https://b.com/', agent: 's1', partition: AGENT_PARTITION });
+    expect(isTakenOver('s1')).toBe(true);
+    // even with no tab at all
+    useBrowser.setState({ tabs: [] });
+    expect(isTakenOver('s1')).toBe(true);
+    setTakenOver('s1', false);
+    expect(isTakenOver('s1')).toBe(false);
+  });
+  it('what 清除浏览数据 clears:the mode\'s profiles and those open tabs still use', () => {
     newTab({ url: 'https://a.com/', partition: AGENT_PARTITION, agent: 's1' });
     expect(browsingPartitions('session').sort()).toEqual([AGENT_PARTITION, SESSION_PARTITION].sort());
     expect(browsingPartitions('shared')).toEqual([USER_PARTITION, AGENT_PARTITION]);

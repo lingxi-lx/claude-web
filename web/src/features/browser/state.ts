@@ -33,12 +33,7 @@ export interface BrowserTab {
   zoom?: number;
   /** drawn as a device (viewport.ts); undefined = auto, the panel's size */
   viewport?: ViewportId;
-  /** 接管: the user took the page over from the Agent — its page-changing ops are refused until 交还 */
-  takenOver?: boolean;
 }
-
-/** Has the user taken over the browser from this conversation's Agent (any of its tabs)? */
-export const takenOverBy = (tabs: readonly BrowserTab[], sessionId: string): boolean => tabs.some((t) => t.agent === sessionId && t.takenOver === true);
 
 /**
  * The browser profiles (Electron partitions): the user's own (what the browser tile always used), Claude's separate
@@ -48,6 +43,10 @@ export const takenOverBy = (tabs: readonly BrowserTab[], sessionId: string): boo
 export const USER_PARTITION = 'persist:cw-browser';
 export const AGENT_PARTITION = 'persist:cw-agent';
 export const SESSION_PARTITION = 'cw-session';
+/** Local pages (file:): in memory, apart from every login — what they load cannot reach a profile's cookies or storage (desktop/src/guest-tools.ts LOCAL_PARTITION). */
+export const LOCAL_PARTITION = 'cw-local';
+/** The profile a page of this address is made in: a local file its own; anything else `otherwise`. */
+const profileFor = (url: string, otherwise: string): string => (/^file:/i.test(url) ? LOCAL_PARTITION : otherwise);
 
 /**
  * 保留 Cookie: shared — the user and Claude browse with the same logins; separate — Claude in a profile of its own;
@@ -90,8 +89,9 @@ export function browsingPartitions(mode: CookieMode): string[] {
   return [...new Set([p.user, p.agent, ...useBrowser.getState().tabs.filter((t) => t.src).map((t) => t.partition)])];
 }
 
-interface BrowserState { tabs: BrowserTab[]; active: string | null }
-export const useBrowser = create<BrowserState>(() => ({ tabs: [], active: null }));
+/** `takenOver`: the conversations whose Agent the user has taken the browser over from (接管) — the conversation's, so a tab it opens later is covered too. */
+interface BrowserState { tabs: BrowserTab[]; active: string | null; takenOver: string[] }
+export const useBrowser = create<BrowserState>(() => ({ tabs: [], active: null, takenOver: [] }));
 
 let seq = 0;
 const blank = (o: Partial<BrowserTab> = {}): BrowserTab => ({ id: `b${Date.now().toString(36)}${(seq++).toString(36)}`, src: '', url: '', title: '', loading: false, back: false, fwd: false, partition: userPartition(), ...o });
@@ -102,7 +102,7 @@ const blank = (o: Partial<BrowserTab> = {}): BrowserTab => ({ id: `b${Date.now()
  */
 export function newTab(o: { url?: string; agent?: string; partition?: string; front?: boolean } = {}): string {
   const url = o.url && viewable(o.url) ? o.url : '';
-  const tab = blank({ src: url, url, agent: o.agent, partition: o.partition ?? userPartition(), loading: !!url });
+  const tab = blank({ src: url, url, agent: o.agent, partition: o.partition ?? profileFor(url, userPartition()), loading: !!url });
   useBrowser.setState((s) => ({ tabs: [...s.tabs, tab], active: o.front === false && s.active ? s.active : tab.id }));
   return tab.id;
 }
@@ -122,12 +122,13 @@ export function frontTab(id: string): void {
   useBrowser.setState((s) => (s.active === id || !s.tabs.some((t) => t.id === id) ? s : { ...s, active: id }));
 }
 
-/** 接管 (on) / 交还 (off): every tab of this conversation's Agent. */
+/** 接管 (on) / 交还 (off): the conversation's Agent — all its tabs, now and later. */
 export function setTakenOver(sessionId: string, on: boolean): void {
-  useBrowser.setState((s) => (s.tabs.some((t) => t.agent === sessionId && !!t.takenOver !== on)
-    ? { ...s, tabs: s.tabs.map((t) => (t.agent === sessionId ? { ...t, takenOver: on || undefined } : t)) }
-    : s));
+  useBrowser.setState((s) => (s.takenOver.includes(sessionId) === on ? s
+    : { ...s, takenOver: on ? [...s.takenOver, sessionId] : s.takenOver.filter((x) => x !== sessionId) }));
 }
+/** Has the user taken over the browser from this conversation's Agent? */
+export const isTakenOver = (sessionId: string): boolean => useBrowser.getState().takenOver.includes(sessionId);
 
 export function patchTab(id: string, patch: Partial<BrowserTab>): void {
   useBrowser.setState((s) => {
@@ -164,7 +165,7 @@ export function ensureTab(): void {
 export function openUrl(url: string): string {
   const s = useBrowser.getState();
   const cur = s.tabs.find((t) => t.id === s.active);
-  if (cur && !cur.src && !cur.agent && viewable(url)) { patchTab(cur.id, { src: url, url, loading: true, error: undefined, partition: firstPage(cur) }); return cur.id; }
+  if (cur && !cur.src && !cur.agent && viewable(url)) { patchTab(cur.id, { src: url, url, loading: true, error: undefined, partition: profileFor(url, firstPage(cur)) }); return cur.id; }
   return newTab({ url });
 }
 

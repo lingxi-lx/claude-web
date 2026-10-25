@@ -311,9 +311,15 @@ function driver() {
     wc.on('render-process-gone', (_e, d) => check('renderer alive', false, d.reason));
     const js = (code) => wc.executeJavaScript(code, true);
     const waitFor = async (code, ms = 15_000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await js(code).catch(() => false)) return true; await sleep(120); } return false; };
-    /** One operation as the server would send it, answered as { ok, a | error }. */
+    /** One operation exactly as given, answered as { ok, a | error }. */
     let seq = 0;
-    const op = (sessionId, o, args = {}) => js(`window.__cwBrowser.carryOut(${JSON.stringify({ id: `s${++seq}`, sessionId, op: o, args })}).then((a) => ({ ok: true, a }), (e) => ({ ok: false, error: String(e && e.message || e) }))`);
+    const rawOp = (sessionId, o, args = {}) => js(`window.__cwBrowser.carryOut(${JSON.stringify({ id: `s${++seq}`, sessionId, op: o, args })}).then((a) => ({ ok: true, a }), (e) => ({ ok: false, error: String(e && e.message || e) }))`);
+    /** One operation as the server would send it: a page-changing one carries the `site` the server's check judged
+     *  (service.ts gated; the window refuses one without) — here the tab's own host, unless the step gives one. */
+    const op = (sessionId, o, args = {}) => js(`(() => { const c = ${JSON.stringify({ id: `s${++seq}`, sessionId, op: o, args })}; const B = window.__cwBrowser;
+      const gated = ['click', 'type', 'key', 'scroll', 'hover', 'drag', 'select', 'eval'].includes(c.op) || (c.op === 'computer' && !['screenshot', 'wait'].includes(c.args.action));
+      if (gated && !('site' in c.args)) c.args.site = B.siteOf(c.sessionId);
+      return B.carryOut(c); })().then((a) => ({ ok: true, a }), (e) => ({ ok: false, error: String(e && e.message || e) }))`);
     const refOf = (a, re) => (a?.page?.elements ?? a?.elements ?? []).find((e) => re.test(`${e.role} ${e.name}`))?.ref;
     const tabs = () => js(`window.__cwBrowser.state.getState().tabs.map((t) => ({ id: t.id, url: t.url, title: t.title, agent: t.agent || null, src: t.src }))`);
 
