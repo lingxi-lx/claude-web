@@ -16,6 +16,11 @@ export type DockKind = 'tool' | 'ask' | 'plan' | 'access';
 
 export const dockKind = (p: Pick<PermissionRequestEvent, 'toolName'>): DockKind => (p.toolName === 'AskUserQuestion' ? 'ask' : p.toolName === 'ExitPlanMode' ? 'plan' : isAccessRequest(p.toolName) ? 'access' : 'tool');
 
+/** A conversation's waiting requests as the composer sees them: the question card lives in the conversation (stage C1), the rest dock. */
+export function splitPending<P extends { toolName: string }>(pending: readonly P[]): { dock?: P; ask?: P } {
+  return { dock: pending.find((p) => dockKind(p) !== 'ask'), ask: pending.find((p) => dockKind(p) === 'ask') };
+}
+
 /** How long a card (or the next one taking its place) is on screen before an empty Enter may answer it. */
 export const DOCK_COOLDOWN_MS = 600;
 

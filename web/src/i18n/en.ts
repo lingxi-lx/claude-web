@@ -4035,6 +4035,7 @@ export const EN_WEB: Record<string, string> = {
   "（没有记下：可能是模型或临时错误，对话里仍会先试 /v1/responses，失败这一次退回 chat/completions）": " (not noted: it may be the model or a temporary error; conversations will still try /v1/responses first and fall back to chat/completions for that one failure)",
   "（没有错误信息）": "(no error message)",
   "（用 {cmd} 启动的第一次要下载、之后也可能慢，过一会儿再点「检查连接」）": " (started with {cmd}: the first start downloads it, and later starts can be slow too; click “Check connections” again in a while)",
+  "（用户跳过）": "(skipped by the user)",
   "（离线）": "(offline)",
   "（离线，只读）": "(offline, read-only)",
   "（空）": "(empty)",

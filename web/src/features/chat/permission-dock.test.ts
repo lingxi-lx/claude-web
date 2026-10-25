@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PermissionRequestEvent } from '@shared';
 import type { AssistantItem, Item, ToolUseBlock } from '@/model/conversation';
-import { alwaysDetails, alwaysLabel, DOCK_COOLDOWN_MS, dockAction, dockDecide, denyResponse, dockKind, isSlashCommand, permissionTitle, primaryKey, waitingToolIds, type DockSeen } from './permission-dock';
+import { alwaysDetails, alwaysLabel, DOCK_COOLDOWN_MS, dockAction, dockDecide, denyResponse, dockKind, isSlashCommand, permissionTitle, primaryKey, splitPending, waitingToolIds, type DockSeen } from './permission-dock';
 
 const req = (toolName: string, input: Record<string, unknown> = {}, extra: Partial<PermissionRequestEvent> = {}): PermissionRequestEvent => ({ requestId: `r-${toolName}`, sessionId: 's', toolName, input, ...extra });
 
@@ -221,5 +221,16 @@ describe('waitingToolIds (the step that shows 等你确认)', () => {
   });
   it('questions and plans have no step to mark; nothing pending → empty', () => {
     expect(waitingToolIds([], []).size).toBe(0);
+  });
+});
+
+describe('splitPending: the question goes in the conversation, everything else docks', () => {
+  it('splits by kind and keeps the first of each', () => {
+    const a = req('AskUserQuestion', { questions: [] });
+    const b = req('Bash', { command: 'ls' });
+    const c = req('ExitPlanMode', { plan: 'x' });
+    expect(splitPending([a, b, c])).toEqual({ dock: b, ask: a });
+    expect(splitPending([c])).toEqual({ dock: c, ask: undefined });
+    expect(splitPending([])).toEqual({ dock: undefined, ask: undefined });
   });
 });
