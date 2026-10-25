@@ -42,9 +42,12 @@ import { LocalEnvStore } from './runtime/local-env.js';
 import { setSessionsDeps, setSessionsMcpEnabled } from './sessions-mcp/tools.js';
 import { projectOf } from './meta/project.js';
 import os from 'node:os';
+import { randomBytes } from 'node:crypto';
 import { ProjectFiles, PROJECT_FILE_MAX } from './cloud/project-files.js';
 import { DispatchService } from './dispatch/service.js';
 import type { CloudServices } from './cloud/handlers.js';
+import { ClaudeAiSource } from './library/claudeai-source.js';
+import { ClaudeAiImport, CLAUDEAI_UPLOAD_MAX } from './import/claude-ai-service.js';
 import { PublishService } from './publish/service.js';
 import { HandoffService } from './handoff/service.js';
 import { renameSession as renameSdkSession } from '@anthropic-ai/claude-agent-sdk';
@@ -294,6 +297,21 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       out.on('error', (e) => { if (!res.headersSent) res.writeHead(500).end(e.message); else res.destroy(); });
       return;
     }
+    // 导入 claude.ai 数据 (stage F4): POST /api/import/claude-ai — the export zip, kept under <data>/claude-ai/uploads/
+    if (url.pathname === '/api/import/claude-ai' && req.method === 'POST') {
+      if (!authOk(req, url)) { res.writeHead(403).end(); return; }
+      if (Number(req.headers['content-length'] ?? 0) > CLAUDEAI_UPLOAD_MAX) { res.writeHead(413).end('too large'); return; }
+      const dir = path.join(dataDir(), 'claude-ai', 'uploads');
+      try { fs.mkdirSync(dir, { recursive: true }); } catch (e: any) { res.writeHead(500).end(e.message); return; }
+      const dest = path.join(dir, `${randomBytes(12).toString('hex')}.zip`);
+      const out = fs.createWriteStream(dest);
+      let size = 0;
+      req.on('data', (c: Buffer) => { size += c.length; if (size > CLAUDEAI_UPLOAD_MAX) { req.destroy(); out.destroy(); fs.rm(dest, { force: true }, () => {}); } });
+      req.pipe(out);
+      out.on('finish', () => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ path: dest, size })); });
+      out.on('error', (e) => { if (!res.headersSent) res.writeHead(500).end(e.message); else res.destroy(); });
+      return;
+    }
     // 项目资料 (stage F2): POST /api/project-files?workspaceId=&name= — token-guarded like /ws, 20 MB
     if (url.pathname === '/api/project-files' && req.method === 'POST') {
       if (!authOk(req, url)) { res.writeHead(403).end(); return; }
@@ -436,6 +454,8 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   // Session library: Claude always; Codex / OpenCode constructed but idle until joined (no process is
   // started before the user joins); other ACP agents get a source built only on join. Launch specs are
   // read through getters so agents.set overrides apply without a restart.
+  // claude.ai data export (stage F4): read-only, joined by the import itself
+  const claudeAiSource = new ClaudeAiSource(path.join(dataDir(), 'claude-ai'));
   const library = new LibraryService(
     [
       new ClaudeSource(sessionsSvc),
@@ -443,6 +463,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       new OpenCodeSource(() => agents.launch('opencode')),
       new CursorSource(),
       new DshSource(),
+      claudeAiSource,
     ],
     new LibraryIndex(),
     transcripts,
@@ -518,7 +539,8 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     dataDir: dataDir(),
     serverName: () => os.hostname(),
   });
-  const cloud: CloudServices = { projectFiles, dispatch, handoff, publish, workspaceExists: (id) => meta.workspaces().some((w) => w.id === id) };
+  const claudeAi = new ClaudeAiImport({ root: path.join(dataDir(), 'claude-ai'), meta, library: { join: (k, on) => library.join(k, on), invalidate: (k) => library.invalidate(k) }, source: claudeAiSource });
+  const cloud: CloudServices = { projectFiles, dispatch, handoff, publish, claudeAi, workspaceExists: (id) => meta.workspaces().some((w) => w.id === id) };
   const importer = new ImportService({
     providers: { hasSame: (t, b, k) => providers.hasSame(t, b, k), upsert: (p) => providers.upsert(p) },
     mcp: {

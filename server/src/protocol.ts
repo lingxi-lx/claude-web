@@ -234,14 +234,14 @@ export interface ModelRefreshResult { id: string; name: string; ok: boolean; cou
 export interface CompactSource { value?: number; source: 'settings' | 'env' | 'none' }
 
 /** Multi-agent (phase 5): built-in kinds plus user-defined ACP agents (`acp:<id>`). */
-export type AgentKind = 'claude' | 'codex' | 'opencode' | 'gemini' | 'qwen' | 'kimi' | 'cursor' | 'dsh' | `acp:${string}`;
+export type AgentKind = 'claude' | 'codex' | 'opencode' | 'gemini' | 'qwen' | 'kimi' | 'cursor' | 'dsh' | /** claude.ai data export (stage F4), read-only */ 'claudeai' | `acp:${string}`;
 
 /**
  * Session library ids (shared by server/src/library/ids.ts and the web client): Claude keeps its bare
  * UUID; these built-in kinds are `<kind>-<native id>`; a custom ACP agent `acp:<id>` is
  * `acp_<id with '-' escaped as '~'>-<native id>`. No colons anywhere.
  */
-export const LIBRARY_ID_PREFIXED_KINDS = ['codex', 'opencode', 'gemini', 'qwen', 'kimi', 'cursor', 'dsh'] as const satisfies readonly AgentKind[];
+export const LIBRARY_ID_PREFIXED_KINDS = ['codex', 'opencode', 'gemini', 'qwen', 'kimi', 'cursor', 'dsh', 'claudeai'] as const satisfies readonly AgentKind[];
 
 /** Inverse of `libraryId`. An id with no recognised prefix is a native Claude id. */
 export function parseLibraryId(id: string): { kind: AgentKind; nativeId: string } {
