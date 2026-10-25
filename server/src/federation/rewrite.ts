@@ -23,6 +23,8 @@ const FORWARD = new Set<ClientRequest['kind']>([
   // 后台: a remote conversation's finished runs and sub-agent transcripts are on that machine's disk
   'background.history', 'background.run', 'background.transcript',
 ]);
+// Not here on purpose (stage F1): handoff.check / handoff.start / handoff.fetchBack take only this machine's own
+// conversations — planRoute rejects them for another machine's (rewrite.test.ts 'stage F requests').
 /** Batch requests: split per machine (local ids stay here, each peer gets its own), results merged. */
 const SPLIT = new Set<ClientRequest['kind']>(['library.archive', 'library.delete']);
 /** This machine's own state keyed by a session id (ratings, pin / archive meta, the ledger, the memory store — there a session id is just a scope key). */

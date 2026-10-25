@@ -134,3 +134,16 @@ describe('rewriteEvent', () => {
     ] as ServerEvent[]) expect(rewriteEvent(e, P)).toBeNull();
   });
 });
+
+describe('stage F requests', () => {
+  it('交接 / 取回 are about this machine\'s own conversations: another machine\'s conversation is refused, a local one is not federation\'s business', () => {
+    for (const kind of ['handoff.check', 'handoff.start', 'handoff.fetchBack'] as const) {
+      const req = { kind, sessionId: 'peer_b1~s1', peerId: 'b1' } as unknown as ClientRequest;
+      expect(planRoute(req).kind, kind).toBe('reject');
+      expect(planRoute({ ...req, sessionId: 's1' } as ClientRequest).kind, kind).toBe('none');
+    }
+    // 派活 / 发布 name no conversation: never routed by id
+    expect(planRoute({ kind: 'dispatch.start', prompt: 'x', peer: 'b1' } as ClientRequest).kind).toBe('none');
+    expect(planRoute({ kind: 'publish.list' } as ClientRequest).kind).toBe('none');
+  });
+});

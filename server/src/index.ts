@@ -45,6 +45,9 @@ import os from 'node:os';
 import { ProjectFiles, PROJECT_FILE_MAX } from './cloud/project-files.js';
 import { DispatchService } from './dispatch/service.js';
 import type { CloudServices } from './cloud/handlers.js';
+import { PublishService } from './publish/service.js';
+import { HandoffService } from './handoff/service.js';
+import { renameSession as renameSdkSession } from '@anthropic-ai/claude-agent-sdk';
 import { setDesktopSkillsEnabled } from './runtime/desktop-skills.js';
 import { findClaudeTranscript } from './runtime/transcript-file.js';
 import { PreviewService } from './preview/service.js';
@@ -212,8 +215,19 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   const themes = new ThemeService();
   /** the main listener's port once it is listening (PORT=0 in the desktop app: a new one every start) */
   let listenPort = 0;
+  // 发布 (stage F5): /p/<id>/ snapshots, served before any token check on both listeners (publish/service.ts)
+  const publish = new PublishService({
+    dir: path.join(dataDir(), 'published'),
+    exportsDir: path.join(dataDir(), 'exports'),
+    localBase: () => `http://127.0.0.1:${listenPort || PORT}`,
+    lanBase: () => { const st = remote?.status(); return st?.running && st.addresses[0] ? `http://${st.addresses[0]}:${st.port}` : null; },
+    peers: () => federation?.list() ?? [],
+    request: (peerId, req) => federation.request(peerId, req),
+  });
+  setInterval(() => void publish.sweep().catch(() => {}), 3_600_000).unref();
   const handler = (req: http.IncomingMessage, res: http.ServerResponse) => {
     const url = requestUrl(req, HOST);
+    if (publish.handle(req, res, url)) return;
     // model gateway: its own key auth, loopback only (404 on the LAN listener)
     if (gateway?.handle(req, res, url)) return;
     // 联网: the `web` MCP processes' tool calls — this start's secret, loopback only (404 on the LAN listener)
@@ -491,7 +505,20 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     forward: (peerId, req) => federation.request(peerId, req),
     peers: () => federation.list(),
   });
-  const cloud: CloudServices = { projectFiles, dispatch, workspaceExists: (id) => meta.workspaces().some((w) => w.id === id) };
+  // 交给常开机器继续 (stage F1)
+  const handoff = new HandoffService({
+    meta,
+    request: (peerId, req) => federation.request(peerId, req),
+    peers: () => federation.list(),
+    summaryOf: async (id) => { const x = (await library.list()).find((y) => y.sessionId === id); return x ? { cwd: x.cwd, title: x.customTitle || x.title } : undefined; },
+    readAll: (id) => library.readAll(id),
+    stop: (id) => pool.close(id),
+    open: (p) => pool.open(p),
+    rename: async (id, title, cwd) => { await renameSdkSession(id, title, { dir: cwd }); sessionsSvc.emit('changed'); },
+    dataDir: dataDir(),
+    serverName: () => os.hostname(),
+  });
+  const cloud: CloudServices = { projectFiles, dispatch, handoff, publish, workspaceExists: (id) => meta.workspaces().some((w) => w.id === id) };
   const importer = new ImportService({
     providers: { hasSame: (t, b, k) => providers.hasSame(t, b, k), upsert: (p) => providers.upsert(p) },
     mcp: {
