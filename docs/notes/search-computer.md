@@ -66,7 +66,13 @@
 - **列表规则**（`siteAllowed`）：`example.com` 只这一个主机；`*.example.com` 含它和所有子域；端口不算；IP 只等于它自己、通配符永远不配 IP；大小写、末尾的点不算；整条网址也认它的主机。
 - **卡**：`PermissionCards.tsx` 的 `SiteRequest`（`[data-id=site-card][data-host][data-op]`，`data-act=allow|always|deny`），脚本用代码块显示；空输入框按 Enter = 允许一次网站，**脚本只能点**。
 - **Agent 的光标**（`cursor.ts` 总线 + `AgentCursor.tsx`）：ops 在 hover / drag / select / click / type / computer 时报坐标（页面自己的像素 + 页面大小），光标按 webview 元素的框换算，所以手机视口缩小居中时也对得上；按下有涟漪；停 2.5 s 后淡出；只是画，不挡输入，截图里没有。钩子 `[data-id=agent-cursor][data-shown]`、`[data-id=agent-ripple]`。
-- **接管 / 交还**：Agent 条上的 `[data-id=takeover]` / `[data-id=giveback]`（`[data-taken=true]`），`state.ts` 的 `setTakenOver(sessionId, on)` 给这个对话的所有标签记 `takenOver`。接管期间 host.ts 对这个对话会改页面的 op（以及服务端的 probe）直接回「用户接管了浏览器……」，读页面照常。只在窗口内存里（窗口关了就没了），不进 meta.json。
+- **接管 / 交还**：Agent 条上的 `[data-id=takeover]` / `[data-id=giveback]`（`[data-taken=true]`），`state.ts` 的 `setTakenOver(sessionId, on)` 把这个对话记进 `takenOver`（修正一轮起按对话记，见下）。接管期间 host.ts 对这个对话除了读以外的 op（以及服务端的 probe）直接回「用户接管了浏览器……」，读页面照常。只在窗口内存里（窗口关了就没了），不进 meta.json。
+- **修正一轮（2026-10-25）改了的行为**：
+  - **网站检查以窗口看到的真地址为准**：服务端判过的会改页面的 op **一定**带 `site`（没主机的页也带 `''`）；窗口拿 webview 自己的 `getURL()` 比（不是页面 agent 报的——页面能伪造 `__cwAgent`），不带 `site` 的直接拒（「这个操作没有经过网站检查」），每个回答里的 `page.url / title` 也换成 webview 的。`blob:` 页按它的来源算主机。`browser_tabs`（new / switch / close）之后服务端忘掉这个对话的 `lastUrl`，下次改页面先 probe；`browser_tabs new` 的网址和 `browser_open` 一样过 `urlRefusal`（元数据地址、链路本地、带用户名密码的都拒）。
+  - **接管属于对话**：`state.ts` 的 `takenOver: string[]`（会话 id），不再记在标签上——接管后新开的标签也在接管下；`isTakenOver(sid)`。接管时 host.ts 中止这个对话正在跑的 op（`AbortSignal`，每一步前查，拖到一半也停）并让它的标签停止加载。接管期间只放行读（read / find / snapshot / screenshot / console / network / wait、`browser_tabs list`）；open / back / viewport / tabs new·switch·close 都拒。
+  - **卡住的 op**：一个 op 在窗口里最多 28 s（`OP_LIMIT_MS`），`browser_eval` 15 s（`EVAL_LIMIT_MS`）；脚本超时后壳把这个页面的渲染进程结束再重新加载（`desktop:browser:recover`），队列接着走。`browser_eval` 先解析（不运行）决定当表达式还是函数体，只跑一次。
+  - **总览栏**的网站请求不给「允许」按钮（看不到网站和脚本），写「想在网站 … 上操作网页（打开对话再决定）」。`browser_network` 的地址里 token / code / sig 之类参数的值换成 `…`。控制台 / 网络记录在主框架换页（`did-navigate`）时清空；两个同时的第一次查看共用一次启动。
+  - 真机：`scripts/browser-smoke.cjs` 的 `fixwave` 段（伪造地址、自己跳到别的主机、换标签后再点、接管打断拖动），`scripts/ui-smoke.cjs` 的 `browser-b` 段末尾（同目录资源、被拒的本地页、`while (1) {}` 超时后下一个 op 照常）。
 - **验证**：`site-gate.test.ts`、`service.test.ts`（probe、一次 / 总是、通配、脚本每次问、完全放开、拒绝、file:、网站变了、接管）、`ops.test.ts`（含在 Node 里真跑 `evalSource`）、`server.test.ts`（没打开的对话在新网站上点击被拒、窗口一个点击都没收到）；`scripts/browser-smoke.cjs` 的 `t7` 段（真 Electron）；e2e 第 23 期用 mock ACP 的真对话走卡片 / 总是允许写列表 / 脚本每次问。
 
 ## 自动检查改动（2026-10-24，阶段 B 任务 8）
