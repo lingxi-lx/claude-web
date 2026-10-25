@@ -8,7 +8,7 @@ import { hasLive } from '@/features/background/model';
 import { credentialHint, ERROR_HINT, ERROR_LABEL, noResponseHint } from '@/model/health';
 import { fmtSize } from '@/model/attachments';
 import type { FileChange } from '@/model/diffstat';
-import { displayPath, fmtDuration, groupSteps, groupTurns, stepStarts, taskPlan, turnDone, turnMemo, turnStamp, turnSummaryParts, type Turn, type TurnMemo } from '@/model/turn';
+import { displayPath, fmtDuration, groupSteps, groupTurns, stepStarts, taskPlan, turnDone, turnDuration, turnMemo, turnStamp, turnSummaryParts, type Turn, type TurnMemo } from '@/model/turn';
 import { TodoBody, planItems, planProgress } from './tools/AgentTool';
 import { useScopedSession, useScopedSessionId, useStore } from '@/store';
 import { usePaneCtx } from '@/store/paneContext';
@@ -41,6 +41,7 @@ import { tr } from '@/i18n';
 import { fileMenuProps } from '@/features/files/FileMenu';
 import { normViewMode, type ViewMode } from './view-mode';
 import { SelectionMenu } from './SelectionMenu';
+import { TurnRecordings } from '@/features/browser/TurnRecordings';
 
 const useViewMode = (): ViewMode => useStore((s) => normViewMode(s.settings['ui.viewMode']));
 
@@ -565,6 +566,8 @@ const TurnView = memo(function TurnView({ turn, last, live, version, sessionId, 
     return () => el.removeEventListener('cw:open-fold', on);
   }, [key]);
   const finals = parts.final;
+  // 录下 Claude 的操作: recordings that started between this turn's message and its end (a minute's slack)
+  const recStart = turn.user?.ts ? Date.parse(turn.user.ts) : NaN;
   const lastFinal = finals[finals.length - 1];
   const answerActions = !!lastFinal && !lastFinal.streaming && lastFinal.blocks.some((b) => b.type === 'text' && b.text.trim());
   return (
@@ -601,6 +604,7 @@ const TurnView = memo(function TurnView({ turn, last, live, version, sessionId, 
       )}
       {fold && !open && workflows.map((id) => <WorkflowLive key={id} toolUseId={id} onlyRunning />)}
       {fold && parts.tail.length > 0 && <ItemList items={parts.tail} version={version} />}
+      <TurnRecordings sessionId={sessionId} start={recStart} end={last ? Infinity : recStart + (turnDuration(turn) ?? 0) + 60_000} />
     </div>
   );
 }, sameTurn);

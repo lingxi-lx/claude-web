@@ -123,3 +123,5 @@
 .fv-touched-it .grow { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fv-touched .empty-state .es-act { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
 .fv-touched .empty-state kbd { margin-left: 4px; font-size: 11px; opacity: 0.75; }
+.turn-recs { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 2px; }
+.turn-rec { cursor: pointer; }

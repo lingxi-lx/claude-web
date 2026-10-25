@@ -470,6 +470,19 @@ function SwitchRow({ act, setting, icon, label }: { act: string; setting: string
   );
 }
 
+/** 录下 Claude 的操作 (stage B5): off unless turned on (the other switches are on unless turned off). */
+function RecordRow() {
+  const on = useStore((s) => s.settings['browser.recordActions']) === true;
+  const setSetting = useStore((s) => s.setSetting);
+  return (
+    <button type="button" data-mi role="menuitemcheckbox" aria-checked={on} className={clsx('cm-it', on && 'on')} data-act="record-actions" onClick={() => void setSetting('browser.recordActions', !on)}>
+      <span className="cm-ck"><Icon name="monitor" size={14} /></span>
+      <span className="cm-tx"><span className="cm-l">{tr('录下 Claude 的操作')}</span></span>
+      <span className={clsx('toggle sm', on && 'on')} aria-hidden />
+    </button>
+  );
+}
+
 /** The ⋯ menu: what can be done with the page, 视口 › and 保留 Cookie › (views of their own, like the + menu's 连接器 ›), the switches. */
 function PageMenu({ tab, close, external, onSites }: { tab: BrowserTab; close: (refocus: boolean) => void; external: () => void; onSites: () => void }) {
   const [view, setView] = useState<'main' | 'viewport' | 'cookies'>('main');
@@ -553,6 +566,7 @@ function PageMenu({ tab, close, external, onSites }: { tab: BrowserTab; close: (
       {live && row('devtools', 'bash', tr('开发者工具'), () => { close(false); try { guestOf(tab.id)?.openDevTools?.(); } catch { /* not attached */ } })}
       {(hasPage || canPickHtml()) && <div className="menu-sep" />}
       {SWITCHES.map((s) => <SwitchRow key={s.act} act={s.act} setting={s.key} icon={s.icon} label={s.label()} />)}
+      {browser && desktop?.chooseCapture && <RecordRow />}
       {row('allowed-sites', 'shield', tr('管理允许的网站…'), () => { close(false); onSites(); })}
       {browser && (
         <>

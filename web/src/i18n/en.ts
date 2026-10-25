@@ -2047,6 +2047,8 @@ export const EN_WEB: Record<string, string> = {
   "当前版本与更新。": "Current version and updates.",
   "当前目录": "Current folder",
   "录一段屏幕、窗口或内置浏览器的标签，连同关键帧一起发给 Claude": "Record a screen, a window or a built-in browser tab and send it to Claude with keyframes",
+  "录下 Claude 的操作": "Record what Claude does",
+  "录下的操作 · {d}": "Recorded actions · {d}",
   "录屏": "Record screen",
   "录屏 {d}.{ext}": "Recording {d}.{ext}",
   "录屏 · {d}": "Recording · {d}",
