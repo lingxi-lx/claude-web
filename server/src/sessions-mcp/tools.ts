@@ -27,6 +27,8 @@ export interface SessionsDeps {
   projectOf?(id: string, cwd?: string): string | undefined;
   /** the project of conversation `id` limits its sessions tools to that project (Workspace.sessionsScope) */
   restricted?(id: string, cwd?: string): boolean;
+  /** the folder a live conversation runs in (a new one is not in the list yet: without this it would see everything) */
+  cwdOf?(id: string): string | undefined;
 }
 
 let deps: SessionsDeps | null = null;
@@ -57,9 +59,9 @@ const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] });
 const fail = (t: string) => ({ content: [{ type: 'text' as const, text: t }], isError: true });
 
 /** 项目范围 (stage F2): what conversation `me` may see — all, or (restricted / asked) its own project's. */
-export function scopeSessions(all: SessionSummary[], me: string, d: Pick<SessionsDeps, 'projectOf' | 'restricted'>, projectOnly = false): SessionSummary[] {
+export function scopeSessions(all: SessionSummary[], me: string, d: Pick<SessionsDeps, 'projectOf' | 'restricted' | 'cwdOf'>, projectOnly = false): SessionSummary[] {
   if (!d.projectOf) return all;
-  const cwd = all.find((s) => s.sessionId === me)?.cwd;
+  const cwd = d.cwdOf?.(me) ?? all.find((s) => s.sessionId === me)?.cwd;
   if (!projectOnly && !d.restricted?.(me, cwd)) return all;
   const mine = d.projectOf(me, cwd);
   return all.filter((s) => s.sessionId === me || inProjectScope(mine, d.projectOf!(s.sessionId, s.cwd)));

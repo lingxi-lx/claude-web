@@ -68,7 +68,7 @@ const homeB = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-e2e-b37-'));
 const tokenB = crypto.randomBytes(12).toString('hex');
 const envB = { ...process.env, HOME: homeB, USERPROFILE: homeB, PORT: '0', CLAUDE_WEB_TOKEN: tokenB, CLAUDE_WEB_DIR: path.join(homeB, '.claude-web') };
 for (const k of Object.keys(envB)) if (/^(ANTHROPIC_|CLAUDE_CODE_)/.test(k)) delete envB[k];
-const serverB = spawn(process.execPath, [path.join(here, 'dist', 'index.js')], { cwd: root, env: envB, stdio: ['ignore', 'pipe', 'pipe'] });
+const serverB = spawn(process.execPath, [path.join(here, 'dist', 'index.js')], { cwd: root, env: envB, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
 let logB = '';
 serverB.stderr.on('data', (d) => { logB += d; });
 const portB = await new Promise((res, rej) => {

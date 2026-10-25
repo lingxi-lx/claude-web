@@ -542,6 +542,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     isScheduled: (id) => meta.schedules().some((s) => s.sessionId === id) || meta.scheduleRuns(undefined, 300).some((r) => r.sessionId === id),
     // 项目页 (stage F2): a conversation's project, and whether that project keeps its sessions tools to itself
     projectOf: (id, cwd) => { const m = meta.sessionMeta(id); return projectOf({ cwd, workspaceId: m.workspaceId, groupCwd: m.groupCwd }, meta.workspaces())?.id; },
+    cwdOf: (id) => pool.get(id)?.info.cwd || undefined,
     restricted: (id, cwd) => { const m = meta.sessionMeta(id); return projectOf({ cwd, workspaceId: m.workspaceId, groupCwd: m.groupCwd }, meta.workspaces())?.sessionsScope === 'project'; },
   });
   // stage F (cloud/handlers.ts): project files, 派活
