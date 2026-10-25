@@ -14,6 +14,7 @@ import { agentCurrentOf, agentTab, closeTab, cookiesMode, frontTab, guestElOf, g
 import { desktop } from '@/desktop';
 import { loadable } from './url';
 import { tr } from '@/i18n';
+import { installRecordActions, maybeRecordActions } from './record-actions';
 
 // the user's new pages are made in the profile 保留 Cookie gives them (state.ts cannot read the settings itself)
 setPartitionSource(() => partitionsFor(cookiesMode(useStore.getState().settings)).user);
@@ -191,6 +192,8 @@ function take(c: BrowserCommand): void {
     let msg: { ok: true; answer: BrowserAnswer } | { ok: false; error: string };
     try {
       msg = { ok: true, answer: await carryOut(c) };
+      // 录下 Claude 的操作 (stage B5): its first browser action of a turn starts recording its tab
+      void maybeRecordActions(c.sessionId).catch(() => {});
     } catch (e) {
       msg = { ok: false, error: String((e as Error)?.message ?? e).slice(0, 2000) };
     }
@@ -215,7 +218,8 @@ export function installBrowserHost(): () => void {
   const offStore = useStore.subscribe((s, p) => { if (s.connected && !p.connected) announce(); });
   window.addEventListener('focus', announce);
   announce();
-  return () => { offEvents(); offStore(); window.removeEventListener('focus', announce); };
+  const offRec = installRecordActions();
+  return () => { offEvents(); offStore(); offRec(); window.removeEventListener('focus', announce); };
 }
 
 // for scripts/browser-smoke.cjs: drive an operation without a server in between, and look at the tabs

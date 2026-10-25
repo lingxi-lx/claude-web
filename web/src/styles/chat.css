@@ -294,6 +294,17 @@ div.code { border: 0; border-radius: var(--r-lg); background-color: var(--surfac
 .pr-bar .pr-ci { flex: none; display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: var(--r-sm); color: var(--ink-2); font-size: var(--fs-small); }
 .pr-bar .pr-ci:hover, .pr-bar .pr-ci[aria-expanded='true'] { background: var(--layer-hover); }
 .pr-bar .pr-ci.on { color: var(--accent-text); }
+/* the PR bar's comment list (stage E1): plain text, two lines each, handed over one at a time */
+.pr-comment-list { max-width: 420px; max-height: 360px; overflow: auto; }
+.pr-comment-list .pr-cm { display: grid; gap: 4px; padding: 8px 10px; border-bottom: var(--hairline) solid var(--edge-subtle); }
+.pr-comment-list .pr-cm:last-child { border-bottom: 0; }
+.pr-comment-list .pr-cm-h { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: var(--fs-small); }
+.pr-comment-list .pr-cm-a { color: var(--ink-1); font-weight: var(--fw-strong); text-decoration: none; }
+.pr-comment-list .pr-cm-bot { font-size: var(--fs-micro); padding: 0 5px; border-radius: var(--r-xs); background: var(--layer-hover); color: var(--ink-3); }
+.pr-comment-list .pr-cm-at { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-3); font-family: var(--font-mono); font-size: var(--fs-micro); }
+.pr-comment-list .pr-cm-b { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink-2); font-size: var(--fs-small); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.pr-comment-list .pr-cm-go { justify-self: end; padding: 2px 8px; border-radius: var(--r-sm); color: var(--accent-text); font-size: var(--fs-small); }
+.pr-comment-list .pr-cm-go:hover, .pr-comment-list .pr-cm-go:focus-visible { background: var(--layer-hover); }
 
 /* the latest turn's plan at the foot of the conversation (ChatView PlanDock), like the official app's card */
 .plan-dock { margin: var(--sp-2) 0 var(--sp-3); }

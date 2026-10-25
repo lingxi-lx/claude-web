@@ -9,6 +9,9 @@ import { Icon } from '@/ui/icons';
 import { useDropdown } from '@/ui/menus';
 import { imeComposing } from '@/ui/ime';
 import { tr, dateLocale } from '@/i18n';
+import { desktop } from '@/desktop';
+import { EMPTY } from '@/ui/terms';
+import { EmptyState } from '@/ui/EmptyState';
 
 function join(dir: string, name: string) {
   const sep = dir.includes('\\') ? '\\' : '/';
@@ -150,7 +153,7 @@ function ContextMenu({ m, ctx, onClose }: { m: NonNullable<Ctx['menu']>; ctx: Ct
 }
 
 /** Workspace explorer: lazy directory nodes, git status badges, inline create / rename, recycle-bin delete, live refresh. */
-export function FileTree({ root, gitStatus }: { root: string; gitStatus?: GitStatus | null }) {
+export function FileTree({ root, gitStatus, onPickRoot }: { root: string; gitStatus?: GitStatus | null; /** stage E4: no folder — the one picked is browsed here (never written into the conversation) */ onPickRoot?: (dir: string) => void }) {
   const [filter, setFilter] = useState('');
   const [tick, setTick] = useState<Record<string, number>>({});
   const [menu, setMenu] = useState<Ctx['menu']>(null);
@@ -187,7 +190,13 @@ export function FileTree({ root, gitStatus }: { root: string; gitStatus?: GitSta
     return { git, gitDirs };
   }, [gitStatus]);
 
-  if (!root) return <div className="empty">{tr('没有工作目录')}</div>;
+  if (!root) {
+    const pick = async () => {
+      const p = desktop ? await desktop.pickDir() : await ws.request<string | null>({ kind: 'fs.pickDir' }).catch(() => null);
+      if (p) onPickRoot?.(p);
+    };
+    return <EmptyState e={EMPTY.filesNoFolder} action={onPickRoot ? <button className="btn sm" onClick={() => void pick()}>{tr('打开一个文件夹')}</button> : undefined} />;
+  }
   const ctx: Ctx = { root, filter, git, gitDirs, reload, tick, menu, setMenu, editing, setEditing, selected, setSelected };
   return (
     <div className="filetree">

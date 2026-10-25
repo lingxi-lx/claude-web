@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { readView, VIEW_KEY } from '@/features/sidebar/view';
-import type { AgentInfo, AgentKind, AttachmentRef, EffortLevel, EngineInfo, Limits, MessageFeedback, PermissionMode, Provider, SessionFeatures, PermissionRequestEvent, RunnerState, Schedule, ServerEvent, SessionInfoSnapshot, SessionMeta, SessionSummary, SourceStatus, Workspace } from '@shared';
+import type { AgentInfo, AgentKind, AttachmentRef, EffortLevel, EngineInfo, Limits, MessageFeedback, PermissionMode, Provider, SessionEnv, SessionFeatures, PermissionRequestEvent, RunnerState, Schedule, ServerEvent, SessionInfoSnapshot, SessionMeta, SessionSummary, SourceStatus, Workspace } from '@shared';
 import { withDefaultMode } from './default-mode';
 import { decodeAttachments, findChainUuidBefore } from '@/model/conversation';
 import { activeGroup, chatTile, deriveActive, hasLegacyLayout, initialLayout, layoutReducer, migrateLegacy, migrateWorkbench, needsSimplifiedNotice, panelToggleEffect, sanitizeLayout, SIMPLIFIED_NOTICE_KEY, type LayoutAction, type LayoutState, type Tile } from '@/model/layout';
@@ -159,7 +159,7 @@ interface State {
   // actions
   init(): void;
   refreshSessions(): Promise<void>;
-  openSession(p: { sessionId?: string; peer?: string; cwd: string; model?: string; permissionMode?: PermissionMode; effort?: EffortLevel; ultracode?: boolean; subagentModel?: string; fork?: boolean; resumeAt?: string; worktree?: string; providerId?: string; features?: SessionFeatures; agent?: AgentKind }, target?: { paneId: string; tileId: string } | 'none'): Promise<string>;
+  openSession(p: { sessionId?: string; peer?: string; cwd: string; env?: SessionEnv; model?: string; permissionMode?: PermissionMode; effort?: EffortLevel; ultracode?: boolean; subagentModel?: string; fork?: boolean; resumeAt?: string; worktree?: string; providerId?: string; features?: SessionFeatures; agent?: AgentKind }, target?: { paneId: string; tileId: string } | 'none'): Promise<string>;
   engine: EngineInfo | null;
   providers: Provider[];
   agents: AgentInfo[];

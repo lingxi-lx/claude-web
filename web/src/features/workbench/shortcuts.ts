@@ -13,6 +13,8 @@ export const SHORTCUTS: Shortcut[] = [
   { id: 'nav.back', label: tr('后退（上一个看过的对话）'), desktop: 'Alt+Left', browser: 'Alt+Left', group: tr('全局') },
   { id: 'nav.forward', label: tr('前进'), desktop: 'Alt+Right', browser: 'Alt+Right', group: tr('全局') },
   { id: 'find', label: tr('在对话中查找'), desktop: 'Ctrl+F', browser: 'Ctrl+F', group: tr('全局') },
+  // stage E4: the 文件 panel's search (desktop Ctrl+P is already 搜索对话 in the menu)
+  { id: 'files.search', label: tr('搜索文件'), desktop: 'Ctrl+Shift+F', browser: 'Alt+P', group: tr('全局') },
   { id: 'shortcuts', label: tr('快捷键速查'), desktop: 'Ctrl+/', browser: 'Ctrl+/', group: tr('全局') },
   // 界面缩放: the desktop shell's own (remembered, every window — desktop/src/zoom.ts); in a browser these keys are the
   // browser's zoom, which `matchBrowserKey` leaves alone
@@ -108,6 +110,7 @@ export function matchBrowserKey(e: KeyboardEvent): string | null {
   if (ctrl && alt && k === 'ArrowRight') return 'pane.next';
   if (ctrl && alt && k === 'ArrowLeft') return 'pane.prev';
   if (alt && !ctrl && !shift && lower === 'n') return 'new';
+  if (alt && !ctrl && !shift && lower === 'p') return 'files.search';
   if (alt && !ctrl && !shift && lower === 't') return 'group.new';
   if (alt && !ctrl && shift && lower === 'w') return 'group.close';
   if (alt && !ctrl && !shift && lower === 'w') return 'tile.close';

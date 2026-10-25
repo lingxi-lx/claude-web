@@ -9,14 +9,28 @@ import path from 'node:path';
 
 const projectsDir = () => path.join(process.env.CLAUDE_CONFIG_DIR ?? path.join(os.homedir(), '.claude'), 'projects');
 
-/** The transcript of `sessionId` in any project folder, or null (a conversation that never ran a turn has none). */
+/** stage E5: the projects folders of WSL distros a conversation ran in (`\\wsl.localhost\<distro>\home\…\.claude\projects`). */
+const extraRoots: { dir: string; distro: string }[] = [];
+
+export function addTranscriptRoot(dir: string, distro: string): void {
+  if (!dir || extraRoots.some((r) => r.dir.toLowerCase() === dir.toLowerCase())) return;
+  extraRoots.push({ dir, distro });
+}
+
+/** This computer's projects folder, then the distros'. */
+export function transcriptRoots(): { dir: string; distro?: string }[] {
+  return [{ dir: projectsDir() }, ...extraRoots];
+}
+
+/** The transcript of `sessionId` in any project folder (WSL distros' too), or null (one that never ran a turn has none). */
 export function findClaudeTranscript(sessionId: string): string | null {
-  const projects = projectsDir();
-  let dirs: string[];
-  try { dirs = readdirSync(projects); } catch { return null; }
-  for (const d of dirs) {
-    const f = path.join(projects, d, `${sessionId}.jsonl`);
-    if (existsSync(f)) return f;
+  for (const root of transcriptRoots()) {
+    let dirs: string[];
+    try { dirs = readdirSync(root.dir); } catch { continue; }
+    for (const d of dirs) {
+      const f = path.join(root.dir, d, `${sessionId}.jsonl`);
+      if (existsSync(f)) return f;
+    }
   }
   return null;
 }

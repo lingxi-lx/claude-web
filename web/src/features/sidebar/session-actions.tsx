@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import type { AgentKind, SessionMeta, SessionSummary } from '@shared';
+import { toWslPath, type AgentKind, type SessionMeta, type SessionSummary } from '@shared';
+import { wslCliCommand } from '@/features/composer/machine';
 import { forkCarry, useStore } from '@/store';
 import { ws } from '@/ws/client';
 import { dlg } from '@/ui/dialog';
@@ -127,6 +128,13 @@ export function saveSections(l: CustomSection[]): Promise<void> {
 }
 
 export function openNativeCli(s: SessionSummary): void {
+  // a WSL conversation goes on with the distro's own claude, in its Linux folder (the shell starts in the home)
+  const env = useStore.getState().sessionMeta[s.sessionId]?.env;
+  if (env?.kind === 'wsl') {
+    const cmd = wslCliCommand(env.distro, toWslPath(s.cwd, env.distro) ?? '~', s.sessionId);
+    useStore.getState().openTile({ id: `t${Date.now()}`, kind: 'term', cwd: '', cmd, title: 'wsl' }, 'tab');
+    return;
+  }
   const cmd = nativeCliCommand(s);
   if (!cmd) return;
   useStore.getState().openTile({ id: `t${Date.now()}`, kind: 'term', cwd: s.cwd, cmd, title: cmd.split(' ')[0] }, 'tab');

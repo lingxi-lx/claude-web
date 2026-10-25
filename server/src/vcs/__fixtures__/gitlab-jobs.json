@@ -1,0 +1,8 @@
+[
+  { "id": 1001, "name": "lint", "stage": "test", "status": "success", "allow_failure": false, "web_url": "https://gitlab.com/acme/app/-/jobs/1001" },
+  { "id": 1002, "name": "unit", "stage": "test", "status": "failed", "allow_failure": false, "web_url": "https://gitlab.com/acme/app/-/jobs/1002" },
+  { "id": 1005, "name": "unit", "stage": "test", "status": "failed", "allow_failure": false, "web_url": "https://gitlab.com/acme/app/-/jobs/1005" },
+  { "id": 1003, "name": "flaky-e2e", "stage": "e2e", "status": "failed", "allow_failure": true, "web_url": "https://gitlab.com/acme/app/-/jobs/1003" },
+  { "id": 1004, "name": "deploy", "stage": "deploy", "status": "manual", "allow_failure": true, "web_url": "https://gitlab.com/acme/app/-/jobs/1004" },
+  { "id": 1006, "name": "build", "stage": "build", "status": "running", "allow_failure": false, "web_url": "https://gitlab.com/acme/app/-/jobs/1006" }
+]

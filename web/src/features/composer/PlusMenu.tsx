@@ -35,6 +35,8 @@ export interface PlusMenuProps {
   onChatOnly?: (on: boolean) => void;
   /** 斜杠命令: a `/` in the box, which opens the command list */
   onSlash?: () => void;
+  /** 录屏 (stage E3): desktop only — the plain web app has no picker of its own */
+  onRecord?: () => void;
   /** a running conversation: its connectors switch on and off here (连接器 ›) */
   sessionId?: string;
 }
@@ -101,6 +103,12 @@ function PlusBody(p: PlusMenuProps & { close: (refocus: boolean) => void }) {
           </button>
         );
       })}
+      {p.onRecord && (
+        <button type="button" data-mi data-id={PLUS_ID.record} role="menuitem" className="cm-it one" title={tr('录一段屏幕、窗口或内置浏览器的标签，连同关键帧一起发给 Claude')} onClick={() => { p.close(false); p.onRecord!(); }}>
+          <span className="cm-ic"><Icon name="monitor" size={15} /></span>
+          <span className="cm-tx"><span className="cm-l">{tr('录屏')}</span></span>
+        </button>
+      )}
       {p.onSlash && (
         <button type="button" data-mi data-id={PLUS_ID.slash} role="menuitem" className="cm-it one" title={tr('在输入框里打一个 /，列出命令和 skills')} onClick={() => { p.close(false); p.onSlash!(); }}>
           <span className="cm-ic"><Icon name="terminal" size={15} /></span>

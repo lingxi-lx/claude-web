@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, Tray, clipboard, Notification, dialog, shell, ipcMain, nativeImage, nativeTheme, powerSaveBlocker, screen, session } from 'electron';
+import { app, BrowserWindow, Menu, Tray, clipboard, Notification, dialog, shell, ipcMain, nativeImage, nativeTheme, powerSaveBlocker, screen, session, desktopCapturer, webContents } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { ServerHost } from './server-host';
@@ -18,6 +18,7 @@ import { ZOOM_STEPS, cleanZoom, fitWindow, minWindow, nextZoom, scaleCaption, tr
 import { getLocale, initLanguage, tr } from './i18n.js';
 import { SCHEME, linkFromArgv, parseDeepLink, type DeepLink } from './deep-link';
 import { menuItems } from './context-menu';
+import { PendingPicks, listSources, type CapturePick } from './capture';
 import { CrashGuard, allowNavigation, externalAllowed, sameOrigin, windowOpenAction } from './nav-guard';
 import { FileGuard, guardSession } from './file-guard';
 import { fromOurWindow, openablePath, type IpcAsker } from './ipc-guard';
@@ -510,6 +511,7 @@ function buildMenu() {
         cmd(tr('新对话'), 'CmdOrCtrl+N', 'new'),
         cmd(tr('命令面板'), 'CmdOrCtrl+K', 'palette'),
         cmd(tr('搜索对话'), 'CmdOrCtrl+P', 'palette'),
+        cmd(tr('搜索文件'), 'CmdOrCtrl+Shift+F', 'files.search'),
         { type: 'separator' },
         cmd(tr('中断当前轮'), 'CmdOrCtrl+Shift+C', 'interrupt'),
         cmd(tr('结束当前对话的进程'), 'CmdOrCtrl+Shift+Q', 'close'),
@@ -810,6 +812,37 @@ ipcMain.on('desktop:appMenu', (e, at: { x: number; y: number }) => {
   const m = Menu.getApplicationMenu();
   if (w && m) m.popup({ window: w, x: Math.round(at?.x ?? 0), y: Math.round(at?.y ?? 0) });
 });
+// 录屏 (spec E3): our own picker lists sources, the page chooses one, the next getDisplayMedia of that window gets it
+const picks = new PendingPicks();
+const listed = new Map<number, Set<string>>(); // window → source ids it was shown (a pick must be one of them)
+ipcMain.handle('desktop:capture:sources', async (e) => {
+  if (!ours(e)) return [];
+  const list = await listSources(desktopCapturer, BrowserWindow);
+  listed.set(e.sender.id, new Set(list.map((s) => s.id)));
+  return list;
+});
+ipcMain.handle('desktop:capture:choose', (e, p: CapturePick) => {
+  if (!ours(e) || !p || typeof p !== 'object') return false;
+  if (p.kind === 'source') {
+    if (typeof p.id !== 'string' || !listed.get(e.sender.id)?.has(p.id)) return false;
+    picks.set(e.sender.id, { kind: 'source', id: p.id });
+    return true;
+  }
+  if (p.kind === 'guest') {
+    // only a built-in browser tab of this very window
+    const g = typeof p.webContentsId === 'number' ? webContents.fromId(p.webContentsId) : undefined;
+    if (!g || g.hostWebContents !== e.sender) return false;
+    picks.set(e.sender.id, { kind: 'guest', webContentsId: p.webContentsId });
+    return true;
+  }
+  return false;
+});
+ipcMain.handle('desktop:pickFile', async (e) => {
+  if (!ours(e)) return null;
+  const w = BrowserWindow.fromWebContents(e.sender) ?? focusedWin();
+  const r = await dialog.showOpenDialog(w!, { properties: ['openFile'] });
+  return r.canceled ? null : r.filePaths[0];
+});
 ipcMain.handle('desktop:pickDir', async (e) => {
   const w = BrowserWindow.fromWebContents(e.sender) ?? focusedWin();
   const r = await dialog.showOpenDialog(w!, { properties: ['openDirectory', 'createDirectory'], title: tr('选择工作目录') });
@@ -978,6 +1011,20 @@ if (gotLock) app.whenReady().then(async () => {
   // the built-in browser's profiles (web features/browser/state.ts) are guarded before any page; any other profile a
   // <webview> names gets it as it attaches (createWindow)
   for (const p of [...BROWSER_PARTITIONS, LOCAL_PARTITION]) guardSession(session.fromPartition(p), fileGuard);
+  // 录屏: a getDisplayMedia gets the source its window picked in our picker a moment ago, or nothing
+  session.defaultSession.setDisplayMediaRequestHandler((req, cb) => {
+    void (async () => {
+      const wc = req.frame ? webContents.fromFrame(req.frame) : undefined;
+      const p = wc ? picks.take(wc.id) : undefined;
+      if (!p) return cb({});
+      if (p.kind === 'guest') {
+        const g = webContents.fromId(p.webContentsId);
+        return g && !g.isDestroyed() ? cb({ video: g.mainFrame }) : cb({});
+      }
+      const src = (await desktopCapturer.getSources({ types: ['screen', 'window'] })).find((s) => s.id === p.id);
+      return src ? cb({ video: src }) : cb({});
+    })().catch(() => cb({}));
+  });
   // the window first (on the splash), then the server: see splashUrl
   const hidden = process.argv.includes('--hidden');
   const main = createWindow(null, 'main', undefined, hidden);

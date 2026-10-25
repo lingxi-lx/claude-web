@@ -34,7 +34,7 @@ describe('keys while a page covers the workbench (review 7 I3, final review I2)'
   });
   it('every shortcut is decided (none left to act unseen by accident): each one is either kept or listed above', () => {
     // (find / send / slash / paste / attach / perm.cycle are not commands: the focused element handles them, and the covered area is inert)
-    const kept = /^(palette|settings|sidebar|shortcuts|dock\.|panel\.|zoom\.|find$|send$|slash$|paste$|attach$|perm\.cycle$|view\.)/;
+    const kept = /^(palette|settings|sidebar|shortcuts|dock\.|panel\.|files\.search$|zoom\.|find$|send$|slash$|paste$|attach$|perm\.cycle$|view\.)/;
     for (const s of SHORTCUTS) {
       const r = underCovers(s.id, { settings: true, automation: false });
       expect(kept.test(s.id) || r.close.length > 0, s.id).toBe(true);

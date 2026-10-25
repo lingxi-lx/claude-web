@@ -16,11 +16,13 @@ import { ConnectModelHost } from '@/features/providers/ConnectModel';
 import { UpdatePrompt } from '@/features/update/UpdatePrompt';
 import { SettingsModal } from '@/features/settings/SettingsModal';
 import { Onboarding } from '@/features/onboarding/Onboarding';
-import { desktop } from '@/desktop';
+import { desktop, isDesktop } from '@/desktop';
 import { Icon } from '@/ui/icons';
 import { installOrchestra } from '@/features/orchestra/state';
 import { ErrorBoundary } from '@/ui/ErrorBoundary';
 import { Toasts } from '@/ui/Toasts';
+import { SourcePicker } from '@/features/recording/SourcePicker';
+import { RecordingIndicator } from '@/features/recording/RecordingIndicator';
 import { chromeVisibility, workbenchOn } from '@/model/layout';
 import { captionHeightAt, captionRow } from '@/features/workbench/tab-row';
 import { installZoom, useZoom } from '@/ui/zoom';
@@ -44,6 +46,7 @@ import { installSettingsClose } from '@/features/settings/close-on-nav';
 import { pushBackLayer } from '@/ui/back-layer';
 import { installPhoneSheet, sheetEnter, sheetTakesEscape, toggleSheetDetent, useSheetLeaving } from '@/ui/phone-sheet';
 import { drawerEnter, installPhoneDrawer, usePhoneDrawer } from '@/ui/phone-drawer';
+import { imeComposing } from '@/ui/ime';
 import { tr } from '@/i18n';
 import { applyUiSettings, resolveTheme, DEFAULT_THEME } from '@/features/settings/ui-settings';
 import { setSafeMode } from '@/themes/apply';
@@ -283,6 +286,7 @@ export function App() {
       }
       const id = matchBrowserKey(e);
       if (!id) return;
+      if (id === 'files.search' && imeComposing(e)) return;
       // on desktop the menu accelerators own the Ctrl-only chords; browser-only (Alt) chords still run here
       if (desktop && (e.ctrlKey || e.metaKey) && !e.altKey && !['pane.splitRight', 'pane.splitDown', 'pane.zoom', 'dock.toggle', 'dock.minimize', 'view.cycle', 'side', 'menu.effort', 'pane.close', 'shortcuts'].includes(id) && !id.startsWith('panel.') && !/^group\.jump/.test(id)) return;
       e.preventDefault();
@@ -312,6 +316,7 @@ export function App() {
         <ErrorBoundary area={tr('右侧面板')}><Dock /></ErrorBoundary>
       </div>
       <ErrorBoundary area={tr('通知')} floating><Toasts /></ErrorBoundary>
+      {isDesktop && <ErrorBoundary area={tr('录屏')} floating><SourcePicker /><RecordingIndicator /></ErrorBoundary>}
       <ErrorBoundary area={tr('命令面板')} floating><CommandPalette /></ErrorBoundary>
       <ErrorBoundary area={tr('快捷键')} floating><ShortcutsModal /></ErrorBoundary>
       <ErrorBoundary area={tr('更新内容')} floating><WhatsNewModal /></ErrorBoundary>

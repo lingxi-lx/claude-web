@@ -14,6 +14,11 @@ import { tr } from '@/i18n';
 import { AllArtifacts } from './AllArtifacts';
 import { RootGroups } from './RootGroups';
 import { projectRoots } from '@/features/paths';
+import { walkTools } from '@/model/conversation';
+import { desktop } from '@/desktop';
+import { keyLabel, SHORTCUTS } from './shortcuts';
+import { openExplorer } from './right-panel';
+import { touchedFiles } from './touched-files';
 
 /** The last open request (`useRightPanel().explorer.n`) the right panel's 文件 applied (each is applied once). */
 let appliedIntent = 0;
@@ -32,7 +37,9 @@ export function FilesView({ visible, inDock }: { visible: boolean; inDock?: bool
   const cwd = active?.cwd ?? '';
   // a project with extra folders: a group per folder (stage C2)
   const workspaces = useStore((s) => s.workspaces);
-  const roots = useMemo(() => projectRoots(cwd, workspaces), [cwd, workspaces]);
+  // a conversation without a folder: the one picked in the empty state, browsed here only (stage E4)
+  const [browseRoot, setBrowseRoot] = useState('');
+  const roots = useMemo(() => projectRoots(cwd || browseRoot, workspaces), [cwd, browseRoot, workspaces]);
   const peer = sessionPeer(sid, sessions);
   const [mode, setMode] = useState<'tree' | 'search'>('tree');
   const [searched, setSearched] = useState(false);
@@ -40,6 +47,11 @@ export function FilesView({ visible, inDock }: { visible: boolean; inDock?: bool
   /** 生成的文件 was asked for (··· / the palette): the group shows even when there are none yet */
   const [askedArtifacts, setAskedArtifacts] = useState(false);
   const artifacts = useArtifacts(sid);
+  // 本对话的文件 (stage E4): what Claude read or changed here, first time first
+  const conv = useStore((s) => (sid ? s.open[sid]?.conv : undefined));
+  const version = useStore((s) => (sid ? s.open[sid]?.version : undefined));
+  const touched = useMemo(() => (conv ? touchedFiles([...walkTools(conv.items)].filter((x) => x.depth === 0).map((x) => ({ name: x.tool.name, input: x.tool.input }))) : []), [conv, version]);
+  const [showTouched, setShowTouched] = useState(true);
   const gitStatus = useGitStatus(cwd, visible && mode === 'tree' && !peer);
 
   const intent = useRightPanel((s) => s.explorer);
@@ -57,6 +69,13 @@ export function FilesView({ visible, inDock }: { visible: boolean; inDock?: bool
   if (!active) return <EmptyState e={EMPTY.filesNoChat} />;
   if (peer) return <div className="empty">{tr('这个对话在机器「{name}」上，它的文件在那台机器上。', { name: peer.name })}</div>;
   const pick = (m: 'tree' | 'search') => { setMode(m); if (m === 'search') setSearched(true); };
+  const searchKey = keyLabel(SHORTCUTS.find((x) => x.id === 'files.search')!);
+  // 打开文件: the desktop's own file box; a browser has none — go to the search instead
+  const openFile = async () => {
+    const p = desktop?.pickFile ? await desktop.pickFile() : null;
+    if (p) useStore.getState().openTile({ id: `d${Date.now()}`, kind: 'doc', path: p }, 'tab');
+    else if (!desktop?.pickFile) pick('search');
+  };
   return (
     <div className="files-view">
       <div className="fv-head">
@@ -66,6 +85,23 @@ export function FilesView({ visible, inDock }: { visible: boolean; inDock?: bool
         </span>
       </div>
       <div className="fv-body" hidden={mode !== 'tree'}>
+        <div className={clsx('fv-group fv-touched', showTouched && 'open')}>
+          <button className="fv-group-head" aria-expanded={showTouched} onClick={() => setShowTouched(!showTouched)}>
+            <Icon name={showTouched ? 'chevronDown' : 'chevronRight'} size={12} />
+            <span className="grow">{tr('本对话的文件')}</span>
+            <span className="n">{touched.length}</span>
+          </button>
+          {showTouched && (touched.length
+            ? <div className="fv-touched-list">{touched.map((p) => (
+                <button key={p} className="fv-touched-it" title={p} onClick={() => useStore.getState().openTile({ id: `d${Date.now()}`, kind: 'doc', path: p }, 'tab')}>
+                  <Icon name="files" size={12} /><span className="grow">{p.split(/[\/]/).pop()}</span>
+                </button>
+              ))}</div>
+            : <EmptyState e={EMPTY.filesSession} action={<>
+                <button className="btn sm" onClick={() => void openFile()}>{tr('打开文件')}</button>
+                <button className="btn sm" onClick={() => openExplorer('search')}>{tr('搜索文件')} <kbd>{searchKey}</kbd></button>
+              </>} />)}
+        </div>
         {(artifacts.length > 0 || askedArtifacts) && (
           <div className={clsx('fv-group', showArtifacts && 'open')}>
             <button className="fv-group-head" aria-expanded={showArtifacts} onClick={() => setShowArtifacts(!showArtifacts)}>
@@ -79,7 +115,7 @@ export function FilesView({ visible, inDock }: { visible: boolean; inDock?: bool
           </div>
         )}
         <AllArtifacts />
-        <RootGroups roots={roots}>{(r) => <FileTree root={r} gitStatus={r === cwd ? gitStatus : undefined} />}</RootGroups>
+        {roots.length ? <RootGroups roots={roots}>{(r) => <FileTree root={r} gitStatus={r === cwd ? gitStatus : undefined} />}</RootGroups> : <FileTree root="" onPickRoot={setBrowseRoot} />}
       </div>
       {searched && <div className="fv-body" hidden={mode !== 'search'}><RootGroups roots={roots}>{(r) => <SearchView root={r} />}</RootGroups></div>}
     </div>

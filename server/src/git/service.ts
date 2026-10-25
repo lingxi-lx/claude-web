@@ -5,6 +5,7 @@ import fs from 'node:fs/promises';
 import chokidar from 'chokidar';
 import type { GitBranch, GitError, GitErrorKind, GitFileStatus, GitLogEntry, GitStatus, GitWorktree } from '../protocol.js';
 import { tr } from '../i18n/index.js';
+import { isWslUnc } from '../wsl/paths.js';
 
 // for-each-ref does not expand %xNN like log does → pass the separator byte literally
 const SEP = String.fromCharCode(0x1f);
@@ -173,7 +174,8 @@ export class GitService extends EventEmitter {
 
   async run(cwd: string, args: string[], opts: { input?: string; timeoutMs?: number } = {}): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
-      const child = execFile('git', ['-c', 'core.quotepath=off', '-c', 'color.ui=never', ...args], {
+      // a repo on a WSL disk belongs to the Linux user: Git for Windows calls it dubious ownership. Trust it for this call only
+      const child = execFile('git', [...(isWslUnc(cwd) ? ['-c', 'safe.directory=*'] : []), '-c', 'core.quotepath=off', '-c', 'color.ui=never', ...args], {
         cwd,
         windowsHide: true,
         maxBuffer: 32 * 1024 * 1024,

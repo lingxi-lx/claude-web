@@ -23,6 +23,15 @@ describe('PR bar', () => {
     const p = pr();
     expect(ciFixMessage(p, p.checks.failures)).toBe('PR #7 的 CI 检查失败了：\n- lint（gh run view 42 --log-failed）\n- ci/legacy https://x/legacy\n\n看一下失败原因，修好后提交并推送到这个分支。');
   });
+  it('GitLab: the failed job\'s trace tail goes in a fence, named as a log', () => {
+    const p = { id: '5', number: 5, title: 't', url: 'u', state: 'open', draft: false, autoMerge: false, sha: 's', host: 'gitlab', checks: { total: 1, passed: 0, failed: 1, pending: 0, failures: [{ name: 'unit', url: 'j', runId: 1005 }] } } as const;
+    const msg = ciFixMessage(p as any, p.checks.failures as any, { 1005: 'Error: boom ```' });
+    expect(msg).toContain('MR !5');
+    expect(msg).toContain('unit');
+    expect(msg).toContain('Error: boom');
+    expect(msg).toContain('````');
+    expect(msg).not.toContain('gh run view');
+  });
   it('settled = merged or closed', () => {
     expect(prSettled(pr({ state: 'merged' }))).toBe(true);
     expect(prSettled(pr({ state: 'closed' }))).toBe(true);

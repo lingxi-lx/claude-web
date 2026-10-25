@@ -52,6 +52,9 @@ import { reportKeepAwake } from './remote/keep-awake.js';
 import { TunnelManager } from './remote/tunnel.js';
 import { ImService } from './im/service.js';
 import { VcsService } from './vcs/service.js';
+import { WslService, setWslService } from './wsl/service.js';
+import { addTranscriptRoot } from './runtime/transcript-file.js';
+import { VcsTokenStore } from './vcs/token-store.js';
 import { GoalService } from './goals/service.js';
 import { AndroidService } from './android/service.js';
 import { LibraryService } from './library/service.js';
@@ -329,7 +332,20 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   const providers = new ProviderService(meta, secrets);
   await providers.warm();
   // a network path is touched only inside a project folder the user added (files/service.ts uncAllowed)
-  const files = new FilesService(() => workspaceRoots(meta.workspaces()));
+  // stage E5: WSL distros — their `\\wsl.localhost` / `\\wsl$` roots are readable like workspaces (only listed distros)
+  const wsl = new WslService();
+  setWslService(wsl);
+  const files = new FilesService(() => [...workspaceRoots(meta.workspaces()), ...wsl.roots()]);
+  // conversations that ran in a distro: its transcripts folder joins the library (in the background, never blocks start)
+  void (async () => {
+    const distros = new Set<string>();
+    for (const m of Object.values(meta.allSessionMeta())) if (m.env?.kind === 'wsl') distros.add(m.env.distro);
+    if (!distros.size) return;
+    await wsl.list();
+    for (const d of distros) {
+      try { await wsl.check(d); const root = wsl.projectsRoot(d); if (root) addTranscriptRoot(root, d); } catch { /* distro gone */ }
+    }
+  })();
   const agents = new AgentRegistry(meta);
   // agent CLIs installed where a GUI-started app's PATH does not look (npm -g after login, fnm, uv tool…): added before
   // the first probe / session / terminal needs them (agents/locate.ts)
@@ -345,6 +361,8 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   setDesktopSkillsEnabled(meta.settings()['claude.desktopSkills'] !== false);
   const localEnvStore = new LocalEnvStore(path.join(dataDir(), 'local-env.json'), secrets);
   await localEnvStore.load();
+  // stage E: GitHub / GitLab tokens typed in settings — their own encrypted file, never meta.json's settings
+  const vcsTokens = new VcsTokenStore(path.join(dataDir(), 'vcs-tokens.json'), secrets);
   // 联网: web search here, the browser tools in whichever desktop window hosts the built-in browser (web/service.ts).
   // Its own fetches wait for the proxy's look like every other request that goes out, and never reach this server.
   web = new WebService({
@@ -472,7 +490,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     },
   });
   themes.watch();
-  const services = { importer, customCss, orchestra, background, characters, themes, remote, anywhere, tunnels, im, vcs: new VcsService(gitSvc), goals, android: new AndroidService(), pool, sessions: sessionsSvc, config, usage: new UsageService(async (sid) => providerTimeline(await canonical.providerSwitches(sid), meta.sessionMeta(sid).providerId, (id) => { const p = meta.provider(id); return p ? { type: p.type, name: p.name } : undefined; })), files, terminal, meta, limits: new LimitsService(), schedules: new ScheduleService(meta, pool), providers, git: gitSvc, search: new SearchService(), skills: new SkillsService(), mcp: new McpService(), diag: new DiagService(version), ledger, agents, transcripts, canonical, memory, library, version, federation, agentConfig: new AgentConfigService({ agents, backupDir: path.join(dataDir(), 'config-backups') }), gateway, upstreams, tasks, web, computer, siteAsk, localEnv: localEnvStore, previews };
+  const services = { importer, customCss, orchestra, background, characters, themes, remote, anywhere, tunnels, im, vcs: new VcsService(gitSvc, { gitlabHosts: () => { const v = meta.settings()['vcs.gitlabHosts']; return Array.isArray(v) ? v : []; }, tokens: vcsTokens }), vcsTokens, wsl, goals, android: new AndroidService(), pool, sessions: sessionsSvc, config, usage: new UsageService(async (sid) => providerTimeline(await canonical.providerSwitches(sid), meta.sessionMeta(sid).providerId, (id) => { const p = meta.provider(id); return p ? { type: p.type, name: p.name } : undefined; })), files, terminal, meta, limits: new LimitsService(), schedules: new ScheduleService(meta, pool), providers, git: gitSvc, search: new SearchService(), skills: new SkillsService(), mcp: new McpService(), diag: new DiagService(version), ledger, agents, transcripts, canonical, memory, library, version, federation, agentConfig: new AgentConfigService({ agents, backupDir: path.join(dataDir(), 'config-backups') }), gateway, upstreams, tasks, web, computer, siteAsk, localEnv: localEnvStore, previews };
   new Hub(wss, services);
   tasks.start();
   // model lists older than a day (or never pulled) are refreshed in the background — list only, no tokens

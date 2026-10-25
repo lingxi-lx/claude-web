@@ -98,3 +98,42 @@
 /* 生成的文件 across conversations: the conversation a file came from, a link that looks like the line under the name */
 .all-artifacts .link-btn { background: none; border: 0; padding: 0; font: inherit; color: var(--fg-3); cursor: pointer; text-align: left; }
 .all-artifacts .link-btn:hover { color: var(--fg-2); text-decoration: underline; }
+
+/* 录屏 (stage E3): the source picker, the 3 s countdown, the red dot in the title bar row */
+.rec-picker { width: min(760px, 92vw); max-height: 82vh; overflow: auto; }
+.rec-picker .rec-h { margin: 12px 0 6px; font-size: var(--fs-small); color: var(--ink-3); }
+.rec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+.rec-src { display: grid; gap: 4px; padding: 6px; border-radius: var(--r-sm); border: var(--hairline) solid var(--edge-subtle); background: var(--surface-1); text-align: left; }
+.rec-src:hover, .rec-src:focus-visible { background: var(--layer-hover); }
+.rec-src img { width: 100%; aspect-ratio: 16 / 9; object-fit: contain; background: var(--surface-2); border-radius: var(--r-xs); }
+.rec-src span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-small); color: var(--ink-2); }
+.rec-tabs { display: grid; gap: 4px; }
+.rec-tab { padding: 6px 10px; border-radius: var(--r-sm); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
+.rec-tab:hover, .rec-tab:focus-visible { background: var(--layer-hover); }
+.rec-countdown { position: fixed; inset: 0; z-index: 2000; display: grid; place-items: center; pointer-events: none; font-size: 120px; font-weight: var(--fw-strong); color: var(--ink-1); text-shadow: 0 2px 16px rgb(0 0 0 / 0.35); font-variant-numeric: tabular-nums; }
+.rec-dot { position: fixed; top: 4px; left: 50%; transform: translateX(-50%); z-index: 1500; display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; background: var(--surface-1); border: var(--hairline) solid var(--edge-subtle); color: var(--ink-1); font-size: var(--fs-small); font-variant-numeric: tabular-nums; -webkit-app-region: no-drag; }
+.rec-dot .rec-red { width: 8px; height: 8px; border-radius: 50%; background: var(--red); animation: rec-blink 1.2s ease-in-out infinite; }
+@keyframes rec-blink { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .rec-dot .rec-red { animation: none; } }
+
+/* 文件 → 本对话的文件 (stage E4) */
+.fv-touched-list { display: flex; flex-direction: column; padding: 2px 0 6px; }
+.fv-touched-it { display: flex; align-items: center; gap: 6px; padding: 3px 10px 3px 22px; text-align: left; font-size: 12.5px; color: var(--text-1); border-radius: var(--r-sm, 4px); }
+.fv-touched-it:hover { background: var(--hover, rgba(127, 127, 127, 0.1)); }
+.fv-touched-it .grow { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fv-touched .empty-state .es-act { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.fv-touched .empty-state kbd { margin-left: 4px; font-size: 11px; opacity: 0.75; }
+.turn-recs { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 2px; }
+.turn-rec { cursor: pointer; }
+
+/* 选机器: WSL rows and 添加 SSH 机器… (stage E5) */
+.machine-wsl-row { display: flex; align-items: center; gap: 4px; }
+.machine-wsl-row > .cm-it { flex: 1; min-width: 0; }
+.machine-install { flex: none; margin-right: 6px; }
+.add-ssh-dlg { width: min(460px, 92vw); display: flex; flex-direction: column; gap: 8px; }
+.add-ssh-dlg .fld { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; color: var(--text-2); }
+.add-ssh-dlg .btn.ghost.sm { align-self: flex-start; }
+.add-ssh-dlg .ssh-ok { color: var(--ok, #2e9d5b); }
+.add-ssh-dlg .dim { opacity: 0.7; }
+.cmp-wsl-note { margin: 4px 12px 0; font-size: 12px; }
+.wsl-tag { opacity: 0.8; }

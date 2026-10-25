@@ -9,6 +9,7 @@ import { createRequire } from 'node:module';
 import { resolveClaudeExe } from '../claude-exe.js';
 import { tr } from '../i18n/index.js';
 import { localEnv } from '../runtime/local-env.js';
+import { toWslPath } from '../wsl/paths.js';
 
 type Pty = { write(d: string): void; resize(c: number, r: number): void; kill(): void; onData(cb: (d: string) => void): void; onExit(cb: (e: { exitCode: number }) => void): void };
 
@@ -68,13 +69,17 @@ export class TerminalService extends EventEmitter {
     return !!this.ptyMod;
   }
 
-  async open(cwd: string, cols: number, rows: number) {
+  async open(cwd: string, cols: number, rows: number, o: { wsl?: { distro: string } } = {}) {
     if (!(await this.available())) throw new Error('node-pty is not installed; run `npm i -w server node-pty` to enable the terminal panel');
     const termId = randomUUID();
     let exe: string | null = null;
     try { exe = resolveClaudeExe(); } catch { /* no bundled claude: the shell still works */ }
     const sh = terminalShell(process.platform, { ...process.env, ...localEnv(), CLAUDE_CODE_ENTRYPOINT: 'claude-web-terminal' }, exe);
-    const p: Pty = this.ptyMod.spawn(sh.file, sh.args, { name: 'xterm-256color', cols, rows, cwd: cwd || os.homedir(), env: sh.env });
+    // stage E5: a WSL conversation's terminal is a shell of its distro, in its folder (cmd.exe cannot start in a UNC path)
+    const d = o.wsl?.distro;
+    const p: Pty = d && process.platform === 'win32'
+      ? this.ptyMod.spawn('wsl.exe', ['-d', d, '--cd', toWslPath(cwd, d) ?? '~'], { name: 'xterm-256color', cols, rows, cwd: os.homedir(), env: sh.env })
+      : this.ptyMod.spawn(sh.file, sh.args, { name: 'xterm-256color', cols, rows, cwd: cwd || os.homedir(), env: sh.env });
     this.terms.set(termId, p);
     p.onData((d) => this.emit('data', termId, d));
     p.onExit((e) => {

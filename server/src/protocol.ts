@@ -17,6 +17,8 @@ import type { LinkKind } from './remote/anywhere/core/link.js';
 export type { LinkKind } from './remote/anywhere/core/link.js';
 import type { UpstreamRequest } from './upstreams/types.js';
 export * from './upstreams/types.js';
+/** stage E5: WSL ↔ Windows paths (pure, the web side uses them too) */
+export * from './wsl/paths.js';
 
 export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'dontAsk' | 'auto';
 // `ultra` is Codex-only (its own enum member). `ultracode` is NOT here on purpose: in Claude Code it is a
@@ -107,8 +109,14 @@ export interface SourceStatus {
   caps?: SourceCaps;
 }
 
+/** stage E5: where a conversation runs — this computer, or inside one of its WSL distros */
+export type SessionEnv = { kind: 'local' } | { kind: 'wsl'; distro: string };
+export interface WslDistro { name: string; claude: boolean | null; interop: boolean | null; home: string | null }
+export type { SshProbe } from './remote/ssh-probe.js';
 export interface OpenSessionParams {
   sessionId?: string; // resume this session; omit to start a new one
+  /** stage E5: run it inside a WSL distro (local only; recorded in the session meta) */
+  env?: SessionEnv;
   /** 新对话选机器: start it on this federation peer (its id); routed and dropped by federation/rewrite.ts */
   peer?: string;
   cwd: string;
@@ -377,6 +385,10 @@ export interface SessionMeta {
   /** replies pinned with 📌 under them (the info column's 钉住 card): their item id and first words */
   pinnedMsgs?: { id: string; text: string }[];
   /** a rename made while the conversation's process ran (server/src/meta/store.ts) */
+  /** stage E1 自动处理评论: when the switch went on (0 / absent = off), comment ids already handed over (newest 200), the batch waiting for a push */
+  prAutoComments?: number; prCommentsDone?: string[]; prCommentsSent?: { ids: string[]; sha: string; at: number };
+  /** stage E5: the machine it runs on (WSL); stage E3: the built-in browser's recordings (newest 20) */
+  env?: SessionEnv; browserRecordings?: { path: string; start: number; end: number }[];
   pendingTitle?: string; /** 只聊天: started without tools; a resume keeps it that way */ chatOnly?: boolean; /** 保持电脑唤醒 while this conversation is busy */ keepAwake?: boolean; /** 代码审查卡: findings dismissed here, `<toolUseId>#<index>` */ reviewDismissed?: string[]; /** 任务 chip: suggestions dismissed (tool use ids), and started (tool use id → the new conversation) */ taskDismissed?: string[]; taskStarted?: Record<string, string>; /** PR 监控条: 自动修 CI on, and the failures it already asked about */ prAutoFix?: boolean; prFixed?: string[]; pinned?: boolean; archived?: boolean; workspaceId?: string; tags?: string[]; providerId?: string; /** sidebar grouping directory when it differs from the cwd (orchestration worktrees) */ groupCwd?: string; /** prompt-cache route key when it is not the session's own id (forks keep their root's) */ cacheKey?: string; /** the model its subagents run on, picked for this provider ('' = the main model) */ subagent?: { providerId: string; model: string }; /** the permission mode it last ran with: a resume without a pick comes back in it (the SDK never says it) */ permissionMode?: PermissionMode; /** 思考用的语言 for this conversation: '' / absent = the setting `ai.thinkingLanguage`, 'off' = none here, 'auto' = the interface language, else a THINKING_LANGUAGES id */ thinkingLanguage?: string; /** a `continueInClaude` source's conversation: the Claude conversation it goes on in */ continuedAs?: string; /** the Claude conversation of a `continuedAs`: what it goes on from, and how many of its messages are in it */ continuedFrom?: string; replayed?: number }
 export interface Schedule { id: string; name: string; cwd: string; prompt: string; everyMinutes: number; cron?: string; enabled: boolean; lastRunAt?: number; nextRunAt?: number; sessionId?: string; model?: string; permissionMode?: string; freshSession?: boolean; lastError?: string; runs?: number; /** 手动: only 立即运行 starts it */ manual?: boolean; /** each run in its own worktree (with freshSession) */ worktree?: boolean }
 export interface LimitWindow { label: string; percent: number; resetsAt: string | null; active: boolean; severity?: string }
@@ -411,7 +423,10 @@ export interface VcsRepo { provider: 'github' | 'gitlab'; host: string; owner: s
 /** PR 监控条: a pull request's checks, summed up (`failures`: where to look — `runId` for `gh run view --log-failed`). */
 export interface PrChecks { total: number; passed: number; failed: number; pending: number; failures: { name: string; url: string; runId?: number }[] }
 /** PR 监控条: the pull request of a conversation's branch. `sha`: its head commit (a new push re-arms the CI auto-fix). */
-export interface BranchPr { /** GitHub's review decision (none when the repository needs no review) */ review?: 'approved' | 'changes' | 'required'; id: string; number: number; title: string; url: string; state: 'open' | 'closed' | 'merged'; draft: boolean; mergeable?: boolean; autoMerge: boolean; sha: string; checks: PrChecks }
+export interface BranchPr { /** GitHub's review decision (none when the repository needs no review) */ review?: 'approved' | 'changes' | 'required'; id: string; number: number; title: string; url: string; state: 'open' | 'closed' | 'merged'; draft: boolean; mergeable?: boolean; autoMerge: boolean; sha: string; checks: PrChecks; /** stage E: which forge (missing = github) */ host?: 'github' | 'gitlab'; /** the target branch */ base?: string }
+/** A PR/MR review comment (stage E1). `body` is untrusted text from whoever wrote it. */
+export interface PrComment { id: string; kind: 'thread' | 'general'; threadId?: string; replyTo?: string; author: string; bot: boolean; trusted: boolean; body: string; path?: string; line?: number; diff?: string; url: string; createdAt: string }
+export type PrCommentRef = Pick<PrComment, 'id' | 'kind' | 'threadId' | 'replyTo'>
 export interface VcsItem { number: number; title: string; state: 'open' | 'closed' | 'merged'; isPr: boolean; draft?: boolean; author: string; labels: { name: string; color: string }[]; assignees: string[]; comments: number; createdAt: string; updatedAt: string; url: string; milestone?: string; head?: string; base?: string; additions?: number; deletions?: number; changedFiles?: number; reviewDecision?: string; checks?: 'success' | 'failure' | 'pending' | 'none'; mergeable?: boolean }
 export interface VcsDetail extends VcsItem { body: string; comments: any; commentsList: { id: string; author: string; body: string; createdAt: string; url: string }[]; reviews?: { author: string; state: string; submittedAt: string }[]; files?: { path: string; additions: number; deletions: number; status: string }[]; checkRuns?: { name: string; status: string; conclusion: string; url: string }[]; mergeableState?: string }
 export type GoalStatus = 'draft' | 'active' | 'paused' | 'complete' | 'blocked' | 'max_turns';
@@ -440,6 +455,8 @@ export type PermissionResponse =
 
 export interface SessionInfoSnapshot {
   sessionId: string;
+  /** stage E5: running inside this WSL distro; `dropped` = injected MCP servers that could not start there */
+  wsl?: { distro: string; dropped: string[] };
   state: RunnerState;
   cwd: string;
   model?: string;
@@ -674,6 +691,12 @@ export type ClientRequest =
   | { kind: 'tunnel.close'; hostId: string }
   | { kind: 'tunnel.list' }
   | { kind: 'tunnel.run'; hostId: string; command: string }
+  | { kind: 'remote.hosts.test'; target: string; sshPort?: number; identityFile?: string; remotePort?: number }
+  // stage E5: WSL (local only; install runs only the shown command after the user said yes)
+  | { kind: 'wsl.list' }
+  | { kind: 'wsl.check'; distro: string }
+  | { kind: 'wsl.installCommand' }
+  | { kind: 'wsl.install'; distro: string; confirmed: true }
   | { kind: 'im.kinds' }
   | { kind: 'im.list' }
   | { kind: 'im.set'; id: string; patch: Partial<ImGatewayConfig> | null }
@@ -693,6 +716,13 @@ export type ClientRequest =
   | { kind: 'vcs.prForBranch'; cwd: string }
   /** squash-merge on its own once the checks pass (GitHub auto-merge; the repository must allow it) */
   | { kind: 'vcs.autoMerge'; cwd: string; prId: string; on: boolean }
+  // stage E: PR / MR comments, GitLab job logs, forge tokens (host names only on the wire, never a token value back)
+  | { kind: 'vcs.prComments'; cwd: string; number: number; base?: string }
+  | { kind: 'vcs.replyComment'; cwd: string; number: number; comment: PrCommentRef; body: string }
+  | { kind: 'vcs.resolveComment'; cwd: string; number: number; comment: PrCommentRef }
+  | { kind: 'vcs.failureLog'; cwd: string; jobId: number }
+  | { kind: 'vcs.tokens.list' }
+  | { kind: 'vcs.tokens.set'; host: string; token: string | null }
   | { kind: 'vcs.create'; cwd: string; repo?: string; title: string; body?: string; isPr?: boolean; head?: string; base?: string; draft?: boolean; labels?: string[] }
   | { kind: 'vcs.checkout'; cwd: string; repo?: string; number: number; worktree?: boolean }
   | { kind: 'goals.list' }
@@ -713,7 +743,7 @@ export type ClientRequest =
   | { kind: 'android.launchApp'; serial: string; pkg: string }
   | { kind: 'android.startEmulator'; avd: string }
   | { kind: 'agents.set'; agent: AgentKind; patch: { command?: string; args?: string[]; env?: Record<string, string>; model?: string; label?: string; enabled?: boolean; name?: string; protocol?: 'acp' | 'codex'; providerId?: string } | null }
-  | { kind: 'terminal.open'; cwd: string; cols: number; rows: number }
+  | { kind: 'terminal.open'; cwd: string; cols: number; rows: number; wsl?: { distro: string } }
   | { kind: 'terminal.input'; termId: string; data: string }
   | { kind: 'terminal.resize'; termId: string; cols: number; rows: number }
   | { kind: 'terminal.close'; termId: string }

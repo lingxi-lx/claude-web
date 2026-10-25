@@ -3,6 +3,10 @@ export interface DesktopBridge {
   version: string;
   platform: string;
   pickDir(): Promise<string | null>;
+  /** 录屏 (stage E3): screens / windows for our own picker (not this app's windows), the pick for the next getDisplayMedia, a file */
+  captureSources?(): Promise<{ id: string; name: string; kind: 'screen' | 'window'; thumb: string }[]>;
+  chooseCapture?(p: { kind: 'source'; id: string } | { kind: 'guest'; webContentsId: number }): Promise<boolean>;
+  pickFile?(): Promise<string | null>;
   /** ☰: the application menu (对话 / 工作台 / 视图 / 前往 / 编辑 / 帮助) as a popup at x, y (page coordinates); older shells lack it */
   showAppMenu?(x: number, y: number): void;
   openPath(p: string): Promise<void>;

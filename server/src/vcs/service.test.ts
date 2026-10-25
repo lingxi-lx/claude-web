@@ -25,3 +25,11 @@ describe('VcsService.target', () => {
     await expect(new VcsService({ remotes: async () => [] } as any).target('x')).rejects.toThrow('没有 git remote');
   });
 });
+
+describe('VcsService.target with vcs.gitlabHosts', () => {
+  it('a self-hosted GitLab named in vcs.gitlabHosts is GitLab', async () => {
+    const v = new VcsService({} as any, { gitlabHosts: () => ['git.corp.example'] });
+    expect((await v.target('', 'https://git.corp.example/acme/app')).provider).toBe('gitlab');
+    expect((await v.target('', 'https://ghe.corp/acme/app')).provider).toBe('github');
+  });
+});
