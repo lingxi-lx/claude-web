@@ -66,7 +66,7 @@ describe('SessionRunner', () => {
     expect(o.pathToClaudeCodeExecutable).toBe('claude');
     o.spawnClaudeCodeProcess({ command: 'claude', args: ['-p'], env: {}, cwd: 'x' });
     expect(spawned[0].cmd).toBe('wsl.exe');
-    expect(spawned[0].args).toEqual(['-d', 'Ubuntu', '--cd', '/home/me/p', '--', 'claude', '-p']);
+    expect(spawned[0].args).toEqual(['-d', 'Ubuntu', '--cd', '/home/me/p', '--exec', 'sh', '-lc', 'exec claude "$@"', 'claude', '-p']);
     expect(spawned[0].opts.windowsHide).toBe(true);
     expect(r.info.wsl).toEqual({ distro: 'Ubuntu', dropped: [] });
     await r.close();
