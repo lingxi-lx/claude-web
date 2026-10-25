@@ -3981,6 +3981,7 @@ export const EN_WEB: Record<string, string> = {
   "这个账号已经在里面了，登录已更新": "This account was already here; its sign-in is updated",
   "这个账号的代理（留空保持不变）": "Proxy for this account (leave empty to keep)",
   "这个页面": "This page",
+  "这个页面崩溃了，正在重新加载：过一会儿再试。": "This page crashed and is being reloaded: try again in a moment.",
   "这个页面现在不能输入文字。": "Can't type text into this page right now.",
   "这个页面现在截不了图。": "Can't take a screenshot of this page right now.",
   "这个页面现在截不了图（它没有被画出来：窗口最小化了，或者屏幕关着）。": "Can't take a screenshot of this page right now (it isn't being drawn: the window is minimized or the screen is off).",

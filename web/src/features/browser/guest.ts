@@ -39,8 +39,13 @@ export function scriptable(el: WebviewEl | null | undefined): el is WebviewEl {
   try { el.getWebContentsId(); return el.getURL() !== ''; } catch { return false; }
 }
 const NOT_SCRIPTABLE = () => tr('这个标签页现在没有打开的页面（没打开，或者被拒绝打开了），不能在里面操作。');
+/** A page whose renderer is gone (ended after a stuck script, or crashed) never answers a script: said at once. */
+function crashed(el: WebviewEl): boolean {
+  try { return !!el.isCrashed?.(); } catch { return false; }
+}
 /** Every script the app runs in a page goes through here (scriptable() first). */
 function runIn<T>(el: WebviewEl, code: string): Promise<T> {
+  if (crashed(el)) return Promise.reject(new Error(tr('这个页面崩溃了，正在重新加载：过一会儿再试。')));
   if (!scriptable(el)) return Promise.reject(new Error(NOT_SCRIPTABLE()));
   return el.executeJavaScript<T>(code);
 }

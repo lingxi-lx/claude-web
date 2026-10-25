@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { BROWSER_PARTITIONS, DOWNLOAD_BURST, Downloads, isRisky, browserPartition, cleanCookie, cleanVp, clearBrowsingData, guestKeyOf, importCookies, metricsParams, mobileUserAgent, safeName, uniqueIn } from './guest-tools';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { BROWSER_PARTITIONS, DOWNLOAD_BURST, Downloads, isRisky, browserPartition, cleanCookie, cleanVp, clearBrowsingData, endStuckPage, GONE_WAIT_MS, RECHECK_MS, guestKeyOf, importCookies, metricsParams, mobileUserAgent, safeName, uniqueIn } from './guest-tools';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
 
@@ -240,5 +240,58 @@ describe('cookies imported from a file, and clearing browsing data', () => {
     const calls: string[] = [];
     await clearBrowsingData({ clearStorageData: async () => { calls.push('storage'); }, clearCache: async () => { calls.push('cache'); } });
     expect(calls.sort()).toEqual(['cache', 'storage']);
+  });
+});
+
+describe('a page stuck in a script is ended and loaded again (A5)', () => {
+  /** A guest whose renderer ends `goneAfter` ms after it is told to (null: never says so). */
+  const stuck = (o: { pid?: number; goneAfter?: number | null } = {}) => {
+    const g = Object.assign(new EventEmitter(), {
+      log: [] as string[], crashed: false, destroyed: false,
+      getOSProcessId: () => o.pid ?? 200,
+      isDestroyed: () => g.destroyed,
+      isCrashed: () => g.crashed,
+      forcefullyCrashRenderer: () => {
+        g.log.push('crash');
+        const after = o.goneAfter === undefined ? 50 : o.goneAfter;
+        if (after !== null) setTimeout(() => { g.crashed = true; g.emit('render-process-gone', {}, { reason: 'crashed' }); }, after);
+      },
+      // a reload before the end is noticed is lost with the dying renderer; after it, a new renderer starts
+      reload: () => { g.log.push(g.crashed ? 'reload' : 'reload-too-early'); g.crashed = false; },
+    });
+    return g;
+  };
+  const guest = (g: ReturnType<typeof stuck>) => g as unknown as Parameters<typeof endStuckPage>[0];
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('reloads only once the renderer is gone, however late that is noticed', () => {
+    vi.useFakeTimers();
+    const g = stuck({ goneAfter: 900 });
+    expect(endStuckPage(guest(g), 100)).toBe(true);
+    vi.advanceTimersByTime(800);
+    expect(g.log).toEqual(['crash']);
+    vi.advanceTimersByTime(200);
+    expect(g.log).toEqual(['crash', 'reload']);
+    vi.advanceTimersByTime(RECHECK_MS + GONE_WAIT_MS);
+    expect(g.log).toEqual(['crash', 'reload']);
+  });
+  it('a renderer whose end is never heard of is loaded again after the wait; still crashed after that, once more', () => {
+    vi.useFakeTimers();
+    const g = stuck({ goneAfter: null });
+    endStuckPage(guest(g), 100);
+    vi.advanceTimersByTime(GONE_WAIT_MS + 1);
+    expect(g.log).toEqual(['crash', 'reload-too-early']);
+    g.crashed = true;
+    vi.advanceTimersByTime(RECHECK_MS);
+    expect(g.log).toEqual(['crash', 'reload-too-early', 'reload']);
+  });
+  it('never a page in the asking window\'s own process, nor one already closed', () => {
+    const same = stuck({ pid: 100 });
+    expect(endStuckPage(guest(same), 100)).toBe(false);
+    expect(same.log).toEqual([]);
+    const closed = stuck();
+    closed.destroyed = true;
+    expect(endStuckPage(guest(closed), 100)).toBe(false);
+    expect(closed.log).toEqual([]);
   });
 });
