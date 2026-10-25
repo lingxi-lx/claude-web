@@ -3336,6 +3336,7 @@ export const EN_WEB: Record<string, string> = {
   "第一次启用时，系统防火墙可能会询问是否允许；只在可信网络里打开。": "The system firewall may ask for permission the first time you enable it; only turn it on on trusted networks.",
   "第一次添加账号时会自动准备好": "Set up automatically when you add the first account",
   "第一次用的时候，在对话里输入 /mcp，然后在浏览器里登录这个服务": "The first time you use it, type /mcp in the conversation, then sign in to this service in the browser",
+  "第一次连这台机器，已记下它的主机密钥。请和那台机器上的指纹核对（ssh-keygen -lf /etc/ssh/ssh_host_*_key.pub）：": "First connection to this machine: its host key has been saved. Compare it with the fingerprint on that machine (ssh-keygen -lf /etc/ssh/ssh_host_*_key.pub):",
   "第三方接口": "Third-party APIs",
   "第三方接口或中转站：地址、密钥和默认模型。每个对话可以在模型菜单里换用。": "Third-party API or relay: address, key and default model. Each conversation can switch in the model menu.",
   "等一会儿": "Wait a moment",
