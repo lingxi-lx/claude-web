@@ -50,6 +50,8 @@ const defaultFile = () => path.join(process.env.CLAUDE_WEB_DIR ?? path.join(os.h
 export class MetaStore extends EventEmitter {
   data: Data = { version: 1, workspaces: [], sessions: {}, schedules: [], scheduleRuns: [], settings: {}, providers: [], feedback: {}, drafts: {}, devices: [], remoteHosts: [], imGateways: [], imBindings: [], goals: [] };
   private saving: Promise<void> | null = null;
+  /** meta.json on disk is known good, so it may become meta.json.bak */
+  private diskValid = false;
 
   constructor(private file = defaultFile()) {
     super();
@@ -65,10 +67,25 @@ export class MetaStore extends EventEmitter {
     }
     try {
       this.data = { ...this.data, ...JSON.parse(txt) };
+      this.diskValid = true;
     } catch {
       // A torn / hand-broken file would otherwise be silently replaced by defaults on the next save,
       // taking workspaces, providers and keys with it. Keep a copy the user can recover from.
       await fs.copyFile(file, `${file}.corrupt-${Date.now()}`).catch(() => {});
+      // a power cut can leave the file full of NUL bytes (data never flushed): fall back to the last good copy
+      try {
+        this.data = { ...this.data, ...JSON.parse(await fs.readFile(`${file}.bak`, 'utf8')) };
+      } catch { /* no usable backup */ }
+    }
+  }
+
+  private async writeDurable(target: string, text: string) {
+    const h = await fs.open(target, 'w', 0o600);
+    try {
+      await h.writeFile(text, 'utf8');
+      await h.sync();
+    } finally {
+      await h.close();
     }
   }
 
@@ -76,15 +93,20 @@ export class MetaStore extends EventEmitter {
     const file = this.file;
     await fs.mkdir(path.dirname(file), { recursive: true });
     // write-then-rename: a crash mid-write must not leave a truncated meta.json (it holds provider API keys)
+    // and fsync before the rename: without it a sudden reboot keeps the rename but not the data (a NUL-filled file)
+    const text = JSON.stringify(this.data, null, 2);
     const tmp = `${file}.${process.pid}.tmp`;
-    await fs.writeFile(tmp, JSON.stringify(this.data, null, 2), { encoding: 'utf8', mode: 0o600 });
+    await this.writeDurable(tmp, text);
+    // the file being replaced was itself durable and valid: keep it as the fallback load() uses
+    if (this.diskValid) await fs.readFile(file, 'utf8').then((old) => this.writeDurable(`${file}.bak`, old)).catch(() => {});
     try {
       await fs.rename(tmp, file);
     } catch {
       // Windows: rename over a file another process holds open fails — fall back to an in-place write
       await fs.rm(tmp, { force: true }).catch(() => {});
-      await fs.writeFile(file, JSON.stringify(this.data, null, 2), { encoding: 'utf8', mode: 0o600 });
+      await this.writeDurable(file, text);
     }
+    this.diskValid = true;
     if (!quiet) this.emit('changed');
   }
   private queueSave(quiet = false) {

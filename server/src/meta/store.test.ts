@@ -38,6 +38,22 @@ describe('MetaStore', () => {
     expect(siblings.some((f) => f.startsWith('meta.json.corrupt-'))).toBe(true);
   });
 
+  it('a NUL-filled meta.json (power cut) comes back from meta.json.bak', async () => {
+    const file = await tmpFile();
+    const m = new MetaStore(file);
+    await m.load();
+    await m.setSetting('a', 1);
+    await m.setSetting('b', 2); // the save that turns {a} into .bak
+    await fs.writeFile(file, Buffer.alloc(4096));
+    const again = new MetaStore(file);
+    await again.load();
+    expect(again.settings()).toEqual({ a: 1 });
+    // its first save must not put the broken file over the good backup
+    await again.setSetting('c', 3);
+    expect(JSON.parse(await fs.readFile(`${file}.bak`, 'utf8')).settings).toEqual({ a: 1 });
+    expect(JSON.parse(await fs.readFile(file, 'utf8')).settings).toEqual({ a: 1, c: 3 });
+  });
+
   it('null clears a profile’s 自动压缩 point and windows (the editor’s 跟着上下文窗口)', async () => {
     const m = new MetaStore(await tmpFile());
     await m.load();
