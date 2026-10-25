@@ -17,6 +17,7 @@ import type { LinkKind } from './remote/anywhere/core/link.js';
 export type { LinkKind } from './remote/anywhere/core/link.js';
 import type { UpstreamRequest } from './upstreams/types.js';
 export * from './upstreams/types.js';
+export type * from './channels/types.js';
 /** stage E5: WSL ↔ Windows paths (pure, the web side uses them too) */
 export * from './wsl/paths.js';
 
