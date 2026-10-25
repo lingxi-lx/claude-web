@@ -38,11 +38,17 @@ function Shell({ id, label, children }: { id: string; label: string; children: R
   );
 }
 
+/** handoff.check: the new files Git does not track (carried only when ticked) and the key files never carried. */
+interface Untracked { count: number; bytes: number; files: { path: string; size: number }[]; skipped: string[] }
+type Check = { ok: boolean; reason?: string; remote?: string; untracked?: Untracked };
+const sizeText = (n: number) => (n < 1024 * 1024 ? `${Math.max(n ? 1 : 0, Math.round(n / 1024))} KB` : `${(n / 1048576).toFixed(1)} MB`);
+
 function HandoffDialog({ s }: { s: Target }) {
   const [peers, setPeers] = useState<PeerInfo[] | null>(null);
-  const [check, setCheck] = useState<{ ok: boolean; reason?: string; remote?: string } | null>(null);
+  const [check, setCheck] = useState<Check | null>(null);
   const [peer, setPeer] = useState('');
   const [prompt, setPrompt] = useState('');
+  const [withNew, setWithNew] = useState(false);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     ws.request<PeerInfo[]>({ kind: 'peers.list' }).then((l) => {
@@ -50,13 +56,13 @@ function HandoffDialog({ s }: { s: Target }) {
       setPeers(usable);
       setPeer(usable.find((p) => p.state === 'online')?.id ?? '');
     }, (e) => { setPeers([]); toast(e.message); });
-    ws.request<{ ok: boolean; reason?: string; remote?: string }>({ kind: 'handoff.check', sessionId: s.sessionId }).then(setCheck, (e) => setCheck({ ok: false, reason: e.message }));
+    ws.request<Check>({ kind: 'handoff.check', sessionId: s.sessionId }).then(setCheck, (e) => setCheck({ ok: false, reason: e.message }));
   }, [s.sessionId]);
   const go = async () => {
     if (!peer || busy) return;
     setBusy(true);
     try {
-      const info = await ws.request<HandoffInfo>({ kind: 'handoff.start', sessionId: s.sessionId, peerId: peer, ...(prompt.trim() ? { prompt: prompt.trim() } : {}) });
+      const info = await ws.request<HandoffInfo & { skipped?: string[] }>({ kind: 'handoff.start', sessionId: s.sessionId, peerId: peer, ...(prompt.trim() ? { prompt: prompt.trim() } : {}), ...(withNew ? { includeUntracked: true } : {}) });
       toast(tr('已交给「{name}」，分支 {branch}', { name: info.peerName, branch: info.branch }), true);
       void useStore.getState().loadMeta();
       closeAll();
@@ -87,6 +93,21 @@ function HandoffDialog({ s }: { s: Target }) {
           })}
         </div>
       )}
+      {check?.ok && !!check.untracked?.count && (
+        <div className="dialog-msg" data-id="handoff-untracked">
+          <label className="cloud-check">
+            <input type="checkbox" data-act="include-untracked" checked={withNew} onChange={(e) => setWithNew(e.target.checked)} />
+            {tr('也带上 {n} 个新文件（Git 还没跟踪的，共 {size}）', { n: check.untracked.count, size: sizeText(check.untracked.bytes) })}
+          </label>
+          <details>
+            <summary>{tr('看看是哪些文件')}</summary>
+            <pre className="cloud-diff mono">{check.untracked.files.map((f) => `${f.path}  ${sizeText(f.size)}`).join('\n')}{check.untracked.count > check.untracked.files.length ? `\n…` : ''}</pre>
+          </details>
+        </div>
+      )}
+      {check?.ok && !!check.untracked?.skipped.length && (
+        <div className="dialog-msg cloud-warn" data-id="handoff-skipped"><Icon name="alert" size={13} /> {tr('这些像密钥的文件不会带过去：{files}', { files: check.untracked.skipped.slice(0, 8).join('、') + (check.untracked.skipped.length > 8 ? '…' : '') })}</div>
+      )}
       <label className="pj-label" htmlFor="handoff-next">{tr('接着做什么（可不填）')}</label>
       <textarea id="handoff-next" className="field" rows={3} value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={tr('不填的话，对话在那台机器上等你打开')} />
       <div className="actions">
@@ -99,10 +120,10 @@ function HandoffDialog({ s }: { s: Target }) {
 }
 
 function FetchBackDialog({ sessionId }: { sessionId: string }) {
-  const [r, setR] = useState<{ branch: string; stat: string; diff: string; files: number; saved: boolean } | null>(null);
+  const [r, setR] = useState<{ branch: string; stat: string; diff: string; files: number; saved: boolean; saveError?: string } | null>(null);
   const [err, setErr] = useState('');
   useEffect(() => {
-    ws.request<{ branch: string; stat: string; diff: string; files: number; saved: boolean }>({ kind: 'handoff.fetchBack', sessionId }).then((x) => { setR(x); void useStore.getState().loadMeta(); }, (e) => setErr(e.message));
+    ws.request<{ branch: string; stat: string; diff: string; files: number; saved: boolean; saveError?: string }>({ kind: 'handoff.fetchBack', sessionId }).then((x) => { setR(x); void useStore.getState().loadMeta(); }, (e) => setErr(e.message));
   }, [sessionId]);
   return (
     <Shell id="fetch-back-dialog" label={tr('取回')}>
@@ -111,7 +132,7 @@ function FetchBackDialog({ sessionId }: { sessionId: string }) {
       {r && (
         <>
           <div className="dialog-msg">{tr('已取回到本地分支 {branch}（{n} 个文件有改动）。不会自动合并：看过之后自己决定合并、挑选还是丢掉。', { branch: r.branch, n: r.files })}</div>
-          {!r.saved && <div className="dialog-msg cloud-warn">{tr('那台机器现在连不上，取回的是远端上已有的内容。')}</div>}
+          {!r.saved && <div className="dialog-msg cloud-warn" data-id="fetch-back-unsaved">{tr('那台机器没能先保存它的改动（{why}），取回的是远端上已有的内容。', { why: r.saveError || tr('连不上') })}</div>}
           <pre className="cloud-diff mono" data-id="fetch-back-diff">{r.stat ? `${r.stat}\n\n${r.diff}` : tr('没有改动')}</pre>
           <div className="actions">
             <button className="btn sm ghost" onClick={() => { void navigator.clipboard.writeText(`git merge ${r.branch}`); toast(tr('已复制'), true); }}>{tr('复制合并命令')}</button>
