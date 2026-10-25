@@ -180,6 +180,7 @@ export function SessionRow({ s, ctx, depth = 0, flat = false, pip = false }: { s
       {sel.on && <input type="checkbox" className="sel-box" checked={checked} readOnly tabIndex={-1} aria-hidden />}
       {pip && <span className={clsx('pip', st.kind === 'error' && 'err')} />}
       <span className="t">{s.title}</span>
+      {meta?.env?.kind === 'wsl' && <span className="peer-tag wsl-tag" title={tr('在 WSL 发行版 {d} 里运行', { d: meta.env.distro })}>{tr('WSL · {d}', { d: meta.env.distro })}</span>}
       {s.peer && <span className="peer-tag" title={tr('在机器「{name}」上{v}', { name: s.peer.name, v: s.peer.offline ? tr('（离线）') : '' })}>{s.peer.name}</span>}
       <StatusMark st={st} />
       {!sel.on && <button className="more" title={tr('更多')} aria-label={tr('更多')} onClick={(e) => { e.stopPropagation(); setMenu(menu === key ? null : key); }}><Icon name="more" size={14} /></button>}

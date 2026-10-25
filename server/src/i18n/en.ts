@@ -552,7 +552,7 @@ export const EN_SERVER: Record<string, string> = {
   "打不开 {start}：跳转的地址不对": "Can't open {start}: the redirect address is invalid",
   "打不开 {url}：HTTP {status}{v}": "Can't open {url}: HTTP {status}{v}",
   "打不开 {url}：{code}": "Can't open {url}: {code}",
-  "找不到 ssh（请安装 OpenSSH 客户端）": "Can't find ssh (please install the OpenSSH client)",
+  "找不到 ssh（请安装 OpenSSH 客户端）": "ssh not found (install the OpenSSH client)",
   "找不到 {command}（未安装或不在 PATH 上）": "Can't find {command} (not installed or not on PATH)",
   "找不到「{command}」（设置的命令不在 PATH 里，也不是存在的文件）": "Can't find “{command}” (the configured command isn't on PATH and isn't an existing file)",
   "找不到可用的 worktree 名字": "Couldn't find an available worktree name",

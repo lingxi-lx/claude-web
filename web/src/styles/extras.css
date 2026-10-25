@@ -125,3 +125,15 @@
 .fv-touched .empty-state kbd { margin-left: 4px; font-size: 11px; opacity: 0.75; }
 .turn-recs { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 2px; }
 .turn-rec { cursor: pointer; }
+
+/* 选机器: WSL rows and 添加 SSH 机器… (stage E5) */
+.machine-wsl-row { display: flex; align-items: center; gap: 4px; }
+.machine-wsl-row > .cm-it { flex: 1; min-width: 0; }
+.machine-install { flex: none; margin-right: 6px; }
+.add-ssh-dlg { width: min(460px, 92vw); display: flex; flex-direction: column; gap: 8px; }
+.add-ssh-dlg .fld { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; color: var(--text-2); }
+.add-ssh-dlg .btn.ghost.sm { align-self: flex-start; }
+.add-ssh-dlg .ssh-ok { color: var(--ok, #2e9d5b); }
+.add-ssh-dlg .dim { opacity: 0.7; }
+.cmp-wsl-note { margin: 4px 12px 0; font-size: 12px; }
+.wsl-tag { opacity: 0.8; }

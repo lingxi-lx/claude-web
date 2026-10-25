@@ -27,6 +27,8 @@ export function TerminalPanel({ cwd, cmd, visible = true }: { cwd?: string; cmd?
   const active = useScopedSession();
   // a session on another machine: its cwd doesn't exist here — the terminal opens in the default directory
   const dir = cwd ?? (active && !parsePeerId(active.sessionId) ? active.cwd : '');
+  // stage E5: the conversation's own terminal of a WSL conversation is a shell inside its distro
+  const wslDistro = useStore((s) => { if (cwd !== undefined || !active) return ''; const e = s.sessionMeta[active.sessionId]?.env; return e?.kind === 'wsl' ? e.distro : ''; });
   const ref = useRef<HTMLDivElement>(null);
   const [err, setErr] = useState('');
   const [termId, setTermId] = useState<string | null>(null);
@@ -73,7 +75,7 @@ export function TerminalPanel({ cwd, cmd, visible = true }: { cwd?: string; cmd?
         };
         if (!inTime) void face.then((ok) => { if (ok && !disposed) { try { term.options.fontFamily = TERM_FONT_AGAIN; } catch { /* ignore */ } fitRef.current(); } });
         sent = `${term.cols}x${term.rows}`;
-        const r = await ws.request<{ termId: string }>({ kind: 'terminal.open', cwd: dir, cols: term.cols, rows: term.rows });
+        const r = await ws.request<{ termId: string }>({ kind: 'terminal.open', cwd: dir, cols: term.cols, rows: term.rows, ...(wslDistro ? { wsl: { distro: wslDistro } } : {}) });
         // unmounted (or cwd changed) while the pty was spawning: the cleanup ran with no id, so close it here
         if (disposed) { void ws.request({ kind: 'terminal.close', termId: r.termId }).catch(() => {}); return; }
         id = r.termId;
@@ -106,7 +108,7 @@ export function TerminalPanel({ cwd, cmd, visible = true }: { cwd?: string; cmd?
       if (termRef.current === term) termRef.current = null;
       term?.dispose();
     };
-  }, [dir]);
+  }, [dir, wslDistro]);
 
   // re-fit when the tile becomes visible again (hidden tiles have zero size)
   useEffect(() => { if (visible) setTimeout(() => fitRef.current(), 30); }, [visible]);

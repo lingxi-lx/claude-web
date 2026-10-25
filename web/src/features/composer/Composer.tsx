@@ -4,8 +4,11 @@ import { useScopedSession, useStore } from '@/store';
 import { ws } from '@/ws/client';
 import { desktop } from '@/desktop';
 import { clsx, shortModel } from '@/util';
-import { parsePeerId, type AgentKind, type AttachmentRef, type EffortLevel, type PeerInfo, type PermissionMode, type PermissionRequestEvent, type SessionFeatures } from '@shared';
+import { parsePeerId, type AgentKind, type AttachmentRef, type EffortLevel, type PeerInfo, type PermissionMode, type PermissionRequestEvent, type SessionFeatures, type WslDistro, wslToWin } from '@shared';
 import { MachineChip } from './MachineChip';
+import { machineOf } from './machine';
+import { AddSshDialog } from '@/features/remote/AddSshDialog';
+import { installClaudeInWsl } from '@/features/remote/wsl-install';
 import { bundleParts, compressImage, expandDataTransfer, fmtSize, isLongPaste, pasteAsAttachment, uploadAttachment, type DroppedFile, type PendingBundle, type PendingImage } from '@/model/attachments';
 import { pickFolderFiles } from '@/model/attachment-filter';
 import { StatusStrip } from '@/features/chat/StatusStrip';
@@ -167,8 +170,27 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   const [wEffort, setWEffort] = useState<EffortLevel | ''>('');
   const [wUltra, setWUltra] = useState(false);
   const [wWorktree, setWWorktree] = useState('');
-  // 新对话选机器: '' = this computer, else a federation peer's id (the welcome page only)
-  const [wPeer, setWPeer] = useState('');
+  // 新对话选机器: '' = this computer, 'wsl:<distro>' = a WSL distro, else a federation peer's id (the welcome page only)
+  const [wMachine, setWMachine] = useState('');
+  const wm = machineOf(wMachine);
+  const wPeer = wm.kind === 'peer' ? wm.id : '';
+  const wWsl = wm.kind === 'wsl' ? wm.distro : '';
+  const [wslDistros, setWslDistros] = useState<WslDistro[]>([]);
+  const [addSsh, setAddSsh] = useState(false);
+  const wslOf = (d: string) => wslDistros.find((x) => x.name === d);
+  /** the machine menu opened (Windows desktop): the distros, then a check of each as it comes back */
+  const loadWsl = () => {
+    if (!desktop || !/win/i.test(desktop.platform ?? '')) return;
+    ws.request<{ available: boolean; distros: WslDistro[] }>({ kind: 'wsl.list' }).then((r) => {
+      if (!r?.available) { setWslDistros([]); return; }
+      setWslDistros((cur) => r.distros.map((d) => cur.find((c) => c.name === d.name && c.claude !== null) ?? d));
+      for (const d of r.distros) ws.request<WslDistro>({ kind: 'wsl.check', distro: d.name }).then((c) => setWslDistros((cur) => cur.map((x) => (x.name === c.name ? c : x)))).catch(() => {});
+    }).catch(() => setWslDistros([]));
+  };
+  const installWsl = async (d: string) => {
+    const c = await installClaudeInWsl(d).catch((e) => { toast(String(e?.message ?? e)); return null; });
+    if (c) setWslDistros((cur) => cur.map((x) => (x.name === c.name ? c : x)));
+  };
   // 只聊天: this new conversation only, never a stored default (a default would quietly take the tools from every one)
   const [wChatOnly, setWChatOnly] = useState(false);
   const liveChatOnly = useStore((s) => !!(active && s.sessionMeta[active.sessionId]?.chatOnly));
@@ -606,6 +628,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     if (welcome) {
       if (!cwd.trim()) return toast(tr('请先选择项目文件夹'));
       if (wPeer) return void startOnPeer();
+      if (wWsl) return void startOnWsl();
       let providerId = provider ? provider.id : 'claude';
       let model = wModel || undefined;
       let effort = wEffortOk;
@@ -796,10 +819,37 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
 
   // 新对话选机器: a conversation on another computer starts there with that computer's own model and settings — this
   // one's providers / models / capabilities mean nothing there. Files on this disk cannot go (images can).
-  const pickMachine = (id: string) => {
-    setWPeer(id);
+  const pickMachine = (v: string) => {
+    setWMachine(v);
+    const m = machineOf(v);
+    if (m.kind === 'wsl') {
+      // its own folders: the ones its conversations used, else its home as Windows reaches it
+      const home = wslOf(m.distro)?.home;
+      setCwd(wslDirs(m.distro)[0] ?? (home ? wslToWin(home, m.distro) : ''));
+      return;
+    }
+    const id = m.kind === 'peer' ? m.id : '';
     const mine = sessions.filter((s) => (id ? s.peer?.id === id : !s.peer)).map((s) => s.cwd).filter(Boolean);
     setCwd(id ? mine[0] ?? '' : initialCwd({ stored: localStorage.getItem('cw.lastCwd'), sessions, workspaces, meta: sessionMeta }));
+  };
+  const wslDirs = (d: string) => [...new Set(sessions.filter((s) => { const e = sessionMeta[s.sessionId]?.env; return e?.kind === 'wsl' && e.distro === d; }).map((s) => s.cwd).filter(Boolean))].slice(0, 8);
+  // a WSL conversation: the distro's own claude and login — no provider, no files from this disk (images can go)
+  const startOnWsl = async () => {
+    if (wslOf(wWsl)?.claude === false) { toast(tr('{d} 里没装 Claude Code：在选机器菜单里点「在 WSL 里安装」', { d: wWsl })); return; }
+    if (files.length || atts.length) { toast(REMOTE_ATTACH); return; }
+    const t = text.trim();
+    if (!t && !imgs.length) return;
+    sendTick();
+    setStarting(true);
+    try {
+      const id = await openSession({ cwd: cwd.trim(), env: { kind: 'wsl', distro: wWsl }, permissionMode: wMode, worktree: wWorktree || undefined }, target);
+      await send(id, withRefs(t), imgs.map(({ mediaType, data }) => ({ mediaType, data })), false, []);
+      setRefs([]);
+      saveDraft('welcome', '');
+    } catch (e: any) {
+      toast(String(e?.message ?? e));
+    }
+    setStarting(false);
   };
   const startOnPeer = async () => {
     if (files.length || atts.length) { toast(REMOTE_ATTACH); return; }
@@ -928,7 +978,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   }, [agents, providers, engine, gatewayView.groups, gatewayView.enabled, settings.defaultProviderId]);
 
   // another computer's folders: the ones its conversations ran in (this computer's dialog cannot browse there)
-  const recentDirs = useMemo(() => [...new Set(sessions.filter((s) => (wPeer ? s.peer?.id === wPeer : !s.peer)).map((s) => s.cwd).filter(Boolean))].slice(0, 8), [sessions, wPeer]);
+  const recentDirs = useMemo(() => (wWsl ? wslDirs(wWsl) : [...new Set(sessions.filter((s) => (wPeer ? s.peer?.id === wPeer : !s.peer) && sessionMeta[s.sessionId]?.env?.kind !== 'wsl').map((s) => s.cwd).filter(Boolean))].slice(0, 8)), [sessions, wPeer, wWsl, sessionMeta]);
   const folderChips = useMemo(() => { const m = new Map<string, number>(); for (const f of files) { const top = f.rel.includes('/') ? f.rel.split('/')[0] : null; if (top) m.set(top, (m.get(top) ?? 0) + 1); } return m; }, [files]);
 
   // the capabilities: on the welcome page the ones the new conversation will get (removable); in a running one
@@ -944,7 +994,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   const plus = (
     <PlusMenu claude={claudeHere} live={!welcome} remote={remote} disabled={disabled}
       features={welcome ? featDefaults : sessionFeatures} onFeatures={setFeatures} selfId={welcome ? undefined : active?.sessionId}
-      chatOnly={welcome ? wChatOnly : undefined} onChatOnly={welcome && claudeHere && !wPeer ? setWChatOnly : undefined}
+      chatOnly={welcome ? wChatOnly : undefined} onChatOnly={welcome && claudeHere && !wPeer && !wWsl ? setWChatOnly : undefined}
       onFiles={() => fileInput.current?.click()} onFolder={() => folderInput.current?.click()} onReference={addRef} onGoal={insertGoal} onSlash={insertSlash} onRecord={desktop?.captureSources && !remote ? () => openPicker(recTarget) : undefined} sessionId={!welcome && claudeHere ? active?.sessionId : undefined} />
   );
   // one round button that changes in place (UI refresh §6 「发送键」): faint with nothing to send, ink with something,
@@ -988,7 +1038,9 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
         onPick={pickWelcome}
       />
     );
-    if (!foreign) subagent = <SubagentChip providerId={wProviderId} value={wSubModel} onPick={(m) => setWSub({ providerId: wProviderId, model: m })} />;
+    // WSL: the distro's own Claude login — the model chip is locked to Claude
+    if (wWsl) model = <button type="button" className="cchip" disabled title={tr('WSL 里的对话用发行版自己的 Claude 登录')}><span className="cchip-l">Claude</span></button>;
+    if (!foreign && !wWsl) subagent = <SubagentChip providerId={wProviderId} value={wSubModel} onPick={(m) => setWSub({ providerId: wProviderId, model: m })} />;
     ultraOn = wUltracode && wUltra;
     effort = (
       <EffortChip
@@ -1115,10 +1167,10 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   // unless 设置 → 新对话页的输入框 puts them back in the box
   const welcomeUnder = welcome && !mobile && settings['ui.welcomeLayout'] !== 'inbox';
   const under = (!welcome && !mobile) || welcomeUnder;
-  const projectChips = welcome ? <><MachineChip peers={peers} value={wPeer} onPick={pickMachine} /><ProjectChip cwd={cwd} recent={recentDirs} onPick={setCwd} onBrowse={() => (wPeer ? toast(tr('别的电脑上的文件夹，从它最近用过的里面选')) : void pickDir())} worktree={wWorktree} onWorktree={setWWorktree} /></> : null;
-  const branchChip = welcome && !mobile && !wPeer ? <BranchChip cwd={cwd} /> : null;
+  const projectChips = welcome ? <><MachineChip peers={peers} wsl={wslDistros} value={wMachine} onPick={pickMachine} onAddSsh={() => setAddSsh(true)} onInstall={(d) => void installWsl(d)} onOpen={loadWsl} hideWhenAlone={mobile} /><ProjectChip cwd={cwd} recent={recentDirs} onPick={setCwd} onBrowse={() => (wPeer ? toast(tr('别的电脑上的文件夹，从它最近用过的里面选')) : void pickDir())} worktree={wWorktree} onWorktree={setWWorktree} /></> : null;
+  const branchChip = welcome && !mobile && !wPeer && !wWsl ? <BranchChip cwd={cwd} /> : null;
   // the official title bar's 💬 / </> switch: here it is 只聊天 (no tools) or not, for the conversation about to start
-  const modeSwitch = welcomeUnder && claudeHere && !wPeer ? (
+  const modeSwitch = welcomeUnder && claudeHere && !wPeer && !wWsl ? (
     <span className="seg cmp-mode" role="radiogroup" aria-label={tr('对话方式')}>
       <button role="radio" aria-checked={!wChatOnly} className={clsx(!wChatOnly && 'active')} data-mode="code" title={tr('Claude 可以读写文件、运行命令')} onClick={() => setWChatOnly(false)}><Icon name="code" size={13} /> {tr('代码')}</button>
       <button role="radio" aria-checked={wChatOnly} className={clsx(wChatOnly && 'active')} data-mode="chat" title={tr('只聊天：这个新对话不给 Claude 任何工具')} onClick={() => setWChatOnly(true)}><Icon name="chat" size={13} /> {tr('聊天')}</button>
@@ -1252,8 +1304,10 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
             send={send_}
           />
         </div>
+        {!welcome && active?.info?.wsl && active.info.wsl.dropped.length > 0 && <div className="sub cmp-wsl-note">{tr('Windows 互通已关：记忆、联网、操控电脑在这个对话里不可用')}</div>}
         {under && <ComposerUnder lead={welcomeUnder ? <>{modeSwitch}{projectChips}{branchChip}</> : undefined} permission={permission} stats={!welcome && active ? <ConvStatsLine sessionId={active.sessionId} /> : undefined} status={status} model={model} subagent={subagent} effort={effort} meter={meter} />}
       </div>
+      {addSsh && <AddSshDialog onClose={() => setAddSsh(false)} onJoined={(id) => { ws.request<PeerInfo[]>({ kind: 'peers.list' }).then((l) => setPeers(Array.isArray(l) ? l : [])).catch(() => {}); pickMachine(id); }} />}
     </div>
   );
 }
