@@ -4,6 +4,73 @@
 
 Every version's changes are recorded here; installers are on the [Releases](https://github.com/ypyik0669/claude-web/releases) page. Versions follow [semantic versioning](https://semver.org/).
 
+## [0.4.0] — 2026-10-26
+
+This release mostly catches up with the official desktop app and the Codex app: a much stronger built-in browser, a question card, projects with several folders, node graphs, auto-handling of PR comments, GitLab, screen recording, WSL / SSH, and local versions of a few claude.ai cloud features. The bundled engine is now 2.8.4-cw.7.
+
+### Added
+
+**Built-in browser**
+
+- **Claude uses web pages like a person.** It can hover, drag, select text and run scripts. It reads the page's console, network requests and structure, waits for text or an element to appear, opens and closes its own tabs, and resizes the viewport. While it works you see its cursor on the page; you can take over at any time and hand back when done.
+- **New sites ask first.** The first visit to a site, or running a script in a page, asks you. Allowed sites can be reviewed and removed in settings.
+- **Page annotation.** Pick elements and draw with pen / box / text; "Send to Claude" turns it into one attachment.
+- **The browser itself is complete:** loading bar, find in page, per-tab zoom, downloads bar, viewport presets, save screenshot, open a local HTML file, import cookies from a file, clear browsing data, stop loading.
+- **The preview reloads after front-end files change.** Page errors show as "Preview has N errors" with "Let Claude fix". The last previewable file Claude wrote in a turn opens when the turn ends.
+- **Links in replies open in the built-in browser** (Ctrl / Cmd for the system browser).
+- **Record Claude's actions:** with the ⋯ switch on, the conversation's tab is recorded from its first browser action to the end of the turn.
+
+**Conversations**
+
+- **Question card.** When Claude asks you something (AskUserQuestion), a card appears in the conversation: one question per page, with paging, skip, "Other" and multi-select, all usable from the keyboard.
+- **Node graphs.** ```nodegraph blocks in replies are drawn as graphs you can drag and zoom; Mermaid flowcharts switch between node graph and source. The background command center and orchestra run view are node graphs too.
+- **Double-click selects one word** (a whole inline code span). The selection menu gets a side question with the quote filled in.
+- **Screen recording** from the + menu, with our own picker for screens, windows and built-in browser tabs. The extracted keyframes are shown before sending, each with a remove button.
+
+**Projects and sidebar**
+
+- **A project can have several folders**, added in "Edit project". Files, search, Git and @file list all of them, and conversations in the project can read and write them.
+- **Project page:** project instructions (added to new conversations), project files, the project's conversations.
+- **One "View" menu in the sidebar:** group by project / folder / date or not at all, sort, items per group, and your own sections (drag in, or right-click "Add to section").
+
+**PR / Git**
+
+- **Auto-handle PR comments.** With the switch on in the PR bar, comments from people with write access go to the conversation five at a time, and replies are posted after the push. With two windows open only one handles them.
+- **GitLab.** The PR bar understands GitLab MRs: pipelines, merge when the pipeline succeeds, job logs, comments.
+
+**Run elsewhere**
+
+- **WSL.** A new conversation can pick a WSL distro and run Claude Code inside it; files, Git and the terminal go through `\\wsl.localhost`.
+- **SSH machines.** "Pick machine → Add SSH machine…" with address, user and key, and a connection test. A host trusted for the first time shows its fingerprint to compare.
+
+**Local versions of claude.ai features**
+
+- **Hand off to an always-on machine:** pass a conversation, with its uncommitted changes, to another machine that stays on, and fetch it back later. New untracked files go only when you tick them, and files like `.env` and private keys never go. A handed-off conversation is read-only here.
+- **Publish a page:** turn an HTML page into a link (optional expiry, revoke any time). Only the styles, scripts and pictures the page really uses are copied, and the file list is shown before publishing.
+- **Import a claude.ai data export:** conversations go into the library and can be continued in Claude; its projects become projects here.
+- **Dispatch:** send a task to a project from the phone drawer or IM.
+
+**Context and compaction**
+
+- **Every provider and every Claude account can set its own auto-compact point**, which beats settings.json.
+- **A Claude account can pick 200K or 1M per model family.** The context card title and the model menu show the window and the compaction point.
+
+### Changed
+
+- **Appearance → Background animation (on / off)** replaces "Animated background on the new conversation page".
+- **The context card is faster:** it no longer recounts after every turn, only when opened and on Refresh. Each category keeps one colour, biggest first.
+
+### Fixed
+
+- **Menus are no longer cut off** (a list's fade mask clipped them).
+- **Cafe:** the page scrolling no longer zooms it; small trackpad scrolls no longer make the zoom run away.
+- **The desktop window only ever shows the app's own page**; a crashed page reloads itself (stops after three in a minute).
+- **File links in replies:** `#L12-L20` opens at line 12; `file:///` and `C:\` links are no longer blanked; network-path links (`\\host\…`) open nothing and never reach out over SMB.
+- **A busy computer no longer gets "failed to start".** The desktop app used to wait only 30 seconds for the server, and a cold start with the CPU maxed out took longer. Now it waits up to 3 minutes while the server is alive, and after 20 seconds the splash says the computer is busy.
+- **A sudden reboot no longer wipes your settings.** meta.json (providers, keys, projects, switches) could be renamed before its data reached the disk and come back all zero bytes. Every save is now flushed to disk first, a `meta.json.bak` is kept, and a broken file is recovered from it.
+- **The phone page moved to an address that opens in mainland China**, `https://cw.y0p66y9.me/` (github.io needs a VPN there). The same server runs our own matchmaking server, which only carries encrypted data. Phones paired before need to scan the code again; github.io can still be chosen in settings.
+- Codex: a project's extra folders are added to your own `writable_roots` instead of replacing them.
+
 ## [0.3.2] — 2026-10-23
 
 ### Fixed
