@@ -18,7 +18,7 @@
     "test": "npm test -w server && npm test -w web && npm test -w desktop && npm test --prefix site",
     "build:all": "npm run build -w server && npm run build -w web && npm run build -w desktop",
     "build:site": "npm run build --prefix site",
-    "site:install": "npm install --prefix site",
+    "site:install": "cd site && npm install --no-save",
     "desktop": "npm run build:all && electron .",
     "build:desktop": "npm run build:all && electron-builder --config electron-builder.yml --win",
     "build:desktop:mac": "npm run build:all && electron-builder --config electron-builder.yml --mac",

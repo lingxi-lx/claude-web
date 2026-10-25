@@ -7,9 +7,10 @@
 
 - `npm run dev --prefix site`（http://localhost:4321/）、`npm run build --prefix site`（构建 + 首次加载预算检查）、`npm run preview --prefix site`、`npm test --prefix site`。
 - `npm run data --prefix site`：从 GitHub API 刷新 `site/src/data/site-data.json`（最新版本、安装包、星标）。CI 每次构建前也会跑；API 不通时用仓库里那份。
-- `site/` 是独立包（自己的 lockfile 和 node_modules，`npm install --prefix site`），不是根 workspace：Astro 要 `cookie@2`，根目录里 express 带的是 `cookie@0.7`，放进 workspace 会解析错、构建失败，还会顺带升级产品的 vite / zod。
+- `site/` 是独立包（自己的 lockfile 和 node_modules，`npm run site:install`），不是根 workspace：Astro 要 `cookie@2`，根目录里 express 带的是 `cookie@0.7`，放进 workspace 会解析错、构建失败，还会顺带升级产品的 vite / zod。
 - 新 clone 下来先 `npm run site:install`（官网有自己的 node_modules），再跑根目录的 `npm run typecheck` / `npm test`——这两个现在也查官网；CI 里是 `npm ci --prefix site`。
-- 没有 `site/package-lock.json` 时（重新生成锁文件），用 `npx -y npm@11 install --prefix site`：npm 10.9.4 全新安装 vitest 4.1.x 会在 npm 内部崩溃（`reading 'edgesOut'`）；有锁文件后 npm 10 正常。
+- **别用 `npm install --prefix site`**（2026-10-25）：在仓库根这么跑，npm 会往 `site/package.json` 里加 `"claude-web": "file:.."`，并建一个 JUNCTION `site/node_modules/claude-web` → 仓库根；之后谁递归删 `site/node_modules`，就会顺着它把整个仓库删掉（之前 server / web / desktop 整个没了，多半就是它）。`site:install` 现在是 `cd site && npm install --no-save`：在 site 里装，不加根这个依赖，`site/package.json` / `site/package-lock.json` 不动（npm 10 不带 `--no-save` 会把锁文件里的 `libc` 字段删掉）。装完可以 `cmd /c "dir /AL /S /B site\node_modules"` 确认没有链接（应该是 File Not Found）。已经有那个 junction 的 checkout：先 `cmd /c rmdir site\node_modules\claude-web`（不带 /s，只删链接），再 `git checkout -- site/package.json site/package-lock.json`。`npm ci --prefix site` 不写 package.json，CI 照旧。
+- 没有 `site/package-lock.json` 时（重新生成锁文件），进 `site/` 用 `npx -y npm@11 install`（别在根用 `--prefix site`，见上一条）：npm 10.9.4 全新安装 vitest 4.1.x 会在 npm 内部崩溃（`reading 'edgesOut'`）；有锁文件后 npm 10 正常。
 - Astro 精确锁 7.4.1：7.4.2 要 Node ≥ 22.23.4，本机是 22.22.1。升级前先看 `npm view astro@<v> engines`。
 
 ## 文案
