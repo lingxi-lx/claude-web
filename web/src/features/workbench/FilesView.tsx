@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useScopedSession, useStore } from '@/store';
 import { clsx } from '@/util';
 import { sessionPeer } from '@/features/peers';
@@ -12,6 +12,8 @@ import { useGitStatus } from './git-status';
 import { useRightPanel } from './right-panel';
 import { tr } from '@/i18n';
 import { AllArtifacts } from './AllArtifacts';
+import { RootGroups } from './RootGroups';
+import { projectRoots } from '@/features/paths';
 
 /** The last open request (`useRightPanel().explorer.n`) the right panel's 文件 applied (each is applied once). */
 let appliedIntent = 0;
@@ -28,6 +30,9 @@ export function FilesView({ visible, inDock }: { visible: boolean; inDock?: bool
   const sessions = useStore((s) => s.sessions);
   const sid = active?.sessionId ?? null;
   const cwd = active?.cwd ?? '';
+  // a project with extra folders: a group per folder (stage C2)
+  const workspaces = useStore((s) => s.workspaces);
+  const roots = useMemo(() => projectRoots(cwd, workspaces), [cwd, workspaces]);
   const peer = sessionPeer(sid, sessions);
   const [mode, setMode] = useState<'tree' | 'search'>('tree');
   const [searched, setSearched] = useState(false);
@@ -74,9 +79,9 @@ export function FilesView({ visible, inDock }: { visible: boolean; inDock?: bool
           </div>
         )}
         <AllArtifacts />
-        <FileTree root={cwd} gitStatus={gitStatus} />
+        <RootGroups roots={roots}>{(r) => <FileTree root={r} gitStatus={r === cwd ? gitStatus : undefined} />}</RootGroups>
       </div>
-      {searched && <div className="fv-body" hidden={mode !== 'search'}><SearchView root={cwd} /></div>}
+      {searched && <div className="fv-body" hidden={mode !== 'search'}><RootGroups roots={roots}>{(r) => <SearchView root={r} />}</RootGroups></div>}
     </div>
   );
 }

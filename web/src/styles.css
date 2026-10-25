@@ -943,6 +943,17 @@ html[data-reduce-motion='1'] * { animation: none !important; transition: none !i
 .modal.dialog { width: min(480px, 92vw); }
 .modal.dialog h3 { margin: 0 0 8px; font-size: 15px; }
 .dialog-msg { color: var(--ink-2); font-size: 14px; white-space: pre-wrap; word-break: break-all; margin-bottom: 10px; }
+/* 编辑项目 (stage C2, sidebar/ProjectDialog.tsx) */
+.project-dialog { width: min(560px, calc(100vw - 32px)); }
+.project-dialog .pj-label { display: block; margin: 12px 0 6px; font-size: 13px; color: var(--ink-3); }
+.project-dialog .pj-folders { list-style: none; margin: 0 0 8px; padding: 0; border: var(--hairline) solid var(--edge-subtle); border-radius: var(--r-md); }
+.project-dialog .pj-folder { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 10px; min-height: 34px; color: var(--ink-2); }
+.project-dialog .pj-folder + .pj-folder { border-top: var(--hairline) solid var(--edge-subtle); }
+.project-dialog .pj-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.project-dialog .pj-tag { flex: none; font-size: 12px; color: var(--ink-4); }
+.project-dialog .pj-note { margin-top: 12px; font-size: 13px; color: var(--ink-3); word-break: normal; }
+.project-dialog .actions .grow { flex: 1; }
+.project-dialog .pj-remove { color: var(--err); }
 .modal.dialog .field { width: 100%; margin-bottom: 10px; }
 .btn.danger.solid { background: var(--err); color: #fff; border-color: transparent; }
 .btn.danger.solid:hover { filter: brightness(1.1); background: var(--err); }
@@ -1702,6 +1713,13 @@ html.desktop:not(.mac) .dock.simple:not(.min) .dock-tabs .tab.fixed { padding: 0
 .fv-group-head { width: 100%; display: flex; align-items: center; gap: 6px; margin: 0 8px; width: calc(100% - 16px); padding: 6px; border-radius: var(--r-row); font-size: var(--fs-sm); color: var(--ink-2); }
 .fv-group-head:hover { background: var(--layer-hover); }
 .fv-group-head svg { color: var(--ink-4); }
+/* a project with extra folders: a group per folder (stage C2, workbench/RootGroups.tsx) */
+.root-groups { display: flex; flex-direction: column; min-height: 0; overflow: auto; }
+.root-group-head { display: flex; align-items: center; gap: 6px; margin: 2px 8px; width: calc(100% - 16px); padding: 6px; border-radius: var(--r-row); font-size: var(--fs-sm); color: var(--ink-2); text-align: left; }
+.root-group-head:hover { background: var(--layer-hover); }
+.root-group-head svg { flex: none; color: var(--ink-4); }
+.root-group-head .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.root-group-body { min-height: 0; }
 .fv-group-head .grow { flex: 1; text-align: left; }
 .fv-group-head .n { font-size: var(--fs-meta); color: var(--ink-4); }
 .fv-group .list { padding-top: 0; }

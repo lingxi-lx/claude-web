@@ -150,6 +150,8 @@ interface State {
   addWorkspace(path: string): Promise<void>;
   /** Put the projects in this order (the sidebar's drag, 上移 / 下移): shown at once, saved on the server. */
   reorderWorkspaces(ids: string[]): Promise<void>;
+  /** A project's name / extra folders (stage C2); throws the server's refusal (a folder that does not exist) after a toast. */
+  updateWorkspace(id: string, patch: { name?: string; folders?: string[] }): Promise<void>;
   setSessionMeta(sessionId: string, patch: SessionMeta): Promise<void>;
   // actions
   init(): void;
@@ -518,6 +520,16 @@ export const useStore = create<State>((set, get) => ({
     const next = ids.map((id, i) => by.get(id) && { ...by.get(id)!, order: i }).filter((w): w is Workspace => !!w);
     if (next.length === by.size) set({ workspaces: next });
     await ws.request({ kind: 'workspaces.reorder', ids }).catch((e) => { get().toast(e.message); void get().loadMeta(); });
+  },
+  async updateWorkspace(id, patch) {
+    try {
+      const w = await ws.request<Workspace>({ kind: 'workspaces.update', id, ...patch });
+      set({ workspaces: get().workspaces.map((x) => (x.id === id ? w : x)) });
+    } catch (e: any) {
+      get().toast(e.message);
+      void get().loadMeta();
+      throw e;
+    }
   },
   async addWorkspace(path) {
     await ws.request({ kind: 'workspaces.add', path });

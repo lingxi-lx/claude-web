@@ -54,6 +54,7 @@ import { fillComposer } from '@/features/composer/fill';
 import { quoteInComposer } from '@/features/composer/quote';
 import { WhatsNewModal, useWhatsNewOnUpdate } from '@/features/update/WhatsNew';
 import { startNavHistory } from '@/features/workbench/nav-history';
+import { ProjectDialogHost } from '@/features/sidebar/ProjectDialog';
 
 /** Width of the right panel minimized to its icon rail. */
 const MIN_RAIL = 36;
@@ -321,6 +322,7 @@ export function App() {
       <ErrorBoundary area={tr('接一个模型')} floating><ConnectModelHost /></ErrorBoundary>
       <ErrorBoundary area={tr('应用更新')} floating><UpdatePrompt /></ErrorBoundary>
       <ErrorBoundary area={tr('角色库')} floating><CharacterLibrary /></ErrorBoundary>
+      <ErrorBoundary area={tr('编辑项目')} floating><ProjectDialogHost /></ErrorBoundary>
       <ErrorBoundary area={tr('对话框')} floating><DialogHost /></ErrorBoundary>
       <ErrorBoundary area={tr('添加 Claude 账号')} floating><AddAccountHost /></ErrorBoundary>
       <CustomCss />

@@ -11,6 +11,7 @@ import { pageRows } from './status';
 import type { ProjectMenuId, RowId } from './entries';
 import { moveTo } from './reorder';
 import { tr } from '@/i18n';
+import { openProjectDialog } from './ProjectDialog';
 
 /** A project's ··· / right-click menu (a project = a workspace folder; the data keeps calling it a workspace). */
 export function ProjectMenu({ w, onClose }: { w: Workspace; onClose: () => void }) {
@@ -33,6 +34,7 @@ export function ProjectMenu({ w, onClose }: { w: Workspace; onClose: () => void 
           {at >= 0 && at < ids.length - 1 && <button data-id={id('move-down')} onClick={move(at + 2)}><Icon name="arrowDown" size={14} /> {tr('下移')}</button>}
         </>;
       })()}
+      <button data-id={id('edit')} onClick={act(() => openProjectDialog(w))}><Icon name="settings" size={14} /> {tr('编辑项目…')}</button>
       <button data-id={id('rename')} onClick={act(async () => { const n = await dlg.prompt(tr('项目名称'), w.name); if (n) await ws.request({ kind: 'workspaces.rename', id: w.id, name: n }); })}><Icon name="edit" size={14} /> {tr('重命名')}</button>
       <button data-id={id('explorer')} onClick={act(() => ws.request({ kind: 'shell.open', path: w.path }).catch((e) => useStore.getState().toast(e.message)))}><Icon name="folder" size={14} /> {tr('在资源管理器打开')}</button>
       <button data-id={id('vscode')} onClick={act(() => ws.request({ kind: 'shell.open', path: w.path, app: 'code' }).catch((e) => useStore.getState().toast(e.message)))}><Icon name="keyboard" size={14} /> {tr('在 VS Code 打开')}</button>

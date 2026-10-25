@@ -18,7 +18,7 @@ import { RunCard } from '@/features/chat/RunCard';
 import { BackgroundPill } from '@/features/background/BackgroundPill';
 import { PermissionDock, runDockPrimary } from '@/features/chat/PermissionCards';
 import { denyResponse, dockAction, dockDecide, dockKind, isSlashCommand, primaryKey, splitPending, type DockSeen, type DockWhy } from '@/features/chat/permission-dock';
-import { attachmentFolderPath } from '@/features/paths';
+import { attachmentFolderPath, joinPath, projectRoots } from '@/features/paths';
 import { Icon } from '@/ui/icons';
 import { imeComposing } from '@/ui/ime';
 import { haptic } from '@/ui/haptics';
@@ -366,16 +366,19 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   const atOpen = atQuery && atQuery.start !== atClosed ? atQuery : null;
   const [atFiles, setAtFiles] = useState<string[]>([]);
   const [atIdx, setAtIdx] = useState(0);
+  // a project with extra folders: those are searched too, their files given as absolute paths (stage C2)
+  const atRoots = useMemo(() => (atRoot ? projectRoots(atRoot, workspaces) : []), [atRoot, workspaces]);
   useEffect(() => {
     if (!atOpen) { setAtFiles([]); return; }
     let live = true;
     const t = setTimeout(() => {
-      ws.request({ kind: 'fs.findFiles', root: atRoot, query: atOpen.q, limit: 30 })
-        .then((r: any) => { if (live) { setAtFiles(r.files ?? []); setAtIdx(0); } })
-        .catch(() => { if (live) setAtFiles([]); });
+      Promise.all(atRoots.map((root, i) => ws.request({ kind: 'fs.findFiles', root, query: atOpen.q, limit: 30 })
+        .then((r: any) => ((r.files ?? []) as string[]).map((f) => (i === 0 ? f : joinPath(root, f))))
+        .catch(() => [] as string[])))
+        .then((lists) => { if (live) { setAtFiles(lists.flat().slice(0, 30)); setAtIdx(0); } });
     }, 80);
     return () => { live = false; clearTimeout(t); };
-  }, [atOpen?.start, atOpen?.q, atRoot]);
+  }, [atOpen?.start, atOpen?.q, atRoots.join('\u0000')]);
   const pickFile = (file: string) => {
     if (!atOpen) return;
     const r = pickAt(text, atOpen, file);

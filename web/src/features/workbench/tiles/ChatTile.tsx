@@ -18,6 +18,8 @@ import { Welcome } from '../Welcome';
 import { FileTree } from '../FileTree';
 import { GitView } from '../GitView';
 import { SearchView } from '../SearchView';
+import { RootGroups } from '../RootGroups';
+import { projectRoots } from '@/features/paths';
 import { BoardView } from '@/features/vcs/BoardView';
 import type { SessionSummary } from '@shared';
 import { Icon } from '@/ui/icons';
@@ -229,6 +231,9 @@ export function ChatTile({ tile, paneId, visible }: { tile: ChatTileModel; paneI
   const peer = sessionPeer(sid, sessions);
   const remoteView = !!peer && !viewsFor(true).some((v) => v.id === tile.wb) && tile.wb !== 'live';
   const gitStatus = useGitStatus(active?.cwd ?? '', tile.wb === 'files' && !peer);
+  // a project with extra folders: a group per folder in files / search / git (stage C2)
+  const workspaces = useStore((s) => s.workspaces);
+  const roots = useMemo(() => projectRoots(active?.cwd ?? '', workspaces), [active?.cwd, workspaces]);
   const deleted = useStore((s) => (sid ? !!s.deletedSessions[sid] : false));
   // 信息栏 (phase 6 spec §1): on unless switched off; it steps aside while the pane is too narrow for both columns
   const mobile = useStore((s) => s.mobile);
@@ -277,9 +282,9 @@ export function ChatTile({ tile, paneId, visible }: { tile: ChatTileModel; paneI
       {remoteView && <div className="wb-body"><div className="remote-only"><Icon name="machine" size={22} /><div>{tr('这个对话在机器「{name}」上，它的文件 / Git / 搜索 / 定时任务都在那台机器上。', { name: peer!.name })}</div><div className="sub">{tr('请在该机器上查看；这里可以继续对话、审批、中断。')}</div></div></div>}
       {remoteView ? null : <>
       {tile.wb === 'changes' && <div className="wb-body"><ReviewView inPlace visible={visible} /></div>}
-      {tile.wb === 'git' && <div className="wb-body"><GitView cwd={active.cwd} visible={visible} /></div>}
-      {tile.wb === 'files' && <div className="wb-body"><FileTree root={active.cwd} gitStatus={gitStatus} /></div>}
-      {tile.wb === 'search' && <div className="wb-body"><SearchView root={active.cwd} /></div>}
+      {tile.wb === 'git' && <div className="wb-body"><RootGroups roots={roots}>{(r) => <GitView cwd={r} visible={visible} />}</RootGroups></div>}
+      {tile.wb === 'files' && <div className="wb-body"><RootGroups roots={roots}>{(r) => <FileTree root={r} gitStatus={r === active.cwd ? gitStatus : undefined} />}</RootGroups></div>}
+      {tile.wb === 'search' && <div className="wb-body"><RootGroups roots={roots}>{(r) => <SearchView root={r} />}</RootGroups></div>}
       {tile.wb === 'schedules' && <div className="wb-body"><SchedulesView /></div>}
       {tile.wb === 'artifacts' && <div className="wb-body"><Artifacts sessionId={sid} /></div>}
       {tile.wb === 'board' && <div className="wb-body"><BoardView cwd={active.cwd} sid={sid} /></div>}

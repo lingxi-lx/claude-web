@@ -6,6 +6,8 @@ import { parsePeerId, type GitError, type GitLogEntry, type GitStatus } from '@s
 import { walkTools } from '@/model/conversation';
 import { DiffView } from '@/features/chat/DiffView';
 import { sessionPeer } from '@/features/peers';
+import { RootGroups } from './RootGroups';
+import { projectRoots } from '@/features/paths';
 import { dlg } from '@/ui/dialog';
 import { Icon, type IconName } from '@/ui/icons';
 import { EMPTY, TERMS, emptyText } from '@/ui/terms';
@@ -139,6 +141,8 @@ export function ReviewView({ visible, inPlace, inDock }: { visible: boolean; inP
   const mobile = useStore((s) => s.mobile);
   const sid = active?.sessionId ?? '';
   const cwd = active?.cwd ?? '';
+  const workspaces = useStore((st) => st.workspaces);
+  const gitRoots = useMemo(() => projectRoots(cwd, workspaces), [cwd, workspaces]);
   const peer = sessionPeer(sid || null, sessions);
 
   const [status, setStatus] = useState<GitStatus | null>(null);
@@ -411,8 +415,11 @@ export function ReviewView({ visible, inPlace, inDock }: { visible: boolean; inP
           <button className="btn sm ghost" onClick={() => setSub('diff')} title={tr('回到审阅')}><Icon name="restore" size={13} /> {tr('审阅')}</button>
           <span className="rv-sub-title" title={GIT_VIEW_TITLE}>{GIT_VIEW_LABEL.replace('…', '')}</span>
         </div>
-        {gitMounted && root && <div className="rv-git-body"><GitView cwd={cwd} visible={visible && sub === 'git'} /></div>}
-        {gitMounted && !root && <div className="empty">{loaded ? tr('{cwd} 不是 git 仓库。', { cwd }) : tr('读取中…')}</div>}
+        {/* a project with extra folders: each folder's own git (stage C2) */}
+        {gitMounted && <RootGroups roots={gitRoots}>{(r) => r !== cwd
+          ? <div className="rv-git-body"><GitView cwd={r} visible={visible && sub === 'git'} /></div>
+          : root ? <div className="rv-git-body"><GitView cwd={cwd} visible={visible && sub === 'git'} /></div>
+          : <div className="empty">{loaded ? tr('{cwd} 不是 git 仓库。', { cwd }) : tr('读取中…')}</div>}</RootGroups>}
       </div>
       <div className="rv-main" hidden={sub !== 'diff'} data-lines={mobile ? lineMode : undefined} onKeyDown={(e) => { if (commentSid && e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !imeComposing(e.nativeEvent)) { e.preventDefault(); handOver(); } }}>
         {pending.length > 0 && (
