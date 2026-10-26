@@ -30,13 +30,26 @@
   只有「允许一次 / 拒绝」，不认 Enter。回答 `always` 当一次，永不写允许的网站。拒绝 / 超时 / 对话停下 → 不跑，结果是「用户没有允许…」，
   **不带 `EGO_FALLBACK`**（不能让模型换内置浏览器做同样的事）。为免 Claude 再弹自己的卡，`mcp__web__ego_browser` 进了 `webAllowedTools`；
   `ego_browser_guide` 也在里面。`ToolPermission` 里对 `mcp__web__ego_browser` 的老卡留着：别的 Agent 可能还会先自己问一次。
-- ACP Agent 自己的提示（`AcpDriver.onPermission`）：只有**确切是我们的 ego_browser** 才直接答「允许一次」不弹卡
-  （`launcher.ts` 的 `isServerGatedAcpCall`）：标题整串等于 `ego_browser` / `mcp__web__ego_browser` / `ego_browser (web MCP Server)`，
-  `kind` 没有或是 `other`，`rawInput` 的键只能是 `script` / `timeout_ms`（值不看）。**别放宽成「包含 ego_browser」**：
+- ACP Agent 自己的提示（`AcpDriver.onPermission`）：只有**确切是我们的 ego_browser** 才直接答、不弹卡
+  （`launcher.ts` 的 `isServerGatedAcpCall(tc, egoTools)`）：**这个对话拿到了 ego 工具**（交给 Agent 的 `mcpServers` 里 `web` 带
+  `CW_WEB_BROWSER=ego`，`acpServersGiveEgo`，记在 `AcpDriver.egoTools`；没拿到就没有我们的 ego_browser，同名的是别人的，一律走卡），
+  标题整串等于 `ego_browser` / `mcp__web__ego_browser` / `ego_browser (web MCP Server)`，`kind` 没有或是 `other`，
+  `rawInput` 必须在、是普通对象、`script` 是字符串、键只能是 `script` / `timeout_ms`（脚本内容不看，服务端的卡给用户看）。
+  答的是 `allow_once`，没有就 `allow_always`，两样都没有就照常弹它的卡——**绝不替用户挑 reject**（2026-10-26 Task 4）。
+  **别放宽成「包含 ego_browser」**：
   ACP 的标题是拿调用本身拼的（shell 命令原文、文件名），`rm -rf ~ # ego_browser` 这种就会一张卡都没有地跑掉（2026-10-26 审查抓到过）。
   不认 `normalize.ts` 推出来的名字（它会把「ego browser」也变成 `ego_browser`）。已知剩下的口子：用户自己配了一个也叫 `web` 的 MCP 服务器、
   里面有个 `ego_browser`，标题会一样，会被当成我们的（要用户自己的配置才做得到）。有的 ACP Agent 给 MCP 调用起的标题可能不是这个格式：
-  那就退回它自己的卡，用户看到两张卡（多问一次，不漏问）——Task 4 真机验证各家实际的标题。
+  那就退回它自己的卡，用户看到两张卡（多问一次，不漏问）。各家真 Agent 实际给的标题还没真机核对过。
+- Codex 自己的提示：Codex（codex-cli 0.163，`codex app-server generate-ts` 生成的 `ServerRequest` 里有）在 MCP 工具调用前发
+  `mcpServer/elicitation/request`：`mode: 'form'`、`_meta.codex_approval_kind = 'mcp_tool_call'`、`_meta.tool_params` 是参数，
+  工具名只在固定的 message 里：`Allow the <server> MCP server to run tool "<tool>"?`（codex-rs `core/src/mcp_tool_call.rs`；
+  feature `tool_call_mcp_elicitation` 默认开；没有 `readOnlyHint` 的工具在 untrusted / on-request 下都要问）。以前 `CodexDriver`
+  不认这个请求，回 -32601，Codex 当没批——默认模式下 Codex 里我们 `web` 的会改页面的工具都跑不起来。现在（`codex-driver.ts` 的
+  `onElicitation`）：拿到 ego 工具（`codexArgsGiveEgo`：argv 里 `mcp_servers.web.env=` 带 `CW_WEB_BROWSER = "ego"`）且确切是
+  `web` 的 `ego_browser`、参数形状同上（`isServerGatedCodexElicitation`）→ 回 `accept`（不带 `_meta.persist`，不记住）；
+  别的 MCP 工具 → 普通的卡（`toolName: mcp__<server>__<tool>`，input 是参数），允许 = accept、拒绝 = decline、打断 = cancel；
+  完全放开 / dontAsk → accept；不是工具审批的（MCP 服务器自己的表单 / url 问题）→ `cancel`，和以前的「不认」效果一样。
 - 设置 → 联网 →「Agent 用哪个浏览器操作网页」（`WebSettings.tsx`）：ego lite（装了就用它）/ 内置浏览器、检测结果、「重新检测」
   （`web.egoDetect`）、官网链接（系统浏览器打开）。`WebStatus` 多了 `agentBrowser` 和 `ego`。
 
@@ -69,9 +82,16 @@
   web 的 `web-tools.test.ts`。
 - e2e：`server/ws-phase40.mjs`（自己起 server，PATH 前面放假 `ego-browser`，两个真引擎对假上游）：找到版本、工具在列表里且不延迟、
   权限卡带脚本、round 文件逐字节、中文 / 引号 / `$` / `%` 原样回到模型、截图是图片块、选「内置浏览器」后新对话没有 ego 工具。
+  权限规则：每个引擎上默认模式 ego_browser 恰好一张卡（服务端的）、完全放开零张卡且脚本照跑、输出回到模型；内置浏览器的
+  `browser_eval`（这个脚本的 WebSocket 当宿主窗口）默认一张服务端的卡（外加 Claude 自己对这个 MCP 工具的老卡：它不在
+  `webAllowedTools` 里，这是改之前就有的）、完全放开零张。然后 mock ACP Agent / mock Codex（argv 带 `app-server`，好让 `-c`
+  插在它前面）：Agent 自己对 ego_browser 的提示不弹卡；调用本身由脚本经真的 `web` MCP 入口、带这个对话的 id 发出（Agent 的 MCP
+  进程就是这么调的），默认一张服务端的卡、完全放开零张。`PHASE40_RUNTIMES` / `PHASE40_AGENTS` 可缩小范围。跑完删掉临时根目录。
+  驱动层的单元测试在 `agents/drivers.test.ts`（ego 工具开 / 关、只给 reject、只给 always、各种像而不是的调用；Codex 的 elicitation）。
 - e2e：`server/ws-phase41.mjs`（自己起 server，这个脚本的 WebSocket 当内置浏览器的宿主窗口，截图回一张真 1×1 PNG）：
-  我们的引擎上 `browser_screenshot` 在工具列表里、直接调用而不是经 `ExecuteExtraTool`，模型收到的 tool_result 里是图片块，
-  文字块里没有 base64。默认只跑 ccb，`PHASE41_RUNTIMES=ccb,claude` 再跑官方二进制。把 alwaysLoad 去掉再跑，前四项会 FAIL
+  我们的引擎上 `browser_screenshot` 在工具列表里、直接调用而不是经 `ExecuteExtraTool`（另外核对：下一个请求的 tool_result
+  回的正是那个名叫 `browser_screenshot` 的 tool_use 的 id），模型收到的 tool_result 里是图片块、数据和窗口回的 PNG 逐字相同，
+  文字块里没有 base64。跑完删掉临时根目录。默认只跑 ccb，`PHASE41_RUNTIMES=ccb,claude` 再跑官方二进制。把 alwaysLoad 去掉再跑，前四项会 FAIL
   （tool_result 变成一整段 JSON 字符串）。
 - ui-smoke：设置 → 联网的新一行和「重新检测」，切到内置浏览器后 `web.status` 跟着变。
 - **没在真 ego lite 上验过**（这台电脑没装）：装好并完成首次引导后，让 Claude 打开一个页面，看 ego lite 里出现 `claude-web <id8>` 这个 Space。

@@ -75,6 +75,7 @@ function anthropic(s, j, h) {
     // the tool directly, or — when the engine deferred it — through its deferred-tool runner, the way a model would
     const direct = h.tools.includes(TOOL);
     h.called = direct ? 'direct' : 'extra';
+    h.sent = direct ? { id, name: TOOL } : { id, name: 'ExecuteExtraTool' };
     return sse(s, j, [direct ? { type: 'tool_use', id, name: TOOL, input: {} } : { type: 'tool_use', id, name: 'ExecuteExtraTool', input: { tool_name: TOOL, params: {} } }], 'tool_use');
   };
   // our engine runs a deferred tool only after SearchExtraTools found it
@@ -169,15 +170,19 @@ async function suite(runtime) {
 
   const mine = hits.slice(mark).filter((h) => h.main);
   const first = mine[0];
-  const called = mine.find((h) => h.called)?.called;
   check('the conversation has browser_screenshot in its own tool list (not deferred behind ExecuteExtraTool)', !!first?.tools?.includes(TOOL), JSON.stringify(first?.tools?.filter((t) => /browser_screenshot|browser_computer|Extra/.test(t))));
-  check('… and the model calls it directly, not through ExecuteExtraTool', called === 'direct', String(called));
+  // independent of the tool list: the engine answered the very tool_use naming browser_screenshot — the next request
+  // upstream carries a tool_result for that id (through ExecuteExtraTool there would be no such tool_use at all)
+  const sentAt = mine.findIndex((h) => h.sent);
+  const sent = mine[sentAt]?.sent;
+  const answeredId = mine.slice(sentAt + 1).find((h) => h.toolResult)?.toolResult?.tool_use_id;
+  check('… and the model calls it directly: the next request\'s tool_result answers the browser_screenshot tool_use', sent?.name === TOOL && !!answeredId && answeredId === sent.id, JSON.stringify({ sent, answeredId }));
   const shots = events.slice(from).filter((e) => e.kind === 'browser.command' && e.command.op === 'screenshot');
   check('the screenshot is taken in the window hosting the built-in browser, for this conversation', shots.length === 1 && shots[0].command.sessionId === sid, JSON.stringify(shots.map((e) => ({ op: e.command.op, sessionId: e.command.sessionId }))));
   const tr = mine.find((h) => h.toolResult)?.toolResult;
   const blocks = Array.isArray(tr?.content) ? tr.content : [];
   const img = blocks.find((b) => b?.type === 'image');
-  check('the tool_result reaching the model holds an image block (base64 PNG)', img?.source?.type === 'base64' && /^image\/png$/.test(img.source.media_type ?? '') && typeof img.source.data === 'string' && img.source.data.length > 0 && !tr?.is_error, JSON.stringify(blocks.map((b) => (b?.type === 'image' ? { type: 'image', media_type: b.source?.media_type, chars: b.source?.data?.length, same: b.source?.data === PNG } : { type: b?.type, text: String(b?.text ?? '').slice(0, 120) }))));
+  check('the tool_result reaching the model holds an image block: the very PNG the window answered', img?.source?.type === 'base64' && /^image\/png$/.test(img.source.media_type ?? '') && img.source.data === PNG && !tr?.is_error, JSON.stringify(blocks.map((b) => (b?.type === 'image' ? { type: 'image', media_type: b.source?.media_type, chars: b.source?.data?.length, same: b.source?.data === PNG } : { type: b?.type, text: String(b?.text ?? '').slice(0, 120) }))));
   const leaked = blocks.filter((b) => b?.type !== 'image').some((b) => textOf([b]).includes(PNG.slice(0, 24))) || (typeof tr?.content === 'string' && tr.content.includes(PNG.slice(0, 24)));
   check('… and no text block carries the picture as base64', !!tr && !leaked, typeof tr?.content === 'string' ? tr.content.slice(0, 200) : '');
   check('… and the turn ends normally', r?.subtype === 'success', r?.subtype);
@@ -190,8 +195,12 @@ try {
   checkRaw('ran without throwing', false, e?.stack ?? String(e));
 } finally {
   ws.close();
+  const gone = new Promise((r) => server.once('exit', r));
   server.kill();
   upstream.close();
+  await Promise.race([gone, new Promise((r) => setTimeout(r, 10_000))]);
+  // the throwaway HOME (Windows may hold a file a moment longer: retried)
+  try { fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }); } catch (e) { console.log(`(could not remove ${root}: ${e.message})`); }
   const failed = results.filter(([, ok]) => !ok).length;
   console.log(`\nphase41: ${results.length - failed}/${results.length} passed`);
   if (failed) console.log(slog.split('\n').slice(-30).join('\n'));
