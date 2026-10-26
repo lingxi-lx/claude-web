@@ -842,14 +842,24 @@ describe('WebService: 允许的网站 — the gate before a page is changed', ()
     web.dropConnection(w.key);
   });
 
-  it('完全放开 (bypassPermissions): no site is asked about — a script still is', async () => {
-    const { web, asked } = gated('once', {}, 'bypassPermissions');
+  it('完全放开 (bypassPermissions): nothing is asked about — not a site, not a script — and both run', async () => {
+    const { web, asked } = gated('deny', {}, 'bypassPermissions');
     const w = autoWin(web, (c) => (c.op === 'eval' ? { result: '1' } : page('https://new.example/')));
-    await web.tool('conv-4', 'browser_click', { ref: '1' });
+    expect((await web.tool('conv-4', 'browser_click', { ref: '1' })).isError).toBeFalsy();
+    expect((await web.tool('conv-4', 'browser_eval', { script: '1' })).isError).toBeFalsy();
     expect(asked).toEqual([]);
-    await web.tool('conv-4', 'browser_eval', { script: '1' });
-    expect(asked).toHaveLength(1);
+    expect(w.ops()).toEqual(['read', 'click', 'eval']);
     web.dropConnection(w.key);
+  });
+
+  it('a script in the five other modes is still asked about', async () => {
+    for (const mode of ['default', 'acceptEdits', 'plan', 'dontAsk', 'auto']) {
+      const { web, asked } = gated('once', {}, mode);
+      const w = autoWin(web, (c) => (c.op === 'eval' ? { result: '1' } : page('https://new.example/')));
+      await web.tool('conv-4', 'browser_eval', { script: '1' });
+      expect(asked).toHaveLength(1);
+      web.dropConnection(w.key);
+    }
   });
 
   it('declined: nothing is done and the model is told not to retry', async () => {

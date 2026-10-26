@@ -81,3 +81,10 @@
 - `Runtime.enable` 会把之前几次加载的 console 补发过来，带的是原来的时间戳——所以按「重新加载之后」的时间筛，不按条数。
 - 有报错 → 这一轮的改动文件卡下面一条 `VerifyChip`（`[data-id=verify-chip][data-state=checking|errors][data-count]`，「预览有 N 个报错」点开看列表，`data-act=verify-fix`「让 Claude 修」、`data-act=verify-dismiss`）；没报错什么都不留。「让 Claude 修」把截图 + 报错文字作为一个附件放进输入框（任务 5 的 inbox），输入框空着才填一句话——**从不自动发**。状态在窗口内存里（`useVerify`），不进 meta.json。
 - 真机：`window.__cwBrowser.checkPage(tabId)` 给脚本用。
+
+## 「完全放开」什么都不问（2026-10-26，用户决定，spec 14.4）
+
+- 上面两处的旧规则改了：「操控电脑不看权限模式」「脚本在完全放开下也问」都不再成立。对话处于 `bypassPermissions` 时，服务端自己弹的卡一张都不弹、动作直接执行：`needsAsk()` 第一行就回 `'no'`（网站和 `browser_eval` 都是）；`ComputerAccess.ask()` 在「对话不在本机就拒」之后、出卡之前看 `AccessDeps.mode(sid)`，是 `bypassPermissions` 就直接 `{granted:true}`，不发事件、不进待答。
+- 其它五种模式不变：脚本每次问，网站按允许列表问，操控电脑每次问。没传 `mode` 的 `ComputerAccess`（测试、旧调用）照旧每次问。
+- 模式来源和浏览器闸同一个：`index.ts` 的 `modeOf = (sid) => pool.get(sid)?.info.permissionMode`，两边共用。这是用户明确的取舍：「完全放开」的对话可以直接控制任意应用。
+- 以后新加的服务端询问也照这条：先看模式。测试：`site-gate.test.ts`、`service.test.ts`、`access.test.ts` 里五种模式照旧 / 完全放开零张卡。

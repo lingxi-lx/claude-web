@@ -440,10 +440,11 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   // (after PATH has the registry's entries and ~/.local/bin, where its onboarding puts the command)
   void refreshProcessPath().catch(() => {}).then(() => egoStatus()).then(() => web.settingsChanged()).catch(() => {});
   const pool = new RunnerPool(providers, agents, transcripts);
-  // 操控电脑: only a conversation that is open here can ask for control of applications
-  computer = new ComputerAccess({ knows: (sid) => !!pool.get(sid) });
   knowsSession = (sid) => !!pool.get(sid);
   modeOf = (sid) => pool.get(sid)?.info.permissionMode;
+  // 操控电脑: only a conversation that is open here can ask for control of applications; one in 完全放开 is not
+  // asked (the same mode lookup as the browser gate's)
+  computer = new ComputerAccess({ knows: knowsSession, mode: modeOf });
   const config = new ConfigService();
   pool.accountLoggedOut = () => config.knownLoggedOut();
   const ledger = new LedgerService((id) => meta.provider(id)?.type);

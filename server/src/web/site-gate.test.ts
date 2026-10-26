@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { BrowserOp, PermissionRequestEvent } from '../protocol.js';
+import type { BrowserOp, PermissionMode, PermissionRequestEvent } from '../protocol.js';
 import { MUTATING_OPS, SCRIPT_PREVIEW_CHARS, SITE_TOOL, SiteAsk, allowedSitesOf, hostOfUrl, needsAsk, normHost, siteAllowed, siteAnswerOf } from './site-gate.js';
 
 const tick = (ms = 5) => new Promise((r) => setTimeout(r, ms));
@@ -94,10 +94,30 @@ describe('needsAsk: when the user is asked', () => {
     expect(needsAsk('click', 'new.com', { list: [], mode: 'default' })).toBe('site');
   });
 
-  it('a script always asks — on an allowed site, and in bypassPermissions too', () => {
+  it('a script asks every time — on an allowed site too — in every mode but 完全放开', () => {
     expect(needsAsk('eval', 'allowed.com', { list })).toBe('eval');
     expect(needsAsk('eval', 'new.com', { list: [] })).toBe('eval');
-    expect(needsAsk('eval', 'allowed.com', { list, mode: 'bypassPermissions' })).toBe('eval');
+    expect(needsAsk('eval', undefined, { list: [] })).toBe('eval');
+    for (const mode of ['default', 'acceptEdits', 'plan', 'dontAsk', 'auto'] as PermissionMode[]) {
+      expect(needsAsk('eval', 'allowed.com', { list, mode })).toBe('eval');
+      expect(needsAsk('eval', 'new.com', { list: [], mode })).toBe('eval');
+    }
+  });
+
+  it('完全放开 (bypassPermissions, spec 14.4) asks nothing: not a script, not a site', () => {
+    const mode: PermissionMode = 'bypassPermissions';
+    expect(needsAsk('eval', 'allowed.com', { list, mode })).toBe('no');
+    expect(needsAsk('eval', 'new.com', { list: [], mode })).toBe('no');
+    expect(needsAsk('eval', undefined, { list: [], mode })).toBe('no');
+    for (const op of MUTATING_OPS) expect(needsAsk(op, 'new.com', { list: [], mode })).toBe('no');
+  });
+
+  it('site ops in the five other modes: unchanged (asked on a new site, not on an allowed one)', () => {
+    for (const mode of ['default', 'acceptEdits', 'plan', 'dontAsk', 'auto'] as PermissionMode[]) {
+      expect(needsAsk('click', 'new.com', { list, mode })).toBe('site');
+      expect(needsAsk('click', 'allowed.com', { list, mode })).toBe('no');
+      expect(needsAsk('read', 'new.com', { list, mode })).toBe('no');
+    }
   });
 });
 

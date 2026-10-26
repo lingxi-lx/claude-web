@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
-import type { PermissionRequestEvent } from '../protocol.js';
+import type { PermissionMode, PermissionRequestEvent } from '../protocol.js';
 import { ACCESS_TOOL, ASK_TIMEOUT_MS, COMPUTER_SERVER, ComputerAccess, cleanRequest } from './access.js';
 import { COMPUTER_ASK_PATH, handleComputerAsk } from './http.js';
 import { computerAllowedTools, computerClaudeMcpServer, computerSupported, configureComputerMcp } from './launcher.js';
@@ -23,7 +23,7 @@ function make(over: ConstructorParameters<typeof ComputerAccess>[0] = {}) {
   return { access, asked, resolved };
 }
 
-describe('操控电脑: the user is asked by this app, whatever the conversation lets through', () => {
+describe('操控电脑: the user is asked by this app (unless the conversation is in 完全放开)', () => {
   it('the names: agents know the server as `computer` (`computer-use` is reserved by the engines)', () => {
     expect(COMPUTER_SERVER).toBe('computer');
     expect(ACCESS_TOOL).toBe('mcp__computer__request_access');
@@ -94,6 +94,49 @@ describe('操控电脑: the user is asked by this app, whatever the conversation
     expect(open.access.pendingFor('d')).toHaveLength(1);
     open.access.respond(open.asked[2].requestId, { behavior: 'allow' });
     expect((await other).granted).toBe(true);
+  });
+
+  it('完全放开 (bypassPermissions, spec 14.4): granted with no card; the five other modes ask as before', async () => {
+    const modes: Record<string, PermissionMode | undefined> = { full: 'bypassPermissions' };
+    const { access, asked, resolved } = make({ knows: (sid) => sid !== 'closed', mode: (sid) => modes[sid] });
+    expect(await access.ask('full', { apps: ['Notepad'], reason: 'r' })).toEqual({ granted: true });
+    expect(asked).toEqual([]);
+    expect(resolved).toEqual([]);
+    expect(access.pendingFor('full')).toEqual([]);
+
+    for (const mode of ['default', 'acceptEdits', 'plan', 'dontAsk', 'auto'] as PermissionMode[]) {
+      modes[mode] = mode;
+      const n = asked.length;
+      const p = access.ask(mode, { apps: ['Notepad'], reason: 'r' });
+      await tick();
+      expect(asked).toHaveLength(n + 1);
+      expect(asked[n]).toMatchObject({ sessionId: mode, toolName: ACCESS_TOOL });
+      access.respond(asked[n].requestId, { behavior: 'deny' });
+      expect((await p).granted).toBe(false);
+    }
+    // no mode known (a conversation without one): asked
+    const u = access.ask('unknown-mode', { apps: ['Notepad'], reason: 'r' });
+    await tick();
+    expect(access.pendingFor('unknown-mode')).toHaveLength(1);
+    access.drop('unknown-mode');
+    await u;
+
+    // a conversation not open here is still refused unasked, whatever the mode says
+    modes.closed = 'bypassPermissions';
+    const n = asked.length;
+    const closed = await access.ask('closed', { apps: ['Notepad'], reason: 'r' });
+    expect(closed.granted).toBe(false);
+    expect((closed as { message: string }).message).toContain('not open in Claude Web');
+    expect(asked).toHaveLength(n);
+  });
+
+  it('with no mode lookup the mode is not looked at: every request is a card (the old behavior)', async () => {
+    const { access, asked } = make();
+    const p = access.ask('any', { apps: ['Notepad'], reason: 'r' });
+    await tick();
+    expect(asked).toHaveLength(1);
+    access.drop('any');
+    await p;
   });
 
   it('what the card shows is made sure of: a few short names, one sentence, real flags', () => {

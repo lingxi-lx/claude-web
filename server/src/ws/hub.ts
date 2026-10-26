@@ -205,7 +205,8 @@ export class Hub {
     });
     s.pool.on('permissionResolved', (_sid, requestId) => this.broadcast({ kind: 'permission.resolved', requestId }));
     // 操控电脑: which applications an agent may control is asked here, as a permission card of its conversation —
-    // by this server, whatever the conversation's own permission mode lets through (computer/access.ts)
+    // by this server, whatever the conversation's own permission mode lets through, except 完全放开 which is not asked
+    // (computer/access.ts)
     s.computer.on('permission', (request) => this.broadcast({ kind: 'permission.request', request }));
     s.computer.on('permissionResolved', (requestId) => this.broadcast({ kind: 'permission.resolved', requestId }));
     s.pool.on('state', (sessionId, state) => { if (state === 'closed' || state === 'error') s.computer.drop(sessionId); });

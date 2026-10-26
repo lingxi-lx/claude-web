@@ -194,7 +194,8 @@ export class ComputerService {
     }
     const flag = (f: 'clipboardRead' | 'clipboardWrite' | 'systemKeyCombos') => a[f] === true;
     if (wanted.length && this.opts.approve) {
-      // the user's yes, from Claude Web itself — whatever the conversation's own permission mode lets through
+      // the user's yes, from Claude Web itself — whatever the conversation's own permission mode lets through, except
+      // 完全放开, which access.ts grants without a card
       const said = await this.opts.approve({ apps: wanted.map((w) => w.name), reason: a.reason.trim(), clipboardRead: flag('clipboardRead'), clipboardWrite: flag('clipboardWrite'), systemKeyCombos: flag('systemKeyCombos') });
       if (!said.granted) return bad(JSON.stringify({ granted: [], denied: [...wanted.map((w) => ({ app: w.name, reason: said.message })), ...denied], allGranted: this.grants.names() }));
     }

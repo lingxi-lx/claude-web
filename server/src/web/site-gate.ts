@@ -10,9 +10,10 @@ import type { BrowserOp, PermissionMode, PermissionRequestEvent, PermissionRespo
  * `web.browser.allowedSites`, after which that site is not asked about again. A script (`browser_eval`) is asked about
  * every time, allowed site or not, with its first 400 characters on the card.
  *
- * Like 操控电脑 (computer/access.ts) the card is raised by this server, not by the agent's own permission prompt —
- * but unlike it, a conversation in 「完全放开」 (bypassPermissions) is not asked about sites: the user told it to do
- * things without asking. A script still is.
+ * Like 操控电脑 (computer/access.ts) the card is raised by this server, not by the agent's own permission prompt.
+ * A conversation in 「完全放开」 (bypassPermissions) is asked nothing — not about sites, not about scripts — and the
+ * action runs (the user's decision, 2026-10-26, spec 14.4: full access means no server-raised card at all). Every
+ * other mode is asked as above.
  *
  * Reading (open / read / find / snapshot / screenshot / console / network / tabs, wait, back, viewport) is never asked.
  */
@@ -74,13 +75,13 @@ export function allowedSitesOf(settings: Record<string, unknown>): string[] {
 }
 
 /**
- * Must the user be asked before `op` on a page of `host`? `eval`: always (a script, whatever the site or the mode);
- * `site`: a page-changing op on a site not on the list, unless the conversation lets everything through; `no`.
+ * Must the user be asked before `op` on a page of `host`? Never in 「完全放开」 (bypassPermissions). Otherwise
+ * `eval`: every time (a script, whatever the site); `site`: a page-changing op on a site not on the list; `no`.
  */
 export function needsAsk(op: BrowserOp, host: string | undefined, o: { list: readonly unknown[]; mode?: PermissionMode }): 'no' | 'site' | 'eval' {
+  if (o.mode === 'bypassPermissions') return 'no';
   if (op === 'eval') return 'eval';
   if (!MUTATING_OPS.has(op)) return 'no';
-  if (o.mode === 'bypassPermissions') return 'no';
   if (host && siteAllowed(host, o.list)) return 'no';
   return 'site';
 }

@@ -1,15 +1,19 @@
 import { EventEmitter } from 'node:events';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import type { PermissionRequestEvent, PermissionResponse } from '../protocol.js';
+import type { PermissionMode, PermissionRequestEvent, PermissionResponse } from '../protocol.js';
 
 /**
- * Who says yes to 操控电脑 — the user, in a window of this app, every time.
+ * Who says yes to 操控电脑 — the user, in a window of this app, every time; except in 「完全放开」.
  *
  * The `computer` MCP server grants nothing by itself: its `request_access` comes here (POST /api/computer/ask,
  * computer/http.ts), and this raises the same permission card a tool call does, for that conversation. It is NOT the
- * agent's own permission prompt, on purpose: in 「完全放开」 (bypassPermissions) or 「自动判断」 a tool call is never
- * shown to the user, and an agent that could approve its own access to the whole desktop would have it. So the
- * answer does not depend on the conversation's permission mode, nor on which agent it is.
+ * agent's own permission prompt, on purpose: in 「自动判断」 a tool call is never shown to the user, and an agent
+ * that could approve its own access to the whole desktop would have it. So in every mode but one the card is raised
+ * here, whichever agent it is.
+ *
+ * The one: a conversation in 「完全放开」 (bypassPermissions) is granted without a card (the user's decision,
+ * 2026-10-26, spec 14.4: full access means no server-raised card at all, so such a conversation may control any
+ * application). The mode comes from `AccessDeps.mode`; without it the mode is not looked at and every request asks.
  *
  * A request nobody answers is a no after ASK_TIMEOUT_MS; so is one whose conversation is not open here.
  * IM bots are not asked (they listen to the pool's own permission events): control of the desktop is approved from
@@ -31,6 +35,8 @@ interface Waiting { event: PermissionRequestEvent; resolve: (a: AccessAnswer) =>
 export interface AccessDeps {
   /** is this conversation open in this server? (a request for one that is not is refused unasked) */
   knows?: (sessionId: string) => boolean;
+  /** the conversation's permission mode: `bypassPermissions` (完全放开) is granted without a card */
+  mode?: (sessionId: string) => PermissionMode | undefined;
   timeoutMs?: number;
 }
 
@@ -74,6 +80,7 @@ export class ComputerAccess extends EventEmitter {
       return Promise.resolve({ granted: false, message: 'This conversation is not open in Claude Web, so the user cannot be asked. Nothing was granted.' });
     }
     if (signal?.aborted) return Promise.resolve({ granted: false, message: 'cancelled' });
+    if (this.d.mode?.(sessionId) === 'bypassPermissions') return Promise.resolve({ granted: true });
     const requestId = randomUUID();
     const event: PermissionRequestEvent = { requestId, sessionId, toolName: ACCESS_TOOL, input: { ...req } };
     return new Promise<AccessAnswer>((resolve) => {

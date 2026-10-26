@@ -107,7 +107,7 @@ export function computerClaudeMcpServer(t: { sessionId: string }, o: { execPath?
 
 /**
  * Its tools run without the agent's own permission prompt — all of them: `request_access` is answered by the user
- * in the app whatever the conversation's permission mode is (access.ts), and what the others may do is decided by
+ * in the app in every permission mode but 完全放开, which is granted unasked (access.ts), and what the others may do is decided by
  * the server's gate from what was granted. [] when the server is not handed out.
  */
 export function computerAllowedTools(o: { platform?: NodeJS.Platform } = {}): string[] {
