@@ -794,6 +794,8 @@ export type ClientRequest =
   /** One search with the configured engine → WebSearchAnswer. */
   | { kind: 'web.search'; query: string; count?: number }
   | GatewayRequest
+  // ---- privacy pipeline (privacy/service.ts) ----
+  | PrivacyRequest
   | UpstreamRequest
   // ---- other agents' configuration center (phase 17) ----
   | AgentConfigRequest
@@ -912,6 +914,8 @@ export type WireUp = { type: 'request'; request: RequestEnvelope };
 
 // ---------- model gateway (sub-project 4) ----------
 export * from './gateway/types.js';
+export * from './privacy/types.js';
+import type { PrivacyRequest } from './privacy/types.js';
 import type { GatewayEvent, GatewayLedgerInfo, GatewayRequest } from './gateway/types.js';
 
 // ---- stage F: local versions of claude.ai features (handoff, project page, dispatch, claude.ai import, publish) ----

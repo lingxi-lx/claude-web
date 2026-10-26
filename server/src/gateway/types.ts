@@ -177,6 +177,8 @@ export interface GatewayAuditLine {
   tokensIn: number;
   tokensOut: number;
   errorCode: string;
+  /** 隐私保护: what was found / replaced — types, counts and placeholders, never a value */
+  privacy?: { count: number; categories: Partial<Record<string, number>>; placeholders: string[]; blocked?: boolean; warned?: number };
 }
 
 export interface GatewayKeyStatus { groups: GatewayKeyGroup[]; keys: GatewayKeyView[]; defaultKeyId: string }

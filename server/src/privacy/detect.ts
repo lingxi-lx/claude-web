@@ -1,0 +1,178 @@
+// Detectors and text redaction for the privacy pipeline (spec 2026-10-26 §4.1). Pure: no I/O, no state but what is
+// passed in. Placeholders are `{{CATEGORY_xxxxxxxx}}` — an HMAC of the value with a per-install secret, so the same
+// value always gets the same placeholder (the prompt prefix stays byte-identical and prompt caching survives).
+import crypto from 'node:crypto';
+import type { PrivacyAction, PrivacyCategory, PrivacyHit, PrivacySettings } from './types.js';
+
+export const TAG: Record<PrivacyCategory, string> = {
+  api_key: 'API_KEY', private_key: 'PRIVATE_KEY', jwt: 'JWT', password: 'SECRET', email: 'EMAIL', phone: 'PHONE', id_card: 'ID_CARD', bank_card: 'BANK_CARD', custom: 'CUSTOM',
+};
+
+/** A complete placeholder anywhere in a text. */
+export const PLACEHOLDER = /\{\{([A-Z][A-Z_]*?)_([a-f0-9]{8})\}\}/g;
+/** A text ending in what may be the start of a placeholder (a stream chunk cut in the middle of one). */
+const PARTIAL = /\{(?:\{(?:[A-Z][A-Z_]*(?:[a-f0-9]{1,8}\}?)?)?)?$/;
+
+/** Index where a trailing partial placeholder starts, or -1. */
+export function partialTail(s: string): number {
+  const from = Math.max(0, s.length - 32);
+  for (let i = s.indexOf('{', from); i >= 0; i = s.indexOf('{', i + 1)) if (PARTIAL.test(s.slice(i)) && !/^\{\{[A-Z][A-Z_]*_[a-f0-9]{8}\}\}$/.test(s.slice(i))) return i;
+  return -1;
+}
+
+interface Match { start: number; end: number; category: PrivacyCategory }
+interface Detector { category: PrivacyCategory; re: RegExp; group?: number; check?: (v: string) => boolean }
+
+// common key shapes: Anthropic / OpenAI / AWS / GitHub / GitLab / Slack / Google / Stripe / Hugging Face / npm / xAI / Groq …
+const API_KEY = new RegExp([
+  String.raw`sk-ant-(?:api|oat|admin)\d{2}-[A-Za-z0-9_-]{20,}`,
+  String.raw`sk-(?:proj-|svcacct-|or-v1-)?[A-Za-z0-9_-]{20,}`,
+  String.raw`(?:AKIA|ASIA)[0-9A-Z]{16}`,
+  String.raw`gh[pousr]_[A-Za-z0-9]{30,}`,
+  String.raw`github_pat_[A-Za-z0-9_]{40,}`,
+  String.raw`glpat-[A-Za-z0-9_-]{20,}`,
+  String.raw`xox[abprs]-[A-Za-z0-9-]{10,}`,
+  String.raw`AIza[0-9A-Za-z_-]{35}`,
+  String.raw`ya29\.[0-9A-Za-z_-]{20,}`,
+  String.raw`(?:sk|rk|pk)_(?:live|test)_[0-9A-Za-z]{16,}`,
+  String.raw`hf_[A-Za-z0-9]{30,}`,
+  String.raw`npm_[A-Za-z0-9]{36}`,
+  String.raw`xai-[A-Za-z0-9]{40,}`,
+  String.raw`gsk_[A-Za-z0-9]{40,}`,
+  String.raw`r8_[A-Za-z0-9]{30,}`,
+  String.raw`cws-[a-f0-9]{64}`,
+].map((s) => `(?<![A-Za-z0-9_-])${s}`).join('|'), 'g');
+
+const luhn = (digits: string) => {
+  let sum = 0;
+  for (let i = 0; i < digits.length; i++) {
+    let d = Number(digits[digits.length - 1 - i]);
+    if (i % 2) { d *= 2; if (d > 9) d -= 9; }
+    sum += d;
+  }
+  return sum % 10 === 0;
+};
+const cnId = (v: string) => {
+  const w = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2];
+  let s = 0;
+  for (let i = 0; i < 17; i++) s += Number(v[i]) * w[i];
+  return '10X98765432'[s % 11] === v[17].toUpperCase();
+};
+
+const DETECTORS: Detector[] = [
+  { category: 'private_key', re: /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----[\s\S]*?-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----/g },
+  { category: 'jwt', re: /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g },
+  { category: 'api_key', re: API_KEY },
+  // config-like `password = …`, `"api_key": "…"`, `TOKEN=…`: only the value
+  { category: 'password', re: /\b(?:[A-Za-z0-9]+[_-])*(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret|auth[_-]?token|密码|口令)\b["']?\s*[:=]\s*["']?([^\s"'`,;\\<>{}]{4,})/gi, group: 1, check: (v) => !/^(?:true|false|null|none|undefined|\*+|x+|\$\{?\w+\}?|<[^>]*>|process\.env.*|os\.environ.*)$/i.test(v) },
+  { category: 'email', re: /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g },
+  // Chinese mobile (optionally +86), and international numbers written with their + country code
+  { category: 'phone', re: /(?<![\d+])(?:(?:\+|00)86[- ]?)?1[3-9]\d[- ]?\d{4}[- ]?\d{4}(?!\d)|(?<![\w+])\+[1-9]\d{0,2}[- ]?(?:\(\d{1,4}\)[- ]?)?\d{2,4}[- ]?\d{3,4}[- ]?\d{3,4}(?!\d)/g },
+  { category: 'id_card', re: /(?<!\d)[1-9]\d{5}(?:18|19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx](?![\dA-Za-z])/g, check: cnId },
+  { category: 'bank_card', re: /(?<![\d-])(?:\d{4}[ -]?){3}\d{1,7}(?![\d-])/g, check: (v) => { const d = v.replace(/\D/g, ''); return d.length >= 15 && d.length <= 19 && luhn(d); } },
+];
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** Compiled custom detectors, and the patterns that do not compile (the center shows those). */
+export function customDetectors(s: Pick<PrivacySettings, 'words' | 'patterns'>): { list: Detector[]; bad: string[] } {
+  const list: Detector[] = [];
+  const bad: string[] = [];
+  const words = s.words.map((w) => w.trim()).filter((w) => w.length >= 2);
+  if (words.length) list.push({ category: 'custom', re: new RegExp(words.sort((a, b) => b.length - a.length).map(escapeRe).join('|'), 'gi') });
+  for (const p of s.patterns) {
+    if (!p.trim()) continue;
+    try {
+      const re = new RegExp(p, 'g');
+      if (re.test('')) { bad.push(p); continue; } // matches the empty string: would loop / redact nothing useful
+      list.push({ category: 'custom', re });
+    } catch { bad.push(p); }
+  }
+  return { list, bad };
+}
+
+export interface Compiled { detectors: Detector[]; actions: PrivacySettings['actions']; allow: Set<string>; bad: string[] }
+
+export function compile(s: PrivacySettings): Compiled {
+  const custom = customDetectors(s);
+  const detectors = [...DETECTORS, ...custom.list].filter((d) => (s.actions[d.category] ?? 'off') !== 'off');
+  return { detectors, actions: s.actions, allow: new Set(s.allow.map((a) => a.trim()).filter(Boolean)), bad: custom.bad };
+}
+
+function find(text: string, c: Compiled): Match[] {
+  const all: Match[] = [];
+  for (const d of c.detectors) {
+    d.re.lastIndex = 0;
+    for (let m = d.re.exec(text); m; m = d.re.exec(text)) {
+      if (m[0] === '') { d.re.lastIndex++; continue; }
+      const v = d.group ? m[d.group] : m[0];
+      if (!v) continue;
+      const start = d.group ? m.index + m[0].lastIndexOf(v) : m.index;
+      if (c.allow.has(v.trim())) continue;
+      if (d.check && !d.check(v)) continue;
+      // already a placeholder (an earlier pass, or the model echoing one)
+      if (/^\{\{[A-Z][A-Z_]*_[a-f0-9]{8}\}\}$/.test(v)) continue;
+      all.push({ start, end: start + v.length, category: d.category });
+    }
+  }
+  // earlier first, then longer; overlaps go to the first (detector order puts private keys and JWTs ahead of the rest)
+  all.sort((a, b) => a.start - b.start || b.end - a.end);
+  const out: Match[] = [];
+  let at = -1;
+  for (const m of all) if (m.start >= at) { out.push(m); at = m.end; }
+  return out;
+}
+
+export const placeholderFor = (secret: Buffer, category: PrivacyCategory, value: string) =>
+  `{{${TAG[category]}_${crypto.createHmac('sha256', secret).update(value).digest('hex').slice(0, 8)}}}`;
+
+export interface TextResult { text: string; hits: PrivacyHit[] }
+
+/**
+ * One text through the detectors: `redact` hits become placeholders (and land in `map`), `warn` hits stay, `block`
+ * hits are only reported — the caller refuses the request.
+ */
+export function redactText(text: string, c: Compiled, secret: Buffer, map: Map<string, string>): TextResult {
+  if (!text || !c.detectors.length) return { text, hits: [] };
+  const ms = find(text, c);
+  if (!ms.length) return { text, hits: [] };
+  const hits: PrivacyHit[] = [];
+  let out = '';
+  let at = 0;
+  for (const m of ms) {
+    const action = c.actions[m.category] as Exclude<PrivacyAction, 'off'>;
+    const value = text.slice(m.start, m.end);
+    if (action === 'redact') {
+      const ph = placeholderFor(secret, m.category, value);
+      map.set(ph, value);
+      out += text.slice(at, m.start) + ph;
+      at = m.end;
+      hits.push({ category: m.category, action, placeholder: ph, length: value.length });
+    } else hits.push({ category: m.category, action, length: value.length });
+  }
+  return { text: out + text.slice(at), hits };
+}
+
+/** Placeholders back to their values (`json`: the text is inside a JSON string, so the value goes in escaped). */
+export function restoreText(text: string, map: ReadonlyMap<string, string>, json = false): string {
+  if (!text.includes('{{')) return text;
+  return text.replace(PLACEHOLDER, (ph) => {
+    const v = map.get(ph);
+    if (v === undefined) return ph;
+    return json ? JSON.stringify(v).slice(1, -1) : v;
+  });
+}
+
+/** For logs, errors and diagnostics: secrets masked by type whatever the settings say (no placeholder, no map). */
+const LOG_CATS = new Set<PrivacyCategory>(['api_key', 'private_key', 'jwt', 'password']);
+const LOG_DETECTORS = DETECTORS.filter((d) => LOG_CATS.has(d.category));
+export function scrubForLog(text: string, extra: Detector[] = []): string {
+  if (!text) return text;
+  const c: Compiled = { detectors: [...LOG_DETECTORS, ...extra], actions: { api_key: 'redact', private_key: 'redact', jwt: 'redact', password: 'redact', email: 'off', phone: 'off', id_card: 'off', bank_card: 'off', custom: 'redact' }, allow: new Set(), bad: [] };
+  const ms = find(text, c);
+  if (!ms.length) return text;
+  let out = '';
+  let at = 0;
+  for (const m of ms) { out += `${text.slice(at, m.start)}[${TAG[m.category]}]`; at = m.end; }
+  return out + text.slice(at);
+}
