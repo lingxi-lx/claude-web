@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import type { BrowserCommand } from '../protocol.js';
 import { BROWSER_QUIET_MS, COMPUTER_ACTIONS, MASK, MAX_IMAGE_CHARS, NEEDS_DESKTOP, WebService, computerArgs, decodeBody, maskWebSettings, type WebDeps } from './service.js';
 import { CONTENT_END, CONTENT_START, SEARCH_FAILED_HINT } from './format.js';
+import { SiteAsk } from './site-gate.js';
 
 /** SecretService's shape, without the platform keystore. */
 const secrets = {
@@ -872,6 +873,24 @@ describe('WebService: 允许的网站 — the gate before a page is changed', ()
     expect(asked).toHaveLength(1);
     expect(w.ops()).toEqual(['read']);
     web.dropConnection(w.key);
+  });
+
+  it('the turn is stopped while a site / script card waits: the card is withdrawn and nothing reaches the page', async () => {
+    for (const [tool, args] of [['browser_click', { ref: '1' }], ['browser_eval', { script: '1' }]] as const) {
+      const siteAsk = new SiteAsk();
+      const { web } = make({ gate: { ask: (sid, req, signal) => siteAsk.ask(sid, req, signal), mode: () => 'default' } });
+      const w = autoWin(web, () => page('https://bank.example/'));
+      const ac = new AbortController();
+      const p = web.tool('conv-12', tool, { ...args }, ac.signal);
+      for (let i = 0; i < 50 && !siteAsk.pendingFor('conv-12').length; i++) await tick();
+      expect(siteAsk.pendingFor('conv-12'), tool).toHaveLength(1);
+      ac.abort();
+      const r = await p;
+      expect(r.isError, tool).toBe(true);
+      expect(siteAsk.pendingFor('conv-12'), tool).toEqual([]);
+      expect(w.ops(), tool).toEqual(['read']);
+      web.dropConnection(w.key);
+    }
   });
 
   it('a file: page is never driven — refused before the user is asked', async () => {

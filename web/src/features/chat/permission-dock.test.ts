@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { PermissionRequestEvent } from '@shared';
 import type { AssistantItem, Item, ToolUseBlock } from '@/model/conversation';
-import { alwaysDetails, alwaysLabel, DOCK_COOLDOWN_MS, dockAction, dockDecide, denyResponse, dockKind, isEgoScriptRequest, isSlashCommand, permissionTitle, primaryKey, splitPending, waitingToolIds, type DockSeen } from './permission-dock';
+import { alwaysDetails, alwaysLabel, DOCK_COOLDOWN_MS, dockAction, dockDecide, denyResponse, dockKind, dockStatus, isEgoScriptRequest, isSlashCommand, permissionTitle, primaryKey, splitPending, waitingToolIds, type DockSeen } from './permission-dock';
+import { DOCK_STATUS, DOCK_STATUS_CLICK } from '@/ui/terms';
 
 const req = (toolName: string, input: Record<string, unknown> = {}, extra: Partial<PermissionRequestEvent> = {}): PermissionRequestEvent => ({ requestId: `r-${toolName}`, sessionId: 's', toolName, input, ...extra });
 
@@ -182,6 +183,18 @@ describe('dockKind / permissionTitle', () => {
     expect(permissionTitle(page)).toBe('Claude 想在 a.example 上运行一段脚本');
     // an agent that still asks about the tool itself (its own approval): the same title as before
     expect(isEgoScriptRequest(req('mcp__web__ego_browser', { script: '1' }))).toBe(false);
+  });
+  it('the card\'s status line: a script card (ego lite or the built-in browser) is click-only — it never says Enter allows it', () => {
+    const ego = req('browser.site', { host: 'mail.example', op: 'eval', tool: 'ego_browser', eval: true, script: '1' });
+    const evalCard = req('browser.site', { host: 'a.example', op: 'eval', tool: 'browser_eval', eval: true, script: '1' });
+    const site = req('browser.site', { host: 'a.example', op: 'click', tool: 'browser_click' });
+    expect(dockStatus(ego)).toBe(DOCK_STATUS_CLICK);
+    expect(dockStatus(evalCard)).toBe(DOCK_STATUS_CLICK);
+    expect(dockStatus(ego)).not.toMatch(/Enter 允许/);
+    expect(dockStatus(site)).toBe(DOCK_STATUS.tool);
+    expect(dockStatus(req('Bash', { command: 'ls' }))).toBe(DOCK_STATUS.tool);
+    expect(dockStatus(req('ExitPlanMode', { plan: 'x' }))).toBe(DOCK_STATUS.plan);
+    expect(dockStatus(req('mcp__computer__request_access', { apps: ['记事本'] }))).toBe(DOCK_STATUS.access);
   });
 });
 

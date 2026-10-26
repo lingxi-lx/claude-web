@@ -83,6 +83,28 @@ describe('AcpDriver (mock agent)', () => {
     await d.close();
   });
 
+  it('ego_browser is asked about by this server (spec 14.1): the agent\'s own prompt for it is answered allow_once with no card, in default and plan; another tool still raises one', async () => {
+    for (const permissionMode of ['default', 'plan'] as const) {
+      const d = new AcpDriver('gemini', { command: process.execPath, args: [path.join(here, '__mocks__', 'acp-agent.mjs')], env: {}, name: 'Mock ACP' }, { cwd: tmp, permissionMode }, transcripts, null);
+      const msgs = collect(d);
+      await waitFor(() => d.state === 'idle');
+      const perms: any[] = [];
+      d.on('permission', (e) => { perms.push(e); });
+      d.send('EGO please');
+      await waitFor(() => msgs.some((m) => m.type === 'result'));
+      const texts = msgs.filter((m) => m.type === 'stream_event' && m.event.delta?.type === 'text_delta').map((m) => m.event.delta.text).join('');
+      expect(texts, permissionMode).toContain('(ego answer: allow)');
+      expect(perms, permissionMode).toEqual([]);
+      // a tool that is not gated by the server still gets the agent's card
+      d.send('use a tool');
+      await waitFor(() => perms.length > 0);
+      expect(perms[0].toolName).toBe('Read');
+      d.respondPermission(perms[0].requestId, { behavior: 'allow' });
+      await waitFor(() => msgs.filter((m) => m.type === 'result').length >= 2);
+      await d.close();
+    }
+  });
+
   it('plan updates become TodoWrite; denied permission marks the tool result as error', async () => {
     const d = new AcpDriver('qwen', { command: process.execPath, args: [path.join(here, '__mocks__', 'acp-agent.mjs')], env: {}, name: 'Mock' }, { cwd: tmp }, transcripts, null);
     const msgs = collect(d);

@@ -196,6 +196,8 @@ export const DOCK_REQUEUED = {
 } as const;
 /** The card's status line (`aria-live`, announced after its title): what an empty Enter does on it (review M-6). */
 export const DOCK_STATUS = { tool: tr('空着按 Enter 允许一次'), ask: tr('选好后空着按 Enter 提交回答'), plan: tr('批准请按 Ctrl+Enter'), access: tr('允许请点卡片上的「允许操控」，按键不会允许') } as const;
+/** The status line of a script card (ego lite, or a script in the built-in browser): allowed only with a click. */
+export const DOCK_STATUS_CLICK = tr('运行脚本请点卡片上的「允许一次」，按键不会允许');
 /** An Enter the card did not take (review M-6): in its first moments (`DOCK_COOLDOWN_MS`), or an empty Enter on a plan. */
 export const DOCK_ENTER_IGNORED = { soon: tr('卡片刚出现，这次 Enter 没有生效：看清楚后再按'), plan: tr('批准请按 Ctrl+Enter'), access: tr('允许操控电脑要点卡片上的「允许操控」：按键不会允许') } as const;
 /** Words and attachments while a card is docked: a deny carries words only (review M2). */

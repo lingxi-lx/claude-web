@@ -8,9 +8,9 @@ import { CodeBlock } from './CodeBlock';
 import { langFromPath } from './highlight';
 import { JsonTree } from './tools/McpTool';
 import { Icon } from '@/ui/icons';
-import { DOCK_DENY_QUEUED, DOCK_HINT, DOCK_STATUS } from '@/ui/terms';
+import { DOCK_DENY_QUEUED, DOCK_HINT } from '@/ui/terms';
 import { useLeaveGhost, type GhostOpts } from '@/ui/ghost';
-import { SITE_TOOL, alwaysDetails, alwaysLabel, denyResponse, dockKind, isEgoScriptRequest, permissionTitle, primaryKey, splitPending } from './permission-dock';
+import { SITE_TOOL, alwaysDetails, alwaysLabel, denyResponse, dockKind, dockStatus, isEgoScriptRequest, permissionTitle, primaryKey, splitPending } from './permission-dock';
 import { ACCESS_NOTE, accessAsk } from '@/features/computer/computer-tools';
 import { webToolOf } from '@/features/browser/web-tools';
 import { tr } from '@/i18n';
@@ -133,8 +133,8 @@ function ToolPermission({ p, agent, cwd, more, reason, onReasonUsed, scope, note
         ) : edit ? (
           <div className="pd-scroll">{(p.toolName === 'MultiEdit' ? inp.edits ?? [] : [inp]).map((e: any, i: number) => <DiffView key={i} oldText={String(e.old_string ?? '')} newText={String(e.new_string ?? '')} title={String(inp.file_path ?? '')} collapse={false} />)}</div>
         ) : webToolOf(p.toolName) === 'ego_browser' ? (
-          // an agent's own prompt for the tool (Claude has it allowed and the server asks — EgoScriptRequest; another
-          // agent may still ask on its own first)
+          // an agent's own prompt for the tool — a fallback look only: the server asks (EgoScriptRequest), Claude has
+          // the tool allowed, AcpDriver answers an ACP agent's prompt for it without a card, Codex does not ask
           <div className="pd-scroll"><CodeBlock code={String(inp.script ?? '')} lang="javascript" title={tr('在 ego lite 里运行的脚本')} maxLines={30} /></div>
         ) : p.toolName === 'Write' ? (
           <div className="pd-scroll"><CodeBlock code={String(inp.content ?? '')} lang={langFromPath(String(inp.file_path ?? ''))} title={String(inp.file_path ?? '')} maxLines={40} /></div>
@@ -311,7 +311,7 @@ export function PermissionDock({ sessionId, reason, onReasonUsed, scope, note, o
   const title = permissionTitle(p, agent);
   return (
     <div ref={setDock} className={clsx('pdock', kind)} role="region" aria-label={title} data-request={p.requestId} data-kind={kind}>
-      <DockLive text={note ?? `${title}。${DOCK_STATUS[kind]}`} />
+      <DockLive text={note ?? `${title}。${dockStatus(p)}`} />
       {/* before the card: its cleanup must run first, while the card's own nodes are still there */}
       <CardLeave key={`leave:${p.requestId}`} dock={dock} />
       <DockCard key={p.requestId} {...props} />

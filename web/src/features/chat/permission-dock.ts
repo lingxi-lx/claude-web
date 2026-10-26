@@ -7,6 +7,7 @@ import { basename } from '@/util';
 import { webToolAsk, webToolOf } from '@/features/browser/web-tools';
 import { accessTitle, computerToolLabel, computerToolOf, isAccessRequest } from '@/features/computer/computer-tools';
 import { tr } from '@/i18n';
+import { DOCK_STATUS, DOCK_STATUS_CLICK } from '@/ui/terms';
 
 /** 允许的网站 (server/src/web/site-gate.ts SITE_TOOL): the built-in browser asks before Claude changes a page of a new site, and before every script. */
 export const SITE_TOOL = 'browser.site';
@@ -14,10 +15,21 @@ export const SITE_TOOL = 'browser.site';
 /**
  * The server's card before an ego lite script runs (site-gate.ts EGO_SCRIPT_TOOL, spec 14.1): a `browser.site` request
  * whose tool is `ego_browser` — every agent's, the whole script in it. Not an agent's own prompt for
- * `mcp__web__ego_browser` (some agents may still raise one; that keeps its card in PermissionCards' ToolPermission).
+ * `mcp__web__ego_browser`: none should come any more (Claude has the tool in its allowed tools, AcpDriver answers an
+ * ACP agent's prompt for it without a card, Codex does not ask about MCP calls); ToolPermission keeps a fallback
+ * look for one all the same.
  */
 export const isEgoScriptRequest = (p: Pick<PermissionRequestEvent, 'toolName' | 'input'>): boolean =>
   p.toolName === SITE_TOOL && (p.input as Record<string, unknown> | undefined)?.tool === 'ego_browser';
+
+/**
+ * The card's status line after its title: what an empty Enter does on it. A script card (ego lite, or a script in the
+ * built-in browser) is allowed only with a click, like 操控电脑 — it never says Enter allows it.
+ */
+export function dockStatus(p: Pick<PermissionRequestEvent, 'toolName' | 'input'>): string {
+  if (isEgoScriptRequest(p) || (p.toolName === SITE_TOOL && (p.input as Record<string, unknown> | undefined)?.eval === true)) return DOCK_STATUS_CLICK;
+  return DOCK_STATUS[dockKind(p)];
+}
 
 /** `access`: 操控电脑 asking which applications it may control — answered by a click on the card, never by a key. */
 export type DockKind = 'tool' | 'ask' | 'plan' | 'access';

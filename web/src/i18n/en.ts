@@ -3832,6 +3832,7 @@ export const EN_WEB: Record<string, string> = {
   "输出速度：输出的 token ÷ 模型生成用的时间": "Output speed: output tokens ÷ the model's generation time",
   "输出（失败）": "Output (failed)",
   "运行": "Run",
+  "运行脚本请点卡片上的「允许一次」，按键不会允许": "To run the script, click Allow once on the card; no key allows it",
   "运行 claude doctor…": "Run claude doctor…",
   "运行 doctor": "Run doctor",
   "运行 {cmd} 条命令": "Ran {cmd} {cmd?command:commands}",

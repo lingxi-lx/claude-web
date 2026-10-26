@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { parse as parseToml } from 'smol-toml';
 import { egoReset, egoStatus } from './ego.js';
+import { SERVER_GATED_TOOLS, isServerGatedTool } from './launcher.js';
 import { WEB_SEARCH_TOOL, configureWebMcp, setWebAgentBrowser, insertWebCodexConfig, setWebMcpEnabled, sweepWebTokens, webAcpMcpServers, webAllowedTools, webClaudeMcpServer, webCodexConfigArgs, webMcpEnabled, webMcpEntry } from './launcher.js';
 
 let dir: string;
@@ -14,6 +15,16 @@ afterEach(() => { configureWebMcp(null, dir); setWebMcpEnabled(true); });
 const target = { sessionId: 'sess-1' };
 const NODE = 'C:\\Program Files\\nodejs\\node.exe';
 const SECRET = 'a'.repeat(64);
+
+describe('server-gated tools: one card, the server\'s', () => {
+  it('ego_browser by any name an agent gives it — not its guide, not another tool', () => {
+    expect(SERVER_GATED_TOOLS).toEqual(['mcp__web__ego_browser']);
+    for (const n of ['mcp__web__ego_browser', 'ego_browser', 'ego_browser (web MCP Server)', 'web: ego_browser']) expect(isServerGatedTool(n), n).toBe(true);
+    for (const n of ['mcp__web__ego_browser_guide', 'ego_browser_guide (web MCP Server)', 'Read package.json', 'my_ego_browser', 'mcp__web__browser_eval']) expect(isServerGatedTool(n), n).toBe(false);
+    expect(isServerGatedTool(undefined, 'Read', { script: 'ego_browser' })).toBe(false);
+    expect(isServerGatedTool(undefined, 'ego_browser (web)')).toBe(true);
+  });
+});
 
 describe('web MCP launcher', () => {
   it('hands out nothing before the server is listening, and nothing while the switch is off', () => {

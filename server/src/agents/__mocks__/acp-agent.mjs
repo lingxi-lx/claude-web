@@ -92,6 +92,16 @@ rl.on('line', async (line) => {
         update(sid, { sessionUpdate: 'tool_call_update', toolCallId: callId, status: allowed ? 'completed' : 'failed', content: [{ type: 'content', content: { type: 'text', text: allowed ? '{"name":"x"}' : 'denied' } }] });
         update(sid, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: allowed ? ' (read ok)' : ' (denied)' } });
       }
+      // 'EGO' calls the web MCP server's ego_browser and asks first, as a real ACP agent does before an MCP tool
+      if (text.includes('EGO')) {
+        const egoId = `ego-${++callSeq}`;
+        const toolCall = { toolCallId: egoId, title: 'ego_browser (web MCP Server)', kind: 'other', rawInput: { script: "await p.goto('https://mail.example/')" } };
+        update(sid, { sessionUpdate: 'tool_call', ...toolCall, status: 'pending' });
+        const perm = await req('session/request_permission', { sessionId: sid, toolCall, options: [{ optionId: 'allow', name: 'Allow', kind: 'allow_once' }, { optionId: 'always', name: 'Always', kind: 'allow_always' }, { optionId: 'deny', name: 'Deny', kind: 'reject_once' }] });
+        const how = perm?.outcome?.optionId ?? 'cancelled';
+        update(sid, { sessionUpdate: 'tool_call_update', toolCallId: egoId, status: how === 'deny' || how === 'cancelled' ? 'failed' : 'completed', content: [{ type: 'content', content: { type: 'text', text: how } }] });
+        update(sid, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: ` (ego answer: ${how})` } });
+      }
       if (text.includes('mcp')) update(sid, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: ` [mcp: ${lastMcp.map((s) => s.name).join(',') || 'none'}]` } });
       // 'slow' keeps a tool call running so the UI's mid-turn states can be looked at
       if (text.includes('slow')) {
