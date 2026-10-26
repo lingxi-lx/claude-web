@@ -97,6 +97,17 @@
   click / type 等**没动**：它们只在网站不在允许列表时由服务端问。
 - Codex 对 MCP 工具调用的审批（`mcpServer/elicitation/request`，`_meta.codex_approval_kind = 'mcp_tool_call'`）以前被回 -32601
   = 没批；现在普通的卡问用户，我们的 ego_browser / browser_eval 直接 accept（服务端自己问）。细节在「ego lite 作为 Agent 的第一浏览器」。
+- **完全放开时操作过的网站自动进「允许的网站」**（2026-10-26，用户决定，spec 14.4 最后一条）：`bypassPermissions` 下内置浏览器
+  点击 / 输入 / 填表等改页面的 op（`MUTATING_OPS`，截图 / wait 除外）成功后、以及 `browser_open`（落地页的地址）/ `browser_tabs new`
+  （带网址）之后，那个主机名追加进 `web.browser.allowedSites`，同时记进旁边的 `web.browser.allowedSitesAuto`（列表本身仍是
+  `string[]`，旧数据照读；记号只对也在列表里的主机算数）。判断在 `site-gate.ts` 的 `autoAllowHost(op, url, mode)`：只认
+  http(s) 页（about:blank / file: / data: / chrome: / blob: 都不加），localhost 和 IP 照加（和总是允许一致）；已被列表覆盖
+  （含 `*.`）的不重复加。**脚本（`browser_eval`）不加**，ego_browser 不碰这张表。写走 `service.ts` 的 `allowSite(site, auto)`
+  （和总是允许同一个函数，写入串行、每次读当时的列表），**不 await**：写失败只 `console.warn`，动作照常。总是允许一个带记号的站会
+  去掉记号；允许的网站页删一项两边都删。页（`AllowedSites.tsx`）打开时和删之前都先 `settings.get` 拿服务端当下的两项——web 的
+  store 只在启动时读设置，服务端自己加的站否则看不到，删的时候还会把它覆盖掉。测试：`site-gate.test.ts`、`service.test.ts`、
+  `service-ego.test.ts`、`allowed-sites.test.tsx`；e2e `ws-phase40.mjs` 最后一段（完全放开点新站零卡且进列表带记号，默认模式再点
+  零卡，另一个新站仍然问）。
 
 ## 出图的工具在我们的引擎上不延迟（2026-10-26，spec 14.2）
 

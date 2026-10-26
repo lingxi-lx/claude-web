@@ -80,11 +80,14 @@ describe('WebService: ego_browser asks through the server gate', () => {
   });
 
   it('完全放开 (bypassPermissions): nothing is asked, the script runs', async () => {
-    const { web, asked } = make({ answer: 'deny', mode: 'bypassPermissions' });
+    const { web, asked, settings } = make({ answer: 'deny', mode: 'bypassPermissions' });
     const r = await web.tool('conv-3', 'ego_browser', { script: SCRIPT });
     expect(r.isError).toBeFalsy();
     expect(asked).toEqual([]);
     expect(ran).toHaveLength(1);
+    // ego lite runs scripts, not site ops: 完全放开 puts nothing on 允许的网站 from it (spec 14.4)
+    await new Promise((res) => setTimeout(res, 20));
+    expect(settings).toEqual({});
   });
 
   it('拒绝: the script does not run, the model is told the user refused — and not to fall back to the built-in browser', async () => {

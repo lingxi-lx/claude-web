@@ -13,8 +13,9 @@ import type { BrowserOp, PermissionMode, PermissionRequestEvent, PermissionRespo
  *
  * Like 操控电脑 (computer/access.ts) the card is raised by this server, not by the agent's own permission prompt.
  * A conversation in 「完全放开」 (bypassPermissions) is asked nothing — not about sites, not about scripts — and the
- * action runs (the user's decision, 2026-10-26, spec 14.4: full access means no server-raised card at all). Every
- * other mode is asked as above.
+ * action runs (the user's decision, 2026-10-26, spec 14.4: full access means no server-raised card at all) — and every
+ * site it changes a page on or opens goes on the list by itself, marked as such (autoAllowHost below), so the other
+ * modes are not asked about it afterwards. Every other mode is asked as above.
  *
  * Reading (open / read / find / snapshot / screenshot / console / network / tabs, wait, back, viewport) is never asked.
  */
@@ -73,6 +74,35 @@ export function siteAllowed(host: string, list: readonly unknown[]): boolean {
 export function allowedSitesOf(settings: Record<string, unknown>): string[] {
   const v = settings[ALLOWED_SITES_KEY];
   return Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string' && !!s.trim()) : [];
+}
+
+/**
+ * The sites 「完全放开」 put on the list by itself (spec 14.4, last bullet), so 允许的网站 can say so: a sibling of
+ * ALLOWED_SITES_KEY (which stays a plain string[] — old data and old windows keep working). A mark only counts for a
+ * host that is also on the list; 总是允许 takes it off, removing the site on the page takes it off too.
+ */
+export const ALLOWED_SITES_AUTO_KEY = 'web.browser.allowedSitesAuto';
+
+/** The marks as stored (normalised host names). */
+export function autoSitesOf(settings: Record<string, unknown>): string[] {
+  const v = settings[ALLOWED_SITES_AUTO_KEY];
+  return Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string').map(normHost).filter(Boolean) : [];
+}
+
+/**
+ * In 「完全放开」 every site the built-in browser works on goes on 允许的网站 (spec 14.4, last bullet): a page-changing
+ * op (what the list would otherwise be asked about) or opening a page. Which host, for `op` on the page at `url` in
+ * `mode`: '' when nothing is added — any other mode, a script (the list never covers scripts), a read, and a page that
+ * is not a web site (about:blank, file:, data:, chrome:, blob: … — only http(s) pages are sites the list is about).
+ * localhost and IP addresses are sites like any other (总是允许 puts them on the list just the same).
+ */
+export function autoAllowHost(op: BrowserOp, url: string | undefined, mode: PermissionMode | undefined): string {
+  if (mode !== 'bypassPermissions' || op === 'eval') return '';
+  if (op !== 'open' && !MUTATING_OPS.has(op)) return '';
+  let u: URL;
+  try { u = new URL(String(url ?? '')); } catch { return ''; }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
+  return normHost(u.hostname);
 }
 
 /**

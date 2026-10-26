@@ -853,6 +853,105 @@ describe('WebService: 允许的网站 — the gate before a page is changed', ()
     web.dropConnection(w.key);
   });
 
+  /** The fire-and-forget write of a 完全放开 site has landed. */
+  const settled = async (cond: () => boolean) => { for (let i = 0; i < 100 && !cond(); i++) await tick(); };
+  const AUTO = 'web.browser.allowedSitesAuto';
+  const LIST = 'web.browser.allowedSites';
+
+  it('完全放开: a click / type on a new site puts it on 允许的网站, marked as added by 完全放开 — once', async () => {
+    const settings: Record<string, unknown> = { [LIST]: ['other.example'] };
+    const { web, asked } = gated('deny', settings, 'bypassPermissions');
+    const w = autoWin(web, () => page('https://Shop.Example/cart'));
+    expect((await web.tool('conv-a1', 'browser_click', { ref: '1' })).isError).toBeFalsy();
+    await settled(() => Array.isArray(settings[AUTO]));
+    expect(settings[LIST]).toEqual(['other.example', 'shop.example']);
+    expect(settings[AUTO]).toEqual(['shop.example']);
+    await web.tool('conv-a1', 'browser_type', { ref: '2', text: 'x' });
+    await web.tool('conv-a1', 'browser_scroll', { direction: 'down' });
+    await tick(); await tick();
+    expect(settings[LIST]).toEqual(['other.example', 'shop.example']);
+    expect(settings[AUTO]).toEqual(['shop.example']);
+    expect(asked).toEqual([]);
+    expect(w.ops()).toEqual(['read', 'click', 'type', 'scroll']);
+    web.dropConnection(w.key);
+  });
+
+  it('完全放开: opening a page puts its site on the list (where it landed); a site already covered (*.) is left alone', async () => {
+    const settings: Record<string, unknown> = { [LIST]: ['*.covered.example'] };
+    const { web } = gated('deny', settings, 'bypassPermissions');
+    const w = autoWin(web, (c) => page(c.op === 'open' && String(c.args.url).includes('covered') ? 'https://www.covered.example/' : 'https://www.news.example/a'));
+    expect((await web.tool('conv-a2', 'browser_open', { url: 'https://news.example/' })).isError).toBeFalsy();
+    await settled(() => Array.isArray(settings[AUTO]));
+    expect(settings[LIST]).toEqual(['*.covered.example', 'www.news.example']);
+    expect(settings[AUTO]).toEqual(['www.news.example']);
+    await web.tool('conv-a2', 'browser_open', { url: 'https://www.covered.example/' });
+    await tick(); await tick();
+    expect(settings[LIST]).toEqual(['*.covered.example', 'www.news.example']);
+    web.dropConnection(w.key);
+  });
+
+  it('完全放开: a script adds no site; a page without a host (about:blank) adds nothing', async () => {
+    const settings: Record<string, unknown> = {};
+    const { web } = gated('deny', settings, 'bypassPermissions');
+    let where = 'https://app.example/';
+    const w = autoWin(web, (c) => (c.op === 'eval' ? { result: '1', page: { url: where, title: '', text: '' } } : page(where)));
+    expect((await web.tool('conv-a3', 'browser_eval', { script: '1' })).isError).toBeFalsy();
+    where = 'about:blank';
+    // another conversation's tab, on a page without a host: the probe says about:blank
+    expect((await web.tool('conv-a3b', 'browser_click', { ref: '1' })).isError).toBeFalsy();
+    expect(w.ops()).toEqual(['read', 'eval', 'read', 'click']);
+    await tick(); await tick(); await tick();
+    expect(settings[LIST]).toBeUndefined();
+    expect(settings[AUTO]).toBeUndefined();
+    web.dropConnection(w.key);
+  });
+
+  it('the five other modes: nothing is added by itself (允许一次 stays once, a click on an allowed site writes nothing)', async () => {
+    for (const mode of ['default', 'acceptEdits', 'plan', 'dontAsk', 'auto']) {
+      const settings: Record<string, unknown> = { [LIST]: ['ok.example'] };
+      const { web } = gated('once', settings, mode);
+      let where = 'https://new.example/';
+      const w = autoWin(web, () => page(where));
+      await web.tool('conv-a4', 'browser_open', { url: where });
+      await web.tool('conv-a4', 'browser_click', { ref: '1' });
+      where = 'https://ok.example/';
+      await web.tool('conv-a4', 'browser_open', { url: where });
+      await web.tool('conv-a4', 'browser_click', { ref: '1' });
+      await tick(); await tick();
+      expect(settings[LIST], mode).toEqual(['ok.example']);
+      expect(settings[AUTO], mode).toBeUndefined();
+      web.dropConnection(w.key);
+    }
+  });
+
+  it('总是允许 on a site 完全放开 added takes its mark off (the user chose it now)', async () => {
+    const settings: Record<string, unknown> = { [LIST]: ['a.example'], [AUTO]: ['a.example', 'shop.example'] };
+    const { web } = gated('always', settings, 'default');
+    const w = autoWin(web, () => page('https://shop.example/'));
+    await web.tool('conv-a5', 'browser_click', { ref: '1' });
+    expect(settings[LIST]).toEqual(['a.example', 'shop.example']);
+    expect(settings[AUTO]).toEqual(['a.example']);
+    web.dropConnection(w.key);
+  });
+
+  it('a write that fails (or never finishes) does not hold up or fail the click', async () => {
+    const warn = console.warn;
+    const warned: string[] = [];
+    console.warn = (...a: unknown[]) => { warned.push(a.join(' ')); };
+    try {
+      for (const setSetting of [async () => { throw new Error('disk full'); }, () => new Promise<void>(() => {})]) {
+        const { web } = make({ setSetting, gate: { ask: async () => 'deny', mode: () => 'bypassPermissions' } }, {});
+        const w = autoWin(web, () => page('https://shop.example/'));
+        const r = await web.tool('conv-a6', 'browser_click', { ref: '1' });
+        expect(r.isError).toBeFalsy();
+        expect(w.ops()).toEqual(['read', 'click']);
+        web.dropConnection(w.key);
+      }
+      await settled(() => warned.length > 0);
+      expect(warned.join('\n')).toContain('disk full');
+    } finally { console.warn = warn; }
+  });
+
   it('a script in the five other modes is still asked about', async () => {
     for (const mode of ['default', 'acceptEdits', 'plan', 'dontAsk', 'auto']) {
       const { web, asked } = gated('once', {}, mode);

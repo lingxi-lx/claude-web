@@ -12,7 +12,9 @@
 // script, 完全放开 → none. Then the other agents, with the mock ACP agent and the mock Codex app-server: the agent's own
 // prompt for ego_browser is answered without a card (ACP: session/request_permission; Codex: mcpServer/elicitation/
 // request), and the call itself — made here through the real web MCP entry with that conversation's id, the way the
-// agent's MCP process makes it — raises one server card in default mode and none in 完全放开.
+// agent's MCP process makes it — raises one server card in default mode and none in 完全放开. Last, 允许的网站 (spec
+// 14.4, last bullet): a click on a new site in 完全放开 raises no card and puts the site on the list, marked as added by
+// 完全放开; a click there in the default mode then raises no card, while another new site still asks.
 //   node server/ws-phase40.mjs   (starts its own server; scripts/e2e.mjs' port/token are ignored)
 import WebSocket from 'ws';
 import http from 'node:http';
@@ -142,6 +144,8 @@ const port = await new Promise((res, rej) => {
   server.on('exit', (c) => rej(new Error(`server exited (${c})\n${slog}`)));
 });
 
+/** Where this window's browser tab is: every answer says this page. */
+let pageUrl = 'https://app.example/';
 const ws = new WebSocket(`ws://127.0.0.1:${port}/ws?token=${token}`);
 let seq = 0;
 const pending = new Map();
@@ -154,7 +158,7 @@ ws.on('message', (raw) => {
   // this window hosts the built-in browser: a script is answered with its result, anything else with a plain page
   const c = m.event.kind === 'browser.command' ? m.event.command : null;
   if (!c) return;
-  const page = { url: 'https://app.example/', title: 'App', text: '' };
+  const page = { url: pageUrl, title: 'App', text: '' };
   req({ kind: 'browser.result', id: c.id, ok: true, answer: c.op === 'eval' ? { result: JSON.stringify('App EVAL-RAN'), page } : { page } }).catch(() => {});
 });
 const req = (r) => new Promise((res, rej) => { const id = String(++seq); pending.set(id, { res, rej }); ws.send(JSON.stringify({ type: 'request', request: { id, req: r } })); });
@@ -170,6 +174,7 @@ async function main() {
   checkRaw('this window hosts the built-in browser', hosted?.host === true, JSON.stringify({ host: hosted?.host }));
   for (const runtime of (process.env.PHASE40_RUNTIMES ?? 'ccb,claude').split(',')) await suite(runtime);
   for (const agent of (process.env.PHASE40_AGENTS ?? 'acp,codex').split(',').filter(Boolean)) await agentSuite(agent);
+  if (process.env.PHASE40_ALLOWLIST !== '0') await allowListSuite();
 }
 
 const cardsOf = (sid, from) => events.slice(from).filter((e) => e.kind === 'permission.request' && e.request.sessionId === sid).map((e) => e.request);
@@ -369,6 +374,72 @@ async function agentSuite(kind) {
   } finally {
     await req({ kind: 'agents.set', agent, patch: null }).catch(() => {});
   }
+}
+
+/**
+ * 完全放开 puts the sites the built-in browser works on onto 允许的网站 (spec 14.4, last bullet): a click on a new site
+ * in 完全放开 raises no card and the site lands on the list, marked as added by 完全放开; then a click on that site in
+ * the default mode raises no card either — while a click on another new site there still does (the gate is live).
+ * The clicks go through the real web MCP entry with each conversation's id, the way an agent's MCP process makes them.
+ */
+async function allowListSuite() {
+  const check = (name, ok, detail) => checkRaw(`[允许的网站] ${name}`, ok, detail);
+  const proj = path.join(root, 'proj-allow');
+  fs.mkdirSync(proj, { recursive: true });
+  const A = await req({ kind: 'providers.upsert', provider: { name: '中转allow', type: 'anthropic', baseUrl: up, apiKey: 'relay-key-e2e', defaultModel: 'claude-sonnet-4-6', models: ['claude-sonnet-4-6'] } });
+  const SITE = 'shop-p40.example';
+  const OTHER = 'other-p40.example';
+  /** a conversation in `permissionMode` that has had a turn (so this server runs it and knows its mode) */
+  const open = async (permissionMode) => {
+    const o = await req({ kind: 'session.open', params: { cwd: proj, providerId: A.id, model: 'claude-sonnet-4-6', permissionMode } });
+    const from = events.length;
+    await req({ kind: 'session.send', params: { sessionId: o.sessionId, text: 'hello' } });
+    await runTurn(o.sessionId, from);
+    return o.sessionId;
+  };
+  /** `tool` through the web MCP entry; every card on the way is answered with `answer` */
+  const call = async (sid, tool, args, answer = 'deny') => {
+    const mcp = startMcp(sid);
+    const from = events.length;
+    const init = mcp.send('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'phase40', version: '0' } });
+    await until(() => mcp.reply(init), 30_000);
+    const n = mcp.send('tools/call', { name: tool, arguments: args });
+    const answered = new Set();
+    const res = await until(() => {
+      for (const rq of cardsOf(sid, from)) {
+        if (answered.has(rq.requestId)) continue;
+        answered.add(rq.requestId);
+        void req({ kind: 'permission.respond', requestId: rq.requestId, response: answer === 'deny' ? { behavior: 'deny', message: 'no' } : { behavior: 'allow' } }).catch(() => {});
+      }
+      return mcp.reply(n);
+    }, 120_000, 300);
+    mcp.stop();
+    const clicks = events.slice(from).filter((e) => e.kind === 'browser.command' && e.command.op === 'click' && e.command.sessionId === sid);
+    return { res, cards: cardsOf(sid, from), clicks };
+  };
+  const sitesNow = async () => { const s = await req({ kind: 'settings.get' }); return { list: s['web.browser.allowedSites'] ?? [], auto: s['web.browser.allowedSitesAuto'] ?? [] }; };
+
+  const before = await sitesNow();
+  check('the site is not on the list to begin with', !before.list.includes(SITE) && !before.auto.includes(SITE), JSON.stringify(before));
+  pageUrl = `https://${SITE}/cart`;
+  const full = await open('bypassPermissions');
+  const r1 = await call(full, 'browser_click', { ref: '1' });
+  check('完全放开: a click on a new site raises no card at all, and reaches the page', r1.cards.length === 0 && r1.clicks.length === 1 && !r1.res?.result?.isError, JSON.stringify({ cards: cardBrief(r1.cards), clicks: r1.clicks.length, err: r1.res?.result?.isError ?? r1.res?.error }));
+  const after = await until(async () => { const s = await sitesNow(); return s.list.includes(SITE) && s.auto.includes(SITE) ? s : null; }, 10_000, 200);
+  check('… and the site is on 允许的网站, marked as added by 完全放开', !!after, JSON.stringify(after ?? await sitesNow()));
+  await req({ kind: 'session.close', sessionId: full }).catch(() => {});
+
+  const def = await open('default');
+  const r2 = await call(def, 'browser_click', { ref: '2' });
+  check('default mode: a click on that site raises no site card, and reaches the page', r2.cards.filter((c) => c.toolName === 'browser.site').length === 0 && r2.clicks.length === 1 && !r2.res?.result?.isError, JSON.stringify({ cards: cardBrief(r2.cards), clicks: r2.clicks.length }));
+  pageUrl = `https://${OTHER}/`;
+  await call(def, 'browser_read', {});
+  const r3 = await call(def, 'browser_click', { ref: '3' }, 'deny');
+  check('… while a click on another new site still raises the site card (declined: it does not reach the page)', r3.cards.filter((c) => c.toolName === 'browser.site' && c.input?.host === OTHER).length === 1 && r3.clicks.length === 0, JSON.stringify({ cards: cardBrief(r3.cards), clicks: r3.clicks.length }));
+  const last = await sitesNow();
+  check('… and default mode added nothing by itself', !last.list.includes(OTHER) && !last.auto.includes(OTHER), JSON.stringify(last));
+  await req({ kind: 'session.close', sessionId: def }).catch(() => {});
+  pageUrl = 'https://app.example/';
 }
 
 try {

@@ -8,7 +8,7 @@ import { BROWSER_TIMEOUT_MS, ENGINES, engineSetting, search, type BrowserSearch,
 import { htmlToText } from './html-text.js';
 import { resolvedRefusal, urlRefusal } from './url-guard.js';
 import { ACTION_CHARS, DEFAULT_CHARS, SEARCH_FAILED_HINT, clampChars, errorResult, formatConsole, formatFind, formatNetwork, formatPage, formatEval, formatSearch, formatSnapshot, formatTabs, textResult, type ToolResult } from './format.js';
-import { ALLOWED_SITES_KEY, EGO_SCRIPT_TOOL, MUTATING_OPS, allowedSitesOf, hostOfUrl, needsAsk, normHost, scriptHost, type SiteAnswer, type SiteRequest } from './site-gate.js';
+import { ALLOWED_SITES_AUTO_KEY, ALLOWED_SITES_KEY, EGO_SCRIPT_TOOL, MUTATING_OPS, allowedSitesOf, autoAllowHost, autoSitesOf, hostOfUrl, needsAsk, normHost, scriptHost, siteAllowed, type SiteAnswer, type SiteRequest } from './site-gate.js';
 import { tr } from '../i18n/index.js';
 
 /**
@@ -139,6 +139,8 @@ export class WebService extends EventEmitter {
   private browserQuietUntil = 0;
   /** where each conversation's tab was at the window's last answer (the site the gate judges) */
   private lastUrl = new Map<string, string>();
+  /** writes of 允许的网站, one after another (allowSite) */
+  private siteWrites: Promise<void> = Promise.resolve();
 
   constructor(private d: WebDeps) {
     super();
@@ -311,9 +313,18 @@ export class WebService extends EventEmitter {
     if (host && this.d.gate && MUTATING_OPS.has(op)) return this.gated(host, sessionId, op, args, signal);
     if (host && op === 'tabs') {
       // another tab may be the one its tools work in now: where it is is asked again before the next change (site gate)
-      try { return await this.command(host, sessionId, op, args); } finally { this.lastUrl.delete(sessionId); }
+      try {
+        const a = await this.command(host, sessionId, op, args);
+        if (args.action === 'new' && args.url) this.autoAllow(sessionId, 'open', String(args.url)); // a page opened in a new tab
+        return a;
+      } finally { this.lastUrl.delete(sessionId); }
     }
-    if (host) return this.seen(sessionId, await this.command(host, sessionId, op, args));
+    if (host) {
+      const a = this.seen(sessionId, await this.command(host, sessionId, op, args));
+      // 完全放开: the site a page was opened on (where it landed) goes on 允许的网站
+      if (op === 'open') this.autoAllow(sessionId, op, a.page?.url || String(args.url ?? ''));
+      return a;
+    }
     if (!READ_ONLY_OPS.has(op)) throw new Error(needsDesktop(op));
     if (op === 'open') return { page: this.window(await this.fetchPage(sessionId, String(args.url)), 0, DEFAULT_CHARS) };
     const kept = this.pages.get(sessionId);
@@ -359,7 +370,9 @@ export class WebService extends EventEmitter {
       try {
         // always the site it was judged on — '' for a page without a host — so the window, which compares it with the
         // tab's REAL address, refuses the op when the tab is elsewhere (a page can forge what it reports, or navigate itself)
-        return this.seen(sessionId, await this.command(host, sessionId, op, { ...args, site }, signal));
+        const a = this.seen(sessionId, await this.command(host, sessionId, op, { ...args, site }, signal));
+        this.autoAllow(sessionId, op, url); // 完全放开: the site it was done on goes on 允许的网站 (not a script's)
+        return a;
       } catch (e) {
         const msg = String((e as Error)?.message ?? '');
         if (!msg.startsWith(SITE_CHANGED) || round >= 1) throw e;
@@ -389,11 +402,40 @@ export class WebService extends EventEmitter {
     }
   }
 
-  /** 总是允许: the host goes on `web.browser.allowedSites` (once). */
-  private async allowSite(site: string): Promise<void> {
-    const list = allowedSitesOf(this.d.settings());
-    if (list.some((s) => normHost(s) === site)) return;
-    await this.d.setSetting(ALLOWED_SITES_KEY, [...list, site]);
+  /**
+   * The host goes on `web.browser.allowedSites` (once). 总是允许 (`auto` false): the user chose it, so a 完全放开 mark
+   * on it comes off. 完全放开 (`auto` true): a site the list covers already (`*.` too) is left alone; a new one goes on
+   * marked (ALLOWED_SITES_AUTO_KEY). The writes go one after another (each reads the list as it is then), so two at once
+   * neither lose one another nor add a site twice.
+   */
+  private allowSite(site: string, auto = false): Promise<void> {
+    const run = this.siteWrites.then(async () => {
+      const s = this.d.settings();
+      const list = allowedSitesOf(s);
+      const marks = autoSitesOf(s);
+      if (auto) {
+        if (siteAllowed(site, list)) return;
+        await this.d.setSetting(ALLOWED_SITES_KEY, [...list, site]);
+        await this.d.setSetting(ALLOWED_SITES_AUTO_KEY, [...marks.filter((m) => m !== site), site]);
+        return;
+      }
+      if (!list.some((x) => normHost(x) === site)) await this.d.setSetting(ALLOWED_SITES_KEY, [...list, site]);
+      if (marks.includes(site)) { const rest = marks.filter((m) => m !== site); await this.d.setSetting(ALLOWED_SITES_AUTO_KEY, rest.length ? rest : undefined); }
+    });
+    this.siteWrites = run.catch(() => {});
+    return run;
+  }
+
+  /**
+   * 完全放开: the site `op` just worked on goes on 允许的网站 (autoAllowHost). Not waited for — a slow or failed write of
+   * meta.json neither holds up nor fails the action; a failure is logged.
+   */
+  private autoAllow(sessionId: string, op: BrowserOp, url: string | undefined): void {
+    try {
+      const site = autoAllowHost(op, url, this.d.gate?.mode(sessionId));
+      if (!site) return;
+      this.allowSite(site, true).catch((e) => console.warn(`[web] full access: could not add ${site} to the allowed sites: ${(e as Error)?.message ?? e}`));
+    } catch (e) { console.warn(`[web] full access: allowed sites: ${(e as Error)?.message ?? e}`); }
   }
 
   /** `text` from `offset`, at most `maxChars`; the elements go with the start of the page only. */

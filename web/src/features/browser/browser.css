@@ -151,6 +151,7 @@
 .bw-allowed-list li { display: flex; align-items: center; gap: 8px; padding: 4px 4px 4px 10px; border-radius: var(--r-md); }
 .bw-allowed-list li:hover { background: var(--layer-hover); }
 .bw-allowed-list .h { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: var(--fs-meta); color: var(--ink-1); }
+.bw-allowed-list .bw-allowed-auto { flex: none; font-size: var(--fs-meta); color: var(--ink-3); padding: 1px 6px; border-radius: var(--r-sm); background: var(--fill-subtle); white-space: nowrap; }
 .bw-allowed .empty { color: var(--ink-4); font-size: var(--fs-sm); padding: var(--sp-2) 0; }
 
 /* the Agent's mouse over its page (AgentCursor.tsx, stage B task 7): only a picture, never in the way */

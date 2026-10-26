@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BrowserOp, PermissionMode, PermissionRequestEvent } from '../protocol.js';
-import { MUTATING_OPS, SCRIPT_PREVIEW_CHARS, SITE_TOOL, SiteAsk, allowedSitesOf, hostOfUrl, needsAsk, normHost, scriptHost, siteAllowed, siteAnswerOf } from './site-gate.js';
+import { ALLOWED_SITES_AUTO_KEY, MUTATING_OPS, SCRIPT_PREVIEW_CHARS, SITE_TOOL, SiteAsk, allowedSitesOf, autoAllowHost, autoSitesOf, hostOfUrl, needsAsk, normHost, scriptHost, siteAllowed, siteAnswerOf } from './site-gate.js';
 
 const tick = (ms = 5) => new Promise((r) => setTimeout(r, ms));
 
@@ -127,6 +127,41 @@ describe('needsAsk: when the user is asked', () => {
       expect(needsAsk('click', 'allowed.com', { list, mode })).toBe('no');
       expect(needsAsk('read', 'new.com', { list, mode })).toBe('no');
     }
+  });
+});
+
+describe('autoAllowHost: the site 完全放开 puts on 允许的网站 (spec 14.4, last bullet)', () => {
+  const bypass: PermissionMode = 'bypassPermissions';
+  it('a site op or opening a page on an http(s) site, in 完全放开: its host', () => {
+    for (const op of ['click', 'type', 'key', 'scroll', 'computer', 'hover', 'drag', 'select', 'open'] as BrowserOp[]) {
+      expect(autoAllowHost(op, 'https://Shop.Example:8443/cart', bypass), op).toBe('shop.example');
+    }
+    expect(autoAllowHost('click', 'http://localhost:5173/', bypass)).toBe('localhost');
+    expect(autoAllowHost('click', 'http://127.0.0.1/', bypass)).toBe('127.0.0.1');
+  });
+  it('a script never; reading never', () => {
+    for (const op of ['eval', 'read', 'find', 'snapshot', 'screenshot', 'console', 'network', 'tabs', 'wait', 'back', 'viewport'] as BrowserOp[]) {
+      expect(autoAllowHost(op, 'https://shop.example/', bypass), op).toBe('');
+    }
+  });
+  it('the five other modes (and no mode): never', () => {
+    for (const mode of ['default', 'acceptEdits', 'plan', 'dontAsk', 'auto', undefined] as (PermissionMode | undefined)[]) {
+      expect(autoAllowHost('click', 'https://shop.example/', mode)).toBe('');
+      expect(autoAllowHost('open', 'https://shop.example/', mode)).toBe('');
+    }
+  });
+  it('a page that is not a web site: about:blank, file:, data:, chrome:, blob:, junk, nothing', () => {
+    for (const url of ['about:blank', 'file:///C:/x.html', 'data:text/html,hi', 'chrome://settings', 'devtools://x', 'blob:https://shop.example/uuid', 'not a url', '', undefined]) {
+      expect(autoAllowHost('click', url, bypass), String(url)).toBe('');
+    }
+  });
+});
+
+describe('autoSitesOf: the 完全放开 marks next to the list', () => {
+  it('the marks as stored (strings only, normalised); junk is none', () => {
+    expect(autoSitesOf({ [ALLOWED_SITES_AUTO_KEY]: ['A.example', 1, '', ' b.example '] })).toEqual(['a.example', 'b.example']);
+    expect(autoSitesOf({ [ALLOWED_SITES_AUTO_KEY]: 'x' })).toEqual([]);
+    expect(autoSitesOf({})).toEqual([]);
   });
 });
 

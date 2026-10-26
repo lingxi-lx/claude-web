@@ -1766,6 +1766,8 @@ export const EN_WEB: Record<string, string> = {
   "安装没有成功": "The install didn't succeed",
   "安装范围": "Install scope",
   "完全放开": "Allow everything",
+  "完全放开时 Claude 打开或操作过的网站会自动加入这里。": "Sites Claude opens or works on in \"Allow everything\" are added here automatically.",
+  "完全放开时自动加入": "Added in Allow everything",
   "完全权限": "Full permissions",
   "完成": "Done",
   "完整 diff": "Full diff",
