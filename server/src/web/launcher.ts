@@ -28,57 +28,105 @@ export const EGO_GUIDE_TOOL = 'mcp__web__ego_browser_guide';
  */
 export const EGO_TOOL = 'mcp__web__ego_browser';
 /**
- * Tools this server asks the user about itself, for every agent: an agent's own prompt for one is answered "allow
- * once" without a card (Claude: in allowedTools; ACP: AcpDriver.onPermission), so there is one card, the server's.
+ * The tools this server asks the user about itself, every call, for every agent, except in 完全放开 (site-gate.ts
+ * needsAsk: `eval` is asked before the allow-list is looked at; service.ts sends every page-changing op through the
+ * gate, and without a hosting window browser_eval fails; an unanswered card is a deny). An agent's own prompt for one
+ * is therefore answered without a card (Claude: in allowedTools; ACP: AcpDriver.onPermission; Codex:
+ * CodexDriver.onElicitation), so there is one card, the server's.
+ * Per tool: the argument keys it takes (a call carrying anything else is not ours; `script` is required, a string)
+ * and whether it exists only with the ego tools (CW_WEB_BROWSER=ego).
+ * Not click / type / key / scroll …: those are asked only on a site not on the allow-list, so the agent's own prompt
+ * is the only one there is for the rest.
  */
-export const SERVER_GATED_TOOLS: readonly string[] = [EGO_TOOL];
+const SERVER_GATED: ReadonlyMap<string, { keys: ReadonlySet<string>; needsEgo: boolean }> = new Map([
+  ['ego_browser', { keys: new Set(['script', 'timeout_ms']), needsEgo: true }],
+  ['browser_eval', { keys: new Set(['script']), needsEgo: false }],
+]);
+export const SERVER_GATED_TOOLS: readonly string[] = [...SERVER_GATED.keys()].map((t) => `mcp__web__${t}`);
 /**
- * The exact names an agent gives our ego_browser: our MCP name, the bare tool name, or the ACP title
- * `ego_browser (web MCP Server)` (Gemini-style). Anchored and exact on purpose: an ACP title is built from the call
- * itself (a shell command's text, a file name), so anything looser lets a command that merely MENTIONS ego_browser
- * through without a card — and only our real ego_browser call reaches the server's own card (service.ts egoGate).
+ * The exact names an agent gives one of those tools: our MCP name, the bare tool name, or the ACP title
+ * `<tool> (web MCP Server)` (Gemini-style). Anchored and exact on purpose: an ACP title is built from the call
+ * itself (a shell command's text, a file name), so anything looser lets a command that merely MENTIONS the tool
+ * through without a card — and only our real call reaches the server's own card.
  */
-const SERVER_GATED_NAME_RE = /^(mcp__web__)?ego_browser( \(web MCP Server\))?$/;
-/** Is `name` exactly one of our server-gated tools' names (see SERVER_GATED_NAME_RE)? Non-strings are no. */
-export function isServerGatedTool(name: unknown): boolean {
-  return typeof name === 'string' && (SERVER_GATED_TOOLS.includes(name) || SERVER_GATED_NAME_RE.test(name));
+const SERVER_GATED_NAME_RE = /^(?:mcp__web__)?([a-z_]+)(?: \(web MCP Server\))?$/;
+/** The server-gated tool `name` is exactly one of the names of (see SERVER_GATED_NAME_RE); undefined for anything else. */
+function serverGatedToolOf(name: unknown): string | undefined {
+  if (typeof name !== 'string') return undefined;
+  const t = SERVER_GATED_NAME_RE.exec(name)?.[1];
+  return t !== undefined && SERVER_GATED.has(t) ? t : undefined;
 }
-/** The arguments our ego_browser takes: a call carrying anything else is not ours. */
-const EGO_ARG_KEYS: ReadonlySet<string> = new Set(['script', 'timeout_ms']);
+/** Is `name` exactly one of our server-gated tools' names? Non-strings are no. */
+export function isServerGatedTool(name: unknown): boolean {
+  return serverGatedToolOf(name) !== undefined;
+}
 /** A plain JSON object (what a parsed message holds), not an array, a Date, a class instance. */
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   if (typeof v !== 'object' || v === null || Array.isArray(v)) return false;
   const proto = Object.getPrototypeOf(v);
   return proto === Object.prototype || proto === null;
 }
-/** Arguments shaped like our ego_browser's: a plain object with a string `script`, keys only script / timeout_ms. */
-function isEgoArgs(v: unknown): boolean {
-  return isPlainObject(v) && typeof v.script === 'string' && Object.keys(v).every((k) => EGO_ARG_KEYS.has(k));
+/** Arguments shaped like `tool`'s: a plain object with a string `script` and no keys the tool does not take. */
+function isGatedArgs(tool: string, v: unknown): boolean {
+  const keys = SERVER_GATED.get(tool)?.keys;
+  return !!keys && isPlainObject(v) && typeof v.script === 'string' && Object.keys(v).every((k) => keys.has(k));
+}
+/**
+ * What a conversation was handed: our `web` server (`web`), and with it the ego tools (`ego`: started with
+ * CW_WEB_BROWSER=ego). Without the web server no tool by our names is ours; without the ego tools no ego_browser is.
+ */
+export interface WebToolsGiven { web: boolean; ego: boolean }
+/** Does `given` include `tool` (a SERVER_GATED key)? */
+function hasGated(tool: string, given: WebToolsGiven): boolean {
+  return given.web && (!SERVER_GATED.get(tool)?.needsEgo || given.ego);
 }
 /**
  * May an ACP agent's permission prompt be answered without a card, because the server asks on its own card when the
- * call runs? Only when this conversation was given our ego tools (`egoTools`: its web server was started with
- * CW_WEB_BROWSER=ego, acpServersGiveEgo — without them there is no ego_browser of ours to call, so a call by that name
- * is someone else's), and only for our exact ego_browser: the prompt's own title matches exactly (not the name we
- * derived for the call: mapToolName turns spaces into _, so 'ego browser' would become ego_browser), its kind is
- * absent or `other` (never execute / edit / delete / move / fetch / read …), and its raw input is there, a plain
- * object with a string `script` and no keys besides `script` / `timeout_ms`. What the script says is never looked at
- * (the server's card shows it). Anything else gets the agent's card.
+ * call runs? Only for one of our server-gated tools that this conversation was given (`given`), by its exact name (the
+ * prompt's own title — not the name we derived for the call: mapToolName turns spaces into _, so 'ego browser' would
+ * become ego_browser), its kind absent or `other` (never execute / edit / delete / move / fetch / read …), and its raw
+ * input there, a plain object with a string `script` and no keys the tool does not take. What the script says is
+ * never looked at (the server's card shows it). Anything else gets the agent's card.
  */
-export function isServerGatedAcpCall(tc: { title?: unknown; kind?: unknown; rawInput?: unknown }, egoTools: boolean): boolean {
-  if (!egoTools) return false;
+export function isServerGatedAcpCall(tc: { title?: unknown; kind?: unknown; rawInput?: unknown }, given: WebToolsGiven): boolean {
+  const tool = serverGatedToolOf(tc.title);
+  if (tool === undefined || !hasGated(tool, given)) return false;
   if (tc.kind !== undefined && tc.kind !== null && tc.kind !== 'other') return false;
-  if (!isEgoArgs(tc.rawInput)) return false;
-  return isServerGatedTool(tc.title);
+  return isGatedArgs(tool, tc.rawInput);
 }
 
-/** Did the ACP `mcpServers` list handed to an agent include our web server with the ego tools (CW_WEB_BROWSER=ego)? */
-export function acpServersGiveEgo(servers: readonly { name?: unknown; env?: unknown }[] | undefined): boolean {
-  return (servers ?? []).some((s) => s.name === 'web' && Array.isArray(s.env) && s.env.some((e: any) => e?.name === 'CW_WEB_BROWSER' && e?.value === 'ego'));
+/** The env entry that gives a conversation's web server the ego tools (spawnShape), and how it is read back. */
+const EGO_ENV = { name: 'CW_WEB_BROWSER', value: 'ego' } as const;
+/** What the ACP `mcpServers` list handed to an agent gave it (webAcpMcpServers' shape: env as name/value pairs). */
+export function acpWebToolsGiven(servers: readonly { name?: unknown; env?: unknown }[] | undefined): WebToolsGiven {
+  const web = (servers ?? []).find((s) => s.name === 'web');
+  const ego = !!web && Array.isArray(web.env) && web.env.some((e: any) => e?.name === EGO_ENV.name && e?.value === EGO_ENV.value);
+  return { web: !!web, ego };
 }
-/** Did the Codex argv carry our web server with the ego tools (webCodexConfigArgs' `mcp_servers.web.env=` override)? */
-export function codexArgsGiveEgo(args: readonly string[]): boolean {
-  return args.some((a) => a.startsWith('mcp_servers.web.env=') && a.includes('CW_WEB_BROWSER = "ego"'));
+/** Codex `-c` overrides: the key prefixes, and one TOML inline-table entry (`K = "v"`), shared by builder and reader. */
+const CODEX_WEB_COMMAND = 'mcp_servers.web.command=';
+const CODEX_WEB_ENV = 'mcp_servers.web.env=';
+const tomlEntry = (k: string, v: string) => `${k} = ${JSON.stringify(v)}`;
+const ENTRY_SEP = ', ';
+/** A TOML inline table of string values, as `mcp_servers.web.env=` takes it (values JSON-quoted: a bare path won't parse). */
+function tomlInlineTable(env: Record<string, string>): string {
+  return `{${Object.entries(env).map(([k, v]) => tomlEntry(k, v)).join(ENTRY_SEP)}}`;
+}
+/** The inline-table entry for the ego tools, exactly as webCodexConfigArgs writes it. */
+export function codexEgoEnvEntry(): string { return tomlEntry(EGO_ENV.name, EGO_ENV.value); }
+/**
+ * What the Codex argv gave the conversation: read back from webCodexConfigArgs' own overrides (the same prefixes,
+ * entry builder and separator), the ego entry as a whole entry of the inline table. A value cannot fake one: inside a
+ * JSON-quoted value every `"` is escaped, and the entry has a bare `"` after `= `.
+ */
+export function codexWebToolsGiven(args: readonly string[]): WebToolsGiven {
+  const web = args.some((a) => a.startsWith(CODEX_WEB_COMMAND));
+  const env = args.find((a) => a.startsWith(CODEX_WEB_ENV));
+  if (!web || !env) return { web, ego: false };
+  const table = env.slice(CODEX_WEB_ENV.length);
+  const e = codexEgoEnvEntry();
+  const ego = table === `{${e}}` || table.startsWith(`{${e}${ENTRY_SEP}`) || table.endsWith(`${ENTRY_SEP}${e}}`) || table.includes(`${ENTRY_SEP}${e}${ENTRY_SEP}`);
+  return { web, ego };
 }
 
 /**
@@ -99,13 +147,14 @@ export function isCodexToolApproval(p: unknown): p is { serverName: string; mess
 }
 /**
  * May Codex's approval of an MCP tool call be accepted without a card, because the server asks on its own card when
- * the call runs? Only with the ego tools given to this conversation, only for our `web` server's ego_browser (the exact
- * fixed message) and only with arguments shaped like ours (`_meta.tool_params`: a string script, + timeout_ms).
+ * the call runs? Only for our `web` server (the exact fixed message) and one of its server-gated tools this
+ * conversation was given, with arguments shaped like that tool's (`_meta.tool_params`).
  */
-export function isServerGatedCodexElicitation(p: unknown, egoTools: boolean): boolean {
-  if (!egoTools || !isCodexToolApproval(p)) return false;
-  if (p.serverName !== 'web' || codexElicitationTool(p) !== 'ego_browser') return false;
-  return isEgoArgs(p._meta.tool_params);
+export function isServerGatedCodexElicitation(p: unknown, given: WebToolsGiven): boolean {
+  if (!isCodexToolApproval(p) || p.serverName !== 'web') return false;
+  const tool = codexElicitationTool(p);
+  if (tool === undefined || !SERVER_GATED.has(tool) || !hasGated(tool, given)) return false;
+  return isGatedArgs(tool, p._meta.tool_params);
 }
 
 let enabled = true;
@@ -207,7 +256,7 @@ function spawnShape(t: WebMcpTarget, execPath: string): { command: string; args:
       CW_WEB_URL: endpoint.url,
       ...(endpoint.tokenFile ? { CW_WEB_TOKEN_FILE: endpoint.tokenFile } : { CW_WEB_TOKEN: endpoint.token }),
       CW_SESSION_ID: t.sessionId ?? '',
-      ...(egoForNewConversations() ? { CW_WEB_BROWSER: 'ego' } : {}),
+      ...(egoForNewConversations() ? { [EGO_ENV.name]: EGO_ENV.value } : {}),
     },
   };
 }
@@ -245,11 +294,10 @@ export function webAcpMcpServers(t: WebMcpTarget, execPath = process.execPath) {
 export function webCodexConfigArgs(t: WebMcpTarget, execPath = process.execPath): string[] {
   const s = spawnShape(t, execPath);
   if (!s) return [];
-  const inlineEnv = `{${Object.entries(s.env).map(([k, v]) => `${k} = ${JSON.stringify(v)}`).join(', ')}}`;
   return [
-    '-c', `mcp_servers.web.command=${JSON.stringify(s.command)}`,
+    '-c', `${CODEX_WEB_COMMAND}${JSON.stringify(s.command)}`,
     '-c', `mcp_servers.web.args=${JSON.stringify(s.args)}`,
-    '-c', `mcp_servers.web.env=${inlineEnv}`,
+    '-c', `${CODEX_WEB_ENV}${tomlInlineTable(s.env)}`,
   ];
 }
 

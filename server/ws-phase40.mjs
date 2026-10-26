@@ -220,8 +220,9 @@ async function suite(runtime) {
   check('ego_browser is asked about on the server\'s card, and the card carries the whole script', !!asked && asked.toolName === 'browser.site' && asked.input?.tool === 'ego_browser' && askedScript === SCRIPT, JSON.stringify(asked && { toolName: asked.toolName, input: asked.input }).slice(0, 400));
   if (asked) await req({ kind: 'permission.respond', requestId: asked.requestId, response: { behavior: 'allow' } });
   const r = await resultOf(sid, from);
-  const egoCards = events.slice(from).filter((e) => e.kind === 'permission.request' && e.request.sessionId === sid && isEgo(e.request));
-  check('… and only that one card: Claude does not ask about ego_browser itself', egoCards.length === 1, JSON.stringify(egoCards.map((e) => e.request.toolName)));
+  // every card of the turn, not only the ones naming ego_browser: a stray one (a lookup, Claude's own prompt) fails too
+  const allCards = cardsOf(sid, from);
+  check('… and only that one card in the whole turn: Claude asks about nothing itself', allCards.length === 1 && allCards[0].requestId === asked?.requestId, cardBrief(allCards));
   const mine = hits.slice(mark).filter((h) => h.main);
   const first = mine[0];
   check('the conversation has ego_browser in its tool list itself (not deferred behind ExecuteExtraTool, which would turn the picture into text)', !!first?.tools?.includes('mcp__web__ego_browser') && mine.find((h) => h.called)?.called === 'direct', JSON.stringify({ called: mine.find((h) => h.called)?.called, tools: first?.tools?.filter((t) => /web__|Extra/.test(t)) }));
@@ -264,12 +265,9 @@ async function suite(runtime) {
     const evals = events.slice(from4).filter((e) => e.kind === 'browser.command' && e.command.op === 'eval' && e.command.sessionId === o4.sessionId);
     const tr4 = hits.slice(mark4).find((h) => h.main && h.toolResult)?.toolResult;
     if (permissionMode === 'default') {
-      check('default: browser_eval raises exactly one server card, for the script', server.length === 1 && server[0].input?.op === 'eval' && server[0].input?.tool === 'browser_eval' && server[0].input?.script === EVAL_SCRIPT, cardBrief(cards));
-      // browser_eval is not in Claude's allowed tools (only search / the ego tools are), so Claude still asks about the
-      // MCP tool itself in default mode, as before this rule; nothing else asks
-      const own = cards.filter((c) => c.toolName !== 'browser.site');
-      const isEvalTool = (c) => c.toolName === 'mcp__web__browser_eval' || (c.toolName === 'ExecuteExtraTool' && c.input?.tool_name === 'mcp__web__browser_eval') || c.toolName === 'SearchExtraTools';
-      check('… besides it, only Claude\'s own prompt for the browser_eval tool (unchanged default-mode behavior)', own.every(isEvalTool) && own.filter((c) => c.toolName !== 'SearchExtraTools').length <= 1, cardBrief(cards));
+      // one card in the whole turn, the server's, for the script: Claude has browser_eval in its allowed tools (the
+      // server asks), and nothing else on the way (a lookup) asks
+      check('default: browser_eval raises exactly one card in the whole turn, the server\'s, for the script', cards.length === 1 && server.length === 1 && server[0].input?.op === 'eval' && server[0].input?.tool === 'browser_eval' && server[0].input?.script === EVAL_SCRIPT, cardBrief(cards));
     } else {
       check('完全放开: browser_eval raises no card at all', cards.length === 0, cardBrief(cards));
     }

@@ -208,6 +208,8 @@ rl.on('line', async (line) => {
           click: approval('web', 'browser_click', { selector: '#go' }),
           othersrv: approval('evil', 'ego_browser', script),
           extraarg: approval('web', 'ego_browser', { ...script, command: 'x' }),
+          eval: approval('web', 'browser_eval', { script: 'return document.title' }),
+          evalextra: approval('web', 'browser_eval', { script: 'return 1', timeout_ms: 5000 }),
           form: { threadId, turnId: 'turn-1', serverName: 'web', mode: 'form', message: 'Your name?', requestedSchema: { type: 'object', properties: { name: { type: 'string' } } }, _meta: null },
         };
         const a = await req('mcpServer/elicitation/request', shapes[mcpVariant] ?? shapes.ego);

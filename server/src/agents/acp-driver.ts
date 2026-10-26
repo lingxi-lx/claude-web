@@ -5,7 +5,7 @@ import fs from 'node:fs/promises';
 import type { AgentKind, AttachmentRef, OpenSessionParams, PermissionMode, PermissionRequestEvent, PermissionResponse, RunnerState, SessionInfoSnapshot } from '../protocol.js';
 import { JsonRpcProcess } from './jsonrpc.js';
 import { acpMcpServers } from '../memory/launcher.js';
-import { acpServersGiveEgo, isServerGatedAcpCall, webAcpMcpServers } from '../web/launcher.js';
+import { acpWebToolsGiven, isServerGatedAcpCall, webAcpMcpServers, type WebToolsGiven } from '../web/launcher.js';
 import { MessageSynth, mapToolName } from './normalize.js';
 import type { AgentTranscripts } from './transcript.js';
 import type { AgentDriver } from './types.js';
@@ -38,8 +38,8 @@ export class AcpDriver extends EventEmitter implements AgentDriver {
   private model?: string;
   private permissionMode: PermissionMode;
   private autoApprove = false;
-  /** Was this conversation given our ego tools (its web server started with CW_WEB_BROWSER=ego, and mounted)? */
-  private egoTools = false;
+  /** What this conversation was given: our web server, and the ego tools with it — only once the agent took the list. */
+  private webTools: WebToolsGiven = { web: false, ego: false };
 
   constructor(private kind: AgentKind, private launch: { command: string; args: string[]; env: Record<string, string>; model?: string; name: string; login?: string }, params: OpenSessionParams, private transcripts: AgentTranscripts, private resumeHistory: unknown[] | null) {
     super();
@@ -99,7 +99,7 @@ export class AcpDriver extends EventEmitter implements AgentDriver {
         try {
           try {
             await attempt(mcpServers);
-            this.egoTools = acpServersGiveEgo(mcpServers);
+            this.webTools = acpWebToolsGiven(mcpServers);
           } catch (e) {
             // an agent that chokes on our MCP servers must still be able to resume (DeepSeek Harness: resume with
             // the memory MCP answers an internal error, without it resumes fine)
@@ -116,7 +116,7 @@ export class AcpDriver extends EventEmitter implements AgentDriver {
         const newSession = async () => {
           try {
             const r = await rpc.request('session/new', { cwd: this.cwd, mcpServers }, 120_000);
-            this.egoTools = acpServersGiveEgo(mcpServers);
+            this.webTools = acpWebToolsGiven(mcpServers);
             return r;
           } catch (e) {
             if (!mcpServers.length) throw e;
@@ -225,19 +225,15 @@ export class AcpDriver extends EventEmitter implements AgentDriver {
     const name = known?.name ?? mapToolName(tc.kind, tc.title, tc);
     const input = known ? { ...known.input, ...(tc.rawInput ?? {}) } : this.toolInput(name, tc);
     const options: { optionId: string; kind: string }[] = p.options ?? [];
-    const pick = (kinds: string[]) => options.find((o) => kinds.includes(o.kind))?.optionId ?? options[0]?.optionId;
-    // a tool this server asks about itself (ego_browser, spec 14.1): its card comes from the server when the call runs,
-    // so the agent's own prompt is answered with no card: "allow once", else "allow always" (the server asks each time
-    // anyway), else — an agent offering no allow — its normal card; never a reject picked for the user.
-    // Only with our ego tools given to this conversation and for an exact match (the prompt's title, kind absent or
-    // other, a string script + timeout_ms and nothing else: launcher.ts isServerGatedAcpCall): a title is built from
-    // the call, so a looser match would let a shell command or a file edit that mentions ego_browser through with no
-    // card at all. Not matched → the agent's normal card below.
-    if (isServerGatedAcpCall(tc, this.egoTools)) {
-      const allow = options.find((o) => o.kind === 'allow_once') ?? options.find((o) => o.kind === 'allow_always');
-      if (allow) return { outcome: { outcome: 'selected', optionId: allow.optionId } };
-    }
-    if (this.autoApprove) return { outcome: { outcome: 'selected', optionId: pick(['allow_once', 'allow_always']) } };
+    // "allow once", else "allow always" — never a reject picked for the user: an agent offering no allow gets its card
+    const allow = options.find((o) => o.kind === 'allow_once') ?? options.find((o) => o.kind === 'allow_always');
+    // a tool this server asks about itself (ego_browser, browser_eval: spec 14.1): its card comes from the server when
+    // the call runs, so the agent's own prompt is answered with no card ("always" too: the server asks each time anyway).
+    // Only for a tool of ours this conversation was given and an exact match (the prompt's title, kind absent or other,
+    // a string script and only the tool's own keys: launcher.ts isServerGatedAcpCall): a title is built from the call,
+    // so a looser match would let a shell command or a file edit that mentions the tool through with no card at all.
+    // Full access answers the same way. Not matched → the agent's normal card below.
+    if (allow && (this.autoApprove || isServerGatedAcpCall(tc, this.webTools))) return { outcome: { outcome: 'selected', optionId: allow.optionId } };
     const requestId = randomUUID();
     const event: PermissionRequestEvent = { requestId, sessionId: this.sessionId, toolName: name, input, toolUseId: tc.toolCallId };
     return new Promise((resolve) => {

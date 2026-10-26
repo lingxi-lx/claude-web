@@ -112,6 +112,11 @@ rl.on('line', async (line) => {
           // our exact call, by its bare names
           bare: { title: 'ego_browser', rawInput: script },
           mcpname: { title: 'mcp__web__ego_browser', kind: 'other', rawInput: script },
+          // the built-in browser's browser_eval (also asked by the server); with a key it does not take
+          eval: { title: 'browser_eval (web MCP Server)', kind: 'other', rawInput: { script: 'return document.title' } },
+          evalextra: { title: 'browser_eval (web MCP Server)', kind: 'other', rawInput: { script: 'return 1', timeout_ms: 5000 } },
+          // another web tool, not asked by the server this way
+          click: { title: 'browser_click (web MCP Server)', kind: 'other', rawInput: { selector: '#go' } },
         };
         // the answers the agent offers: all three by default; 'EGO…+always' only "always" and a reject, '+reject' only rejects
         const offer = /\+(always|reject)\b/.exec(text)?.[1];

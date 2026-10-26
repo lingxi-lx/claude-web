@@ -6,7 +6,7 @@ import type { AgentKind, AttachmentRef, EffortLevel, OpenSessionParams, Permissi
 import { codexReported } from './reported-models.js';
 import { JsonRpcProcess } from './jsonrpc.js';
 import { insertCodexConfig } from '../memory/launcher.js';
-import { codexArgsGiveEgo, codexElicitationTool, insertWebCodexConfig, isCodexToolApproval, isServerGatedCodexElicitation } from '../web/launcher.js';
+import { codexElicitationTool, codexWebToolsGiven, insertWebCodexConfig, isCodexToolApproval, isServerGatedCodexElicitation, type WebToolsGiven } from '../web/launcher.js';
 import { MessageSynth } from './normalize.js';
 import { codexItemMessages, type CodexItemState } from './codex-items.js';
 import type { AgentTranscripts } from './transcript.js';
@@ -51,8 +51,8 @@ export class CodexDriver extends EventEmitter implements AgentDriver {
   private model?: string;
   private effort?: EffortLevel;
   private permissionMode: PermissionMode;
-  /** Was this conversation given our ego tools (the web server's -c overrides carry CW_WEB_BROWSER=ego)? */
-  private egoTools = false;
+  /** What this conversation was given: our web server (its -c overrides), and the ego tools with it. */
+  private webTools: WebToolsGiven = { web: false, ego: false };
   /** per-turn usage from the cumulative thread totals (cached tokens are inside Codex's inputTokens) */
   private usage = new CodexUsageMeter();
   /** Resolves once the mirror is up to date for this start (`hooks.beforeResume` ran): prompts are recorded after it. */
@@ -125,7 +125,7 @@ export class CodexDriver extends EventEmitter implements AgentDriver {
       // the shared memory store and 联网 (web search + the built-in browser), injected as `-c` overrides so
       // ~/.codex/config.toml is never touched
       const args = insertWebCodexConfig(insertCodexConfig(this.launch.args, { cwd: this.cwd, sessionId: this.sessionId, agent: this.kind }), { sessionId: this.sessionId });
-      this.egoTools = codexArgsGiveEgo(args);
+      this.webTools = codexWebToolsGiven(args);
       const rpc = new JsonRpcProcess(this.launch.command, args, { cwd: this.cwd, env: this.launch.env });
       this.rpc = rpc;
       rpc.on('exit', (code, err) => { if (!this.closed) this.setState('error', tr("Codex 退出（{code}）{v}\n{stderrTail}", { code, v: err ? ` ${err}` : '', stderrTail: rpc.stderrTail.slice(-800) })); });
@@ -249,15 +249,16 @@ export class CodexDriver extends EventEmitter implements AgentDriver {
   /**
    * `mcpServer/elicitation/request`: Codex asks before an MCP tool call this way (`_meta.codex_approval_kind =
    * mcp_tool_call`, feature tool_call_mcp_elicitation, on by default; codex-rs core/src/mcp_tool_call.rs, codex-cli
-   * 0.163) — before this handler such a request got -32601 and the call was aborted. Our web server's ego_browser is
-   * accepted with no card: the server asks on its own card when the call runs (launcher.ts
-   * isServerGatedCodexElicitation; never remembered, so it asks every time). Any other MCP tool gets the normal card,
-   * full access / don't-ask accept it as they accept a command. An MCP server's own question (not an approval) has
-   * nothing to show it in here: cancelled, as the -32601 did.
+   * 0.163) — before this handler such a request got -32601 and the call was aborted. Our web server's ego_browser /
+   * browser_eval are accepted with no card: the server asks on its own card when the call runs (launcher.ts
+   * isServerGatedCodexElicitation). Any other MCP tool gets the normal card, full access / don't-ask accept it as they
+   * accept a command. Every accept goes without `_meta.persist`: nothing is remembered on Codex's side, so the user's
+   * "always" on a card counts as once here. An MCP server's own question (not an approval) has nothing to show it in
+   * here: cancelled, as the -32601 did.
    */
   private async onElicitation(p: any) {
     if (!isCodexToolApproval(p)) return elicitationAnswer('cancel');
-    if (isServerGatedCodexElicitation(p, this.egoTools)) return elicitationAnswer('accept');
+    if (isServerGatedCodexElicitation(p, this.webTools)) return elicitationAnswer('accept');
     if (this.permissionMode === 'bypassPermissions' || this.permissionMode === 'dontAsk') return elicitationAnswer('accept');
     const requestId = randomUUID();
     const params = p._meta.tool_params;
