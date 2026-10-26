@@ -184,6 +184,13 @@ describe('dockKind / permissionTitle', () => {
     // an agent that still asks about the tool itself (its own approval): the same title as before
     expect(isEgoScriptRequest(req('mcp__web__ego_browser', { script: '1' }))).toBe(false);
   });
+  it('opening a site not on the list (op open): 「Claude 想打开 example.com（这个网站还没允许过）」; a change on a page keeps its title', () => {
+    const open = req('browser.site', { host: 'example.com', op: 'open', tool: 'browser_open' });
+    expect(permissionTitle(open)).toBe('Claude 想打开 example.com（这个网站还没允许过）');
+    expect(permissionTitle(req('browser.site', { host: 'b.example', op: 'open', tool: 'browser_tabs' }), 'Codex')).toBe('Codex 想打开 b.example（这个网站还没允许过）');
+    expect(dockStatus(open)).toBe(DOCK_STATUS.tool);
+    expect(permissionTitle(req('browser.site', { host: 'a.example', op: 'scroll', tool: 'browser_scroll' }))).toBe('Claude 想在 a.example 上操作页面');
+  });
   it('the card\'s status line: a script card (ego lite or the built-in browser) is click-only — it never says Enter allows it', () => {
     const ego = req('browser.site', { host: 'mail.example', op: 'eval', tool: 'ego_browser', eval: true, script: '1' });
     const evalCard = req('browser.site', { host: 'a.example', op: 'eval', tool: 'browser_eval', eval: true, script: '1' });

@@ -532,7 +532,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   customCss.watch();
   // 预览服务器 (preview/): dev servers from .claude/launch.json, opened in the app's browser
   const previews = new PreviewService();
-  setPreviewDeps({ service: previews, open: async (sid, url) => { await web.browser(sid, 'open', { url }); } });
+  setPreviewDeps({ service: previews, open: async (sid, url) => { await web.openPreview(sid, url); } });
   // 跨对话工具: what a conversation's sessions tools see and do (sessions-mcp/tools.ts)
   setSessionsDeps({
     list: () => library.list(),

@@ -131,10 +131,10 @@ beforeAll(async () => {
   process.env.CW_BING_URL = siteUrl;
   process.env.CW_DDG_URL = `${siteUrl}/nothing-here`;
 
-  // 允许的网站: the site the clicks below are on was allowed before (a new site asks on a card of an open
-  // conversation — this file has none: see "a page-changing tool on a new site")
+  // 允许的网站: the sites the pages below are opened / clicked on were allowed before (a new site asks on a card of an
+  // open conversation — this file has none: see "a page-changing tool on a new site"); 127.0.0.1 is the local test site
   fs.mkdirSync(process.env.CLAUDE_WEB_DIR!, { recursive: true });
-  fs.writeFileSync(path.join(process.env.CLAUDE_WEB_DIR!, 'meta.json'), JSON.stringify({ settings: { 'web.browser.allowedSites': ['app.example'] } }));
+  fs.writeFileSync(path.join(process.env.CLAUDE_WEB_DIR!, 'meta.json'), JSON.stringify({ settings: { 'web.browser.allowedSites': ['app.example', '127.0.0.1'] } }));
   const { startServer } = await import('../index.js');
   server = await startServer({ port: 0, host: '127.0.0.1', distDir: fs.mkdtempSync(path.join(home, 'dist-')), version: '0.0.0-test' });
   a = client(`ws://127.0.0.1:${server.port}/ws`);
@@ -199,6 +199,12 @@ describe('联网 through a running server', () => {
     const self = await tool(server.port, { sessionId: 's1', tool: 'browser_open', args: { url: `http://127.0.0.1:${server.port}/api/file?path=${encodeURIComponent(path.join(home, 'x'))}` } });
     expect(self.json?.isError).toBe(true);
     expect(textOf(self)).toContain('Claude Web 自己');
+    // a site not on 允许的网站 is asked about before it is fetched: no conversation to ask on here, so it is refused
+    const n = pageHits.length;
+    const other = await tool(server.port, { sessionId: 's1', tool: 'browser_open', args: { url: `http://localhost:${new URL(siteUrl).port}/page` } });
+    expect(other.json?.isError).toBe(true);
+    expect(textOf(other)).toContain('用户没有允许打开 localhost');
+    expect(pageHits).toHaveLength(n);
   });
 
   it('a window announces the browser: commands go to it alone, its answer is the tool\'s result', async () => {
@@ -364,7 +370,7 @@ describe('联网 through a running server', () => {
     expect(webAllowedTools()).toEqual([]);
     await until(() => b.events.filter((e) => e.kind === 'web.changed').length > n, 'web.changed after the switch');
     await a.req('settings.set', { key: 'web.mcp', value: true });
-    expect(webAllowedTools()).toEqual(['mcp__web__web_search', 'mcp__web__ego_browser_guide', 'mcp__web__ego_browser', 'mcp__web__browser_eval', 'mcp__web__character_guide', 'mcp__web__character_draft', 'mcp__web__character_save', 'mcp__web__character_list', 'mcp__web__theme_guide', 'mcp__web__theme_draft', 'mcp__web__theme_get', 'mcp__web__theme_save', 'mcp__web__theme_list']);
+    expect(webAllowedTools()).toEqual(['mcp__web__web_search', 'mcp__web__ego_browser_guide', 'mcp__web__ego_browser', 'mcp__web__browser_open', 'mcp__web__browser_read', 'mcp__web__browser_find', 'mcp__web__browser_click', 'mcp__web__browser_type', 'mcp__web__browser_press_key', 'mcp__web__browser_scroll', 'mcp__web__browser_back', 'mcp__web__browser_screenshot', 'mcp__web__browser_computer', 'mcp__web__browser_console', 'mcp__web__browser_network', 'mcp__web__browser_snapshot', 'mcp__web__browser_wait', 'mcp__web__browser_tabs', 'mcp__web__browser_viewport', 'mcp__web__browser_hover', 'mcp__web__browser_drag', 'mcp__web__browser_select', 'mcp__web__browser_eval', 'mcp__web__character_guide', 'mcp__web__character_draft', 'mcp__web__character_save', 'mcp__web__character_list', 'mcp__web__theme_guide', 'mcp__web__theme_draft', 'mcp__web__theme_get', 'mcp__web__theme_save', 'mcp__web__theme_list']);
   });
 
   it('an engine that challenged is left out of the next searches until a 联网 setting is saved; a list about something else is not handed on', async () => {

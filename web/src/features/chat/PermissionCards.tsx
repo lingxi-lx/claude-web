@@ -187,11 +187,12 @@ function AccessRequest({ p, agent, more, reason, onReasonUsed, note, onDenyQueue
 const SITE_OP: Record<string, () => string> = {
   click: () => tr('点击'), type: () => tr('输入文字'), key: () => tr('按键'), scroll: () => tr('滚动页面'), computer: () => tr('用鼠标键盘操作'),
   hover: () => tr('把鼠标移到元素上'), drag: () => tr('拖动'), select: () => tr('在下拉框里选择'), eval: () => tr('运行脚本'),
+  open: () => tr('打开这个网站'),
 };
 
 /**
- * 允许的网站 (server/src/web/site-gate.ts): Claude wants to change something on a page of a site that is not on the
- * list — 允许一次 / 总是允许这个网站 / 拒绝; or to run a script in the page (asked every time, on any site) —
+ * 允许的网站 (server/src/web/site-gate.ts): an agent wants to open a site that is not on the list (op open), or change
+ * something on a page of one — 允许一次 / 总是允许这个网站 / 拒绝 (a site on the list is asked nothing); or to run a script in the page (asked every time, on any site) —
  * 允许一次 / 拒绝, with the start of the script. An empty Enter allows a site once; a script only with a click.
  */
 function SiteRequest({ p, agent, more, reason, onReasonUsed, scope, note, onDenyQueued }: CardProps) {
@@ -219,14 +220,14 @@ function SiteRequest({ p, agent, more, reason, onReasonUsed, scope, note, onDeny
             <div className="pd-note">{tr('脚本能读写这个页面上的一切（包括你登录后的内容）。每次运行都会问你（完全放开时不问）。')}</div>
           </>
         ) : (
-          <div className="pd-note">{tr('点「总是允许这个网站」后，Claude 在这个网站上操作页面不再问你（设置 → 联网 → 允许的网站 里可以删掉）。')}</div>
+          <div className="pd-note">{tr('点「总是允许这个网站」后，{agent} 在这个网站上打开网页、操作页面都不再问你（设置 → 联网 → 允许的网站 里可以删掉）。', { agent })}</div>
         )}
       </div>
       <div className="pd-actions">
         <Hint hint={DOCK_HINT.tool(agent)} note={note} />
         <DenyQueued p={p} busy={busy} onDenyQueued={onDenyQueued} />
         <button className="btn" data-act="deny" disabled={busy} onClick={deny} title={reason.trim() ? tr('拒绝，并把输入框里的话告诉 {agent}', { agent }) : tr('拒绝这次操作')}>{tr('拒绝')}</button>
-        {!isEval && host && <button className="btn" data-act="always" disabled={busy} title={tr('允许，并把 {host} 加进允许的网站，之后在这个网站上操作不再询问', { host })} onClick={() => send({ behavior: 'allow', updatedInput: { allow: 'always' } })}>{tr('总是允许这个网站')}</button>}
+        {!isEval && host && <button className="btn" data-act="always" disabled={busy} title={tr('允许，并把 {host} 加进允许的网站，之后在这个网站上打开网页、操作页面都不再询问', { host })} onClick={() => send({ behavior: 'allow', updatedInput: { allow: 'always' } })}>{tr('总是允许这个网站')}</button>}
         <button className="btn primary pd-main" data-act="allow" disabled={busy} onClick={allowOnce} title={isEval ? tr('允许运行这一次（只能点这里）') : tr('允许这一次（输入框空着时按 Enter 也是）')}>{tr('允许一次')}{!isEval && <> <Enter /></>}</button>
       </div>
     </>

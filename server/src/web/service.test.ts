@@ -853,6 +853,104 @@ describe('WebService: 允许的网站 — the gate before a page is changed', ()
     web.dropConnection(w.key);
   });
 
+  it('opening a site not on the list asks once (op open) before the window loads it, in every mode but 完全放开', async () => {
+    for (const mode of [undefined, 'default', 'acceptEdits', 'plan', 'dontAsk', 'auto']) {
+      const { web, asked } = gated('once', { 'web.browser.allowedSites': ['ok.example'] }, mode);
+      const w = autoWin(web, (c) => page(String(c.args.url ?? 'https://new.example/')));
+      expect((await web.tool('conv-o1', 'browser_open', { url: 'https://New.Example/a' })).isError, String(mode)).toBeFalsy();
+      expect(asked, String(mode)).toEqual([{ sid: 'conv-o1', req: { host: 'new.example', op: 'open', tool: 'browser_open' } }]);
+      expect(w.ops(), String(mode)).toEqual(['open']); // no probe: the address is the site
+      // an allowed site, any page of it, any port: not asked
+      await web.tool('conv-o1', 'browser_open', { url: 'https://ok.example/' });
+      await web.tool('conv-o1', 'browser_open', { url: 'http://OK.example:8080/x' });
+      expect(asked, String(mode)).toHaveLength(1);
+      // 允许一次 was that one open: opening the new site again asks again
+      await web.tool('conv-o1', 'browser_open', { url: 'https://new.example/b' });
+      expect(asked, String(mode)).toHaveLength(2);
+      web.dropConnection(w.key);
+    }
+  });
+
+  it('拒绝 an open: the page is never loaded and the agent is told; 总是允许 puts the site on the list and nothing after is asked', async () => {
+    {
+      const { web, asked } = gated('deny');
+      const w = autoWin(web, (c) => page(String(c.args.url)));
+      const r = await web.tool('conv-o2', 'browser_open', { url: 'https://new.example/' });
+      expect(r.isError).toBe(true);
+      expect(textOf(r)).toContain('new.example');
+      expect(asked).toHaveLength(1);
+      expect(w.got).toEqual([]);
+      web.dropConnection(w.key);
+    }
+    const settings: Record<string, unknown> = {};
+    const { web, asked } = gated('always', settings, 'default');
+    const w = autoWin(web, (c) => page(c.op === 'open' ? String(c.args.url) : 'https://new.example/'));
+    await web.tool('conv-o3', 'browser_open', { url: 'https://new.example/' });
+    expect(settings['web.browser.allowedSites']).toEqual(['new.example']);
+    await web.tool('conv-o3', 'browser_scroll', { direction: 'down' });
+    await web.tool('conv-o3', 'browser_click', { ref: '1' });
+    await web.tool('conv-o3', 'browser_open', { url: 'https://new.example/more' });
+    expect(asked).toHaveLength(1);
+    expect(w.ops()).toEqual(['open', 'scroll', 'click', 'open']);
+    web.dropConnection(w.key);
+  });
+
+  it('a new tab with an address is an open (browser_tabs); a blank new tab, the list, switching and closing are not asked', async () => {
+    const { web, asked } = gated('deny');
+    const w = autoWin(web, () => ({ page: { url: 'about:blank', title: '', text: '' }, tabs: [{ id: 'b1', url: 'about:blank', title: '', active: true }] }));
+    const r = await web.tool('conv-o4', 'browser_tabs', { action: 'new', url: 'https://new.example/' });
+    expect(r.isError).toBe(true);
+    expect(asked).toEqual([{ sid: 'conv-o4', req: { host: 'new.example', op: 'open', tool: 'browser_tabs' } }]);
+    expect(w.got).toEqual([]);
+    await web.tool('conv-o4', 'browser_tabs', { action: 'new' });
+    await web.tool('conv-o4', 'browser_tabs', { action: 'list' });
+    await web.tool('conv-o4', 'browser_tabs', { action: 'switch', id: 'b1' });
+    await web.tool('conv-o4', 'browser_tabs', { action: 'close', id: 'b1' });
+    expect(asked).toHaveLength(1);
+    expect(w.ops()).toEqual(['tabs', 'tabs', 'tabs', 'tabs']);
+    web.dropConnection(w.key);
+  });
+
+  it('reading the page that is open never asks — on a site not on the list too', async () => {
+    const { web, asked } = gated('deny');
+    const w = autoWin(web, () => ({ ...page('https://elsewhere.example/'), matches: [], tabs: [], entries: [], shot: '' }));
+    for (const [tool, args] of [
+      ['browser_read', {}], ['browser_find', { query: 'x' }], ['browser_snapshot', {}], ['browser_screenshot', {}], ['browser_console', {}],
+      ['browser_network', {}], ['browser_wait', { text: 'x' }], ['browser_back', {}], ['browser_viewport', { preset: 'mobile' }], ['browser_computer', { action: 'screenshot' }],
+    ] as [string, Record<string, unknown>][]) await web.tool('conv-o5', tool, args);
+    expect(asked).toEqual([]);
+    web.dropConnection(w.key);
+  });
+
+  it('no window (this server reads the page): opening a site not on the list is asked about too; 拒绝 fetches nothing', async () => {
+    const hits: string[] = [];
+    const fetchImpl = (async (u: any) => { hits.push(String(u)); return new Response('<title>T</title><p>hello</p>', { status: 200, headers: { 'content-type': 'text/html' } }); }) as unknown as typeof fetch;
+    const asked: Asked[] = [];
+    const { web } = make({ fetch: fetchImpl, lookup: async () => ['93.184.216.34'], gate: { ask: async (sid, req) => { asked.push({ sid, req }); return 'deny'; }, mode: () => 'default' } });
+    const r = await web.tool('conv-o6', 'browser_open', { url: 'https://new.example/' });
+    expect(r.isError).toBe(true);
+    expect(asked).toEqual([{ sid: 'conv-o6', req: { host: 'new.example', op: 'open', tool: 'browser_open' } }]);
+    expect(hits).toEqual([]);
+  });
+
+  it('the app opening its own preview server (openPreview: launch.json, not an address the model chose) asks nothing', async () => {
+    const { web, asked } = gated('deny');
+    const w = autoWin(web, (c) => page(String(c.args.url)));
+    await web.openPreview('conv-o7', 'http://localhost:5173/');
+    expect(asked).toEqual([]);
+    expect(w.got.map((c) => [c.op, c.args.url])).toEqual([['open', 'http://localhost:5173/']]);
+    // the model opening the same address: asked like any site not on the list
+    expect((await web.tool('conv-o7', 'browser_open', { url: 'http://localhost:5173/' })).isError).toBe(true);
+    expect(asked).toHaveLength(1);
+    // launch.json's url may name any address (and the model can write that file): off this computer, asked like any open
+    await expect(web.openPreview('conv-o7', 'https://elsewhere.example/')).rejects.toThrow(/elsewhere\.example/);
+    expect(asked).toHaveLength(2);
+    expect(asked[1].req).toEqual({ host: 'elsewhere.example', op: 'open', tool: 'browser_open' });
+    await web.openPreview('conv-o7', 'http://127.0.0.1:3000/');
+    expect(asked).toHaveLength(2);
+    web.dropConnection(w.key);
+  });
+
   /** The fire-and-forget write of a 完全放开 site has landed. */
   const settled = async (cond: () => boolean) => { for (let i = 0; i < 100 && !cond(); i++) await tick(); };
   const AUTO = 'web.browser.allowedSitesAuto';

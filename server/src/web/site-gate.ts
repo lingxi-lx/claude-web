@@ -17,7 +17,15 @@ import type { BrowserOp, PermissionMode, PermissionRequestEvent, PermissionRespo
  * site it changes a page on or opens goes on the list by itself, marked as such (autoAllowHost below), so the other
  * modes are not asked about it afterwards. Every other mode is asked as above.
  *
- * Reading (open / read / find / snapshot / screenshot / console / network / tabs, wait, back, viewport) is never asked.
+ * Opening a site (OPENING_OP: browser_open, a new tab with an address) is asked about the same way, once, before the
+ * page is loaded — the list is the only authority for the built-in browser (the user's decision, 2026-10-27, spec
+ * 14.4): every browser tool is pre-allowed for the agents (launcher.ts SERVER_GATED), so a site on the list is asked
+ * nothing at all and a site not on it is asked once, by this card.
+ *
+ * Reading the page that is open (read / find / snapshot / screenshot / console / network / tabs list / switch, wait,
+ * back, viewport) is never asked: its site was allowed, or answered, when it was opened. A page reached without an
+ * open (a link a click followed, a redirect, the page's own script, back) is not asked about on arrival; the first
+ * change on it is (the window reports where the tab really is).
  */
 
 export const ALLOWED_SITES_KEY = 'web.browser.allowedSites';
@@ -30,6 +38,12 @@ export const SCRIPT_PREVIEW_CHARS = 400;
 
 /** Ops that change the page: asked about on a new site. */
 export const MUTATING_OPS: ReadonlySet<BrowserOp> = new Set<BrowserOp>(['click', 'type', 'key', 'scroll', 'computer', 'hover', 'drag', 'select', 'eval']);
+/**
+ * Loading a site the model named (browser_open; browser_tabs new with an address): asked about on a site not on the
+ * list, before the window loads it. Not a MUTATING_OP: those are checked against the page that is open (the window's
+ * own `site` check); an open is checked against the address it is about to load.
+ */
+export const OPENING_OP: BrowserOp = 'open';
 
 /** A host as compared: lower case, no trailing dot, no port, no IPv6 brackets. '' when there is none. */
 export function normHost(h: string | undefined | null): string {
@@ -107,12 +121,13 @@ export function autoAllowHost(op: BrowserOp, url: string | undefined, mode: Perm
 
 /**
  * Must the user be asked before `op` on a page of `host`? Never in 「完全放开」 (bypassPermissions). Otherwise
- * `eval`: every time (a script, whatever the site); `site`: a page-changing op on a site not on the list; `no`.
+ * `eval`: every time (a script, whatever the site); `site`: a page-changing op, or opening a site (OPENING_OP, `host`
+ * = the address's), on a site not on the list; `no`.
  */
 export function needsAsk(op: BrowserOp, host: string | undefined, o: { list: readonly unknown[]; mode?: PermissionMode }): 'no' | 'site' | 'eval' {
   if (o.mode === 'bypassPermissions') return 'no';
   if (op === 'eval') return 'eval';
-  if (!MUTATING_OPS.has(op)) return 'no';
+  if (!MUTATING_OPS.has(op) && op !== OPENING_OP) return 'no';
   if (host && siteAllowed(host, o.list)) return 'no';
   return 'site';
 }

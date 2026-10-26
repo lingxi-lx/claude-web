@@ -9,7 +9,10 @@ import { accessTitle, computerToolLabel, computerToolOf, isAccessRequest } from 
 import { tr } from '@/i18n';
 import { DOCK_PLACEHOLDER, DOCK_STATUS, DOCK_STATUS_CLICK } from '@/ui/terms';
 
-/** 允许的网站 (server/src/web/site-gate.ts SITE_TOOL): the built-in browser asks before Claude changes a page of a new site, and before every script. */
+/**
+ * 允许的网站 (server/src/web/site-gate.ts SITE_TOOL): the built-in browser asks before an agent opens a site not on the
+ * list or changes a page of one (op 'open' / click / type …), and before every script. A site on the list: nothing.
+ */
 export const SITE_TOOL = 'browser.site';
 
 /**
@@ -162,6 +165,8 @@ export function permissionTitle(asked: Pick<PermissionRequestEvent, 'toolName' |
       const host = String(inp.host ?? '');
       if (isEgoScriptRequest(p)) return host ? tr('{agent} 想在 ego lite 里运行一段脚本（{h}）', { agent, h: host }) : tr('{agent} 想在 ego lite 里运行一段脚本', { agent });
       if (inp.eval === true) return host ? tr('{agent} 想在 {host} 上运行一段脚本', { agent, host }) : tr('{agent} 想在页面上运行一段脚本', { agent });
+      // opening a site not on 允许的网站 (browser_open, a new tab with an address): asked before the page is loaded
+      if (inp.op === 'open' && host) return tr('{agent} 想打开 {host}（这个网站还没允许过）', { agent, host });
       return host ? tr('{agent} 想在 {host} 上操作页面', { agent, host }) : tr('{agent} 想在页面上操作', { agent });
     }
   }

@@ -154,7 +154,7 @@ export function WebSettings() {
           <Select className="field" aria-label={tr('保留 Cookie')} data-id="web-cookies" value={cookieMode} onValueChange={(value) => void set(COOKIES_KEY, String(value))} options={COOKIE_MODES.map((m) => ({ value: m, label: cookieModeText(m).label }))} />
         </Row>
         {/* the site card's 「设置 → 联网 → 允许的网站 里可以删掉」 points here (PermissionCards.tsx) */}
-        <Row label={tr('允许的网站')} hint={sites.length ? tr('Claude 在这 {n} 个网站上操作页面不再先问你。', { n: sites.length }) : tr('在权限卡上点「总是允许这个网站」的网站会列在这里。')}>
+        <Row label={tr('允许的网站')} hint={sites.length ? tr('Agent 在内置浏览器里打开这 {n} 个网站、在上面操作页面都不再问你；别的网站第一次打开或操作时问一次。', { n: sites.length }) : tr('在权限卡上点「总是允许这个网站」的网站会列在这里。')}>
           <button className="btn sm" data-id="web-allowed-sites" onClick={() => setSitesOpen(true)}>{tr('管理…')}</button>
         </Row>
         {sitesOpen && <AllowedSites onClose={() => setSitesOpen(false)} />}

@@ -1,5 +1,5 @@
-// 管理允许的网站… (stage B task 4): the sites where Claude's changes to a page (click, type, fill in) do not ask
-// first. Entries are added from the permission card's 总是允许这个网站, and — in 「完全放开」 — by the server itself
+// 管理允许的网站… (stage B task 4): the sites where an agent opening a page, or changing one (click, type, fill in),
+// asks nothing — the list is the only authority for the built-in browser (2026-10-27, spec 14.4). Entries are added from the permission card's 总是允许这个网站, and — in 「完全放开」 — by the server itself
 // for every site the built-in browser works on (spec 14.4, last bullet), marked in ALLOWED_SITES_AUTO_KEY so the
 // list can say so (the server's gate reads the same settings: server/src/web/site-gate.ts); here they are only
 // listed and removed (on the server: web.allowedSites.remove, on the same write queue as its own adds).
@@ -71,7 +71,7 @@ export function AllowedSites({ onClose }: { onClose: () => void }) {
     <div className="modal-bg dialog-bg" onMouseDown={(e) => e.target === e.currentTarget && onClose()} onKeyDown={(e) => { if (e.key === 'Escape' && !imeComposing(e.nativeEvent)) { e.stopPropagation(); onClose(); } else trapTab(e, box.current); }}>
       <div ref={box} className="modal dialog bw-allowed" role="dialog" aria-modal="true" aria-label={tr('允许的网站')} data-id="allowed-sites">
         <h3>{tr('允许的网站')}</h3>
-        <p className="sub">{tr('Claude 在这些网站上点击、输入、填表时不再先问你；让它在页面里运行脚本仍然每次都问（完全放开时不问）。「*.」开头的包括它的子域名。')}</p>
+        <p className="sub">{tr('在内置浏览器里，Agent 打开这些网站、在上面点击、输入、填表都不再问你；不在这里的网站，第一次打开或操作时问你一次。在页面里运行脚本仍然每次都问。完全放开时都不问。「*.」开头的包括它的子域名。')}</p>
         <p className="sub">{tr('完全放开时 Claude 打开或操作过的网站会自动加入这里。')}</p>
         <AllowedSitesList sites={sites} auto={auto} onRemove={remove} />
         <div className="actions">

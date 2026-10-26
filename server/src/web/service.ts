@@ -8,7 +8,7 @@ import { BROWSER_TIMEOUT_MS, ENGINES, engineSetting, search, type BrowserSearch,
 import { htmlToText } from './html-text.js';
 import { resolvedRefusal, urlRefusal } from './url-guard.js';
 import { ACTION_CHARS, DEFAULT_CHARS, SEARCH_FAILED_HINT, clampChars, errorResult, formatConsole, formatFind, formatNetwork, formatPage, formatEval, formatSearch, formatSnapshot, formatTabs, textResult, type ToolResult } from './format.js';
-import { ALLOWED_SITES_AUTO_KEY, ALLOWED_SITES_KEY, EGO_SCRIPT_TOOL, MUTATING_OPS, allowedSitesOf, autoAllowHost, autoSitesOf, hostOfUrl, needsAsk, normHost, scriptHost, siteAllowed, type SiteAnswer, type SiteRequest } from './site-gate.js';
+import { ALLOWED_SITES_AUTO_KEY, ALLOWED_SITES_KEY, EGO_SCRIPT_TOOL, MUTATING_OPS, OPENING_OP, allowedSitesOf, autoAllowHost, autoSitesOf, hostOfUrl, needsAsk, normHost, scriptHost, siteAllowed, type SiteAnswer, type SiteRequest } from './site-gate.js';
 import { tr } from '../i18n/index.js';
 
 /**
@@ -42,6 +42,8 @@ export function maskWebSettings<T extends Record<string, unknown>>(settings: T):
 export const BROWSER_OPS: readonly BrowserOp[] = ['open', 'read', 'find', 'click', 'type', 'key', 'scroll', 'back', 'screenshot', 'computer', 'console', 'network', 'snapshot', 'wait', 'tabs', 'viewport', 'hover', 'drag', 'select', 'eval'];
 /** Ops this server can do by itself (fetch + text) when no window hosts the browser. */
 const READ_ONLY_OPS = new Set<BrowserOp>(['open', 'read', 'find']);
+/** A host on this computer (a dev server): localhost, *.localhost, 127.0.0.0/8, ::1. */
+const isLoopbackHost = (h: string) => h === 'localhost' || h.endsWith('.localhost') || h === '::1' || (net.isIPv4(h) && h.startsWith('127.'));
 
 const OP_TOOL: Record<BrowserOp, string> = { open: 'browser_open', read: 'browser_read', find: 'browser_find', click: 'browser_click', type: 'browser_type', key: 'browser_press_key', scroll: 'browser_scroll', back: 'browser_back', screenshot: 'browser_screenshot', search: 'web_search', computer: 'browser_computer', console: 'browser_console', network: 'browser_network', snapshot: 'browser_snapshot', wait: 'browser_wait', tabs: 'browser_tabs', viewport: 'browser_viewport', hover: 'browser_hover', drag: 'browser_drag', select: 'browser_select', eval: 'browser_eval' };
 export const NEEDS_DESKTOP = tr('这个操作需要桌面版 Claude Web 的内置浏览器（现在没有桌面窗口连着）。');
@@ -302,11 +304,32 @@ export class WebService extends EventEmitter {
    * tool call went away (the turn was stopped) — a page-changing op stops waiting on its card (withdrawn) and its window.
    */
   async browser(sessionId: string, op: BrowserOp, args: Record<string, unknown> = {}, signal?: AbortSignal): Promise<BrowserAnswer> {
+    return this.browse(sessionId, op, args, signal, false);
+  }
+
+  /**
+   * The app opening a preview server it started (preview/: a dev server from the project's .claude/launch.json) in the
+   * conversation's tab: not asked about when it is on this computer (localhost / 127.x / ::1). launch.json's `url` may
+   * name any address, and the model can write that file: anything else is asked about like browser_open.
+   */
+  async openPreview(sessionId: string, url: string): Promise<BrowserAnswer> {
+    return this.browse(sessionId, 'open', { url }, undefined, isLoopbackHost(hostOfUrl(url)));
+  }
+
+  private async browse(sessionId: string, op: BrowserOp, args: Record<string, unknown>, signal: AbortSignal | undefined, preview: boolean): Promise<BrowserAnswer> {
     if (!BROWSER_OPS.includes(op)) throw new Error(`unknown browser operation ${String(op)}`);
-    if (op === 'open') {
-      const why = urlRefusal(String(args.url ?? ''), { reach: 'browser' });
+    // the address a new page is loaded from: browser_open's, or a new tab's (browser_tabs new with a url)
+    const opening = op === 'open' ? String(args.url ?? '') : op === 'tabs' && args.action === 'new' && args.url ? String(args.url) : undefined;
+    if (opening !== undefined) {
+      const why = urlRefusal(opening, { reach: 'browser' });
       if (why) throw new Error(why);
     }
+    // 允许的网站 (spec 14.4, 2026-10-27): a site not on the list is asked about before it is loaded — with a window or
+    // without one (this server fetching it) — the mode read once, as for a change on a page
+    // (no gate — tests, a server without conversations — or the app's own preview: nothing to wait for)
+    const mode = opening === undefined || !this.d.gate ? undefined
+      : preview ? this.d.gate.mode(sessionId)
+      : await this.openGate(sessionId, op === 'tabs' ? 'browser_tabs' : 'browser_open', opening, signal);
     const host = this.currentHost();
     if (host && this.d.gate && MUTATING_OPS.has(op)) return this.gated(host, sessionId, op, args, signal);
     if (host && op === 'tabs') {
@@ -314,14 +337,14 @@ export class WebService extends EventEmitter {
       try {
         const a = await this.command(host, sessionId, op, args);
         // a page opened in a new tab: where it landed (as for browser_open), else the address asked for
-        if (args.action === 'new' && args.url) this.autoAllow(sessionId, 'open', a.page?.url || String(args.url));
+        if (opening !== undefined) this.autoAllow(sessionId, 'open', a.page?.url || opening, mode);
         return a;
       } finally { this.lastUrl.delete(sessionId); }
     }
     if (host) {
       const a = this.seen(sessionId, await this.command(host, sessionId, op, args));
       // 完全放开: the site a page was opened on (where it landed) goes on 允许的网站
-      if (op === 'open') this.autoAllow(sessionId, op, a.page?.url || String(args.url ?? ''));
+      if (op === 'open') this.autoAllow(sessionId, op, a.page?.url || String(args.url ?? ''), mode);
       return a;
     }
     if (!READ_ONLY_OPS.has(op)) throw new Error(needsDesktop(op));
@@ -342,6 +365,25 @@ export class WebService extends EventEmitter {
       for (const k of this.lastUrl.keys()) { if (this.lastUrl.size <= MAX_KEPT_PAGES * 4) break; this.lastUrl.delete(k); }
     }
     return a;
+  }
+
+  /**
+   * Opening `url` (OPENING_OP) under 允许的网站: a site not on the list is asked about once, before the page is loaded
+   * (允许一次: this open; 总是允许: on the list; 拒绝: never loaded). A site on the list, 完全放开, or no gate: nothing
+   * asked. Returns the mode it was judged in (完全放开's auto-add goes by the same one).
+   */
+  private async openGate(sessionId: string, tool: 'browser_open' | 'browser_tabs', url: string, signal?: AbortSignal): Promise<PermissionMode | undefined> {
+    const gate = this.d.gate;
+    if (!gate) return undefined;
+    const mode = gate.mode(sessionId);
+    const site = hostOfUrl(url);
+    if (needsAsk(OPENING_OP, site, { list: allowedSitesOf(this.d.settings()), mode }) === 'no') return mode;
+    // urlRefusal let only http(s) addresses with a host through: one without has no site to ask about, so it is not opened
+    if (!site) throw new Error(tr('只能打开 http / https 地址：{url}', { url: url.slice(0, 200) }));
+    const answer = await gate.ask(sessionId, { host: site, op: OPENING_OP, tool }, signal);
+    if (answer === 'deny') throw new Error(tr('用户没有允许打开 {site}（{tool}）。不要再试，除非用户要求。', { site, tool }));
+    if (answer === 'always') this.allowSite(site).catch((e) => console.warn(`[web] could not save ${site} on the allowed sites: ${(e as Error)?.message ?? e}`));
+    return mode;
   }
 
   /**

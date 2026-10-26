@@ -250,6 +250,10 @@ describe('the tool list', () => {
   it('a call that may wait for the user (a page-changing tool) gets a longer timeout than a read', () => {
     expect(callTimeoutOf('browser_click')).toBeGreaterThan(SITE_ASK_TIMEOUT_MS);
     expect(callTimeoutOf('browser_eval')).toBeGreaterThan(SITE_ASK_TIMEOUT_MS);
+    // opening a site not on the list waits on its card too
+    expect(callTimeoutOf('browser_open')).toBeGreaterThan(SITE_ASK_TIMEOUT_MS);
+    expect(callTimeoutOf('browser_tabs')).toBeGreaterThan(SITE_ASK_TIMEOUT_MS);
+    expect(TOOLS.find((t) => t.name === 'browser_open')!.description).toMatch(/not on the user's allowed sites/);
     expect(callTimeoutOf('browser_read')).toBe(90_000);
   });
 });

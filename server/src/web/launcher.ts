@@ -28,21 +28,53 @@ export const EGO_GUIDE_TOOL = 'mcp__web__ego_browser_guide';
  */
 export const EGO_TOOL = 'mcp__web__ego_browser';
 /**
- * The tools this server asks the user about itself, every call, for every agent, except in 完全放开 (site-gate.ts
- * needsAsk: `eval` is asked before the allow-list is looked at; service.ts sends every page-changing op through the
- * gate, and without a hosting window browser_eval fails; an unanswered card is a deny). An agent's own prompt for one
- * is therefore answered without a card (Claude: in allowedTools; ACP: AcpDriver.onPermission; Codex:
- * CodexDriver.onElicitation), so there is one card, the server's.
- * Per tool: the argument keys it takes (a call carrying anything else is not ours; `script` is required, a string)
- * and whether it exists only with the ego tools (CW_WEB_BROWSER=ego).
- * Not click / type / key / scroll …: those are asked only on a site not on the allow-list, so the agent's own prompt
- * is the only one there is for the rest.
+ * The tools whose only card is this server's own, for every agent (an unanswered card is a deny):
+ * - ego_browser and browser_eval: a script, asked every time except in 完全放开 (site-gate.ts needsAsk `eval`);
+ * - every other built-in browser tool: 允许的网站 is the only authority (the user's decision, 2026-10-27, spec 14.4) —
+ *   opening a site not on the list (browser_open, browser_tabs new with an address) and changing a page of one
+ *   (click / type / key / scroll / computer / hover / drag / select) is asked once on the server's site card, a site
+ *   on the list is asked nothing; reading the page that is open (read / find / snapshot / screenshot / console /
+ *   network / wait / back / viewport / tabs list / switch / close) is asked nothing (service.ts browse / gated).
+ * An agent's own prompt for one is therefore answered without a card (Claude: in allowedTools; ACP:
+ * AcpDriver.onPermission; Codex: CodexDriver.onElicitation), so there is at most one card, the server's.
+ * Per tool, from its inputSchema in mcp.ts (launcher.test.ts checks they match): the argument keys it takes (a call
+ * carrying anything else is not ours), the ones it requires (a script tool's `script` must be a string), and whether
+ * it exists only with the ego tools (CW_WEB_BROWSER=ego).
+ * Not web_search (pre-allowed on its own, WEB_SEARCH_TOOL), not the guides, not the tools that change the user's
+ * settings (character_assign, theme_apply, theme_delete: the agent's own card is the one there is).
  */
-const SERVER_GATED: ReadonlyMap<string, { keys: ReadonlySet<string>; needsEgo: boolean }> = new Map([
-  ['ego_browser', { keys: new Set(['script', 'timeout_ms']), needsEgo: true }],
-  ['browser_eval', { keys: new Set(['script']), needsEgo: false }],
+interface GatedShape { keys: ReadonlySet<string>; required: readonly string[]; script: boolean; needsEgo: boolean }
+const shape = (keys: string[], required: string[] = [], o: { script?: boolean; needsEgo?: boolean } = {}): GatedShape =>
+  ({ keys: new Set(keys), required, script: !!o.script, needsEgo: !!o.needsEgo });
+const SERVER_GATED: ReadonlyMap<string, GatedShape> = new Map([
+  ['ego_browser', shape(['script', 'timeout_ms'], ['script'], { script: true, needsEgo: true })],
+  ['browser_open', shape(['url'], ['url'])],
+  ['browser_read', shape(['offset', 'max_chars'])],
+  ['browser_find', shape(['query'], ['query'])],
+  ['browser_click', shape(['ref'], ['ref'])],
+  ['browser_type', shape(['ref', 'text', 'submit'], ['ref', 'text'])],
+  ['browser_press_key', shape(['key'], ['key'])],
+  ['browser_scroll', shape(['direction', 'amount'], ['direction'])],
+  ['browser_back', shape([])],
+  ['browser_screenshot', shape([])],
+  ['browser_computer', shape(['action', 'coordinate', 'start_coordinate', 'text', 'scroll_direction', 'scroll_amount', 'duration'], ['action'])],
+  ['browser_console', shape(['errors_only'])],
+  ['browser_network', shape(['failed_only'])],
+  ['browser_snapshot', shape([])],
+  ['browser_wait', shape(['text', 'ref', 'timeoutMs'])],
+  ['browser_tabs', shape(['action', 'id', 'url'], ['action'])],
+  ['browser_viewport', shape(['preset'], ['preset'])],
+  ['browser_hover', shape(['ref'], ['ref'])],
+  ['browser_drag', shape(['from', 'to'], ['from', 'to'])],
+  ['browser_select', shape(['ref', 'value'], ['ref', 'value'])],
+  ['browser_eval', shape(['script'], ['script'], { script: true })],
 ]);
 export const SERVER_GATED_TOOLS: readonly string[] = [...SERVER_GATED.keys()].map((t) => `mcp__web__${t}`);
+/** A server-gated tool's argument keys and required ones (tests compare them with mcp.ts); undefined for any other name. */
+export function serverGatedArgs(tool: string): { keys: string[]; required: string[] } | undefined {
+  const s = SERVER_GATED.has(tool) ? SERVER_GATED.get(tool)! : undefined;
+  return s && { keys: [...s.keys], required: [...s.required] };
+}
 /**
  * The exact names an agent gives one of those tools: our MCP name, the bare tool name, or the ACP title
  * `<tool> (web MCP Server)` (Gemini-style). Anchored and exact on purpose: an ACP title is built from the call
@@ -66,10 +98,16 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   const proto = Object.getPrototypeOf(v);
   return proto === Object.prototype || proto === null;
 }
-/** Arguments shaped like `tool`'s: a plain object with a string `script` and no keys the tool does not take. */
+/**
+ * Arguments shaped like `tool`'s: a plain object with no keys the tool does not take and every key it requires (a
+ * script tool's `script` a string). What the values say is never looked at: the server checks and asks.
+ */
 function isGatedArgs(tool: string, v: unknown): boolean {
-  const keys = SERVER_GATED.get(tool)?.keys;
-  return !!keys && isPlainObject(v) && typeof v.script === 'string' && Object.keys(v).every((k) => keys.has(k));
+  const s = SERVER_GATED.has(tool) ? SERVER_GATED.get(tool) : undefined;
+  if (!s || !isPlainObject(v)) return false;
+  if (!Object.keys(v).every((k) => s.keys.has(k))) return false;
+  if (!s.required.every((k) => Object.prototype.hasOwnProperty.call(v, k) && v[k] !== undefined && v[k] !== null)) return false;
+  return !s.script || typeof v.script === 'string';
 }
 /**
  * What a conversation was handed: our `web` server (`web`), and with it the ego tools (`ego`: started with
@@ -84,9 +122,12 @@ function hasGated(tool: string, given: WebToolsGiven): boolean {
  * May an ACP agent's permission prompt be answered without a card, because the server asks on its own card when the
  * call runs? Only for one of our server-gated tools that this conversation was given (`given`), by its exact name (the
  * prompt's own title — not the name we derived for the call: mapToolName turns spaces into _, so 'ego browser' would
- * become ego_browser), its kind absent or `other` (never execute / edit / delete / move / fetch / read …), and its raw
- * input there, a plain object with a string `script` and no keys the tool does not take. What the script says is
- * never looked at (the server's card shows it). Anything else gets the agent's card.
+ * become ego_browser), its kind absent or `other` (never execute / edit / delete / move / fetch / read …: Gemini-style
+ * agents register every MCP tool as kind other; fetch / read are the kinds of the agent's OWN web-fetch / file tools,
+ * whose titles it builds — one named like ours must not slip through, it costs only an extra card if an agent ever
+ * labels ours that way), and its raw input there, a plain object with only the tool's own keys and the ones it
+ * requires (isGatedArgs). What the values say is never looked at (the server checks and asks). Anything else gets
+ * the agent's card.
  */
 export function isServerGatedAcpCall(tc: { title?: unknown; kind?: unknown; rawInput?: unknown }, given: WebToolsGiven): boolean {
   const tool = serverGatedToolOf(tc.title);

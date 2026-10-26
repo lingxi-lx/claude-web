@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BrowserOp, PermissionMode, PermissionRequestEvent } from '../protocol.js';
-import { ALLOWED_SITES_AUTO_KEY, MUTATING_OPS, SCRIPT_PREVIEW_CHARS, SITE_TOOL, SiteAsk, allowedSitesOf, autoAllowHost, autoSitesOf, hostOfUrl, needsAsk, normHost, scriptHost, siteAllowed, siteAnswerOf } from './site-gate.js';
+import { ALLOWED_SITES_AUTO_KEY, MUTATING_OPS, OPENING_OP, SCRIPT_PREVIEW_CHARS, SITE_TOOL, SiteAsk, allowedSitesOf, autoAllowHost, autoSitesOf, hostOfUrl, needsAsk, normHost, scriptHost, siteAllowed, siteAnswerOf } from './site-gate.js';
 
 const tick = (ms = 5) => new Promise((r) => setTimeout(r, ms));
 
@@ -90,10 +90,23 @@ describe('needsAsk: when the user is asked', () => {
     }
   });
 
-  it('reading never asks', () => {
-    for (const op of ['open', 'read', 'find', 'snapshot', 'screenshot', 'console', 'network', 'tabs', 'wait', 'back', 'viewport', 'search'] as BrowserOp[]) {
+  it('reading the page that is open never asks (its site was allowed or answered when it was opened)', () => {
+    for (const op of ['read', 'find', 'snapshot', 'screenshot', 'console', 'network', 'tabs', 'wait', 'back', 'viewport', 'search'] as BrowserOp[]) {
       expect(needsAsk(op, 'new.com', { list: [] })).toBe('no');
     }
+  });
+
+  it('opening a site (op open: browser_open, a new tab with an address) is asked about once on a site not on the list, in every mode but 完全放开', () => {
+    expect(OPENING_OP).toBe('open');
+    expect(MUTATING_OPS.has('open')).toBe(false); // the window's own check is about the page that is open; opening is checked before it
+    for (const mode of [undefined, 'default', 'acceptEdits', 'plan', 'dontAsk', 'auto'] as (PermissionMode | undefined)[]) {
+      expect(needsAsk('open', 'new.com', { list, mode }), String(mode)).toBe('site');
+      expect(needsAsk('open', 'allowed.com', { list, mode }), String(mode)).toBe('no');
+      expect(needsAsk('open', 'www.allowed.com', { list, mode }), String(mode)).toBe('site'); // a bare entry is that host only
+      expect(needsAsk('open', 'www.allowed.com', { list: ['*.allowed.com'], mode }), String(mode)).toBe('no');
+      expect(needsAsk('open', 'allowed.com.evil.net', { list, mode }), String(mode)).toBe('site');
+    }
+    expect(needsAsk('open', 'new.com', { list: [], mode: 'bypassPermissions' })).toBe('no');
   });
 
   it('完全放开 (bypassPermissions): no site is asked about; other modes still ask', () => {

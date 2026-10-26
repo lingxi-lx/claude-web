@@ -25,11 +25,12 @@ const PROTOCOL_VERSION = '2025-06-18';
 /** Longer than the server's own bounds (30 s for the browser, a few engines × 15 s for a search). */
 const CALL_TIMEOUT_MS = 90_000;
 /**
- * A tool that changes a page may first wait for the user's answer on a card (允许的网站: a new site; a script every
- * time — the server waits up to 4 minutes, web/site-gate.ts SITE_ASK_TIMEOUT_MS), then do its 30 s of work.
+ * A tool that opens a site or changes a page may first wait for the user's answer on a card (允许的网站: a site not on
+ * the list; a script every time — the server waits up to 4 minutes, web/site-gate.ts SITE_ASK_TIMEOUT_MS), then do
+ * its 30 s of work. browser_tabs opens a site when it makes a new tab with an address.
  */
 const ASK_CALL_TIMEOUT_MS = 6 * 60_000;
-const ASKING_TOOLS = new Set(['browser_click', 'browser_type', 'browser_press_key', 'browser_scroll', 'browser_computer', 'browser_hover', 'browser_drag', 'browser_select', 'browser_eval']);
+const ASKING_TOOLS = new Set(['browser_open', 'browser_tabs', 'browser_click', 'browser_type', 'browser_press_key', 'browser_scroll', 'browser_computer', 'browser_hover', 'browser_drag', 'browser_select', 'browser_eval']);
 export const callTimeoutOf = (tool: string, args: Record<string, unknown> = {}): number => {
   // ego_browser: the script's own limit (web/ego.ts clamps it the same way) plus room for the permission card
   if (tool === 'ego_browser') return Math.min(Math.max(typeof args.timeout_ms === 'number' ? args.timeout_ms : 120_000, 5_000), 600_000) + 120_000;
@@ -62,7 +63,7 @@ export const TOOLS = [
     name: 'browser_open',
     title: 'Open a web page',
     description:
-      'Open an http(s) URL and read it. Returns the page title, the start of its text (use browser_read with an offset for the rest), and the elements you can act on, each with a ref. In the desktop app the page opens in the built-in browser, where the user sees it and may already be signed in; without the desktop app the page is fetched and converted to text, which is enough for reading articles and documentation but cannot run scripts. Works for a local dev server (http://localhost:3000) too.',
+      'Open an http(s) URL and read it. Returns the page title, the start of its text (use browser_read with an offset for the rest), and the elements you can act on, each with a ref. In the desktop app the page opens in the built-in browser, where the user sees it and may already be signed in; without the desktop app the page is fetched and converted to text, which is enough for reading articles and documentation but cannot run scripts. Works for a local dev server (http://localhost:3000) too. A site that is not on the user\'s allowed sites is asked about first (once; the user may allow it from then on); if the user declines, do not retry unless the user asks.',
     inputSchema: { type: 'object', properties: { url: { type: 'string', description: 'The full address, starting with http:// or https://.' } }, required: ['url'] },
     annotations: { title: 'Open a web page', readOnlyHint: false, destructiveHint: false, openWorldHint: true },
   },
@@ -206,7 +207,7 @@ export const TOOLS = [
     name: 'browser_tabs',
     title: 'Your browser tabs',
     description:
-      'Manage the tabs you opened in the built-in browser for this conversation (never the user\'s own tabs): "list" them, "switch" the one the other browser tools work in (by id), open a "new" one (optionally with an http(s) url), or "close" one (by id; default the current one). Needs the built-in browser of the desktop app.',
+      'Manage the tabs you opened in the built-in browser for this conversation (never the user\'s own tabs): "list" them, "switch" the one the other browser tools work in (by id), open a "new" one (optionally with an http(s) url), or "close" one (by id; default the current one). A new tab\'s address is asked about like browser_open\'s when its site is not on the user\'s allowed sites. Needs the built-in browser of the desktop app.',
     inputSchema: {
       type: 'object',
       properties: {
