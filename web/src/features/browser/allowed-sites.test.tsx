@@ -1,8 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-vi.mock('@/store', () => ({ useStore: () => undefined }));
-vi.mock('@/ws/client', () => ({ ws: { request: async () => ({}) } }));
-import { ALLOWED_SITES_AUTO_KEY, AllowedSitesList, readSites, withoutSite } from './AllowedSites';
+const m = vi.hoisted(() => {
+  const state: { settings: Record<string, unknown> } = { settings: {} };
+  const useStore = Object.assign(() => undefined, { setState: (f: (s: typeof state) => Partial<typeof state>) => Object.assign(state, f(state)) });
+  const sent: unknown[] = [];
+  let reply: unknown = {};
+  return { state, useStore, sent, setReply: (r: unknown) => { reply = r; }, request: async (r: unknown) => { sent.push(r); return reply; } };
+});
+vi.mock('@/store', () => ({ useStore: m.useStore }));
+vi.mock('@/ws/client', () => ({ ws: { request: m.request } }));
+import { ALLOWED_SITES_AUTO_KEY, ALLOWED_SITES_KEY, AllowedSitesList, readSites, removeAllowedSite } from './AllowedSites';
 
 describe('允许的网站: the sites 完全放开 added are marked', () => {
   it('the key is the server\'s (site-gate.ts ALLOWED_SITES_AUTO_KEY)', () => {
@@ -22,10 +29,16 @@ describe('允许的网站: the sites 完全放开 added are marked', () => {
     expect(h).not.toContain('gone.example');
   });
 
-  it('removing a site takes it off the list and its mark off too (the rest untouched); no marks left is no key', () => {
-    expect(withoutSite(['a.example', 'shop.example', 'b.example'], ['shop.example', 'b.example'], 'shop.example')).toEqual({ sites: ['a.example', 'b.example'], auto: ['b.example'] });
-    expect(withoutSite(['a.example', 'shop.example'], ['shop.example'], 'shop.example')).toEqual({ sites: ['a.example'], auto: undefined });
-    expect(withoutSite(['a.example'], [], 'a.example')).toEqual({ sites: [], auto: undefined });
+  it('removing a site asks the server to (one entry, done there with its mark), and the store takes the lists it answers', async () => {
+    m.state.settings = { [ALLOWED_SITES_KEY]: ['a.example', 'shop.example'], [ALLOWED_SITES_AUTO_KEY]: ['shop.example'], other: 1 };
+    m.setReply({ sites: ['a.example', 'new.example'], auto: ['new.example'] });
+    await removeAllowedSite('shop.example');
+    expect(m.sent.at(-1)).toEqual({ kind: 'web.allowedSites.remove', host: 'shop.example' });
+    expect(m.state.settings).toEqual({ [ALLOWED_SITES_KEY]: ['a.example', 'new.example'], [ALLOWED_SITES_AUTO_KEY]: ['new.example'], other: 1 });
+    // no marks left: no key
+    m.setReply({ sites: ['a.example'], auto: [] });
+    await removeAllowedSite('new.example');
+    expect(m.state.settings[ALLOWED_SITES_AUTO_KEY]).toBeUndefined();
   });
 
   it('old data (a plain list, no marks) reads as before', () => {

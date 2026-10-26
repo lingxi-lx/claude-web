@@ -783,6 +783,8 @@ export type ClientRequest =
   | { kind: 'web.status' }
   /** Look for ego lite again (PATH re-read from the registry first) → WebStatus. */
   | { kind: 'web.egoDetect' }
+  /** 允许的网站: one entry off the list, and its 完全放开 mark (on the server's write queue) → { sites, auto } as they are now. */
+  | { kind: 'web.allowedSites.remove'; host: string }
   /** One search with the configured engine → WebSearchAnswer. */
   | { kind: 'web.search'; query: string; count?: number }
   | GatewayRequest

@@ -952,6 +952,87 @@ describe('WebService: 允许的网站 — the gate before a page is changed', ()
     } finally { console.warn = warn; }
   });
 
+  it('the mode is read once per op: a default conversation answered 允许一次 and switched to 完全放开 mid-click adds nothing', async () => {
+    const settings: Record<string, unknown> = {};
+    const modes: string[] = [];
+    let mode = 'default';
+    const { web } = make({
+      gate: {
+        ask: async () => { mode = 'bypassPermissions'; return 'once'; }, // the user switches while the card is up
+        mode: () => { modes.push(mode); return mode as any; },
+      },
+    }, settings);
+    const w = autoWin(web, () => page('https://shop.example/'));
+    expect((await web.tool('conv-m1', 'browser_click', { ref: '1' })).isError).toBeFalsy();
+    await tick(); await tick();
+    expect(modes).toEqual(['default']);
+    expect(settings[LIST]).toBeUndefined();
+    expect(settings[AUTO]).toBeUndefined();
+    web.dropConnection(w.key);
+  });
+
+  it('browser_tabs new: the site the new tab landed on is added, not the address asked for', async () => {
+    const settings: Record<string, unknown> = {};
+    const { web } = gated('deny', settings, 'bypassPermissions');
+    const w = autoWin(web, () => ({ page: { url: 'https://landed.example/home', title: 'L', text: '' }, tabs: [{ id: 'b1', url: 'https://landed.example/home', title: 'L', active: true }] }));
+    expect((await web.tool('conv-t1', 'browser_tabs', { action: 'new', url: 'https://asked.example/' })).isError).toBeFalsy();
+    await settled(() => Array.isArray(settings[AUTO]));
+    expect(settings[LIST]).toEqual(['landed.example']);
+    expect(settings[AUTO]).toEqual(['landed.example']);
+    web.dropConnection(w.key);
+  });
+
+  it('a site already allowed is not queued at all (no write)', async () => {
+    let writes = 0;
+    const settings: Record<string, unknown> = { [LIST]: ['shop.example'] };
+    const { web } = make({ setSetting: async (k, v) => { writes++; settings[k] = v; }, gate: { ask: async () => 'deny', mode: () => 'bypassPermissions' } }, settings);
+    const w = autoWin(web, () => page('https://shop.example/'));
+    await web.tool('conv-q1', 'browser_click', { ref: '1' });
+    await web.tool('conv-q1', 'browser_open', { url: 'https://shop.example/x' });
+    await tick(); await tick();
+    expect(writes).toBe(0);
+    web.dropConnection(w.key);
+  });
+
+  it('a hung 完全放开 write does not hold a later 总是允许 forever: it waits at most siteWriteWaitMs for the one before', async () => {
+    const settings: Record<string, unknown> = {};
+    let hang = true;
+    let mode = 'bypassPermissions';
+    const { web } = make({
+      siteWriteWaitMs: 50,
+      setSetting: (k, v) => { if (hang) { hang = false; return new Promise<void>(() => {}); } settings[k] = v; return Promise.resolve(); },
+      gate: { ask: async () => 'always', mode: () => mode as any },
+    }, settings);
+    let where = 'https://hung.example/';
+    const w = autoWin(web, () => page(where));
+    await web.tool('conv-h1', 'browser_click', { ref: '1' }); // its write hangs
+    mode = 'default';
+    where = 'https://next.example/';
+    const t0 = Date.now();
+    expect((await web.tool('conv-h2', 'browser_click', { ref: '1' })).isError).toBeFalsy();
+    expect(Date.now() - t0).toBeLessThan(2000);
+    expect(settings[LIST]).toEqual(['next.example']);
+    web.dropConnection(w.key);
+  });
+
+  it('removeSite: one entry off the list and its mark, on the same queue as the adds — an add at the same time keeps its site and mark', async () => {
+    const settings: Record<string, unknown> = { [LIST]: ['a.example', '*.wild.example', 'keep.example'], [AUTO]: ['a.example'] };
+    const slow = (k: string, v: unknown) => new Promise<void>((r) => setTimeout(() => { if (v === undefined) delete settings[k]; else settings[k] = v; r(); }, 15));
+    const { web } = make({ setSetting: slow, gate: { ask: async () => 'deny', mode: () => 'bypassPermissions' } }, settings);
+    const w = autoWin(web, () => page('https://b.example/'));
+    const [removed] = await Promise.all([web.removeSite(' A.example '), web.tool('conv-r1', 'browser_click', { ref: '1' })]);
+    await settled(() => (settings[AUTO] as string[] | undefined)?.includes('b.example') === true);
+    await web.removeSite('nothing.example');
+    expect(settings[LIST]).toEqual(['*.wild.example', 'keep.example', 'b.example']);
+    expect(settings[AUTO]).toEqual(['b.example']);
+    expect(removed.sites).not.toContain('a.example');
+    // a wildcard entry goes by its exact text; the last mark gone is no key
+    expect(await web.removeSite('*.wild.example')).toEqual({ sites: ['keep.example', 'b.example'], auto: ['b.example'] });
+    expect(await web.removeSite('b.example')).toEqual({ sites: ['keep.example'], auto: [] });
+    expect(settings[AUTO]).toBeUndefined();
+    web.dropConnection(w.key);
+  });
+
   it('a script in the five other modes is still asked about', async () => {
     for (const mode of ['default', 'acceptEdits', 'plan', 'dontAsk', 'auto']) {
       const { web, asked } = gated('once', {}, mode);

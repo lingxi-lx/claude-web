@@ -63,6 +63,8 @@ export const SITE_CHANGED = 'cw-site-changed:';
 
 /** How long the hosting window has to answer one command. */
 export const COMMAND_TIMEOUT_MS = 30_000;
+/** How long a write of 允许的网站 waits for the one before it (a meta.json write that never finishes must not block the next). */
+export const SITE_WRITE_WAIT_MS = 5_000;
 /** A window that did not answer a search is not asked for result pages for this long (or until a window announces itself). */
 export const BROWSER_QUIET_MS = 2 * 60_000;
 const FETCH_TIMEOUT_MS = 20_000;
@@ -97,6 +99,8 @@ export interface WebDeps {
   /** what a host name resolves to ([] = unknown: the fetch decides) */
   lookup?: (hostname: string) => Promise<string[]>;
   commandTimeoutMs?: number;
+  /** tests: SITE_WRITE_WAIT_MS */
+  siteWriteWaitMs?: number;
   fetchTimeoutMs?: number;
   /** how long the hosting window has for one result page (search.ts BROWSER_TIMEOUT_MS) */
   searchPageTimeoutMs?: number;
@@ -315,7 +319,8 @@ export class WebService extends EventEmitter {
       // another tab may be the one its tools work in now: where it is is asked again before the next change (site gate)
       try {
         const a = await this.command(host, sessionId, op, args);
-        if (args.action === 'new' && args.url) this.autoAllow(sessionId, 'open', String(args.url)); // a page opened in a new tab
+        // a page opened in a new tab: where it landed (as for browser_open), else the address asked for
+        if (args.action === 'new' && args.url) this.autoAllow(sessionId, 'open', a.page?.url || String(args.url));
         return a;
       } finally { this.lastUrl.delete(sessionId); }
     }
@@ -354,12 +359,15 @@ export class WebService extends EventEmitter {
     const gate = this.d.gate!;
     // a picture changes nothing
     if (op === 'computer' && (args.action === 'screenshot' || args.action === 'wait')) return this.seen(sessionId, await this.command(host, sessionId, op, args, signal));
+    // the mode is read once: what the op is judged on (asked or not) is what 完全放开's auto-add goes by — a conversation
+    // switched to 完全放开 while its 允许一次 card was up does not get the site put on the list
+    const mode = gate.mode(sessionId);
     let url = this.lastUrl.get(sessionId);
     if (url === undefined) url = this.seen(sessionId, await this.command(host, sessionId, 'read', { offset: 0, maxChars: 1, probe: true }, signal)).page?.url ?? '';
     for (let round = 0; ; round++) {
       if (/^file:/i.test(url)) throw new Error(tr('不能在本机文件（file:）的页面上点击、输入或运行脚本：这类页面只给你读。'));
       const site = hostOfUrl(url);
-      const ask = needsAsk(op, site, { list: allowedSitesOf(this.d.settings()), mode: gate.mode(sessionId) });
+      const ask = needsAsk(op, site, { list: allowedSitesOf(this.d.settings()), mode });
       // a page with no host (about:blank) has nothing to protect: only a script is asked about there
       if (ask === 'eval' || (ask === 'site' && site)) {
         const tool = OP_TOOL[op];
@@ -371,7 +379,7 @@ export class WebService extends EventEmitter {
         // always the site it was judged on — '' for a page without a host — so the window, which compares it with the
         // tab's REAL address, refuses the op when the tab is elsewhere (a page can forge what it reports, or navigate itself)
         const a = this.seen(sessionId, await this.command(host, sessionId, op, { ...args, site }, signal));
-        this.autoAllow(sessionId, op, url); // 完全放开: the site it was done on goes on 允许的网站 (not a script's)
+        this.autoAllow(sessionId, op, url, mode); // 完全放开: the site it was done on goes on 允许的网站 (not a script's)
         return a;
       } catch (e) {
         const msg = String((e as Error)?.message ?? '');
@@ -409,7 +417,7 @@ export class WebService extends EventEmitter {
    * neither lose one another nor add a site twice.
    */
   private allowSite(site: string, auto = false): Promise<void> {
-    const run = this.siteWrites.then(async () => {
+    return this.queueSiteWrite(async () => {
       const s = this.d.settings();
       const list = allowedSitesOf(s);
       const marks = autoSitesOf(s);
@@ -422,18 +430,48 @@ export class WebService extends EventEmitter {
       if (!list.some((x) => normHost(x) === site)) await this.d.setSetting(ALLOWED_SITES_KEY, [...list, site]);
       if (marks.includes(site)) { const rest = marks.filter((m) => m !== site); await this.d.setSetting(ALLOWED_SITES_AUTO_KEY, rest.length ? rest : undefined); }
     });
-    this.siteWrites = run.catch(() => {});
+  }
+
+  /**
+   * One write of 允许的网站 after the one before it — waiting at most `siteWriteWaitMs` for that one, so a write of
+   * meta.json that never finishes holds up the next (a 总是允许 the user is waiting on) for a moment, not forever.
+   */
+  private queueSiteWrite<T>(write: () => Promise<T>): Promise<T> {
+    const ms = this.d.siteWriteWaitMs ?? SITE_WRITE_WAIT_MS;
+    const before = this.siteWrites;
+    const run = new Promise<void>((r) => { const t = setTimeout(r, ms); t.unref?.(); void before.then(() => { clearTimeout(t); r(); }); }).then(write);
+    this.siteWrites = run.then(() => {}, () => {});
     return run;
+  }
+
+  /**
+   * 允许的网站 page: `entry` off the list (as written: `*.example.com` is that entry, not its subdomains' ones) and its
+   * 完全放开 mark with it, on the same queue as the adds — so a site 完全放开 adds at the same moment is kept, mark and
+   * all. Answers the two lists as they are now (no marks left = no key).
+   */
+  removeSite(entry: string): Promise<{ sites: string[]; auto: string[] }> {
+    const e = String(entry ?? '').trim().toLowerCase();
+    return this.queueSiteWrite(async () => {
+      const s = this.d.settings();
+      const list = allowedSitesOf(s);
+      const marks = autoSitesOf(s);
+      const sites = list.filter((x) => x.trim().toLowerCase() !== e);
+      const auto = marks.filter((m) => m !== e);
+      if (sites.length !== list.length) await this.d.setSetting(ALLOWED_SITES_KEY, sites);
+      if (auto.length !== marks.length) await this.d.setSetting(ALLOWED_SITES_AUTO_KEY, auto.length ? auto : undefined);
+      return { sites, auto };
+    });
   }
 
   /**
    * 完全放开: the site `op` just worked on goes on 允许的网站 (autoAllowHost). Not waited for — a slow or failed write of
    * meta.json neither holds up nor fails the action; a failure is logged.
    */
-  private autoAllow(sessionId: string, op: BrowserOp, url: string | undefined): void {
+  private autoAllow(sessionId: string, op: BrowserOp, url: string | undefined, mode = this.d.gate?.mode(sessionId)): void {
     try {
-      const site = autoAllowHost(op, url, this.d.gate?.mode(sessionId));
-      if (!site) return;
+      const site = autoAllowHost(op, url, mode);
+      // on the list already (the common case once a site is added): nothing is queued
+      if (!site || siteAllowed(site, allowedSitesOf(this.d.settings()))) return;
       this.allowSite(site, true).catch((e) => console.warn(`[web] full access: could not add ${site} to the allowed sites: ${(e as Error)?.message ?? e}`));
     } catch (e) { console.warn(`[web] full access: allowed sites: ${(e as Error)?.message ?? e}`); }
   }

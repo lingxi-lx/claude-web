@@ -438,6 +438,9 @@ async function allowListSuite() {
   check('… while a click on another new site still raises the site card (declined: it does not reach the page)', r3.cards.filter((c) => c.toolName === 'browser.site' && c.input?.host === OTHER).length === 1 && r3.clicks.length === 0, JSON.stringify({ cards: cardBrief(r3.cards), clicks: r3.clicks.length }));
   const last = await sitesNow();
   check('… and default mode added nothing by itself', !last.list.includes(OTHER) && !last.auto.includes(OTHER), JSON.stringify(last));
+  const gone = await req({ kind: 'web.allowedSites.remove', host: SITE });
+  const now = await sitesNow();
+  check('the 允许的网站 page removes it on the server: off the list and its mark', !gone.sites.includes(SITE) && !gone.auto.includes(SITE) && !now.list.includes(SITE) && !now.auto.includes(SITE), JSON.stringify({ gone, now }));
   await req({ kind: 'session.close', sessionId: def }).catch(() => {});
   pageUrl = 'https://app.example/';
 }

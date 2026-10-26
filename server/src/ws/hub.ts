@@ -867,6 +867,11 @@ export class Hub {
       case 'web.egoDetect':
         await egoStatus(true);
         return s.web.status();
+      case 'web.allowedSites.remove': {
+        const r = await s.web.removeSite(String(req.host ?? ''));
+        s.web.settingsChanged();
+        return r;
+      }
       case 'web.search':
         return s.web.search(req.query, { count: req.count });
       case 'browser.host':

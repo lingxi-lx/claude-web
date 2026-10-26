@@ -108,6 +108,11 @@
   store 只在启动时读设置，服务端自己加的站否则看不到，删的时候还会把它覆盖掉。测试：`site-gate.test.ts`、`service.test.ts`、
   `service-ego.test.ts`、`allowed-sites.test.tsx`；e2e `ws-phase40.mjs` 最后一段（完全放开点新站零卡且进列表带记号，默认模式再点
   零卡，另一个新站仍然问）。
+  - 修正轮（2026-10-26）：`gated()` 只读一次模式，问不问和自动加都按这一个值（卡挂着时切到完全放开、答允许一次 → 不加）。
+    自动加先同步查 `siteAllowed`，已在列表的不进队列。写队列（`queueSiteWrite`）每个写最多等前一个 `SITE_WRITE_WAIT_MS`（5 s），
+    卡死的 meta.json 写不会让后面的总是允许永远等。删除改成服务端请求 `web.allowedSites.remove {host}`（同一个写队列，两个键一起删，
+    回 `{sites, auto}`；不带 sessionId，属于 `rewrite.ts` 说的「联网是各机器自己的」，不用进联邦路由表），页面不再整表写回。
+    **跳转后落到的站才是加进去的那个**：`browser_open` / `browser_tabs new` 用回答里 `page.url`（落地页），没有时才用请求的地址。
 
 ## 出图的工具在我们的引擎上不延迟（2026-10-26，spec 14.2）
 
