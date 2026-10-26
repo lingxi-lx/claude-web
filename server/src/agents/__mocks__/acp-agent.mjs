@@ -117,6 +117,12 @@ rl.on('line', async (line) => {
           evalextra: { title: 'browser_eval (web MCP Server)', kind: 'other', rawInput: { script: 'return 1', timeout_ms: 5000 } },
           // another web tool, not asked by the server this way
           click: { title: 'browser_click (web MCP Server)', kind: 'other', rawInput: { selector: '#go' } },
+          // the built-in browser's other tools with their own arguments (允许的网站 decides: the server's card only);
+          // the same call labelled as the agent's own fetch is not ours (a card)
+          open: { title: 'browser_open (web MCP Server)', kind: 'other', rawInput: { url: 'https://new.example/' } },
+          scroll: { title: 'browser_scroll (web MCP Server)', kind: 'other', rawInput: { direction: 'down' } },
+          clickref: { title: 'browser_click (web MCP Server)', kind: 'other', rawInput: { ref: '1' } },
+          openfetch: { title: 'browser_open (web MCP Server)', kind: 'fetch', rawInput: { url: 'https://new.example/' } },
         };
         // the answers the agent offers: all three by default; 'EGO…+always' only "always" and a reject, '+reject' only rejects
         const offer = /\+(always|reject)\b/.exec(text)?.[1];

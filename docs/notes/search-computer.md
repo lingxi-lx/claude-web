@@ -115,6 +115,45 @@
     回 `{sites, auto}`；不带 sessionId，属于 `rewrite.ts` 说的「联网是各机器自己的」，不用进联邦路由表），页面不再整表写回。
     **跳转后落到的站才是加进去的那个**：`browser_open` / `browser_tabs new` 用回答里 `page.url`（落地页），没有时才用请求的地址。
 
+## 「允许的网站」是内置浏览器唯一的说了算（2026-10-27，用户决定，spec 14.4）
+
+- 以前默认模式下 `browser_open` 只弹 Claude 自己的卡（打开不过网站闸），已允许的网站上 `browser_scroll` 也弹 Claude 自己的
+  「Claude 想滚动网页」——和允许的网站页上的说法对不上。现在：**完全放开以外的五种模式，不在列表里的网站只问一次（服务端的网站卡），
+  在列表里的什么都不问**，Claude / Codex / ACP 都不再弹它们自己的卡。脚本（`browser_eval`）照旧每次一张服务端的卡；完全放开照旧零卡
+  （并把网站自动加进列表）；ego_browser 不变。
+- **打开也过闸**（`site-gate.ts` 的 `OPENING_OP = 'open'`，`needsAsk('open', 地址的主机)`）：`service.ts` 的 `browse()` 在
+  `browser_open` 和带网址的 `browser_tabs new` 上先 `urlRefusal`、再 `openGate()`——不在列表里 → 卡 `{host, op:'open',
+  tool:'browser_open'|'browser_tabs'}`，**答之前页面不加载**（拒绝 = 窗口一个命令都收不到）。允许一次 = 这一次打开；总是允许 =
+  `allowSite`（不等存盘）。没有桌面窗口、由服务端去抓页面时也一样先问（不问就抓等于绕过列表）。`open` 不进 `MUTATING_OPS`：
+  那张表是窗口拿「标签现在的真地址」比的；打开比的是要去的地址。卡标题「Claude 想打开 example.com（这个网站还没允许过）」
+  （`permission-dock.ts`），卡上「要做的事：打开这个网站」。
+- **不问的**：读当前页（read / find / snapshot / screenshot / console / network / wait / viewport / `browser_tabs` list·switch·close、
+  不带网址的 new）——那一页的网站在打开时已经允许过或答过。`browser_back` 也不问：回到的是这个标签自己加载过的页。
+  **点链接 / 跳转 / 页面脚本自己换页**落到别的网站时不在落地前拦（webview 的 `will-navigate` 是同步的，要拦就得先挡下再异步问
+  服务端，重定向和 `location=` 还拦不全）——取舍：这是在已允许（或答过）的网站上的动作的后果；落地后的**第一个改页面的动作**按真地址
+  （`args.site` + 窗口的 `cw-site-changed`）再判，新网站照样问。所以能「读到」没允许过的网站的路只有跟着链接走，不能在上面动手。
+- **预览服务器**：`index.ts` 改走 `web.openPreview(sid, url)`——`.claude/launch.json` 起的本机开发服务器（localhost / *.localhost /
+  127.x / ::1）不问；`launch.json` 的 `url` 可以写任何地址、模型也能改这个文件，所以不是本机的照常问。
+- **全部浏览器工具预先允许**（`launcher.ts` 的 `SERVER_GATED` 表，现在是 ego_browser + 20 个 `browser_*`）：Claude 的
+  `webAllowedTools()` 带上它们（我们的引擎走 `ExecuteExtraTool` 时 runner 按里面的工具名放行，见「ego lite」笔记）；ACP 的
+  `isServerGatedAcpCall` / Codex 的 `isServerGatedCodexElicitation` 按表精确匹配：名字锚定（`mcp__web__x` / `x` /
+  `x (web MCP Server)`）、ACP 的 kind 只认缺省 / null / `other`（Gemini 系把所有 MCP 工具都报成 other；`fetch` / `read` 是 agent
+  **自己的**抓网页 / 读文件工具的 kind，标题是它自己拼的，认了就可能放过同名的内置工具——宁可多一张卡）、参数是普通对象且键 ⊆
+  该工具 inputSchema 的键、必填键都在（脚本工具的 `script` 必须是字符串）、对话确实拿到了 web 服务器（ego_browser 还要 ego 工具）。
+  表和 `mcp.ts` 的 schema 由 `launcher.test.ts` 对齐。**没放进去的**：`web_search`（本来就单独预先允许）、两个 guide、改用户设置的
+  `character_assign` / `theme_apply` / `theme_delete`（照旧问）。
+- **每个浏览器工具都过服务端的闸**（逐个核过 `service.ts` 的 `tool()`）：open / tabs new → `openGate`；click / type / press_key /
+  scroll / computer（截图、wait 除外）/ hover / drag / select / eval → `gated()`；其余是读当前页或 back / viewport（同一页重载）。
+  没有哪个工具能带着新地址绕过去（`browser_read` 等不收网址参数）。`browser_open` / `browser_tabs` 进了 `mcp.ts` 的 `ASKING_TOOLS`
+  （6 分钟调用超时，够等卡）。
+- 文案：允许的网站页、联网页那一行、网站卡的说明和「总是允许」的提示都改成「打开、操作都不再问；不在列表的第一次问一次」。
+- 测试：`site-gate.test.ts`（open 在五种模式 × 新 / 已允许 / `*.`、完全放开）、`service.test.ts`（问一次、拒绝不加载、总是允许后
+  scroll / click / 再打开零卡、tabs new、读不问、没窗口也问、预览）、`launcher.test.ts`（表 = schema、每个工具的 ACP / Codex 正反例：
+  像的标题、错的 kind、多的键、少的必填、别的服务器）、`server.test.ts`（没打开的对话打开不在列表的站被拒、没抓）、
+  `permission-dock.test.ts`；e2e `ws-phase40.mjs` 的 `siteRule`：两个 Claude 引擎（我们的走 ExecuteExtraTool）+ mock ACP / Codex
+  （它们自己对 open / scroll / click 的提示零卡，像的那个照样有卡）：默认模式打开新站恰好一张（网站卡，总是允许）、那个站上 scroll /
+  click 零张、再开一个新站一张、脚本一张；完全放开全零。
+
 ## 出图的工具在我们的引擎上不延迟（2026-10-26，spec 14.2）
 
 - ccb 把 MCP 工具藏在 `ExecuteExtraTool` 后面，结果整个 `JSON.stringify` 成文字，截图就成了 base64 字。规则：**会返回图片的工具带

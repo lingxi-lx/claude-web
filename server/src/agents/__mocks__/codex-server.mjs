@@ -210,6 +210,11 @@ rl.on('line', async (line) => {
           extraarg: approval('web', 'ego_browser', { ...script, command: 'x' }),
           eval: approval('web', 'browser_eval', { script: 'return document.title' }),
           evalextra: approval('web', 'browser_eval', { script: 'return 1', timeout_ms: 5000 }),
+          // the built-in browser's other tools with their own arguments; one with a key its schema lacks is not ours
+          open: approval('web', 'browser_open', { url: 'https://new.example/' }),
+          scroll: approval('web', 'browser_scroll', { direction: 'down' }),
+          clickref: approval('web', 'browser_click', { ref: '1' }),
+          openextra: approval('web', 'browser_open', { url: 'https://new.example/', command: 'x' }),
           form: { threadId, turnId: 'turn-1', serverName: 'web', mode: 'form', message: 'Your name?', requestedSchema: { type: 'object', properties: { name: { type: 'string' } } }, _meta: null },
         };
         const a = await req('mcpServer/elicitation/request', shapes[mcpVariant] ?? shapes.ego);

@@ -36,6 +36,10 @@
   宿主窗口时 `browser_eval` 直接报需要桌面版；卡没人答 = 拒绝），所以 Agent 自己的提示一律不弹：Claude 把两个都放进
   `webAllowedTools`；ACP / Codex 见下。click / type / key / scroll 这些**不在表里**：服务端只在网站不在允许列表时才问，
   Agent 自己的那张卡才是剩下情况的唯一一问（要不要改，等用户定）。
+  - **2026-10-27 用户定了**：允许的网站是内置浏览器唯一的说了算，表里现在是 ego_browser + **全部 20 个 `browser_*`**，每个带它
+    inputSchema 的键和必填键（`script` 只对两个脚本工具要求是字符串）；打开不在列表的网站也由服务端问一次（`op: 'open'`）。
+    ACP 的 kind 仍只认缺省 / null / `other`，`fetch` / `read` 照拒。细节在「搜索在内置浏览器里 / 网页上的鼠标键盘 / 操控电脑」的
+    「允许的网站是内置浏览器唯一的说了算」一节。
 - ACP Agent 自己的提示（`AcpDriver.onPermission`）：只有**确切是表里的工具**才直接答、不弹卡
   （`isServerGatedAcpCall(tc, given)`）：**这个对话拿到了那个工具**（交给 Agent 的 `mcpServers` 里有 `web`；ego_browser 还要它带
   `CW_WEB_BROWSER=ego`；`acpWebToolsGiven`，记在 `AcpDriver.webTools`，Agent 收下这份列表才算；没拿到就不是我们的，同名的是别人的，
