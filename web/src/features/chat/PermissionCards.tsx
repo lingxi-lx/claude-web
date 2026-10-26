@@ -10,7 +10,7 @@ import { JsonTree } from './tools/McpTool';
 import { Icon } from '@/ui/icons';
 import { DOCK_DENY_QUEUED, DOCK_HINT } from '@/ui/terms';
 import { useLeaveGhost, type GhostOpts } from '@/ui/ghost';
-import { SITE_TOOL, alwaysDetails, alwaysLabel, asAsked, denyResponse, dockKind, dockStatus, isEgoScriptRequest, permissionTitle, primaryKey, splitPending } from './permission-dock';
+import { SITE_TOOL, alwaysDetails, alwaysLabel, asAsked, denyResponse, dockKind, dockStatus, isClickOnly, isEgoScriptRequest, permissionTitle, primaryKey, splitPending } from './permission-dock';
 import { ACCESS_NOTE, accessAsk } from '@/features/computer/computer-tools';
 import { webToolOf } from '@/features/browser/web-tools';
 import { tr } from '@/i18n';
@@ -197,7 +197,8 @@ const SITE_OP: Record<string, () => string> = {
 function SiteRequest({ p, agent, more, reason, onReasonUsed, scope, note, onDenyQueued }: CardProps) {
   const { busy, send } = useRespond(p);
   const inp = p.input as Record<string, unknown>;
-  const isEval = inp.eval === true;
+  // a script card: the one rule the composer's Enter, the hint and the status line read too
+  const isEval = isClickOnly(p);
   const host = String(inp.host ?? '');
   const op = String(inp.op ?? '');
   const script = String(inp.script ?? '');

@@ -56,5 +56,5 @@
   标签当时看着是 每步询问，多半是还没收到 info；现在标签和服务器一致（`info.permissionMode`）。
 - 顺手补的真漏洞：pool 以前只在进程**报**模式（info）时才记 `SessionMeta.permissionMode`。进程没起来 / init 前就关了的对话没有记录，
   之后不带模式的重开（IM、定时任务、目标、重启后别的窗口）就退回 `ui.defaultMode`——每步询问打开的会以完全放开回来。
-  现在 `pool.open` 收到调用方说的模式（不是分叉）就当场记下。测试：`pool.test.ts`「opened as … a reopen without a mode keeps it」五组对称情况；
+  现在 `pool.open` 收到调用方说的模式（不是分叉）就当场记下。恢复已有对话时显式给了和记录不同的模式、而进程在 init 前就失败的，记录也已经换成新模式（之后不带模式的重开用新模式，不再回到旧记录）。测试：`pool.test.ts`「opened as … a reopen without a mode keeps it」五组对称情况；
   前端 `store.test.ts` / `reopen.test.ts` 锁住「显式 default 不是没设」。
