@@ -35,7 +35,7 @@ export const PERMISSION_MODES: Record<PermissionMode, ModeTerm> = {
   plan: { label: tr('只做计划'), desc: tr('先读代码、写方案，你点头后才动手') },
   auto: { label: tr('自动判断'), desc: tr('Claude 自己判断哪些操作需要问你') },
   dontAsk: { label: tr('只做已允许的'), desc: tr('不弹确认；没事先允许的操作一律跳过') },
-  bypassPermissions: { label: tr('完全放开'), desc: tr('什么都不问直接执行。只在可以随便弄坏的环境里用'), danger: true },
+  bypassPermissions: { label: tr('完全放开'), desc: tr('什么都不问直接执行，操控电脑和网页脚本也不问。只在可以随便弄坏的环境里用'), danger: true },
 };
 export const PERMISSION_MODE_ORDER = Object.keys(PERMISSION_MODES) as PermissionMode[];
 /** Shift+Tab's next mode: round the safe ones (a dangerous mode is only ever picked from the menu). */

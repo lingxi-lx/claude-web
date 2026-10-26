@@ -213,7 +213,7 @@ function SiteRequest({ p, agent, more, reason, onReasonUsed, scope, note, onDeny
         {isEval ? (
           <>
             <div className="pd-scroll"><CodeBlock code={script + (longer ? '\n…' : '')} lang="javascript" title={longer ? tr('脚本的前 {n} 个字', { n: script.length }) : tr('脚本')} maxLines={14} /></div>
-            <div className="pd-note">{tr('脚本能读写这个页面上的一切（包括你登录后的内容）。每次运行都会问你。')}</div>
+            <div className="pd-note">{tr('脚本能读写这个页面上的一切（包括你登录后的内容）。每次运行都会问你（完全放开时不问）。')}</div>
           </>
         ) : (
           <div className="pd-note">{tr('点「总是允许这个网站」后，Claude 在这个网站上操作页面不再问你（设置 → 联网 → 允许的网站 里可以删掉）。')}</div>

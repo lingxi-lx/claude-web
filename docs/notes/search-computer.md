@@ -87,4 +87,6 @@
 - 上面两处的旧规则改了：「操控电脑不看权限模式」「脚本在完全放开下也问」都不再成立。对话处于 `bypassPermissions` 时，服务端自己弹的卡一张都不弹、动作直接执行：`needsAsk()` 第一行就回 `'no'`（网站和 `browser_eval` 都是）；`ComputerAccess.ask()` 在「对话不在本机就拒」之后、出卡之前看 `AccessDeps.mode(sid)`，是 `bypassPermissions` 就直接 `{granted:true}`，不发事件、不进待答。
 - 其它五种模式不变：脚本每次问，网站按允许列表问，操控电脑每次问。没传 `mode` 的 `ComputerAccess`（测试、旧调用）照旧每次问。
 - 模式来源和浏览器闸同一个：`index.ts` 的 `modeOf = (sid) => pool.get(sid)?.info.permissionMode`，两边共用。这是用户明确的取舍：「完全放开」的对话可以直接控制任意应用。
+- 「完全放开」下不声不响批下的应用，对话离开「完全放开」后**仍然有效**：沿用「之前批过的留着」的设计，`computer/service.ts` 的 `grants` 不随模式清空，跟这个对话的 `computer` MCP 进程同生同灭。
+- 界面上的说法跟着改了：模式说明（`terms.ts`）、+ 菜单的操控电脑（`capabilities.ts`）、允许的网站页、脚本卡都写了「完全放开时不问」；给模型看的 `computer/tools.ts` 说明也加了 full access 的例外。
 - 以后新加的服务端询问也照这条：先看模式。测试：`site-gate.test.ts`、`service.test.ts`、`access.test.ts` 里五种模式照旧 / 完全放开零张卡。

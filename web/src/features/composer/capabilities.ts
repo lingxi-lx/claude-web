@@ -38,7 +38,7 @@ export const CAPABILITIES: Capability[] = [
   { key: 'chrome', label: tr('控制 Chrome'), desc: tr('用你自己的 Chrome（要装 Claude 扩展）'), title: tr('Claude in Chrome（--chrome）：在你自己的 Chrome 里打开网页、点击、填表，用的是那里登录着的账号。内置浏览器不用开这个'), icon: 'browser', group: 'main' },
   // the whole desktop, through our own `computer` MCP server (server/src/computer): which applications is asked of
   // the user every time, in a card of this app. Windows only for now — elsewhere the row says so
-  { key: 'computerUse', label: tr('操控电脑'), desc: tr('看屏幕、用键盘鼠标操作你允许的应用（每次先问你）'), title: tr('Computer Use：截图、键盘和鼠标操作整台电脑上你允许的应用。只对这一个对话开；要用哪些应用，每次都会先弹出来问你'), icon: 'machine', group: 'main', needs: 'computer', unavailable: tr('目前只支持 Windows（看的是运行 Claude Web 的那台电脑）。上网不用它——搜索、打开网页、点击、截图都在右侧的「浏览器」里') },
+  { key: 'computerUse', label: tr('操控电脑'), desc: tr('看屏幕、用键盘鼠标操作你允许的应用（每次先问你，完全放开时不问）'), title: tr('Computer Use：截图、键盘和鼠标操作整台电脑上你允许的应用。只对这一个对话开；要用哪些应用，每次都会先弹出来问你（完全放开时不问）'), icon: 'machine', group: 'main', needs: 'computer', unavailable: tr('目前只支持 Windows（看的是运行 Claude Web 的那台电脑）。上网不用它——搜索、打开网页、点击、截图都在右侧的「浏览器」里') },
   { key: 'coordinator', label: tr('协调者模式'), desc: tr('自己不动手，只派活给子代理'), title: tr('协调者模式（CLAUDE_CODE_COORDINATOR_MODE）'), icon: 'orchestra', group: 'advanced' },
   { key: 'proactive', label: tr('主动模式'), desc: tr('空闲时继续推进'), title: tr('主动模式（--proactive）'), icon: 'play', group: 'advanced' },
   { key: 'brief', label: 'Brief', desc: tr('让 Claude 用简报工具随时告诉你进展'), title: tr('Brief（--brief，SendUserMessage 工具）'), icon: 'chat', group: 'advanced' },
