@@ -13,6 +13,7 @@ import { CommandPalette } from '@/features/palette/CommandPalette';
 import { ImageViewer } from '@/features/chat/ImageViewer';
 import { DialogHost } from '@/ui/dialog';
 import { ConnectModelHost } from '@/features/providers/ConnectModel';
+import { AddSourceLazy } from '@/features/gateway/AddSourceLazy';
 import { UpdatePrompt } from '@/features/update/UpdatePrompt';
 import { SettingsModal } from '@/features/settings/SettingsModal';
 import { Onboarding } from '@/features/onboarding/Onboarding';
@@ -327,6 +328,7 @@ export function App() {
       <ErrorBoundary area={tr('图片查看')} floating><ImageViewer /></ErrorBoundary>
       <ErrorBoundary area={tr('文件菜单')} floating><FileMenu /></ErrorBoundary>
       <ErrorBoundary area={tr('接一个模型')} floating><ConnectModelHost /></ErrorBoundary>
+      <ErrorBoundary area={tr('添加来源')} floating><AddSourceLazy /></ErrorBoundary>
       <ErrorBoundary area={tr('应用更新')} floating><UpdatePrompt /></ErrorBoundary>
       <ErrorBoundary area={tr('角色库')} floating><CharacterLibrary /></ErrorBoundary>
       <ErrorBoundary area={tr('编辑项目')} floating><ProjectDialogLazy /></ErrorBoundary>

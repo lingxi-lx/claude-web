@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ws } from '@/ws/client';
 import { useStore } from '@/store';
 import { dlg } from '@/ui/dialog';
@@ -23,10 +23,15 @@ const POOL_STRATEGY: Record<UpstreamGroup['strategy'], string> = {
   'most-quota': tr('剩余额度最多的先用'),
 };
 
-/** 账号: the subscription logins, and the pools a gateway group can route to as one member. */
-export function AccountsTab() {
-  const accounts = useGateway((s) => s.accounts);
-  const pools = useGateway((s) => s.pools);
+/**
+ * A source's 账号 module: the subscription logins of one family (`kind`), and the pools a gateway group can route to
+ * as one member. Without `kind`: every family.
+ */
+export function AccountsTab({ kind }: { kind?: UpstreamKind }) {
+  const allAccounts = useGateway((s) => s.accounts);
+  const allPools = useGateway((s) => s.pools);
+  const accounts = useMemo(() => (kind ? allAccounts.filter((a) => a.kind === kind) : allAccounts), [allAccounts, kind]);
+  const pools = useMemo(() => (kind ? allPools.filter((g) => g.kind === kind) : allPools), [allPools, kind]);
   const routeGroups = useGateway((s) => s.routeGroups);
   const families = useGateway((s) => s.families);
   const warnings = useGateway((s) => s.warnings);
@@ -69,13 +74,13 @@ export function AccountsTab() {
     const name = await dlg.prompt(tr('账号池名称'), tr('默认账号池'));
     if (!name) return;
     try {
-      await ws.request({ kind: 'upstreams.groups.upsert', group: { kind: 'claude', name, strategy: 'failover', members: [] } });
+      await ws.request({ kind: 'upstreams.groups.upsert', group: { kind: kind ?? 'claude', name, strategy: 'failover', members: [] } });
       await reload();
     } catch (e: any) { toast(e.message); }
   };
-  const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? id;
+  const accountName = (id: string) => allAccounts.find((a) => a.id === id)?.name ?? id;
   // an account counts as routed when a gateway group names it or a pool it belongs to
-  const routed = (id: string) => routeGroups.some((g) => g.members.some((m) => m.accountId === id || (!!m.upstreamGroupId && (pools.find((x) => x.id === m.upstreamGroupId)?.members ?? []).includes(id))));
+  const routed = (id: string) => routeGroups.some((g) => g.members.some((m) => m.accountId === id || (!!m.upstreamGroupId && (allPools.find((x) => x.id === m.upstreamGroupId)?.members ?? []).includes(id))));
   const enable = async () => {
     try {
       await ws.request({ kind: 'gateway.set', enabled: true });
@@ -88,11 +93,11 @@ export function AccountsTab() {
         <div className="gateway-card gateway-start">
           <div className="gateway-row">
             <span className="gw-who">
-              <span className="l">{tr('网关还没启用，账号暂时用不了')}</span>
-              <span className="sub">{tr('启用一下就好，只在这台电脑上监听。')}</span>
+              <span className="l">{tr('账号还没开始工作')}</span>
+              <span className="sub">{tr('打开一下就好，只在这台电脑上用。')}</span>
             </span>
             <span className="grow" />
-            <button className="btn sm" onClick={() => void enable()}>{tr('启用')}</button>
+            <button className="btn sm" onClick={() => void enable()}>{tr('打开')}</button>
           </div>
         </div>
       )}
@@ -101,17 +106,17 @@ export function AccountsTab() {
       ))}
       <div className="gateway-row">
         <span className="grow">{tr('账号（{n}）', { n: accounts.length })}</span>
-        <span className="sub">{KINDS.map((k) => `${FAMILY_LABEL[k]} ${accounts.filter((a) => a.kind === k).length}`).join(' · ')}</span>
+        {!kind && <span className="sub">{KINDS.map((k) => `${FAMILY_LABEL[k]} ${accounts.filter((a) => a.kind === k).length}`).join(' · ')}</span>}
         <button className="btn sm" onClick={() => setAdd(true)}>{tr('添加账号')}</button>
       </div>
-      {accounts.length === 0 && <div className="empty">{tr('还没有账号。可以添加 Claude 订阅账号、Gemini 网页的 cookie，或 WorkBuddy 的 cockpit JSON / 扫码登录。')}</div>}
+      {accounts.length === 0 && <div className="empty">{tr('还没有账号。点「添加账号」登录一个。')}</div>}
       {accounts.map((a) => (
         <AccountRow
           key={a.id}
           a={a}
           busy={busy === a.id}
           routed={routed(a.id)}
-          onAttach={() => run(a.id, () => ws.request({ kind: 'upstreams.attachDefault', id: a.id }), tr('已加入默认入口'))}
+          onAttach={() => run(a.id, () => ws.request({ kind: 'upstreams.attachDefault', id: a.id }), tr('已可用'))}
           onProbe={() => run(a.id, () => ws.request({ kind: 'upstreams.probe', id: a.id }))}
           onToggle={() => run(a.id, () => ws.request({ kind: 'upstreams.update', id: a.id, patch: { enabled: !a.enabled } }))}
           onEdit={() => setEditing(a)}
@@ -123,14 +128,14 @@ export function AccountsTab() {
       <div className="gateway-row" style={{ marginTop: 14 }}>
         <span className="gw-who">
           <span className="l">{tr('账号池')}</span>
-          <span className="sub">{tr('同类账号自动轮换；要组合不同来源，请到分组与路由。')}</span>
+          <span className="sub">{tr('同类账号自动轮换；要组合不同来源，用「智能路由」。')}</span>
         </span>
         <span className="grow" />
         <button className="btn sm" onClick={() => void createPool()}>{tr('新建账号池')}</button>
       </div>
-      {pools.length === 0 && <div className="empty">{tr('只有需要分别管理同一类型账号的轮换策略时才需创建账号池。默认入口会直接使用已加入的账号。')}</div>}
+      {pools.length === 0 && <div className="empty">{tr('一般不用建账号池：加进来的账号会自动轮换着用。')}</div>}
       {pools.map((g) => {
-        const rest = accounts.filter((a) => a.kind === g.kind && !g.members.includes(a.id));
+        const rest = allAccounts.filter((a) => a.kind === g.kind && !g.members.includes(a.id));
         return (
           <div className="gateway-card" key={g.id} style={{ marginTop: 10 }}>
             <div className="gateway-row">
@@ -175,7 +180,7 @@ export function AccountsTab() {
           <span className="grow">{f.kind} · {f.detail ?? tr('后续阶段提供')}</span>
         </div>
       ))}
-      {add && <AddAccountWizard onClose={() => { setAdd(false); void reload(); }} />}
+      {add && <AddAccountWizard kind={kind} onClose={() => { setAdd(false); void reload(); }} />}
       {editing && <AccountEditor account={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void reload(); }} />}
     </div>
   );

@@ -5,8 +5,8 @@ import { useStore } from '@/store';
 import { dlg } from '@/ui/dialog';
 import { tr } from '@/i18n';
 
-/** 设置: where the LAN listener listens, who may reach it, and whether requests are audited. */
-export function GatewaySettingsTab() {
+/** 共享 → 连接设置: the fixed local port, where the LAN listener listens and who may reach it. */
+export function ShareSettings() {
   const lan = useGateway((s) => s.lan);
   const status = useGateway((s) => s.status);
   const toast = useStore((s) => s.toast);
@@ -40,7 +40,7 @@ export function GatewaySettingsTab() {
   };
   return (
     <div className="gateway-tab">
-      <h4>{tr('本机连接')}</h4>
+      <h4>{tr('本机地址')}</h4>
       <div className="sub">{tr('这是给 Claude Code、ChatBox、Cline 等本机应用使用的固定地址，不会随桌面应用重启而改变。')}</div>
       <div className="gateway-card gateway-local-card">
         <div className="gateway-row">
@@ -72,7 +72,23 @@ export function GatewaySettingsTab() {
         {lan?.addresses?.length ? ` · ${tr('本机地址：{list}', { list: lan.addresses.join(', ') })}` : ` · ${tr('没有局域网地址')}`}
       </div>
       <div className="sub">{tr('第一次启用时，系统防火墙可能会询问是否允许；只在可信网络里打开。')}</div>
-      <h4>{tr('审计')}</h4>
+      <label className="chip">
+        <input
+          type="checkbox"
+          checked={allowQueryKey}
+          onChange={(e) => void ws.request({ kind: 'gateway.settings.set', patch: { allowQueryKey: e.target.checked } }).then(() => useStore.getState().loadMeta())}
+        /> {tr('允许用 ?key= 传密钥（默认关闭，URL 会进日志）')}
+      </label>
+    </div>
+  );
+}
+
+/** 隐私 → 请求记录: whether requests are audited, and how much is kept. */
+export function AuditSettings() {
+  const lan = useGateway((s) => s.lan);
+  return (
+    <div className="gateway-tab">
+      <h4>{tr('请求记录')}</h4>
       <div className="sub">{tr('记录每次请求的密钥、来源、模型、状态和用量；不记录提示词和响应正文。')}</div>
       <label className="chip">
         <input
@@ -85,13 +101,6 @@ export function GatewaySettingsTab() {
         <label className="field"><span>{tr('审计文件大小上限（MB）')}</span><input type="number" min={1} value={Math.round((lan?.audit.maxBytes ?? 0) / (1024 * 1024))} onChange={(e) => void ws.request({ kind: 'gateway.settings.set', patch: { audit: { maxBytes: Math.max(1, Number(e.target.value) || 1) * 1024 * 1024 } } }).then(() => useGateway.getState().load())} /></label>
         <label className="field"><span>{tr('保留份数')}</span><input type="number" min={1} value={lan?.audit.keepFiles ?? 5} onChange={(e) => void ws.request({ kind: 'gateway.settings.set', patch: { audit: { keepFiles: Math.max(1, Number(e.target.value) || 1) } } }).then(() => useGateway.getState().load())} /></label>
       </div>
-      <label className="chip">
-        <input
-          type="checkbox"
-          checked={allowQueryKey}
-          onChange={(e) => void ws.request({ kind: 'gateway.settings.set', patch: { allowQueryKey: e.target.checked } }).then(() => useStore.getState().loadMeta())}
-        /> {tr('允许用 ?key= 传密钥（默认关闭，URL 会进日志）')}
-      </label>
     </div>
   );
 }

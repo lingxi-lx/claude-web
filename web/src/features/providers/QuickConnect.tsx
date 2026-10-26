@@ -30,8 +30,8 @@ function probe(provider: Partial<Provider>, listOnly: boolean): Promise<Probe> {
  * saved — the default for new conversations when `makeDefault`. Used by the first-run wizard, the 「接一个模型」
  * dialog (a send with nothing to send it with, a conversation on a Claude account that is not logged in) and settings.
  */
-export function QuickConnect({ onDone, makeDefault, autoFocus = true }: { onDone: (p: Provider) => void; makeDefault: boolean; autoFocus?: boolean }) {
-  const [presetId, setPresetId] = useState('relay');
+export function QuickConnect({ onDone, makeDefault, autoFocus = true, preset: startPreset }: { onDone: (p: Provider) => void; makeDefault: boolean; autoFocus?: boolean; /** start on this PRESETS id (添加来源 picked it already) */ preset?: string }) {
+  const [presetId, setPresetId] = useState(startPreset ?? 'relay');
   const preset = PRESETS.find((p) => p.id === presetId) ?? PRESETS[0];
   const relay = preset.type === 'auto';
   const [base, setBase] = useState('');

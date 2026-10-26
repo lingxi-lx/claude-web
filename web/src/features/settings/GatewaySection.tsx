@@ -71,7 +71,7 @@ export function GatewaySection() {
       <div className="row" style={{ alignItems: 'center', gap: 8, marginTop: 14 }}>
         <span className="sub">{tr('组 {groups} · 正常 {ok} · 冷却 {cooling}', { groups: st.groups.length, ok: healthy, cooling })}</span>
         <span className="grow" />
-        <button className="btn sm" onClick={() => openGateway('overview')}>{tr('打开网关')}</button>
+        <button className="btn sm" onClick={() => openGateway()}>{tr('打开上游')}</button>
       </div>
     </div>
   );

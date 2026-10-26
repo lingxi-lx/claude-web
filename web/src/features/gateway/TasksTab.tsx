@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ws } from '@/ws/client';
 import { useStore } from '@/store';
 import { dlg } from '@/ui/dialog';
@@ -7,6 +7,12 @@ import { useGateway } from './state';
 import { TaskEditor } from './TaskEditor';
 import { FAMILY_LABEL, kindLabel, scheduleText, targetText } from './tasks-model';
 import { tr } from '@/i18n';
+
+/** The family a task works on (its account's, or its pool's). */
+const taskKind = (t: MaintenanceTask, accounts: { id: string; kind: UpstreamKind }[], pools: { id: string; kind: UpstreamKind }[]): UpstreamKind | undefined => {
+  const tg = t.target;
+  return tg.kind === 'account' ? accounts.find((a) => a.id === tg.accountId)?.kind : pools.find((p) => p.id === tg.groupId)?.kind;
+};
 
 const when = (t?: number): string => (t ? new Date(t).toLocaleString() : tr('还没跑过'));
 
@@ -18,12 +24,19 @@ const QUICK: Quick[] = [
   { id: 'quota', label: tr('每天刷新额度'), families: ['claude', 'workbuddy'], taskKind: 'quota-refresh', schedule: { cron: '0 6 * * *' } },
 ];
 
-/** 任务: periodical account upkeep, run by our scheduler (the sidecars' own timers are off). */
-export function TasksTab() {
-  const tasks = useGateway((s) => s.tasks);
-  const runs = useGateway((s) => s.runs);
-  const accounts = useGateway((s) => s.accounts);
+/**
+ * 每日任务: periodical account upkeep, run by our scheduler (the sidecars' own timers are off). `kind`: only the tasks
+ * and runs of that family's accounts / pools (a source's detail).
+ */
+export function TasksTab({ kind }: { kind?: UpstreamKind }) {
+  const allTasks = useGateway((s) => s.tasks);
+  const allRuns = useGateway((s) => s.runs);
+  const allAccounts = useGateway((s) => s.accounts);
   const pools = useGateway((s) => s.pools);
+  const accounts = useMemo(() => (kind ? allAccounts.filter((a) => a.kind === kind) : allAccounts), [allAccounts, kind]);
+  const tasks = useMemo(() => (kind ? allTasks.filter((t) => taskKind(t, allAccounts, pools) === kind) : allTasks), [allTasks, allAccounts, pools, kind]);
+  const runs = useMemo(() => (kind ? allRuns.filter((r) => tasks.some((t) => t.id === r.taskId)) : allRuns), [allRuns, tasks, kind]);
+  const quick = kind ? QUICK.filter((q) => q.families.includes(kind)) : QUICK;
   const toast = useStore((s) => s.toast);
   const [editing, setEditing] = useState<MaintenanceTask | null>(null);
   const [adding, setAdding] = useState(false);
@@ -59,7 +72,7 @@ export function TasksTab() {
     <div className="gateway-tab">
       <div className="gateway-row">
         <span className="sub">{tr('常用')}</span>
-        {QUICK.map((q) => (
+        {quick.map((q) => (
           <button key={q.id} className="btn sm ghost" disabled={busy === q.id} onClick={() => void addQuick(q)}>
             {q.label}
             <span className="sub">{q.families.map((f) => FAMILY_LABEL[f]).join(' / ')}</span>

@@ -36,7 +36,7 @@ export function Workbench() {
   const autoOpen = usePageOpen();
   const autoSeen = useAutomation((s) => s.seen.length > 0);
   const extSeen = useExtensions((s) => s.seen.length > 0);
-  const gwSeen = useGateway((s) => s.seen.length > 0);
+  const gwSeen = useGateway((s) => s.seen);
   const bgSeen = useBackground((s) => s.seen);
   // a phone never gets the group bar / tab strips / rail (spec §5.11): its one row is the conversation header
   const vis = chromeVisibility(layout, { workbench, mobile });
