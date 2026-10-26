@@ -1107,7 +1107,7 @@ export class GatewayService extends EventEmitter {
         const out = buildOutbound(outbound, ir, opts);
         path = out.path;
         body = Buffer.from(JSON.stringify(out.body));
-        headers = translatedHeaders(outbound, p.apiKey, route.stream, String(ctx.req.headers['user-agent'] ?? ''));
+        headers = translatedHeaders(outbound, p.apiKey, route.stream, String(ctx.req.headers['user-agent'] ?? ''), p.authStyle);
         if (p.auth === 'oauth') {
           // a subscription login: Bearer + oauth beta, never x-api-key
           delete headers['x-api-key'];

@@ -235,6 +235,12 @@ export interface Provider {
   noResponsesApi?: boolean;
   /** learned: the endpoint rejected `prompt_cache_retention` by name — no longer sent on /v1/responses. */
   noCacheRetention?: boolean;
+  /**
+   * How the key is sent (spec 2026-10-26 §5.1): `Authorization: Bearer`, `x-api-key`, or both. Unset = each path's
+   * old behaviour (Anthropic sessions Bearer, Anthropic model list / gateway both, OpenAI-compatible Bearer).
+   * Honoured by the session env (anthropic type), the model-list probe and the gateway's translated requests.
+   */
+  authStyle?: 'bearer' | 'x-api-key' | 'both';
 }
 export const CLAUDE_PROVIDER_ID = 'claude';
 /** One profile's result of `providers.refreshModels` (model list only — no chat request, no tokens). */

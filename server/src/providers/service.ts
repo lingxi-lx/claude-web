@@ -11,6 +11,7 @@ import { wantsResponses } from '../gateway/shim.js';
 import { settingsOverride } from '../runtime/user-env.js';
 import { writeFlagSettings, type FlagSettings } from '../runtime/flag-settings.js';
 import { tr } from '../i18n/index.js';
+import { anthropicBase, authHeaders } from './endpoint.js';
 
 /** Mask an API key for the wire: keep prefix + last 4 chars. */
 export function maskKey(k: string | undefined): string {
@@ -77,8 +78,15 @@ export function providerEnv(p: SessionProvider, agent: 'claude' | 'codex' | 'acp
     // so the same fingerprint env (plain UA, entrypoint cli) matters here too
     case 'gateway':
     case 'anthropic':
-      env.ANTHROPIC_BASE_URL = p.baseUrl;
-      env.ANTHROPIC_AUTH_TOKEN = p.apiKey; // Bearer — what relays like super-nb expect; official API keys work through it too
+      // without a trailing /v1: the CLI appends /v1/messages itself (a pasted `…/v1` became /v1/v1/messages)
+      env.ANTHROPIC_BASE_URL = p.type === 'anthropic' ? anthropicBase(p.baseUrl) : p.baseUrl;
+      // Bearer by default — what relays like super-nb expect; official API keys work through it too. authStyle
+      // x-api-key → ANTHROPIC_API_KEY only ('' counts as unset for the CLI); both → both variables.
+      if (p.type === 'anthropic' && p.authStyle === 'x-api-key') { env.ANTHROPIC_API_KEY = p.apiKey; env.ANTHROPIC_AUTH_TOKEN = ''; }
+      else {
+        env.ANTHROPIC_AUTH_TOKEN = p.apiKey;
+        if (p.type === 'anthropic' && p.authStyle === 'both') env.ANTHROPIC_API_KEY = p.apiKey;
+      }
       if (p.defaultModel) env.ANTHROPIC_MODEL = p.defaultModel;
       if (m.haiku) { env.ANTHROPIC_DEFAULT_HAIKU_MODEL = m.haiku; env.ANTHROPIC_SMALL_FAST_MODEL = m.haiku; }
       if (m.sonnet) env.ANTHROPIC_DEFAULT_SONNET_MODEL = m.sonnet;
@@ -180,7 +188,7 @@ function modelsUrl(type: ProviderType, baseUrl: string): string {
   if (type === 'gemini') return `${geminiBase(b || 'https://generativelanguage.googleapis.com')}/models`;
   if (type === 'grok') return `${openaiBase(b || 'https://api.x.ai')}/models`;
   if (type === 'openai') return /\/v\d+$/.test(b) ? `${b}/models` : `${b}/v1/models`;
-  return /\/v\d+$/.test(b) ? `${b}/models` : `${b}/v1/models`;
+  return `${anthropicBase(b)}/v1/models`;
 }
 
 export interface ChatProbe { ok: boolean; runtime: RuntimeKind | 'api'; model: string; error?: string; ms: number; switched?: boolean; status?: number }
@@ -288,12 +296,12 @@ export async function chatProbe(p: Provider, runtime: RuntimeKind | undefined, m
 }
 
 /** One minimal `/chat/completions` request (a few tokens) — the chat check for OpenAI-compatible profiles. */
-export async function openaiChatProbe(p: Pick<Provider, 'baseUrl' | 'apiKey'>, model: string): Promise<ChatProbe> {
+export async function openaiChatProbe(p: Pick<Provider, 'baseUrl' | 'apiKey' | 'authStyle'>, model: string): Promise<ChatProbe> {
   const t0 = Date.now();
   try {
     const r = await fetch(`${openaiBase(p.baseUrl)}/chat/completions`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${p.apiKey}` },
+      headers: { 'content-type': 'application/json', ...authHeaders(p.authStyle, p.apiKey, 'bearer') },
       body: JSON.stringify({ model, messages: [{ role: 'user', content: 'Reply with exactly: ok' }], max_tokens: 16 }),
       signal: AbortSignal.timeout(60_000),
     });
@@ -312,12 +320,12 @@ export async function openaiChatProbe(p: Pick<Provider, 'baseUrl' | 'apiKey'>, m
  * One minimal `/v1/responses` request (a few tokens): whether the endpoint has the Responses API the cache shim
  * sends gpt-* to. `status` lets the caller tell "no such endpoint" (404 / 405 / 501) from a model error or an outage.
  */
-export async function openaiResponsesProbe(p: Pick<Provider, 'baseUrl' | 'apiKey'>, model: string): Promise<ChatProbe> {
+export async function openaiResponsesProbe(p: Pick<Provider, 'baseUrl' | 'apiKey' | 'authStyle'>, model: string): Promise<ChatProbe> {
   const t0 = Date.now();
   try {
     const r = await fetch(`${openaiBase(p.baseUrl)}/responses`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${p.apiKey}` },
+      headers: { 'content-type': 'application/json', ...authHeaders(p.authStyle, p.apiKey, 'bearer') },
       body: JSON.stringify({ model, input: 'Reply with exactly: ok', max_output_tokens: 16, store: false }),
       signal: AbortSignal.timeout(60_000),
     });
@@ -336,7 +344,7 @@ export async function openaiResponsesProbe(p: Pick<Provider, 'baseUrl' | 'apiKey
  * Connectivity + auth check via the model list endpoint. We deliberately do not send a /messages request:
  * relays that only accept Claude Code clients reject anything else, and the list is enough to verify the key.
  */
-export async function probeProvider(p: Pick<Provider, 'type' | 'baseUrl' | 'apiKey'>, retryMs = 1000): Promise<ProbeResult> {
+export async function probeProvider(p: Pick<Provider, 'type' | 'baseUrl' | 'apiKey' | 'authStyle'>, retryMs = 1000): Promise<ProbeResult> {
   const r = await listModels(p);
   // the request never got an answer (connection reset, connect timeout on a flaky route — seen on real relays): once
   // more before telling the user the address is wrong. An HTTP answer, or our own 20 s timeout, is final.
@@ -348,14 +356,15 @@ export async function probeProvider(p: Pick<Provider, 'type' | 'baseUrl' | 'apiK
 
 const LIST_TIMEOUT = tr('连接超时（20s）');
 
-async function listModels(p: Pick<Provider, 'type' | 'baseUrl' | 'apiKey'>): Promise<ProbeResult> {
+async function listModels(p: Pick<Provider, 'type' | 'baseUrl' | 'apiKey' | 'authStyle'>): Promise<ProbeResult> {
   const t0 = Date.now();
   const url = modelsUrl(p.type, p.baseUrl);
   const headers: Record<string, string> = { accept: 'application/json' };
   if (p.type === 'gemini') headers['x-goog-api-key'] = p.apiKey;
   else {
-    headers.authorization = `Bearer ${p.apiKey}`;
-    if (p.type === 'anthropic') { headers['x-api-key'] = p.apiKey; headers['anthropic-version'] = '2023-06-01'; }
+    // the profile's style; unset = what this probe always sent (Anthropic both headers, the rest Bearer)
+    Object.assign(headers, authHeaders(p.authStyle, p.apiKey, p.type === 'anthropic' ? 'both' : 'bearer'));
+    if (p.type === 'anthropic') headers['anthropic-version'] = '2023-06-01';
   }
   try {
     const ac = new AbortController();
@@ -526,7 +535,7 @@ export class ProviderService {
       let key = '';
       try { key = this.plainKey(t); } catch (e) { return { ...base, ok: false, count: 0, error: (e as Error).message, ms: 0 }; }
       if (!key) return { ...base, ok: false, count: 0, error: tr('没有 API Key'), ms: 0 };
-      const r = await probeProvider({ type: t.type, baseUrl: t.baseUrl, apiKey: key });
+      const r = await probeProvider({ type: t.type, baseUrl: t.baseUrl, apiKey: key, authStyle: t.authStyle });
       // the profile may have been deleted while the request was out: write back only onto one that still exists
       const gone = { ...base, ok: false, count: 0, error: tr('供应商已删除'), ms: r.ms };
       if (!r.ok) {
@@ -580,6 +589,8 @@ export class ProviderService {
     const type = p.type ?? (p.id ? this.meta.provider(p.id)?.type : undefined);
     // another Claude account: no endpoint of its own, the account's models
     if (type === 'claude-account') p = { ...p, baseUrl: '', ...accountModels(), modelsAt: Date.now() };
+    // one base rule for every path: an Anthropic base is stored without its /v1 (the CLI appends /v1/messages)
+    if (type === 'anthropic' && typeof p.baseUrl === 'string') p = { ...p, baseUrl: anthropicBase(p.baseUrl) };
     // the user added a group's profile by hand: the auto-creation is welcome again if they delete this one
     if (type === 'gateway' && p.gatewayGroupId) {
       const cfg = this.meta.gatewayConfig();
@@ -612,7 +623,7 @@ export class ProviderService {
     if ((draft?.type ?? saved?.type) === 'claude-account') return this.probeAccount(saved, draft, opts);
     if ((draft?.type ?? saved?.type) === 'gateway') return { ok: false, models: [], error: tr('走模型网关的供应商请在「设置 → 模型网关」里用组的「测试」按钮'), ms: 0 };
     const key = draft?.apiKey && !draft.apiKey.includes('…') ? draft.apiKey : saved ? this.plainKey(saved) : '';
-    const p = { type: draft?.type ?? saved?.type ?? 'anthropic', baseUrl: (draft?.baseUrl ?? saved?.baseUrl ?? '').trim(), apiKey: key.trim() } as Pick<Provider, 'type' | 'baseUrl' | 'apiKey'>;
+    const p = { type: draft?.type ?? saved?.type ?? 'anthropic', baseUrl: (draft?.baseUrl ?? saved?.baseUrl ?? '').trim(), apiKey: key.trim(), authStyle: draft?.authStyle ?? saved?.authStyle } as Pick<Provider, 'type' | 'baseUrl' | 'apiKey' | 'authStyle'>;
     if (!p.apiKey) return { ok: false, models: [], error: tr('没有 API Key'), ms: 0 };
     const r = await probeProvider(p);
     if (r.ok && saved && r.models.length) await this.meta.upsertProvider({ id: saved.id, models: r.models, modelNames: (r.modelNames ?? null) as unknown as undefined, modelEfforts: (r.modelEfforts ?? null) as unknown as undefined, modelContext: (r.modelContext ?? null) as unknown as undefined, modelsAt: Date.now(), modelsError: null as unknown as undefined }, { mustExist: true });

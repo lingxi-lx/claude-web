@@ -7,6 +7,7 @@ import zlib from 'node:zlib';
 import type { Readable } from 'node:stream';
 import { proxyAgentFor } from '../net/proxy.js';
 import { tr } from '../i18n/index.js';
+import { authHeaders, type AuthStyle } from '../providers/endpoint.js';
 
 export interface UpstreamResponse {
   status: number;
@@ -191,11 +192,12 @@ export function errorHeaders(h: http.IncomingHttpHeaders | undefined): Record<st
 }
 
 /** Headers for a translated request (a different vendor than the client spoke to: nothing to preserve). */
-export function translatedHeaders(outbound: 'anthropic' | 'openai' | 'gemini', key: string, stream: boolean, userAgent?: string): Record<string, string> {
+export function translatedHeaders(outbound: 'anthropic' | 'openai' | 'gemini', key: string, stream: boolean, userAgent?: string, authStyle?: AuthStyle): Record<string, string> {
   const h: Record<string, string> = { 'content-type': 'application/json', accept: stream ? 'text/event-stream' : 'application/json', 'accept-encoding': 'identity', 'user-agent': userAgent || 'claude-web-gateway/1' };
-  if (outbound === 'anthropic') { h['x-api-key'] = key; h.authorization = `Bearer ${key}`; h['anthropic-version'] = '2023-06-01'; }
+  // the member's authStyle when it has one; unset = both headers to Anthropic, Bearer to OpenAI (what this always sent)
+  if (outbound === 'anthropic') { Object.assign(h, authHeaders(authStyle, key, 'both')); h['anthropic-version'] = '2023-06-01'; }
   else if (outbound === 'gemini') h['x-goog-api-key'] = key;
-  else h.authorization = `Bearer ${key}`;
+  else Object.assign(h, authHeaders(authStyle, key, 'bearer'));
   return h;
 }
 
