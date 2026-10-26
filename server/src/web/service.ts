@@ -63,8 +63,6 @@ export const SITE_CHANGED = 'cw-site-changed:';
 
 /** How long the hosting window has to answer one command. */
 export const COMMAND_TIMEOUT_MS = 30_000;
-/** How long a write of 允许的网站 waits for the one before it (a meta.json write that never finishes must not block the next). */
-export const SITE_WRITE_WAIT_MS = 5_000;
 /** A window that did not answer a search is not asked for result pages for this long (or until a window announces itself). */
 export const BROWSER_QUIET_MS = 2 * 60_000;
 const FETCH_TIMEOUT_MS = 20_000;
@@ -99,8 +97,6 @@ export interface WebDeps {
   /** what a host name resolves to ([] = unknown: the fetch decides) */
   lookup?: (hostname: string) => Promise<string[]>;
   commandTimeoutMs?: number;
-  /** tests: SITE_WRITE_WAIT_MS */
-  siteWriteWaitMs?: number;
   fetchTimeoutMs?: number;
   /** how long the hosting window has for one result page (search.ts BROWSER_TIMEOUT_MS) */
   searchPageTimeoutMs?: number;
@@ -143,8 +139,6 @@ export class WebService extends EventEmitter {
   private browserQuietUntil = 0;
   /** where each conversation's tab was at the window's last answer (the site the gate judges) */
   private lastUrl = new Map<string, string>();
-  /** writes of 允许的网站, one after another (allowSite) */
-  private siteWrites: Promise<void> = Promise.resolve();
 
   constructor(private d: WebDeps) {
     super();
@@ -373,7 +367,8 @@ export class WebService extends EventEmitter {
         const tool = OP_TOOL[op];
         const answer = await gate.ask(sessionId, { host: site, op, tool, ...(op === 'eval' ? { eval: true, script: String(args.script ?? '') } : {}) }, signal);
         if (answer === 'deny') throw new Error(op === 'eval' ? tr('用户没有允许在 {site} 上运行这段脚本。不要再试，除非用户要求。', { site: site || url }) : tr('用户没有允许在 {site} 上操作（{tool}）。不要再试，除非用户要求；读页面不受影响。', { site: site || url, tool }));
-        if (answer === 'always' && op !== 'eval' && site) await this.allowSite(site);
+        // 总是允许: on the list in memory now; the save is not waited for (a stuck meta.json save must not hold the click)
+        if (answer === 'always' && op !== 'eval' && site) this.allowSite(site).catch((e) => console.warn(`[web] could not save ${site} on the allowed sites: ${(e as Error)?.message ?? e}`));
       }
       try {
         // always the site it was judged on — '' for a page without a host — so the window, which compares it with the
@@ -413,54 +408,46 @@ export class WebService extends EventEmitter {
   /**
    * The host goes on `web.browser.allowedSites` (once). 总是允许 (`auto` false): the user chose it, so a 完全放开 mark
    * on it comes off. 完全放开 (`auto` true): a site the list covers already (`*.` too) is left alone; a new one goes on
-   * marked (ALLOWED_SITES_AUTO_KEY). The writes go one after another (each reads the list as it is then), so two at once
-   * neither lose one another nor add a site twice.
+   * marked (ALLOWED_SITES_AUTO_KEY). Both keys are read and changed in memory in one step, before any save is waited on
+   * (setSetting puts the value in memory at once; meta.json saves the whole of it later, in order) — so two changes at
+   * once never work from a stale list or a stale set of marks. The promise is the saves.
    */
   private allowSite(site: string, auto = false): Promise<void> {
-    return this.queueSiteWrite(async () => {
-      const s = this.d.settings();
-      const list = allowedSitesOf(s);
-      const marks = autoSitesOf(s);
-      if (auto) {
-        if (siteAllowed(site, list)) return;
-        await this.d.setSetting(ALLOWED_SITES_KEY, [...list, site]);
-        await this.d.setSetting(ALLOWED_SITES_AUTO_KEY, [...marks.filter((m) => m !== site), site]);
-        return;
-      }
-      if (!list.some((x) => normHost(x) === site)) await this.d.setSetting(ALLOWED_SITES_KEY, [...list, site]);
-      if (marks.includes(site)) { const rest = marks.filter((m) => m !== site); await this.d.setSetting(ALLOWED_SITES_AUTO_KEY, rest.length ? rest : undefined); }
-    });
+    const s = this.d.settings();
+    const list = allowedSitesOf(s);
+    const marks = autoSitesOf(s);
+    if (auto) {
+      if (siteAllowed(site, list)) return Promise.resolve();
+      return this.setSites([...list, site], [...marks.filter((m) => m !== site), site]);
+    }
+    const rest = marks.filter((m) => m !== site);
+    return this.setSites(list.some((x) => normHost(x) === site) ? undefined : [...list, site], rest.length !== marks.length ? rest : undefined);
   }
 
-  /**
-   * One write of 允许的网站 after the one before it — waiting at most `siteWriteWaitMs` for that one, so a write of
-   * meta.json that never finishes holds up the next (a 总是允许 the user is waiting on) for a moment, not forever.
-   */
-  private queueSiteWrite<T>(write: () => Promise<T>): Promise<T> {
-    const ms = this.d.siteWriteWaitMs ?? SITE_WRITE_WAIT_MS;
-    const before = this.siteWrites;
-    const run = new Promise<void>((r) => { const t = setTimeout(r, ms); t.unref?.(); void before.then(() => { clearTimeout(t); r(); }); }).then(write);
-    this.siteWrites = run.then(() => {}, () => {});
-    return run;
+  /** Both keys at once, nothing awaited in between (`undefined`: that key unchanged; no marks left: no key). */
+  private setSites(list: string[] | undefined, marks: string[] | undefined): Promise<void> {
+    const saves: Promise<void>[] = [];
+    try {
+      if (list) saves.push(this.d.setSetting(ALLOWED_SITES_KEY, list));
+      if (marks) saves.push(this.d.setSetting(ALLOWED_SITES_AUTO_KEY, marks.length ? marks : undefined));
+    } catch (e) { saves.push(Promise.reject(e)); }
+    return Promise.all(saves).then(() => {});
   }
 
   /**
    * 允许的网站 page: `entry` off the list (as written: `*.example.com` is that entry, not its subdomains' ones) and its
-   * 完全放开 mark with it, on the same queue as the adds — so a site 完全放开 adds at the same moment is kept, mark and
-   * all. Answers the two lists as they are now (no marks left = no key).
+   * 完全放开 mark with it, both in one step (allowSite) — so a site 完全放开 adds at the same moment is kept, mark and
+   * all. Answers the two lists as they are now (no marks left = no key), once saved.
    */
-  removeSite(entry: string): Promise<{ sites: string[]; auto: string[] }> {
+  async removeSite(entry: string): Promise<{ sites: string[]; auto: string[] }> {
     const e = String(entry ?? '').trim().toLowerCase();
-    return this.queueSiteWrite(async () => {
-      const s = this.d.settings();
-      const list = allowedSitesOf(s);
-      const marks = autoSitesOf(s);
-      const sites = list.filter((x) => x.trim().toLowerCase() !== e);
-      const auto = marks.filter((m) => m !== e);
-      if (sites.length !== list.length) await this.d.setSetting(ALLOWED_SITES_KEY, sites);
-      if (auto.length !== marks.length) await this.d.setSetting(ALLOWED_SITES_AUTO_KEY, auto.length ? auto : undefined);
-      return { sites, auto };
-    });
+    const s = this.d.settings();
+    const list = allowedSitesOf(s);
+    const marks = autoSitesOf(s);
+    const sites = list.filter((x) => x.trim().toLowerCase() !== e);
+    const auto = marks.filter((m) => m !== e);
+    await this.setSites(sites.length !== list.length ? sites : undefined, auto.length !== marks.length ? auto : undefined);
+    return { sites, auto };
   }
 
   /**

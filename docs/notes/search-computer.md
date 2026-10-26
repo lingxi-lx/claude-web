@@ -109,8 +109,9 @@
   `service-ego.test.ts`、`allowed-sites.test.tsx`；e2e `ws-phase40.mjs` 最后一段（完全放开点新站零卡且进列表带记号，默认模式再点
   零卡，另一个新站仍然问）。
   - 修正轮（2026-10-26）：`gated()` 只读一次模式，问不问和自动加都按这一个值（卡挂着时切到完全放开、答允许一次 → 不加）。
-    自动加先同步查 `siteAllowed`，已在列表的不进队列。写队列（`queueSiteWrite`）每个写最多等前一个 `SITE_WRITE_WAIT_MS`（5 s），
-    卡死的 meta.json 写不会让后面的总是允许永远等。删除改成服务端请求 `web.allowedSites.remove {host}`（同一个写队列，两个键一起删，
+    自动加先同步查 `siteAllowed`，已在列表的不写。**两个键在内存里一步改完**（`setSites`：读两项、两次 `setSetting` 中间不 await
+    ——`meta.setSetting` 同步赋值、之后整份按顺序存盘），所以不需要写队列，两个并发的改动不会拿到旧的列表或旧的记号；总是允许和
+    自动加一样**不等存盘**（卡死的保存不会让点击等到 MCP 超时，失败只 `console.warn`）。删除改成服务端请求 `web.allowedSites.remove {host}`（两个键一起删，
     回 `{sites, auto}`；不带 sessionId，属于 `rewrite.ts` 说的「联网是各机器自己的」，不用进联邦路由表），页面不再整表写回。
     **跳转后落到的站才是加进去的那个**：`browser_open` / `browser_tabs new` 用回答里 `page.url`（落地页），没有时才用请求的地址。
 

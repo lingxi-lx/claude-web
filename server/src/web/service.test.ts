@@ -994,30 +994,83 @@ describe('WebService: 允许的网站 — the gate before a page is changed', ()
     web.dropConnection(w.key);
   });
 
-  it('a hung 完全放开 write does not hold a later 总是允许 forever: it waits at most siteWriteWaitMs for the one before', async () => {
-    const settings: Record<string, unknown> = {};
-    let hang = true;
+  /**
+   * meta.setSetting's shape: the value is in memory at once, the save comes later (`saves`: each one's resolve, in the
+   * order they were asked; `hang`: saves that never finish).
+   */
+  function savingLater(settings: Record<string, unknown>) {
+    const saves: { key: string; done: () => void }[] = [];
+    const setSetting = (k: string, v: unknown) => {
+      if (v === undefined) delete settings[k]; else settings[k] = v;
+      return new Promise<void>((r) => { saves.push({ key: k, done: r }); });
+    };
+    return { saves, setSetting };
+  }
+  const within = <T,>(p: Promise<T>, ms = 1500) => Promise.race([p, new Promise<'timeout'>((r) => setTimeout(() => r('timeout'), ms))]);
+
+  it('both keys change in memory before any save is waited on: saves that hang or finish out of order lose no mark', async () => {
+    const settings: Record<string, unknown> = { [AUTO]: ['old.example'], [LIST]: ['old.example'] };
+    const { saves, setSetting } = savingLater(settings);
     let mode = 'bypassPermissions';
-    const { web } = make({
-      siteWriteWaitMs: 50,
-      setSetting: (k, v) => { if (hang) { hang = false; return new Promise<void>(() => {}); } settings[k] = v; return Promise.resolve(); },
-      gate: { ask: async () => 'always', mode: () => mode as any },
-    }, settings);
-    let where = 'https://hung.example/';
+    let answer: 'always' | 'deny' = 'deny';
+    const { web } = make({ setSetting, gate: { ask: async () => answer, mode: () => mode as any } }, settings);
+    let where = 'https://a.example/';
     const w = autoWin(web, () => page(where));
-    await web.tool('conv-h1', 'browser_click', { ref: '1' }); // its write hangs
-    mode = 'default';
-    where = 'https://next.example/';
-    const t0 = Date.now();
-    expect((await web.tool('conv-h2', 'browser_click', { ref: '1' })).isError).toBeFalsy();
-    expect(Date.now() - t0).toBeLessThan(2000);
-    expect(settings[LIST]).toEqual(['next.example']);
+    await web.tool('conv-o1', 'browser_click', { ref: '1' }); // a.example: its saves never finish
+    where = 'https://b.example/';
+    await web.tool('conv-o2', 'browser_click', { ref: '1' }); // b.example: right after, saves still pending
+    await tick();
+    expect(settings[LIST]).toEqual(['old.example', 'a.example', 'b.example']);
+    expect(settings[AUTO]).toEqual(['old.example', 'a.example', 'b.example']);
+    // the later saves finish first: nothing in memory goes back
+    for (const x of [...saves].reverse()) x.done();
+    // 总是允许 on a site whose mark is left over (taken off the list, mark still there), and a removal, while saves
+    // are pending again: both keys right in memory at once
+    mode = 'default'; answer = 'always';
+    settings[LIST] = ['a.example', 'b.example'];
+    where = 'https://old.example/';
+    await web.tool('conv-o3', 'browser_click', { ref: '1' });
+    expect(settings[LIST]).toEqual(['a.example', 'b.example', 'old.example']);
+    expect(settings[AUTO]).toEqual(['a.example', 'b.example']);
+    const removing = web.removeSite('a.example');
+    expect(settings[LIST]).toEqual(['b.example', 'old.example']);
+    expect(settings[AUTO]).toEqual(['b.example']);
+    for (const x of saves) x.done();
+    expect(await removing).toEqual({ sites: ['b.example', 'old.example'], auto: ['b.example'] });
     web.dropConnection(w.key);
   });
 
-  it('removeSite: one entry off the list and its mark, on the same queue as the adds — an add at the same time keeps its site and mark', async () => {
+  it('总是允许 with a save that never finishes: the click still runs (the save is not waited on; a failed one is logged)', async () => {
+    const settings: Record<string, unknown> = {};
+    const { setSetting } = savingLater(settings); // never resolved
+    const { web, asked } = gated('always', settings);
+    (web as any).d.setSetting = setSetting;
+    const w = autoWin(web, () => page('https://next.example/'));
+    const r = await within(web.tool('conv-h2', 'browser_click', { ref: '1' }));
+    expect(r).not.toBe('timeout');
+    expect((r as any).isError).toBeFalsy();
+    expect(asked).toHaveLength(1);
+    expect(w.ops()).toEqual(['read', 'click']);
+    expect(settings[LIST]).toEqual(['next.example']);
+    // a save that fails: logged, the click still runs
+    const warn = console.warn;
+    const warned: string[] = [];
+    console.warn = (...a: unknown[]) => { warned.push(a.join(' ')); };
+    try {
+      (web as any).d.setSetting = (k: string, v: unknown) => { settings[k] = v; return Promise.reject(new Error('disk full')); };
+      (web as any).lastUrl.delete('conv-h3');
+      const w2 = autoWin(web, () => page('https://third.example/'));
+      expect((await web.tool('conv-h3', 'browser_click', { ref: '1' })).isError).toBeFalsy();
+      await settled(() => warned.length > 0);
+      expect(warned.join('\n')).toContain('disk full');
+      web.dropConnection(w2.key);
+    } finally { console.warn = warn; }
+    web.dropConnection(w.key);
+  });
+
+  it('removeSite: one entry off the list and its mark — an add at the same time keeps its site and mark', async () => {
     const settings: Record<string, unknown> = { [LIST]: ['a.example', '*.wild.example', 'keep.example'], [AUTO]: ['a.example'] };
-    const slow = (k: string, v: unknown) => new Promise<void>((r) => setTimeout(() => { if (v === undefined) delete settings[k]; else settings[k] = v; r(); }, 15));
+    const slow = (k: string, v: unknown) => { if (v === undefined) delete settings[k]; else settings[k] = v; return new Promise<void>((r) => setTimeout(r, 15)); };
     const { web } = make({ setSetting: slow, gate: { ask: async () => 'deny', mode: () => 'bypassPermissions' } }, settings);
     const w = autoWin(web, () => page('https://b.example/'));
     const [removed] = await Promise.all([web.removeSite(' A.example '), web.tool('conv-r1', 'browser_click', { ref: '1' })]);
