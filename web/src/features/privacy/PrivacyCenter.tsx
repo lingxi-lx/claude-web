@@ -7,6 +7,7 @@ import type { PrivacyAction, PrivacyCategory, PrivacyPreview, PrivacySettings, P
 import { ws } from '@/ws/client';
 import { useStore } from '@/store';
 import { tr } from '@/i18n';
+import { Select } from '@/ui/Select';
 
 const CATEGORIES: PrivacyCategory[] = ['api_key', 'private_key', 'jwt', 'password', 'email', 'phone', 'id_card', 'bank_card', 'custom'];
 
@@ -92,9 +93,7 @@ export function PrivacyCenter() {
         {CATEGORIES.map((c) => (
           <div key={c} style={{ display: 'contents' }} data-privacy-cat={c}>
             <span>{categoryName(c)}</span>
-            <select value={s.actions[c]} onChange={(e) => void set({ actions: { [c]: e.target.value as PrivacyAction } })}>
-              {(['off', 'redact', 'warn', 'block'] as PrivacyAction[]).map((a) => <option key={a} value={a}>{actionName(a)}</option>)}
-            </select>
+            <Select value={s.actions[c]} onValueChange={(v) => void set({ actions: { [c]: String(v) as PrivacyAction } })} aria-label={categoryName(c)} options={(['off', 'redact', 'warn', 'block'] as PrivacyAction[]).map((a) => ({ value: a, label: actionName(a) }))} />
             <span className="sub">{stats.hits[c] ? tr('命中 {n} 次', { n: stats.hits[c] }) : ''}</span>
           </div>
         ))}

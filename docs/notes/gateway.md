@@ -94,3 +94,16 @@
 - **添加账号即接入**：`ensureDefaultGroup` 只要存在 `默认` 组就把新账号加进去（以前有第二个组后就不再自动加入，用户得手动去高级里加）；用户自己的组永不改动，没有 `默认` 且已有自定义组时不擅自创建。手动接入走 `upstreams.attachDefault`（账号页的「加入默认入口」），账号行显示是否已被任何组/池引用。分组与路由从高级设置提到普通页签。
 - **Gemini 额度**：固定组件（v4.22.0）没有 5 小时 / 周额度窗口接口，`quota-refresh` 实际只是账号检查。已从 Gemini 任务矩阵移除该任务，界面不再暗示能刷新额度（WorkBuddy 的额度接口保留）。账号之间怎么轮换由组件内部决定，外层网关只能按家族整体故障转移。
 - **下拉菜单**：`web/src/ui/Select.tsx` 基于 `composer/Popover`（portal、互斥、ActionSheet、`data-mi` 键盘导航）替换了全应用的原生 `<select>`；菜单里的行（思考语言）改成「就地展开」，不再开第二个锚定菜单（否则会关掉外层）。`scripts/ui-smoke.cjs` 里读选项的地方相应改为打开菜单读 `.select-option`。
+
+## 隐私保护管道与 authStyle（2026-10-26，spec「统一模型来源」§4 / §5.1）
+
+- **代码**：`server/src/privacy/`（`detect.ts` 检测器与占位符、`pipeline.ts` 出站遍历 / 入站还原 / 响应包装、`service.ts` 设置与计数、`types.ts`）；界面 `web/src/features/privacy/PrivacyCenter.tsx`（自成一体，等网关界面挂载）。设置在 meta.json 顶层 `privacy`（含每装一份的占位符 secret，不上 wire）；请求 `privacy.get` / `privacy.set` / `privacy.preview`（预览只算不存、不计数）。默认关。
+- **占位符** `{{API_KEY_a1b2c3d4}}`：值的 HMAC（per-install secret）前 8 位，同值同占位符，前缀字节不变、提示缓存还在。反查表只在进程内存（上限 2 万条，先进先出），重启后随请求重建——客户端手里的历史是原文，每轮重新脱敏。
+- **覆盖**：网关每次成员尝试（直通和翻译都算，`body` 和各个重试变体 retry / noThinking / noEffort / bare 都换成同样的占位符）、`~s` 子代理分流的直接转发、缓存垫片（openai / grok 档案的 Claude 对话、Codex）——垫片在 `serve()` 里先脱敏 `raw` 再解析，下面所有分支都从脱敏后的 body 构造。**不覆盖**：直连的 anthropic / gemini / claude-account 档案（CLI 自己连上游）、关掉缓存优化的 openai / grok 档案、Codex / ACP 直连。
+- **不动的东西**：`thinking` / `redacted_thinking` / `reasoning` 块整块跳过（签名）；id、model、tool 名、schema、`data`、图片、`encrypted_content`、`thoughtSignature` 跳过。tool_use 的 `input` 对象、Gemini `args` / `response` 全部叶子都算内容；OpenAI `arguments`（JSON 文本）先解析再脱敏再序列化，保证 JSON 合法。没有命中时 body 字节原样（指纹中转不受影响）。
+- **还原**：`restoreResponse(res)` 包住 `writeHead / write / end`：SSE 按事件解析，`data:` 是 JSON 的才改；某个字符串叶子结尾像占位符的开头（`{{API_`）就把整个事件扣住，等同一个 slot（type + index 字段 + 叶子路径）的下一个事件把两段拼起来再还原；先来了别的事件就原样放出（宁可留占位符，不出错值）。`partial_json` / `arguments` / `*arguments*.delta` 里还原成 JSON 转义后的值。非流式 JSON 解析后逐叶子还原。直通且有脱敏时出站 `accept-encoding: identity`，上游仍压缩就在包装里解压再发。
+- **fail closed**：开着时 `forRequest` / 脱敏抛错 → 500「隐私保护处理失败，请求没有发出」；命中 block → 403「按隐私设置拦截」。都走 `final`（不冷却成员，不换下一个）。
+- **本机跳过**：`skipLocal` 按上游 URL（127/10/192.168/172.16-31/169.254、localhost、.local、fc/fd/fe80）判断；sidecar（`sidecar:` 成员，地址在本机但转发到云）永不跳过。路由切到云端成员时每次尝试各自判断，不继承。
+- **记录**：审计行加 `privacy: { count, categories, placeholders, blocked?, warned? }`（`audit.ts` 白名单），不含原值、不含来源名。上游错误正文先 `privacy.scrub()`（固定遮 key / 私钥 / JWT / 配置密码，开着时再加自定义词，换成 `[API_KEY]`），再进日志、账本、客户端。
+- **authStyle**：`Provider.authStyle` 未设 = 原行为（Claude 对话 Bearer；模型列表和网关翻译两个头都带；OpenAI Bearer）。设了：会话 env（anthropic：x-api-key → `ANTHROPIC_API_KEY` + `ANTHROPIC_AUTH_TOKEN=''`；both → 两个变量）、`listModels` / chat 探测、`translatedHeaders` 都照它。直通请求仍沿用客户端自己的头风格。
+- **base URL**：`providers/endpoint.ts` 的 `anthropicBase()` 去尾斜杠、`/messages`、`/v1`；会话 env、模型列表、保存档案时都用它（web 的快速连接对 anthropic 预设也用 `anthropicBase`）。网关的 `joinUrl` 本来就去重版本段。

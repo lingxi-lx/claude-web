@@ -568,12 +568,7 @@ function CacheOptions({ editing, set }: { editing: Draft; set: (d: Draft) => voi
       {(editing.type === 'anthropic' || editing.type === 'openai') && (
         <label style={row} title={tr('Key 放在哪个请求头里：Authorization: Bearer、x-api-key，或两个都带。默认：Claude 格式对话用 Bearer，测试和模型网关两个都带；OpenAI 格式用 Bearer')}>
           {tr('鉴权方式')}
-          <select value={editing.authStyle ?? ''} onChange={(e) => set({ ...editing, authStyle: (e.target.value || null) as any })}>
-            <option value="">{tr('默认')}</option>
-            <option value="bearer">Authorization: Bearer</option>
-            <option value="x-api-key">x-api-key</option>
-            <option value="both">{tr('两个都带')}</option>
-          </select>
+          <Select value={editing.authStyle ?? ''} onValueChange={(v) => set({ ...editing, authStyle: (String(v) || null) as any })} aria-label={tr('鉴权方式')} options={[{ value: '', label: tr('默认') }, { value: 'bearer', label: 'Authorization: Bearer' }, { value: 'x-api-key', label: 'x-api-key' }, { value: 'both', label: tr('两个都带') }]} />
         </label>
       )}
       {learned.length > 0 && (
