@@ -105,6 +105,30 @@ describe('AcpDriver (mock agent)', () => {
     }
   });
 
+  it('only our exact ego_browser is answered without a card: a call that merely mentions it gets the agent\'s card, in default and plan', async () => {
+    const variants = ['shell', 'shellnokind', 'execkind', 'rawname', 'othermcp', 'edit', 'extraarg'];
+    for (const permissionMode of ['default', 'plan'] as const) {
+      const d = new AcpDriver('gemini', { command: process.execPath, args: [path.join(here, '__mocks__', 'acp-agent.mjs')], env: {}, name: 'Mock ACP' }, { cwd: tmp, permissionMode }, transcripts, null);
+      const msgs = collect(d);
+      await waitFor(() => d.state === 'idle');
+      const perms: any[] = [];
+      d.on('permission', (e) => { perms.push(e); });
+      for (const [i, v] of variants.entries()) {
+        d.send(`EGO:${v}`);
+        await waitFor(() => perms.length > i);
+        expect(perms[i].toolUseId, `${permissionMode} ${v}`).toMatch(/^ego-/);
+        // nothing was answered behind the user's back: the agent is still waiting on the card
+        expect(d.state, `${permissionMode} ${v}`).toBe('waiting');
+        d.respondPermission(perms[i].requestId, { behavior: 'deny', message: 'no' });
+        await waitFor(() => msgs.filter((m) => m.type === 'result').length > i);
+      }
+      const texts = msgs.filter((m) => m.type === 'stream_event' && m.event.delta?.type === 'text_delta').map((m) => m.event.delta.text).join('');
+      expect(texts.match(/\(ego answer: deny\)/g), permissionMode).toHaveLength(variants.length);
+      expect(texts, permissionMode).not.toContain('(ego answer: allow)');
+      await d.close();
+    }
+  }, 60_000);
+
   it('plan updates become TodoWrite; denied permission marks the tool result as error', async () => {
     const d = new AcpDriver('qwen', { command: process.execPath, args: [path.join(here, '__mocks__', 'acp-agent.mjs')], env: {}, name: 'Mock' }, { cwd: tmp }, transcripts, null);
     const msgs = collect(d);

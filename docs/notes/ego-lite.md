@@ -30,6 +30,13 @@
   只有「允许一次 / 拒绝」，不认 Enter。回答 `always` 当一次，永不写允许的网站。拒绝 / 超时 / 对话停下 → 不跑，结果是「用户没有允许…」，
   **不带 `EGO_FALLBACK`**（不能让模型换内置浏览器做同样的事）。为免 Claude 再弹自己的卡，`mcp__web__ego_browser` 进了 `webAllowedTools`；
   `ego_browser_guide` 也在里面。`ToolPermission` 里对 `mcp__web__ego_browser` 的老卡留着：别的 Agent 可能还会先自己问一次。
+- ACP Agent 自己的提示（`AcpDriver.onPermission`）：只有**确切是我们的 ego_browser** 才直接答「允许一次」不弹卡
+  （`launcher.ts` 的 `isServerGatedAcpCall`）：标题整串等于 `ego_browser` / `mcp__web__ego_browser` / `ego_browser (web MCP Server)`，
+  `kind` 没有或是 `other`，`rawInput` 的键只能是 `script` / `timeout_ms`（值不看）。**别放宽成「包含 ego_browser」**：
+  ACP 的标题是拿调用本身拼的（shell 命令原文、文件名），`rm -rf ~ # ego_browser` 这种就会一张卡都没有地跑掉（2026-10-26 审查抓到过）。
+  不认 `normalize.ts` 推出来的名字（它会把「ego browser」也变成 `ego_browser`）。已知剩下的口子：用户自己配了一个也叫 `web` 的 MCP 服务器、
+  里面有个 `ego_browser`，标题会一样，会被当成我们的（要用户自己的配置才做得到）。有的 ACP Agent 给 MCP 调用起的标题可能不是这个格式：
+  那就退回它自己的卡，用户看到两张卡（多问一次，不漏问）——Task 4 真机验证各家实际的标题。
 - 设置 → 联网 →「Agent 用哪个浏览器操作网页」（`WebSettings.tsx`）：ego lite（装了就用它）/ 内置浏览器、检测结果、「重新检测」
   （`web.egoDetect`）、官网链接（系统浏览器打开）。`WebStatus` 多了 `agentBrowser` 和 `ego`。
 

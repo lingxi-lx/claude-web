@@ -5,7 +5,7 @@ import fs from 'node:fs/promises';
 import type { AgentKind, AttachmentRef, OpenSessionParams, PermissionMode, PermissionRequestEvent, PermissionResponse, RunnerState, SessionInfoSnapshot } from '../protocol.js';
 import { JsonRpcProcess } from './jsonrpc.js';
 import { acpMcpServers } from '../memory/launcher.js';
-import { isServerGatedTool, webAcpMcpServers } from '../web/launcher.js';
+import { isServerGatedAcpCall, webAcpMcpServers } from '../web/launcher.js';
 import { MessageSynth, mapToolName } from './normalize.js';
 import type { AgentTranscripts } from './transcript.js';
 import type { AgentDriver } from './types.js';
@@ -221,9 +221,10 @@ export class AcpDriver extends EventEmitter implements AgentDriver {
     const pick = (kinds: string[]) => options.find((o) => kinds.includes(o.kind))?.optionId ?? options[0]?.optionId;
     // a tool this server asks about itself (ego_browser, spec 14.1): its card comes from the server when the call runs,
     // so the agent's own prompt is answered "once" with no card — never "always", the server asks each time anyway.
-    // Matched by what names the tool (our name, the agent's title, a tool field of its raw input), not by arguments.
-    const raw = tc.rawInput && typeof tc.rawInput === 'object' ? tc.rawInput : {};
-    if (isServerGatedTool(known?.name, tc.title, raw.tool, raw.toolName, raw.tool_name, raw.name)) return { outcome: { outcome: 'selected', optionId: pick(['allow_once']) } };
+    // Only for an exact match (the prompt's title, kind absent or other, args ⊆ script + timeout_ms: launcher.ts
+    // isServerGatedAcpCall): a title is built from the call, so a looser match would let a shell command or a file
+    // edit that mentions ego_browser through with no card at all. Not matched → the agent's normal card below.
+    if (isServerGatedAcpCall(tc)) return { outcome: { outcome: 'selected', optionId: pick(['allow_once']) } };
     if (this.autoApprove) return { outcome: { outcome: 'selected', optionId: pick(['allow_once', 'allow_always']) } };
     const requestId = randomUUID();
     const event: PermissionRequestEvent = { requestId, sessionId: this.sessionId, toolName: name, input, toolUseId: tc.toolCallId };

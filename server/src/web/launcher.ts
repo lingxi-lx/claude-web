@@ -32,13 +32,33 @@ export const EGO_TOOL = 'mcp__web__ego_browser';
  * once" without a card (Claude: in allowedTools; ACP: AcpDriver.onPermission), so there is one card, the server's.
  */
 export const SERVER_GATED_TOOLS: readonly string[] = [EGO_TOOL];
-const SERVER_GATED_RE = /(^|\W)(mcp__web__)?ego_browser(?!_)/;
 /**
- * Is a call one of SERVER_GATED_TOOLS, by any name an agent gives it: `mcp__web__ego_browser`, `ego_browser`, an ACP
- * title such as `ego_browser (web MCP Server)` — not `ego_browser_guide`. Strings only; anything else is no.
+ * The exact names an agent gives our ego_browser: our MCP name, the bare tool name, or the ACP title
+ * `ego_browser (web MCP Server)` (Gemini-style). Anchored and exact on purpose: an ACP title is built from the call
+ * itself (a shell command's text, a file name), so anything looser lets a command that merely MENTIONS ego_browser
+ * through without a card — and only our real ego_browser call reaches the server's own card (service.ts egoGate).
  */
-export function isServerGatedTool(...names: unknown[]): boolean {
-  return names.some((n) => typeof n === 'string' && (SERVER_GATED_TOOLS.includes(n) || SERVER_GATED_RE.test(n)));
+const SERVER_GATED_NAME_RE = /^(mcp__web__)?ego_browser( \(web MCP Server\))?$/;
+/** Is `name` exactly one of our server-gated tools' names (see SERVER_GATED_NAME_RE)? Non-strings are no. */
+export function isServerGatedTool(name: unknown): boolean {
+  return typeof name === 'string' && (SERVER_GATED_TOOLS.includes(name) || SERVER_GATED_NAME_RE.test(name));
+}
+/** The arguments our ego_browser takes: a call carrying anything else is not ours. */
+const EGO_ARG_KEYS: ReadonlySet<string> = new Set(['script', 'timeout_ms']);
+/**
+ * May an ACP agent's permission prompt be answered "allow once" without a card, because the server asks on its own
+ * card when the call runs? Only for our exact ego_browser: the prompt's own title matches exactly (not the name we
+ * derived for the call: mapToolName turns spaces into _, so 'ego browser' would become ego_browser),
+ * its kind is absent or `other` (never execute / edit / delete / move / fetch / read …), and its raw input has no keys
+ * besides `script` / `timeout_ms`. The arguments' VALUES are never looked at. Anything else gets the agent's card.
+ */
+export function isServerGatedAcpCall(tc: { title?: unknown; kind?: unknown; rawInput?: unknown }): boolean {
+  if (tc.kind !== undefined && tc.kind !== null && tc.kind !== 'other') return false;
+  if (tc.rawInput !== undefined && tc.rawInput !== null) {
+    if (typeof tc.rawInput !== 'object' || Array.isArray(tc.rawInput)) return false;
+    if (Object.keys(tc.rawInput).some((k) => !EGO_ARG_KEYS.has(k))) return false;
+  }
+  return isServerGatedTool(tc.title);
 }
 
 let enabled = true;
