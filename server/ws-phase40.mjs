@@ -268,6 +268,10 @@ async function suite(runtime) {
       // one card in the whole turn, the server's, for the script: Claude has browser_eval in its allowed tools (the
       // server asks), and nothing else on the way (a lookup) asks
       check('default: browser_eval raises exactly one card in the whole turn, the server\'s, for the script', cards.length === 1 && server.length === 1 && server[0].input?.op === 'eval' && server[0].input?.tool === 'browser_eval' && server[0].input?.script === EVAL_SCRIPT, cardBrief(cards));
+      // our engine defers browser_eval (no alwaysLoad) behind ExecuteExtraTool: allowedTools names the tool inside, so
+      // the wrapper would raise Claude's own card next to the server's — the runner allows it when the tool inside is
+      // pre-allowed (session-runner onCanUseTool). The one card above must have come through that path.
+      if (runtime === 'ccb') check('default: … and on our engine that call went through ExecuteExtraTool (Claude raised no card of its own for it)', hits.slice(mark4).find((h) => h.called)?.called === 'extra' && !cards.some((c) => c.toolName === 'ExecuteExtraTool'), JSON.stringify({ called: hits.slice(mark4).find((h) => h.called)?.called, cards: cardBrief(cards) }));
     } else {
       check('完全放开: browser_eval raises no card at all', cards.length === 0, cardBrief(cards));
     }
