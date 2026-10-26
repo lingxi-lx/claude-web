@@ -10,7 +10,7 @@ import { JsonTree } from './tools/McpTool';
 import { Icon } from '@/ui/icons';
 import { DOCK_DENY_QUEUED, DOCK_HINT } from '@/ui/terms';
 import { useLeaveGhost, type GhostOpts } from '@/ui/ghost';
-import { SITE_TOOL, alwaysDetails, alwaysLabel, denyResponse, dockKind, dockStatus, isEgoScriptRequest, permissionTitle, primaryKey, splitPending } from './permission-dock';
+import { SITE_TOOL, alwaysDetails, alwaysLabel, asAsked, denyResponse, dockKind, dockStatus, isEgoScriptRequest, permissionTitle, primaryKey, splitPending } from './permission-dock';
 import { ACCESS_NOTE, accessAsk } from '@/features/computer/computer-tools';
 import { webToolOf } from '@/features/browser/web-tools';
 import { tr } from '@/i18n';
@@ -319,9 +319,13 @@ export function PermissionDock({ sessionId, reason, onReasonUsed, scope, note, o
   );
 }
 
-/** Which card a request docks as. */
-export function DockCard(props: CardProps) {
-  const { p } = props;
+/**
+ * Which card a request docks as — a tool our engine runs through ExecuteExtraTool as the card of the tool inside
+ * (`asAsked`); the answer still goes back by the request's id, for the request as it came.
+ */
+export function DockCard(asked: CardProps) {
+  const p = asAsked(asked.p);
+  const props = p === asked.p ? asked : { ...asked, p };
   const kind = dockKind(p);
   return kind === 'plan' ? <PlanApproval {...props} /> : kind === 'access' ? <AccessRequest {...props} /> : isEgoScriptRequest(p) ? <EgoScriptRequest {...props} /> : p.toolName === SITE_TOOL ? <SiteRequest {...props} /> : <ToolPermission {...props} />;
 }

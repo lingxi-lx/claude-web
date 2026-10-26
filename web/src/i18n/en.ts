@@ -381,6 +381,8 @@ export const EN_WEB: Record<string, string> = {
   "{agent} 想按这个计划开始动手": "{agent} wants to start working on this plan",
   "{agent} 想换网页的显示尺寸": "{agent} wants to change the size the page is shown at",
   "{agent} 想搜索网页": "{agent} wants to search the web",
+  "{agent} 想查找要用的工具": "{agent} wants to look up a tool to use",
+  "查找工具:": "Look up tool:",
   "{agent} 想操控这台电脑上的 {appsCount} 个应用": "{agent} wants to control {appsCount} {appsCount?app:apps} on this computer",
   "{agent} 想操控这台电脑上的 {v}": "{agent} wants to control {v} on this computer",
   "{agent} 想操控这台电脑上的应用": "{agent} wants to control apps on this computer",

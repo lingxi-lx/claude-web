@@ -58,3 +58,33 @@ describe('the server-raised ego lite script card', () => {
     expect(html).not.toContain('data-id="ego-card"');
   });
 });
+
+// Our engine (ccb) runs MCP tools without alwaysLoad through ExecuteExtraTool { tool_name, params }: Claude's own prompt
+// for one names the wrapper. The card reads as if the tool inside had been asked about directly.
+describe('a tool asked about through ExecuteExtraTool', () => {
+  const direct: PermissionRequestEvent = { requestId: 'rx', sessionId: 's', toolName: 'mcp__web__browser_open', input: { url: 'https://example.com/' } };
+  const wrapped: PermissionRequestEvent = { requestId: 'rx', sessionId: 's', toolName: 'ExecuteExtraTool', input: { tool_name: 'mcp__web__browser_open', params: { url: 'https://example.com/' } } };
+
+  it('is the card the tool inside would have had: same title, same body, same buttons', () => {
+    const html = dock(wrapped);
+    expect(html).toContain('Claude 想在浏览器里打开 example.com');
+    expect(html).not.toContain('ExecuteExtraTool');
+    expect(html).toBe(dock(direct));
+  });
+
+  it('a wrapped ego_browser prompt gets the script view, a wrapped Bash its command line', () => {
+    const ego = dock({ ...wrapped, input: { tool_name: 'mcp__web__ego_browser', params: { script: 'console.log("hi")' } } });
+    expect(ego).toContain('在 ego lite 里运行的脚本');
+    const bash = dock({ ...wrapped, input: { tool_name: 'Bash', params: { command: 'npm test' } } });
+    expect(bash).toContain('Claude 想运行一条命令');
+    expect(bash).toContain('npm test');
+  });
+
+  it('malformed → the generic card it had before', () => {
+    for (const input of [{}, { tool_name: 7, params: {} }, { tool_name: 'mcp__web__browser_open', params: 'x' }, { tool_name: '', params: {} }]) {
+      const html = dock({ ...wrapped, input });
+      expect(html).toContain('Claude 想使用 ExecuteExtraTool');
+      expect(acts(html)).toEqual(['deny', 'allow']);
+    }
+  });
+});

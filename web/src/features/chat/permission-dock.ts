@@ -41,10 +41,33 @@ export const dockPlaceholder = (p: Pick<PermissionRequestEvent, 'toolName' | 'in
 /** `access`: 操控电脑 asking which applications it may control — answered by a click on the card, never by a key. */
 export type DockKind = 'tool' | 'ask' | 'plan' | 'access';
 
-export const dockKind = (p: Pick<PermissionRequestEvent, 'toolName'>): DockKind => (p.toolName === 'AskUserQuestion' ? 'ask' : p.toolName === 'ExitPlanMode' ? 'plan' : isAccessRequest(p.toolName) ? 'access' : 'tool');
+/**
+ * Our engine (ccb) runs MCP tools without alwaysLoad through `ExecuteExtraTool { tool_name, params }`, so Claude's own
+ * prompt for one names the wrapper (QA 2026-10-26: 「Claude 想使用 ExecuteExtraTool」 over a JSON tree for "open
+ * example.com"). `asAsked` is the request as if the tool inside had been asked about directly — what every card,
+ * title and Enter rule here reads. Only the look: the answer goes back by `requestId` for the request as it came
+ * (the runner fills an allow's input from it). Malformed, or something that must not be answered through the wrapper
+ * (a question, a plan — their answers carry the input —, the server's own card, a wrapper again) → left as it is.
+ */
+export const EXTRA_TOOL = 'ExecuteExtraTool';
+const NOT_UNWRAPPED = new Set([EXTRA_TOOL, 'SearchExtraTools', 'AskUserQuestion', 'ExitPlanMode', SITE_TOOL]);
+export function asAsked<P extends { toolName: string; input?: unknown }>(p: P): P {
+  if (p.toolName !== EXTRA_TOOL) return p;
+  const inp = p.input;
+  if (!inp || typeof inp !== 'object' || Array.isArray(inp)) return p;
+  const { tool_name: name, params } = inp as Record<string, unknown>;
+  if (typeof name !== 'string' || !name.trim() || NOT_UNWRAPPED.has(name)) return p;
+  if (params !== undefined && (!params || typeof params !== 'object' || Array.isArray(params))) return p;
+  return { ...p, toolName: name, input: (params ?? {}) as Record<string, unknown> };
+}
+
+export const dockKind = (p: { toolName: string; input?: unknown }): DockKind => {
+  const t = asAsked(p).toolName;
+  return t === 'AskUserQuestion' ? 'ask' : t === 'ExitPlanMode' ? 'plan' : isAccessRequest(t) ? 'access' : 'tool';
+};
 
 /** A conversation's waiting requests as the composer sees them: the question card lives in the conversation (stage C1), the rest dock. */
-export function splitPending<P extends { toolName: string }>(pending: readonly P[]): { dock?: P; ask?: P } {
+export function splitPending<P extends { toolName: string; input?: unknown }>(pending: readonly P[]): { dock?: P; ask?: P } {
   return { dock: pending.find((p) => dockKind(p) !== 'ask'), ask: pending.find((p) => dockKind(p) === 'ask') };
 }
 
@@ -116,7 +139,8 @@ export function denyResponse(p: PermissionRequestEvent, text: string): Permissio
 }
 
 /** 「Claude 想运行一条命令」: what is being asked, in words. */
-export function permissionTitle(p: Pick<PermissionRequestEvent, 'toolName' | 'input'>, agent = 'Claude'): string {
+export function permissionTitle(asked: Pick<PermissionRequestEvent, 'toolName' | 'input'>, agent = 'Claude'): string {
+  const p = asAsked(asked);
   const inp = (p.input ?? {}) as Record<string, unknown>;
   const file = basename(String(inp.file_path ?? inp.notebook_path ?? inp.path ?? '').replace(/[\\/]+$/, ''));
   switch (p.toolName) {
@@ -132,6 +156,8 @@ export function permissionTitle(p: Pick<PermissionRequestEvent, 'toolName' | 'in
       return host ? tr('{agent} 想访问 {host}', { agent, host }) : tr('{agent} 想访问网页', { agent });
     }
     case 'WebSearch': return tr('{agent} 想搜索网页', { agent });
+    // our engine looking a deferred tool up before it runs one through ExecuteExtraTool
+    case 'SearchExtraTools': return tr('{agent} 想查找要用的工具', { agent });
     case SITE_TOOL: {
       const host = String(inp.host ?? '');
       if (isEgoScriptRequest(p)) return host ? tr('{agent} 想在 ego lite 里运行一段脚本（{h}）', { agent, h: host }) : tr('{agent} 想在 ego lite 里运行一段脚本', { agent });

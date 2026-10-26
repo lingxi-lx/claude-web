@@ -13,6 +13,7 @@ import { WEB_TOOLS, webToolLabel, webToolOf, type WebTool } from '@/features/bro
 import { COMPUTER_TOOLS, computerToolLabel, computerToolOf, type ComputerTool } from '@/features/computer/computer-tools';
 import { tr } from '@/i18n';
 import { ThemeDraftBody } from './ThemeDraftTool';
+import { EXTRA_TOOL, asAsked } from '../permission-dock';
 
 export type ToolCategory = 'read' | 'edit' | 'cmd' | 'web' | 'skill' | 'mcp' | 'agent' | 'plan' | 'other';
 
@@ -92,6 +93,23 @@ const COMPUTER = Object.fromEntries(COMPUTER_TOOLS.map((t) => [t, {
   label: (i) => { const l = computerToolLabel(t, i); return { verb: l.verb, arg: l.arg }; },
   Body: GenericBody,
 } satisfies ToolDef])) as Record<ComputerTool, ToolDef>;
+
+/**
+ * Our engine (ccb) runs MCP tools without alwaysLoad through ExecuteExtraTool { tool_name, params }: the step reads as
+ * the tool inside (its verb and target; another server's tool as 「server · tool」), malformed as any tool's input.
+ */
+DEFS[EXTRA_TOOL] = {
+  icon: 'mcp',
+  category: 'mcp',
+  label: (i) => {
+    const inner = asAsked({ toolName: EXTRA_TOOL, input: i });
+    if (inner.toolName === EXTRA_TOOL) return MCP.label(i);
+    const l = getToolDef(inner.toolName).label(inner.input as Record<string, any>);
+    return l.verb ? l : { verb: toolDisplayName(inner.toolName), arg: l.arg };
+  },
+  Body: GenericBody,
+};
+DEFS.SearchExtraTools = { icon: 'search', category: 'other', label: (i) => ({ verb: tr('查找工具:'), arg: s(i, 'query') }), Body: GenericBody };
 
 export function getToolDef(name: string): ToolDef {
   if (DEFS[name]) return DEFS[name];
