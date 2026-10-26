@@ -288,7 +288,7 @@ export const EGO_TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        script: { type: 'string', maxLength: 200000, description: 'The script, an ES module body (top-level await works). The globals CW_SPACE (this conversation\'s Space name) and CW_OUT (a folder for screenshots) are set.' },
+        script: { type: 'string', maxLength: 60000, description: 'The script, an ES module body (top-level await works). The globals CW_SPACE (this conversation\'s Space name) and CW_OUT (a folder for screenshots) are set.' },
         timeout_ms: { type: 'number', description: 'Stop the script after this long (default 120000, at most 600000).' },
       },
       required: ['script'],
@@ -326,7 +326,7 @@ function secret(env: NodeJS.ProcessEnv): string {
 }
 
 /** One tool call, carried to the claude-web server. Every failure comes back as a tool result the model can read. */
-export function callServer(tool: string, args: Record<string, unknown>, env: NodeJS.ProcessEnv = process.env, timeoutMs = CALL_TIMEOUT_MS): Promise<ToolAnswer> {
+export function callServer(tool: string, args: Record<string, unknown>, env: NodeJS.ProcessEnv = process.env, timeoutMs = CALL_TIMEOUT_MS, signal?: AbortSignal): Promise<ToolAnswer> {
   return new Promise<ToolAnswer>((resolve) => {
     let target: URL;
     try { target = new URL('/api/web/tool', env.CW_WEB_URL); } catch { resolve(failed(tr('联网工具没有配置好（缺少 CW_WEB_URL）。'))); return; }
@@ -352,6 +352,8 @@ export function callServer(tool: string, args: Record<string, unknown>, env: Nod
       });
     });
     req.on('timeout', () => req.destroy(new Error(tr('超时'))));
+    // the agent cancelled the call (the turn was stopped): closing the request stops the work on the server
+    signal?.addEventListener('abort', () => req.destroy(new Error(tr('已取消'))), { once: true });
     req.on('error', (e) => resolve(failed(tr('联网工具连不上 Claude Web：{message}', { message: e.message }))));
     req.end(body);
   });
@@ -362,6 +364,7 @@ function main() {
   const ok = (id: unknown, result: unknown) => send({ jsonrpc: '2.0', id, result });
   const fail = (id: unknown, code: number, message: string) => send({ jsonrpc: '2.0', id, error: { code, message } });
   let inFlight = 0;
+  const inflight = new Map<unknown, AbortController>();
   let ended = false;
   const maybeExit = () => { if (ended && inFlight === 0) process.exit(0); };
 
@@ -381,8 +384,10 @@ function main() {
         case 'initialize':
           ok(msg.id, { protocolVersion: PROTOCOL_VERSION, capabilities: { tools: {} }, serverInfo: { name: 'claude-web-web', version: '1.0.0' }, instructions: instructionsFor() });
           break;
-        case 'notifications/initialized':
         case 'notifications/cancelled':
+          inflight.get(msg.params?.requestId)?.abort();
+          break;
+        case 'notifications/initialized':
           break;
         case 'tools/list':
           ok(msg.id, { tools: toolsFor() });
@@ -393,7 +398,9 @@ function main() {
           const raw = msg.params?.arguments;
           const args = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
           inFlight++;
-          void callServer(name, args, process.env, callTimeoutOf(name, args)).then((r) => { ok(msg.id, r); inFlight--; maybeExit(); });
+          const ac = new AbortController();
+          inflight.set(msg.id, ac);
+          void callServer(name, args, process.env, callTimeoutOf(name, args), ac.signal).then((r) => { inflight.delete(msg.id); if (!ac.signal.aborted) ok(msg.id, r); inFlight--; maybeExit(); });
           break;
         }
         case 'ping':

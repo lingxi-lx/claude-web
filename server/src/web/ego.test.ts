@@ -144,6 +144,36 @@ describe('ego lite', () => {
     expect(fs.readFileSync(mark, 'utf8').trim()).toBe('a<>a b<>b');
   }, 30_000);
 
+  it.runIf(process.platform === 'win32')('a plain .cmd wrapper (run through cmd.exe) is found and runs a round from a folder with spaces and Chinese in its name', async () => {
+    const plain = path.join(dir, 'plain bin');
+    fs.mkdirSync(plain, { recursive: true });
+    // not npm's %~dp0 shim: resolveSpawn keeps cmd.exe in between
+    fs.writeFileSync(path.join(plain, 'ego-browser.cmd'), `@ECHO off\r\nnode "${path.join(bin, 'ego-browser.js')}" %*\r\n`);
+    process.env.PATH = `${plain}${path.delimiter}${oldPath}`;
+    const st = await egoStatus(false);
+    expect(st).toMatchObject({ found: true, version: '1.4.2' });
+    const root = path.join(dir, '我的 数据 dir');
+    const r = await runEgoScript('sess-plain', 'console.log("plain-ok " + CW_SPACE + " 中文")', { root });
+    expect(text(r)).toContain('plain-ok claude-web sess-pla 中文');
+    expect(r.isError).toBeUndefined();
+  }, 30_000);
+
+  it('a stopped turn stops the round, and a round still waiting does not start', async () => {
+    withEgo();
+    const ac = new AbortController();
+    const t0 = Date.now();
+    const slow = runEgoScript('sess-abort', 'await new Promise((r) => setTimeout(r, 60000));', { root: dir, signal: ac.signal });
+    const queued = runEgoScript('sess-abort', 'console.log("should not run")', { root: dir, signal: ac.signal });
+    setTimeout(() => ac.abort(), 1500);
+    const r = await slow;
+    expect(r.isError).toBe(true);
+    expect(text(r)).toContain('停下');
+    expect(Date.now() - t0).toBeLessThan(15_000);
+    const q = await queued;
+    expect(text(q)).toContain('停下');
+    expect(text(q)).not.toContain('should not run');
+  }, 30_000);
+
   it('long output keeps its start and end', () => {
     const s = 'A'.repeat(50) + 'M'.repeat(1000) + 'Z'.repeat(50);
     const c = clip(s, 100);

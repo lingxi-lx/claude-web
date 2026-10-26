@@ -141,6 +141,25 @@ describe('the web MCP server over stdio', () => {
   }, 60_000);
 });
 
+describe('a cancelled call', () => {
+  it('closes its request to the server at once, so the work there stops too', async () => {
+    let closed = false;
+    const srv = http.createServer((q) => { q.on('close', () => { closed = true; }); });
+    await new Promise<void>((r) => srv.listen(0, '127.0.0.1', () => r()));
+    const port = (srv.address() as { port: number }).port;
+    const ac = new AbortController();
+    const t0 = Date.now();
+    const p = callServer('ego_browser', { script: 'x' }, { CW_WEB_URL: `http://127.0.0.1:${port}`, CW_WEB_TOKEN: 't', CW_SESSION_ID: 's' }, 60_000, ac.signal);
+    setTimeout(() => ac.abort(), 300);
+    const r = await p;
+    expect(r.isError).toBe(true);
+    expect(Date.now() - t0).toBeLessThan(5_000);
+    await new Promise((res) => setTimeout(res, 200));
+    expect(closed).toBe(true);
+    srv.close();
+  });
+});
+
 describe('the tool list', () => {
   it('ego lite: its tools are listed only with CW_WEB_BROWSER=ego, and then the browser_* tools defer to it', () => {
     const names = (env: NodeJS.ProcessEnv) => toolsFor(env).map((t) => t.name);

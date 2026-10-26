@@ -22,7 +22,8 @@ export interface EgoStatus { found: boolean; path?: string; version?: string }
 
 export const EGO_DEFAULT_TIMEOUT_MS = 120_000;
 export const EGO_MAX_TIMEOUT_MS = 10 * 60_000;
-export const EGO_MAX_SCRIPT_CHARS = 200_000;
+/** Under the tool endpoint's 256 KB body limit (web/http.ts) even when every character is 3 bytes of UTF-8. */
+export const EGO_MAX_SCRIPT_CHARS = 60_000;
 const OUTPUT_CHARS = 60_000;
 const MAX_SHOTS = 4;
 const MAX_SHOT_BYTES = 5 * 1024 * 1024;
@@ -43,9 +44,11 @@ export function versionOf(skillText: string): string | undefined {
 
 /** Run `ego-browser <args>` to the end, no shell; output capped. */
 function runOnce(file: string, args: string[], timeoutMs: number): Promise<{ code: number | null; out: string; err: string }> {
-  const s = resolveSpawn(file, args);
+  let s: ReturnType<typeof resolveSpawn>;
+  try { s = resolveSpawn(file, args); } catch (e) { return Promise.resolve({ code: 1, out: '', err: (e as Error).message }); }
   return new Promise((resolve) => {
-    execFile(s.command, s.args, { env: { ...process.env, ...s.env }, timeout: timeoutMs, windowsHide: true, maxBuffer: 4 * 1024 * 1024, encoding: 'utf8' }, (e, out, err) => {
+    // a plain .cmd / .bat goes through cmd.exe, which needs its line as resolveSpawn quoted it
+    execFile(s.command, s.args, { env: { ...process.env, ...s.env }, timeout: timeoutMs, windowsHide: true, windowsVerbatimArguments: s.via === 'cmd', maxBuffer: 4 * 1024 * 1024, encoding: 'utf8' }, (e, out, err) => {
       const c = (e as { code?: unknown } | null)?.code;
       resolve({ code: e ? (typeof c === 'number' ? c : 1) : 0, out: String(out ?? ''), err: String(err ?? '') });
     });
@@ -114,6 +117,7 @@ export function runEgoScript(sessionId: string, script: string, opts: EgoRunOpti
 }
 
 async function runRound(sessionId: string, script: string, opts: EgoRunOptions): Promise<ToolResult> {
+  if (opts.signal?.aborted) return { content: [{ type: 'text', text: tr('这一轮被停下了（对话停止或关掉了）。') }], isError: true };
   const st = await egoStatus();
   if (!st.found || !st.path) return { content: [{ type: 'text', text: EGO_FALLBACK }], isError: true };
   const timeoutMs = Math.min(Math.max(opts.timeoutMs ?? EGO_DEFAULT_TIMEOUT_MS, 5_000), EGO_MAX_TIMEOUT_MS);
@@ -126,14 +130,23 @@ async function runRound(sessionId: string, script: string, opts: EgoRunOptions):
   const started = Date.now();
   const before = new Set(images(dir));
 
-  const s = resolveSpawn(st.path, ['nodejs', '-e', `await import(${JSON.stringify(pathToFileURL(file).href)})`]);
+  // import() parses the address as a URL itself, so spaces and non-ASCII letters can stay as they are — and must: a
+  // plain .cmd wrapper runs through cmd.exe, which would expand the %XX escapes (resolveSpawn refuses a %). Only a path
+  // with a literal % keeps the escaped form (which a .cmd wrapper then cannot take).
+  const href = pathToFileURL(file).href;
+  let s: ReturnType<typeof resolveSpawn>;
+  try {
+    s = resolveSpawn(st.path, ['nodejs', '-e', `await import(${JSON.stringify(file.includes('%') ? href : decodeURI(href))})`]);
+  } catch (e) {
+    return { content: [{ type: 'text', text: `${tr('启动不了 ego-browser：{message}', { message: (e as Error).message })}\n${EGO_FALLBACK}` }], isError: true };
+  }
   const r = await new Promise<{ code: number | null; out: string; err: string; timedOut: boolean; spawnError?: string }>((resolve) => {
     let out = '';
     let err = '';
     let timedOut = false;
     let settled = false;
     const cap = 2 * OUTPUT_CHARS;
-    const child = spawn(s.command, s.args, { cwd: dir, env: { ...process.env, ...s.env }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(s.command, s.args, { cwd: dir, env: { ...process.env, ...s.env }, windowsHide: true, windowsVerbatimArguments: s.via === 'cmd', stdio: ['ignore', 'pipe', 'pipe'] });
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     // keep the start and the latest output; clip() trims to size afterwards
@@ -161,7 +174,8 @@ async function runRound(sessionId: string, script: string, opts: EgoRunOptions):
   }
   const secs = ((Date.now() - started) / 1000).toFixed(1);
   const lines: string[] = [];
-  if (r.timedOut) lines.push(tr('脚本超过 {s} 秒没跑完，已经停掉（页面停在停掉时的样子）。把事情拆小一点再试，或者把 timeout_ms 调大。', { s: Math.round(timeoutMs / 1000) }));
+  if (opts.signal?.aborted) lines.push(tr('这一轮被停下了（对话停止或关掉了）。'));
+  else if (r.timedOut) lines.push(tr('脚本超过 {s} 秒没跑完，已经停掉（页面停在停掉时的样子）。把事情拆小一点再试，或者把 timeout_ms 调大。', { s: Math.round(timeoutMs / 1000) }));
   else lines.push(r.code === 0 ? tr('脚本跑完了（{secs} 秒，第 {n} 轮）。', { secs, n }) : tr('脚本出错退出（代码 {code}，{secs} 秒，第 {n} 轮）。', { code: String(r.code), secs, n }));
   if (r.out.trim()) lines.push(`${tr('输出：')}\n${clip(r.out.trimEnd())}`);
   if (r.err.trim()) lines.push(`${tr('错误输出：')}\n${clip(r.err.trimEnd(), OUTPUT_CHARS / 2)}`);

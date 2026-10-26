@@ -36,6 +36,14 @@
 - 另外，ccb 要求延迟的工具先被 `SearchExtraTools` 找到过才能 `ExecuteExtraTool`，否则返回 `result: null`；写假上游时别忘了先搜。
 - 官方二进制读不出尺寸的图片会被换成「Image could not be processed」文字：测试里的假截图要是真的 PNG（1×1 也行）。
 - 命令行上没有脚本，只有 `await import("file:///…")`；Space 名用对话 id 前 8 位，别的对话的 Space 不会被碰到。
+- **Windows 上 ego-browser 要是个普通 `.cmd` / `.bat`**（不是 npm 那种 `%~dp0\x.js` 垫片），`resolveSpawn` 会经 cmd.exe 跑：
+  `execFile` / `spawn` 必须带 `windowsVerbatimArguments: s.via === 'cmd'`（别的调用方都带，第一版漏了，结果「没找到」）；
+  而且 cmd.exe 会展开 `%`，`resolveSpawn` 直接拒绝带 `%` 的参数——`pathToFileURL` 给 `C:\Users\张三`、带空格的路径编出的
+  `%E5…` / `%20` 就过不去。所以 import 的地址用 `decodeURI` 后的原字（`import()` 自己会把它当 URL 解析）；只有路径里本来就有
+  `%` 才保留编码。`resolveSpawn` 抛错时返回退回提示，不让它变成 HTTP 500。
+- 停止：对话停下时 MCP 进程收到 `notifications/cancelled` → 关掉对 server 的请求；`web/http.ts` 看到连接关了就 abort，
+  `runEgoScript` 结束子进程（还在排队的那轮直接不跑）。
+- 脚本上限 60 000 字：工具接口的请求体上限是 256 KB，中文一个字 3 个字节。
 
 ## 测试
 
