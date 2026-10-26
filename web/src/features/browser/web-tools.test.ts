@@ -75,3 +75,15 @@ describe('what a permission card asks', () => {
     expect(permissionTitle({ toolName: 'mcp__github__create_issue', input: {} })).toBe('Claude 想使用 github 的 create_issue');
   });
 });
+
+describe('ego lite', () => {
+  it('names the first address a script goes to, on the step and on the card', () => {
+    const script = 'const t = await taskSpace(CW_SPACE);\nawait t.page("p1").goto("https://github.com/citrolabs/ego-lite");';
+    expect(webToolOf('mcp__web__ego_browser')).toBe('ego_browser');
+    expect(webToolLabel('ego_browser', { script })).toEqual({ icon: 'web', verb: '在 ego lite 里操作网页', arg: 'github.com/citrolabs/ego-lite' });
+    expect(webToolLabel('ego_browser', { script: 'console.log(1)' }).arg).toBe('');
+    expect(webToolAsk('ego_browser', { script }, 'Claude')).toBe('Claude 想在 ego lite 里运行一段脚本（github.com）');
+    expect(webToolAsk('ego_browser', {}, 'Claude')).toBe('Claude 想在 ego lite 里运行一段脚本');
+    expect(webToolLabel('ego_browser_guide', {}).verb).toBe('看 ego lite 的用法');
+  });
+});

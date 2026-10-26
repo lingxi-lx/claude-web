@@ -304,7 +304,12 @@ export interface BrowserSearchPage { url: string; title: string; text: string; c
 /** `image.width / height`: the picture's own size in pixels — the frame `computer` coordinates are given in. */
 export interface BrowserAnswer { page?: BrowserPage; elements?: BrowserElement[]; image?: { mime: 'image/jpeg' | 'image/png'; data: string; width?: number; height?: number }; note?: string; search?: BrowserSearchPage; console?: BrowserConsoleEntry[]; network?: BrowserNetworkEntry[]; tabs?: BrowserTabInfo[]; result?: string }
 /** `web.status`: the switch (`web.mcp`), the search engine, whether a desktop window is hosting the browser. Keys never leave the server. */
-export interface WebStatus { enabled: boolean; engine: string; engines: { id: string; label: string; needsKey: boolean; hasKey?: boolean; browser?: boolean }[]; host: boolean; isolated: boolean }
+export interface WebStatus {
+  enabled: boolean; engine: string; engines: { id: string; label: string; needsKey: boolean; hasKey?: boolean; browser?: boolean }[]; host: boolean; isolated: boolean;
+  /** Which browser Claude acts in (`web.browser.agent`) and whether ego lite's `ego-browser` command was found. */
+  agentBrowser: 'auto' | 'builtin';
+  ego: { found: boolean; version?: string };
+}
 export interface WebSearchResult { title: string; url: string; snippet: string }
 /** What `web.search` answers (the settings page's 「试一下」). `weak`: the results match little of the query (Bing answering a program) and nothing better was to be had. */
 export interface WebSearchAnswer { engine: string; results: WebSearchResult[]; weak?: boolean }
@@ -773,6 +778,8 @@ export type ClientRequest =
   /** The answer to a `browser.command` event, from the window it was sent to. */
   | { kind: 'browser.result'; id: string; ok: boolean; answer?: BrowserAnswer; error?: string }
   | { kind: 'web.status' }
+  /** Look for ego lite again (PATH re-read from the registry first) → WebStatus. */
+  | { kind: 'web.egoDetect' }
   /** One search with the configured engine → WebSearchAnswer. */
   | { kind: 'web.search'; query: string; count?: number }
   | GatewayRequest

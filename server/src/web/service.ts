@@ -1,3 +1,4 @@
+import { EGO_MAX_SCRIPT_CHARS, egoGuide, egoKnown, runEgoScript } from './ego.js';
 import { EventEmitter } from 'node:events';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import dns from 'node:dns';
@@ -171,6 +172,8 @@ export class WebService extends EventEmitter {
       engines: ENGINES.map((e) => (e.needsKey ? { ...e, hasKey: !!this.keys[e.id as 'brave'] } : { ...e })),
       host: this.hosts.size > 0,
       isolated: s['web.browser.isolated'] === true,
+      agentBrowser: s['web.browser.agent'] === 'builtin' ? 'builtin' : 'auto',
+      ego: (({ found, version }) => (version ? { found, version } : { found }))(egoKnown() ?? { found: false }),
     };
   }
 
@@ -542,6 +545,13 @@ export class WebService extends EventEmitter {
       case 'browser_select': {
         if (typeof a.value !== 'string') throw new Error(tr('browser_select 需要参数 value（选项的值或显示的文字）'));
         return acted(await this.browser(sid, 'select', { ref: refOf(a.ref, tool), value: a.value.slice(0, 500) }), tr('已选择。'));
+      }
+      case 'ego_browser_guide':
+        return egoGuide(sid);
+      case 'ego_browser': {
+        const script = str('script');
+        if (script.length > EGO_MAX_SCRIPT_CHARS) throw new Error(tr('ego_browser 的脚本太长（最多 {n} 个字符）', { n: EGO_MAX_SCRIPT_CHARS }));
+        return runEgoScript(sid, script, { timeoutMs: num('timeout_ms') });
       }
       case 'browser_eval': {
         const script = str('script');

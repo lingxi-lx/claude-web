@@ -2,6 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dataDir } from '../files/service.js';
+import { egoKnown, egoStatus } from './ego.js';
 
 /**
  * How each agent is told about the `web` MCP server (web search + the built-in browser) — the same three ways as the
@@ -19,11 +20,26 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 
 /** The tool an agent may use without being asked each time (spec §5.3): searching reads, it changes nothing. */
 export const WEB_SEARCH_TOOL = 'mcp__web__web_search';
+/** Reading ego lite's guide changes nothing; ego_browser itself is asked about (it acts with the user's sign-ins). */
+export const EGO_GUIDE_TOOL = 'mcp__web__ego_browser_guide';
 
 let enabled = true;
 /** Settings switch (`web.mcp`). Off = no agent is told about the server; running conversations keep theirs. */
 export function setWebMcpEnabled(on: boolean) { enabled = on; }
 export function webMcpEnabled() { return enabled; }
+
+/**
+ * Setting `web.browser.agent`: which browser Claude acts in. 'auto' (default) = ego lite when its `ego-browser` command
+ * was found (web/ego.ts), else the built-in one; 'builtin' = always the built-in one. New conversations only.
+ */
+let agentBrowser: 'auto' | 'builtin' = 'auto';
+export function setWebAgentBrowser(v: unknown) { agentBrowser = v === 'builtin' ? 'builtin' : 'auto'; }
+/** Does a conversation started now get ego lite? The last detection, refreshed in the background when stale. */
+export function egoForNewConversations(): boolean {
+  if (agentBrowser === 'builtin') return false;
+  void egoStatus().catch(() => {});
+  return egoKnown()?.found === true;
+}
 
 interface Endpoint { url: string; token: string; tokenFile?: string }
 let endpoint: Endpoint | null = null;
@@ -106,6 +122,7 @@ function spawnShape(t: WebMcpTarget, execPath: string): { command: string; args:
       CW_WEB_URL: endpoint.url,
       ...(endpoint.tokenFile ? { CW_WEB_TOKEN_FILE: endpoint.tokenFile } : { CW_WEB_TOKEN: endpoint.token }),
       CW_SESSION_ID: t.sessionId ?? '',
+      ...(egoForNewConversations() ? { CW_WEB_BROWSER: 'ego' } : {}),
     },
   };
 }
@@ -120,7 +137,7 @@ export function webClaudeMcpServer(t: WebMcpTarget, execPath = process.execPath)
 
 /** Tools Claude runs without asking, as `allowedTools`: the search, only while the server is handed out. */
 export function webAllowedTools(): string[] {
-  return enabled && endpoint ? [WEB_SEARCH_TOOL, ...CHARACTER_FREE_TOOLS, ...THEME_FREE_TOOLS] : [];
+  return enabled && endpoint ? [WEB_SEARCH_TOOL, EGO_GUIDE_TOOL, ...CHARACTER_FREE_TOOLS, ...THEME_FREE_TOOLS] : [];
 }
 
 /** 网吧's character tools that only touch the character library (drafts the user watches, a save): not asked about one by

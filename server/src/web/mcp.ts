@@ -29,7 +29,11 @@ const CALL_TIMEOUT_MS = 90_000;
  */
 const ASK_CALL_TIMEOUT_MS = 6 * 60_000;
 const ASKING_TOOLS = new Set(['browser_click', 'browser_type', 'browser_press_key', 'browser_scroll', 'browser_computer', 'browser_hover', 'browser_drag', 'browser_select', 'browser_eval']);
-export const callTimeoutOf = (tool: string): number => (ASKING_TOOLS.has(tool) ? ASK_CALL_TIMEOUT_MS : CALL_TIMEOUT_MS);
+export const callTimeoutOf = (tool: string, args: Record<string, unknown> = {}): number => {
+  // ego_browser: the script's own limit (web/ego.ts clamps it the same way) plus room for the permission card
+  if (tool === 'ego_browser') return Math.min(Math.max(typeof args.timeout_ms === 'number' ? args.timeout_ms : 120_000, 5_000), 600_000) + 120_000;
+  return ASKING_TOOLS.has(tool) ? ASK_CALL_TIMEOUT_MS : CALL_TIMEOUT_MS;
+};
 /** Said by every page-changing tool: the user's say over sites. */
 const SITE_NOTE = ' The first time you change something on a new site the user is asked to allow it (once, or for that site from then on); if the user declines, do not retry unless the user asks. While the user has taken over the browser these tools refuse; reading still works.';
 
@@ -261,6 +265,50 @@ export const TOOLS = [
   ...THEME_TOOLS,
 ];
 
+/**
+ * ego lite (web/ego.ts): listed only when the launcher found it and the user did not pick the built-in browser
+ * (CW_WEB_BROWSER=ego). Then it is the browser for web tasks and the browser_* tools say so. `anthropic/alwaysLoad`
+ * keeps them in the model's tool list on our engine, which otherwise defers MCP tools behind ExecuteExtraTool — and
+ * that runner hands a result back as one JSON string, so a screenshot would reach the model as base64 text.
+ */
+const ALWAYS_LOAD = { 'anthropic/alwaysLoad': true } as const;
+export const EGO_TOOLS = [
+  {
+    name: 'ego_browser_guide',
+    title: 'How to use ego lite',
+    description: 'Read how to drive ego lite (the user\'s own browser app, with their sign-ins) through ego_browser: the script API (taskSpace, page.goto / snapshot / click / fill / screenshot …) and Claude Web\'s conventions. Read it once in each conversation before the first ego_browser call.',
+    inputSchema: { type: 'object', properties: {} },
+    annotations: { title: 'How to use ego lite', readOnlyHint: true, openWorldHint: false },
+    _meta: ALWAYS_LOAD,
+  },
+  {
+    name: 'ego_browser',
+    title: 'Act in ego lite',
+    description: 'The browser to use FIRST for any web task — opening pages, reading them, clicking, filling forms, signing in, screenshots. Runs a JavaScript (ES module) script in ego lite, a real browser on the user\'s computer where the user is already signed in to their sites; this conversation has its own Space there, apart from the user\'s tabs. Read ego_browser_guide first for the API. Each call is a new process: the Space and its tabs stay, variables do not. Print what you need to read with console.log; pictures saved into CW_OUT come back to you. If it says ego lite cannot be used, switch to the browser_* tools for the rest of the conversation.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        script: { type: 'string', maxLength: 200000, description: 'The script, an ES module body (top-level await works). The globals CW_SPACE (this conversation\'s Space name) and CW_OUT (a folder for screenshots) are set.' },
+        timeout_ms: { type: 'number', description: 'Stop the script after this long (default 120000, at most 600000).' },
+      },
+      required: ['script'],
+    },
+    annotations: { title: 'Act in ego lite', readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    _meta: ALWAYS_LOAD,
+  },
+];
+
+const EGO_PREFER = ' When ego_browser is available, use it instead for web tasks; use this tool only to show the user a page in the app\'s panel, or when ego_browser cannot be used.';
+const EGO_INSTRUCTIONS = ' For web tasks use ego_browser (ego lite, the user\'s own browser) first; the browser_* tools are the fallback and for showing the user a page in the app.';
+
+/** What tools/list answers for this process's environment. */
+export function toolsFor(env: NodeJS.ProcessEnv = process.env) {
+  if (env.CW_WEB_BROWSER !== 'ego') return TOOLS;
+  return [...TOOLS.map((t) => (t.name.startsWith('browser_') ? { ...t, description: t.description + EGO_PREFER } : t)), ...EGO_TOOLS];
+}
+
+export const instructionsFor = (env: NodeJS.ProcessEnv = process.env) => INSTRUCTIONS + (env.CW_WEB_BROWSER === 'ego' ? EGO_INSTRUCTIONS : '');
+
 interface ToolAnswer { content: unknown[]; isError?: boolean }
 const failed = (text: string): ToolAnswer => ({ content: [{ type: 'text', text }], isError: true });
 
@@ -331,20 +379,21 @@ function main() {
       if (!msg || typeof msg !== 'object' || msg.method === undefined) continue; // a response to something we never send
       switch (msg.method) {
         case 'initialize':
-          ok(msg.id, { protocolVersion: PROTOCOL_VERSION, capabilities: { tools: {} }, serverInfo: { name: 'claude-web-web', version: '1.0.0' }, instructions: INSTRUCTIONS });
+          ok(msg.id, { protocolVersion: PROTOCOL_VERSION, capabilities: { tools: {} }, serverInfo: { name: 'claude-web-web', version: '1.0.0' }, instructions: instructionsFor() });
           break;
         case 'notifications/initialized':
         case 'notifications/cancelled':
           break;
         case 'tools/list':
-          ok(msg.id, { tools: TOOLS });
+          ok(msg.id, { tools: toolsFor() });
           break;
         case 'tools/call': {
           const name = String(msg.params?.name);
-          if (!TOOLS.some((t) => t.name === name)) { fail(msg.id, -32602, `unknown tool ${name}`); break; }
-          const args = msg.params?.arguments;
+          if (!toolsFor().some((t) => t.name === name)) { fail(msg.id, -32602, `unknown tool ${name}`); break; }
+          const raw = msg.params?.arguments;
+          const args = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
           inFlight++;
-          void callServer(name, args && typeof args === 'object' ? (args as Record<string, unknown>) : {}, process.env, callTimeoutOf(name)).then((r) => { ok(msg.id, r); inFlight--; maybeExit(); });
+          void callServer(name, args, process.env, callTimeoutOf(name, args)).then((r) => { ok(msg.id, r); inFlight--; maybeExit(); });
           break;
         }
         case 'ping':

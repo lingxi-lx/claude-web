@@ -95,7 +95,8 @@ import { themeTool } from './themes/tools.js';
 import { proxy } from './net/proxy.js';
 import { WebService } from './web/service.js';
 import { handleWebTool } from './web/http.js';
-import { configureWebMcp, setWebMcpEnabled } from './web/launcher.js';
+import { configureWebMcp, setWebAgentBrowser, setWebMcpEnabled } from './web/launcher.js';
+import { egoStatus } from './web/ego.js';
 import { ComputerAccess } from './computer/access.js';
 import { SiteAsk } from './web/site-gate.js';
 import { handleComputerAsk } from './computer/http.js';
@@ -433,6 +434,10 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   });
   await web.warm();
   setWebMcpEnabled(meta.settings()['web.mcp'] !== false);
+  setWebAgentBrowser(meta.settings()['web.browser.agent']);
+  // ego lite: found once at start (launcher.ts reads the verdict when a conversation starts)
+  // (after PATH has the registry's entries and ~/.local/bin, where its onboarding puts the command)
+  void refreshProcessPath().catch(() => {}).then(() => egoStatus()).then(() => web.settingsChanged()).catch(() => {});
   const pool = new RunnerPool(providers, agents, transcripts);
   // 操控电脑: only a conversation that is open here can ask for control of applications
   computer = new ComputerAccess({ knows: (sid) => !!pool.get(sid) });

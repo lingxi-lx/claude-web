@@ -12,6 +12,7 @@ import { DOCK_DENY_QUEUED, DOCK_HINT, DOCK_STATUS } from '@/ui/terms';
 import { useLeaveGhost, type GhostOpts } from '@/ui/ghost';
 import { SITE_TOOL, alwaysDetails, alwaysLabel, denyResponse, dockKind, permissionTitle, primaryKey, splitPending } from './permission-dock';
 import { ACCESS_NOTE, accessAsk } from '@/features/computer/computer-tools';
+import { webToolOf } from '@/features/browser/web-tools';
 import { tr } from '@/i18n';
 
 // The card a permission request or an ExitPlanMode docks above the composer (redesign phase 5; an AskUserQuestion is
@@ -131,6 +132,8 @@ function ToolPermission({ p, agent, cwd, more, reason, onReasonUsed, scope, note
           </>
         ) : edit ? (
           <div className="pd-scroll">{(p.toolName === 'MultiEdit' ? inp.edits ?? [] : [inp]).map((e: any, i: number) => <DiffView key={i} oldText={String(e.old_string ?? '')} newText={String(e.new_string ?? '')} title={String(inp.file_path ?? '')} collapse={false} />)}</div>
+        ) : webToolOf(p.toolName) === 'ego_browser' ? (
+          <div className="pd-scroll"><CodeBlock code={String(inp.script ?? '')} lang="javascript" title={tr('在 ego lite 里运行的脚本')} maxLines={30} /></div>
         ) : p.toolName === 'Write' ? (
           <div className="pd-scroll"><CodeBlock code={String(inp.content ?? '')} lang={langFromPath(String(inp.file_path ?? ''))} title={String(inp.file_path ?? '')} maxLines={40} /></div>
         ) : (
