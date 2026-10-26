@@ -537,3 +537,29 @@ describe('loadResumeMode', () => {
     expect(useStore.getState().resumeModes.s2).toBeUndefined();
   });
 });
+
+describe('loadResumeMode: replies out of order', () => {
+  it('an older reply that comes back after a newer one is dropped', async () => {
+    useStore.setState({ resumeModes: {} });
+    const gates: ((v: unknown) => void)[] = [];
+    fake.handlers.set('session.resumeMode', () => new Promise((res) => gates.push(res)));
+    const first = useStore.getState().loadResumeMode('s1');
+    const second = useStore.getState().loadResumeMode('s1');
+    gates[1]({ permissionMode: 'bypassPermissions' });
+    await second;
+    gates[0]({ permissionMode: 'default' });
+    await first;
+    expect(useStore.getState().resumeModes.s1).toBe('bypassPermissions');
+  });
+  // another machine's meta.changed does not reach this window, its sessions.changed does: the chips already asked
+  // about ask again, so a mode recorded over there shows here
+  it('sessions.changed asks again for every conversation already asked about', async () => {
+    useStore.setState({ resumeModes: { s1: 'default' } });
+    fake.handlers.set('session.resumeMode', () => ({ permissionMode: 'bypassPermissions' }));
+    fake.sent.length = 0;
+    for (const l of fake.listeners) l({ kind: 'sessions.changed' });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(fake.sent.filter((r) => r.kind === 'session.resumeMode').map((r) => r.sessionId)).toEqual(['s1']);
+    expect(useStore.getState().resumeModes.s1).toBe('bypassPermissions');
+  });
+});

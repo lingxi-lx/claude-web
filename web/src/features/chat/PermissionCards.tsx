@@ -325,7 +325,10 @@ export function PermissionDock({ sessionId, reason, onReasonUsed, scope, note, o
  * (`asAsked`); the answer still goes back by the request's id, for the request as it came.
  */
 export function DockCard(asked: CardProps) {
-  const p = asAsked(asked.p);
+  const inner = asAsked(asked.p);
+  // the wrapper's suggestions are a rule for ExecuteExtraTool — every deferred tool — while the card reads as one
+  // narrow action: no 总是允许 on it (only 允许一次 / 拒绝), and no rule made up for the tool inside either
+  const p = inner === asked.p ? inner : { ...inner, suggestions: undefined };
   const props = p === asked.p ? asked : { ...asked, p };
   const kind = dockKind(p);
   return kind === 'plan' ? <PlanApproval {...props} /> : kind === 'access' ? <AccessRequest {...props} /> : isEgoScriptRequest(p) ? <EgoScriptRequest {...props} /> : p.toolName === SITE_TOOL ? <SiteRequest {...props} /> : <ToolPermission {...props} />;

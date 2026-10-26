@@ -389,6 +389,8 @@ export const hideSheet = (): void => { if (useStore.getState().sheetAt) useStore
 
 /** When each toast goes: a keyed one that is rewritten starts its time again. */
 const toastTimers = new Map<number, ReturnType<typeof setTimeout>>();
+/** The latest session.resumeMode ask per conversation: an older reply that comes back later is dropped. */
+const resumeModeSeq = new Map<string, number>();
 
 export const useStore = create<State>((set, get) => ({
   connected: false,
@@ -552,7 +554,11 @@ export const useStore = create<State>((set, get) => ({
     await get().loadMeta();
   },
   async loadResumeMode(sessionId) {
+    // replies can come back out of order (a refetch right after the first ask): only the latest ask's answer counts
+    const seq = (resumeModeSeq.get(sessionId) ?? 0) + 1;
+    resumeModeSeq.set(sessionId, seq);
     const r = await ws.request<{ permissionMode?: PermissionMode } | null>({ kind: 'session.resumeMode', sessionId }).catch(() => null);
+    if (resumeModeSeq.get(sessionId) !== seq) return;
     const mode = r?.permissionMode;
     if (get().resumeModes[sessionId] === mode) return;
     set((s) => {
@@ -671,6 +677,9 @@ export const useStore = create<State>((set, get) => ({
           break;
         case 'sessions.changed':
           void get().refreshSessions();
+          // another machine's meta.changed never reaches this window, its sessions.changed does: a chip that already
+          // asked what a conversation will resume in asks again (a mode recorded over there shows here)
+          for (const id of Object.keys(get().resumeModes)) void get().loadResumeMode(id);
           break;
         case 'transcripts.changed':
           get().externalChanged(e.sessionIds);

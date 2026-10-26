@@ -88,3 +88,24 @@ describe('a tool asked about through ExecuteExtraTool', () => {
     }
   });
 });
+
+// review: the wrapper's suggestions are a rule for ExecuteExtraTool — every deferred tool — while the card reads as
+// one narrow action; 总是允许 there would write a blanket allow with one click. Not offered on an unwrapped card.
+describe('总是允许 on a card shown as the tool inside ExecuteExtraTool', () => {
+  const suggestions = [{ type: 'addRules', rules: [{ toolName: 'ExecuteExtraTool' }], behavior: 'allow', destination: 'localSettings' }];
+  it('is not offered: only 拒绝 / 允许一次', () => {
+    const html = dock({ requestId: 'rs', sessionId: 's', toolName: 'ExecuteExtraTool', input: { tool_name: 'mcp__web__browser_open', params: { url: 'https://example.com/' } }, suggestions });
+    expect(html).toContain('Claude 想在浏览器里打开 example.com');
+    expect(acts(html)).toEqual(['deny', 'allow']);
+    expect(html).not.toContain('总是允许');
+  });
+  it('a card asked about directly with suggestions still has it', () => {
+    const html = dock({ requestId: 'rd', sessionId: 's', toolName: 'mcp__web__browser_open', input: { url: 'https://example.com/' }, suggestions: [{ ...suggestions[0], rules: [{ toolName: 'mcp__web__browser_open' }] }] });
+    expect(acts(html)).toEqual(['deny', 'always', 'allow']);
+  });
+  it('a malformed wrapper (the generic card) keeps its button: it reads as ExecuteExtraTool, which is what the rule is', () => {
+    const html = dock({ requestId: 'rm', sessionId: 's', toolName: 'ExecuteExtraTool', input: {}, suggestions });
+    expect(html).toContain('Claude 想使用 ExecuteExtraTool');
+    expect(acts(html)).toEqual(['deny', 'always', 'allow']);
+  });
+});
