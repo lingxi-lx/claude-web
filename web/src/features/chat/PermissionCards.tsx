@@ -10,7 +10,7 @@ import { JsonTree } from './tools/McpTool';
 import { Icon } from '@/ui/icons';
 import { DOCK_DENY_QUEUED, DOCK_HINT, DOCK_STATUS } from '@/ui/terms';
 import { useLeaveGhost, type GhostOpts } from '@/ui/ghost';
-import { SITE_TOOL, alwaysDetails, alwaysLabel, denyResponse, dockKind, permissionTitle, primaryKey, splitPending } from './permission-dock';
+import { SITE_TOOL, alwaysDetails, alwaysLabel, denyResponse, dockKind, isEgoScriptRequest, permissionTitle, primaryKey, splitPending } from './permission-dock';
 import { ACCESS_NOTE, accessAsk } from '@/features/computer/computer-tools';
 import { webToolOf } from '@/features/browser/web-tools';
 import { tr } from '@/i18n';
@@ -66,7 +66,7 @@ export function useRespond(p: PermissionRequestEvent) {
   return { busy, send };
 }
 
-interface CardProps { p: PermissionRequestEvent; agent: string; cwd: string; more: number; reason: string; onReasonUsed: () => void; scope: string; note?: string; onDenyQueued?: () => void }
+export interface CardProps { p: PermissionRequestEvent; agent: string; cwd: string; more: number; reason: string; onReasonUsed: () => void; scope: string; note?: string; onDenyQueued?: () => void }
 
 /**
  * The line left of the buttons: the hint (the composer is where another instruction goes), or the composer's note
@@ -133,6 +133,8 @@ function ToolPermission({ p, agent, cwd, more, reason, onReasonUsed, scope, note
         ) : edit ? (
           <div className="pd-scroll">{(p.toolName === 'MultiEdit' ? inp.edits ?? [] : [inp]).map((e: any, i: number) => <DiffView key={i} oldText={String(e.old_string ?? '')} newText={String(e.new_string ?? '')} title={String(inp.file_path ?? '')} collapse={false} />)}</div>
         ) : webToolOf(p.toolName) === 'ego_browser' ? (
+          // an agent's own prompt for the tool (Claude has it allowed and the server asks — EgoScriptRequest; another
+          // agent may still ask on its own first)
           <div className="pd-scroll"><CodeBlock code={String(inp.script ?? '')} lang="javascript" title={tr('在 ego lite 里运行的脚本')} maxLines={30} /></div>
         ) : p.toolName === 'Write' ? (
           <div className="pd-scroll"><CodeBlock code={String(inp.content ?? '')} lang={langFromPath(String(inp.file_path ?? ''))} title={String(inp.file_path ?? '')} maxLines={40} /></div>
@@ -230,6 +232,32 @@ function SiteRequest({ p, agent, more, reason, onReasonUsed, scope, note, onDeny
   );
 }
 
+/**
+ * ego lite (server/src/web/service.ts egoGate, spec 14.1): the server asks before every script any agent runs there —
+ * the ego card's look (its title with the first site the script names, every line of the script), 允许一次 / 拒绝 only.
+ * A script runs with the user's sign-ins: only a click says yes, no Enter.
+ */
+function EgoScriptRequest({ p, agent, more, reason, onReasonUsed, note, onDenyQueued }: CardProps) {
+  const { busy, send } = useRespond(p);
+  const inp = p.input as Record<string, unknown>;
+  const deny = () => { if (send(denyResponse(p, reason)) && reason.trim()) onReasonUsed(); };
+  return (
+    <>
+      <Head p={p} agent={agent} more={more} />
+      <div className="pd-body" data-id="ego-card" data-host={String(inp.host ?? '')}>
+        <div className="pd-scroll"><CodeBlock code={String(inp.script ?? '')} lang="javascript" title={tr('在 ego lite 里运行的脚本')} maxLines={30} /></div>
+        <div className="pd-note">{tr('脚本带着你在 ego lite 里的登录运行。每次运行都会问你（完全放开时不问）。')}</div>
+      </div>
+      <div className="pd-actions">
+        <Hint hint={DOCK_HINT.tool(agent)} note={note} />
+        <DenyQueued p={p} busy={busy} onDenyQueued={onDenyQueued} />
+        <button className="btn" data-act="deny" disabled={busy} onClick={deny} title={reason.trim() ? tr('拒绝，并把输入框里的话告诉 {agent}', { agent }) : tr('拒绝这次操作')}>{tr('拒绝')}</button>
+        <button className="btn primary pd-main" data-act="allow" disabled={busy} onClick={() => send({ behavior: 'allow' })} title={tr('允许运行这一次（只能点这里）')}>{tr('允许一次')}</button>
+      </div>
+    </>
+  );
+}
+
 function PlanApproval({ p, agent, more, reason, onReasonUsed, scope, note, onDenyQueued }: CardProps) {
   const { busy, send } = useRespond(p);
   const approve = () => send({ behavior: 'allow', updatedInput: p.input });
@@ -286,7 +314,14 @@ export function PermissionDock({ sessionId, reason, onReasonUsed, scope, note, o
       <DockLive text={note ?? `${title}。${DOCK_STATUS[kind]}`} />
       {/* before the card: its cleanup must run first, while the card's own nodes are still there */}
       <CardLeave key={`leave:${p.requestId}`} dock={dock} />
-      {kind === 'plan' ? <PlanApproval key={p.requestId} {...props} /> : kind === 'access' ? <AccessRequest key={p.requestId} {...props} /> : p.toolName === SITE_TOOL ? <SiteRequest key={p.requestId} {...props} /> : <ToolPermission key={p.requestId} {...props} />}
+      <DockCard key={p.requestId} {...props} />
     </div>
   );
+}
+
+/** Which card a request docks as. */
+export function DockCard(props: CardProps) {
+  const { p } = props;
+  const kind = dockKind(p);
+  return kind === 'plan' ? <PlanApproval {...props} /> : kind === 'access' ? <AccessRequest {...props} /> : isEgoScriptRequest(p) ? <EgoScriptRequest {...props} /> : p.toolName === SITE_TOOL ? <SiteRequest {...props} /> : <ToolPermission {...props} />;
 }

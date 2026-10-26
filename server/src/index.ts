@@ -431,7 +431,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     characterTool: (tool, args) => characterTool(characters, tool, args) as any,
     themeTool: (tool, args) => themeTool({ svc: themes, getTheme: () => meta.settings()['ui.theme'], setTheme: (v) => meta.setSetting('ui.theme', v) }, tool, args) as any,
     ownPorts: () => [listenPort, remote?.port ?? 0].filter((p) => p > 0),
-    gate: { ask: (sid, req) => siteAsk.ask(sid, req), mode: (sid) => modeOf(sid) },
+    gate: { ask: (sid, req, signal) => siteAsk.ask(sid, req, signal), mode: (sid) => modeOf(sid) },
   });
   await web.warm();
   setWebMcpEnabled(meta.settings()['web.mcp'] !== false);

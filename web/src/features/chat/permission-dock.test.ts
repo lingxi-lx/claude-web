@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PermissionRequestEvent } from '@shared';
 import type { AssistantItem, Item, ToolUseBlock } from '@/model/conversation';
-import { alwaysDetails, alwaysLabel, DOCK_COOLDOWN_MS, dockAction, dockDecide, denyResponse, dockKind, isSlashCommand, permissionTitle, primaryKey, splitPending, waitingToolIds, type DockSeen } from './permission-dock';
+import { alwaysDetails, alwaysLabel, DOCK_COOLDOWN_MS, dockAction, dockDecide, denyResponse, dockKind, isEgoScriptRequest, isSlashCommand, permissionTitle, primaryKey, splitPending, waitingToolIds, type DockSeen } from './permission-dock';
 
 const req = (toolName: string, input: Record<string, unknown> = {}, extra: Partial<PermissionRequestEvent> = {}): PermissionRequestEvent => ({ requestId: `r-${toolName}`, sessionId: 's', toolName, input, ...extra });
 
@@ -169,6 +169,19 @@ describe('dockKind / permissionTitle', () => {
     expect(permissionTitle(req('mcp__computer__left_click', { coordinate: [3, 4] }))).toBe('Claude 想点击屏幕');
     expect(permissionTitle(req('mcp__computer__type', { text: 'hi' }))).toBe('Claude 想用键盘输入');
     expect(permissionTitle(req('mcp__computer__screenshot'))).toBe('Claude 想看屏幕');
+  });
+  it('an ego lite script asked by the server (browser.site, tool ego_browser): titled as ego lite, with the site the server found', () => {
+    const ego = req('browser.site', { host: 'mail.example', op: 'eval', tool: 'ego_browser', eval: true, script: "await p.goto('https://mail.example/')" });
+    expect(isEgoScriptRequest(ego)).toBe(true);
+    expect(dockKind(ego)).toBe('tool');
+    expect(permissionTitle(ego)).toBe('Claude 想在 ego lite 里运行一段脚本（mail.example）');
+    expect(permissionTitle({ ...ego, input: { ...ego.input, host: '' } }, 'Codex')).toBe('Codex 想在 ego lite 里运行一段脚本');
+    // the built-in browser's own script card stays what it was
+    const page = req('browser.site', { host: 'a.example', op: 'eval', tool: 'browser_eval', eval: true, script: '1' });
+    expect(isEgoScriptRequest(page)).toBe(false);
+    expect(permissionTitle(page)).toBe('Claude 想在 a.example 上运行一段脚本');
+    // an agent that still asks about the tool itself (its own approval): the same title as before
+    expect(isEgoScriptRequest(req('mcp__web__ego_browser', { script: '1' }))).toBe(false);
   });
 });
 

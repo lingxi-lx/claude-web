@@ -165,8 +165,9 @@ async function suite(runtime) {
   const from = events.length;
   fs.writeFileSync(egoLog, '');
   await req({ kind: 'session.send', params: { sessionId: sid, text: 'EGO-GO open the page' } });
-  // allow anything else that asks on the way (looking the tool up); keep the ego_browser card
-  const isEgo = (rq) => /ego_browser/.test(String(rq.toolName) + String(rq.input?.tool_name ?? ''));
+  // allow anything else that asks on the way (looking the tool up); keep the ego_browser card — the server's
+  // (browser.site, tool ego_browser: spec 14.1), never Claude's own (the tool is in its allowed tools)
+  const isEgo = (rq) => /ego_browser/.test(String(rq.toolName) + String(rq.input?.tool_name ?? '') + String(rq.input?.tool ?? ''));
   const asked = await until(() => {
     for (const e of events.slice(from)) {
       if (e.kind !== 'permission.request' || e.request.sessionId !== sid) continue;
@@ -176,9 +177,11 @@ async function suite(runtime) {
     return null;
   }, 120_000, 300);
   const askedScript = asked?.input?.script ?? asked?.input?.params?.script;
-  check('ego_browser is asked about, and the card carries the script', !!asked && /ego_browser/.test(JSON.stringify(asked.toolName) + JSON.stringify(asked.input?.tool_name ?? '')) && askedScript === SCRIPT, JSON.stringify(asked && { toolName: asked.toolName, input: asked.input }).slice(0, 400));
+  check('ego_browser is asked about on the server\'s card, and the card carries the whole script', !!asked && asked.toolName === 'browser.site' && asked.input?.tool === 'ego_browser' && askedScript === SCRIPT, JSON.stringify(asked && { toolName: asked.toolName, input: asked.input }).slice(0, 400));
   if (asked) await req({ kind: 'permission.respond', requestId: asked.requestId, response: { behavior: 'allow' } });
   const r = await resultOf(sid, from);
+  const egoCards = events.slice(from).filter((e) => e.kind === 'permission.request' && e.request.sessionId === sid && isEgo(e.request));
+  check('… and only that one card: Claude does not ask about ego_browser itself', egoCards.length === 1, JSON.stringify(egoCards.map((e) => e.request.toolName)));
   const mine = hits.slice(mark).filter((h) => h.main);
   const first = mine[0];
   check('the conversation has ego_browser in its tool list itself (not deferred behind ExecuteExtraTool, which would turn the picture into text)', !!first?.tools?.includes('mcp__web__ego_browser') && mine.find((h) => h.called)?.called === 'direct', JSON.stringify({ called: mine.find((h) => h.called)?.called, tools: first?.tools?.filter((t) => /web__|Extra/.test(t)) }));

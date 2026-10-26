@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import type { BrowserOp, PermissionMode, PermissionRequestEvent } from '../protocol.js';
-import { MUTATING_OPS, SCRIPT_PREVIEW_CHARS, SITE_TOOL, SiteAsk, allowedSitesOf, hostOfUrl, needsAsk, normHost, siteAllowed, siteAnswerOf } from './site-gate.js';
+import { MUTATING_OPS, SCRIPT_PREVIEW_CHARS, SITE_TOOL, SiteAsk, allowedSitesOf, hostOfUrl, needsAsk, normHost, scriptHost, siteAllowed, siteAnswerOf } from './site-gate.js';
 
 const tick = (ms = 5) => new Promise((r) => setTimeout(r, ms));
+
+describe('scriptHost: the site an ego lite script names first', () => {
+  it('the first http(s) address in the script, as a host; \'\' when there is none', () => {
+    expect(scriptHost("const p = task.page('p1');\nawait p.goto('https://GitHub.com/citrolabs/ego-lite'); await p.goto('https://b.example/')")).toBe('github.com');
+    expect(scriptHost('await p.goto(`http://localhost:5173/x`)')).toBe('localhost');
+    expect(scriptHost('console.log(1)')).toBe('');
+    expect(scriptHost('')).toBe('');
+  });
+});
 
 describe('siteAllowed: is a host on the allowed-sites list', () => {
   it('an exact entry is that host only — not its subdomains, not a look-alike', () => {
@@ -168,6 +177,17 @@ describe('SiteAsk: the card, and its three answers', () => {
     expect(siteAnswerOf({ behavior: 'allow', updatedInput: { allow: 'always' } }, true)).toBe('once');
     expect(siteAnswerOf({ behavior: 'allow', updatedInput: { allow: 'always' } }, false)).toBe('always');
     expect(siteAnswerOf({ behavior: 'deny', message: '' }, false)).toBe('deny');
+  });
+
+  it('an ego lite script card carries the whole script (the user reads every line of what runs with their sign-ins)', async () => {
+    const { ask, asked } = make();
+    const script = `await page.goto('https://mail.example/inbox')\n${'y'.repeat(59_000)}`;
+    const p = ask.ask('c1', { host: 'mail.example', op: 'eval', tool: 'ego_browser', eval: true, script });
+    await tick();
+    expect(asked[0]).toMatchObject({ toolName: SITE_TOOL, input: { host: 'mail.example', tool: 'ego_browser', eval: true, scriptLength: script.length } });
+    expect(asked[0].input.script).toBe(script);
+    ask.respond(asked[0].requestId, { behavior: 'allow', updatedInput: { allow: 'always' } });
+    expect(await p).toBe('once');
   });
 
   it('nobody answers / unknown conversation / the conversation closes / the caller goes: deny', async () => {

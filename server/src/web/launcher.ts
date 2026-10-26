@@ -20,8 +20,13 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 
 /** The tool an agent may use without being asked each time (spec §5.3): searching reads, it changes nothing. */
 export const WEB_SEARCH_TOOL = 'mcp__web__web_search';
-/** Reading ego lite's guide changes nothing; ego_browser itself is asked about (it acts with the user's sign-ins). */
+/** Reading ego lite's guide changes nothing. */
 export const EGO_GUIDE_TOOL = 'mcp__web__ego_browser_guide';
+/**
+ * ego_browser acts with the user's sign-ins, so it IS asked about — by this server, on its own card, for every agent
+ * (service.ts egoGate, spec 14.1). Claude is told it is allowed so it does not raise a second card of its own.
+ */
+export const EGO_TOOL = 'mcp__web__ego_browser';
 
 let enabled = true;
 /** Settings switch (`web.mcp`). Off = no agent is told about the server; running conversations keep theirs. */
@@ -137,7 +142,7 @@ export function webClaudeMcpServer(t: WebMcpTarget, execPath = process.execPath)
 
 /** Tools Claude runs without asking, as `allowedTools`: the search, only while the server is handed out. */
 export function webAllowedTools(): string[] {
-  return enabled && endpoint ? [WEB_SEARCH_TOOL, EGO_GUIDE_TOOL, ...CHARACTER_FREE_TOOLS, ...THEME_FREE_TOOLS] : [];
+  return enabled && endpoint ? [WEB_SEARCH_TOOL, EGO_GUIDE_TOOL, EGO_TOOL, ...CHARACTER_FREE_TOOLS, ...THEME_FREE_TOOLS] : [];
 }
 
 /** 网吧's character tools that only touch the character library (drafts the user watches, a save): not asked about one by

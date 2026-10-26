@@ -45,7 +45,7 @@ describe('web MCP launcher', () => {
     expect(JSON.stringify(s)).not.toContain(SECRET);
     expect(fs.readFileSync(tokenFile, 'utf8')).toBe(SECRET);
     // searching is the one tool pre-allowed
-    expect(webAllowedTools()).toEqual(['mcp__web__web_search', 'mcp__web__ego_browser_guide', 'mcp__web__character_guide', 'mcp__web__character_draft', 'mcp__web__character_save', 'mcp__web__character_list', 'mcp__web__theme_guide', 'mcp__web__theme_draft', 'mcp__web__theme_get', 'mcp__web__theme_save', 'mcp__web__theme_list']);
+    expect(webAllowedTools()).toEqual(['mcp__web__web_search', 'mcp__web__ego_browser_guide', 'mcp__web__ego_browser', 'mcp__web__character_guide', 'mcp__web__character_draft', 'mcp__web__character_save', 'mcp__web__character_list', 'mcp__web__theme_guide', 'mcp__web__theme_draft', 'mcp__web__theme_get', 'mcp__web__theme_save', 'mcp__web__theme_list']);
     expect(WEB_SEARCH_TOOL).toBe('mcp__web__web_search');
     // a conversation whose id is not known yet still gets the server
     expect(webClaudeMcpServer({}, NODE).web.env.CW_SESSION_ID).toBe('');

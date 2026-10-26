@@ -11,6 +11,14 @@ import { tr } from '@/i18n';
 /** 允许的网站 (server/src/web/site-gate.ts SITE_TOOL): the built-in browser asks before Claude changes a page of a new site, and before every script. */
 export const SITE_TOOL = 'browser.site';
 
+/**
+ * The server's card before an ego lite script runs (site-gate.ts EGO_SCRIPT_TOOL, spec 14.1): a `browser.site` request
+ * whose tool is `ego_browser` — every agent's, the whole script in it. Not an agent's own prompt for
+ * `mcp__web__ego_browser` (some agents may still raise one; that keeps its card in PermissionCards' ToolPermission).
+ */
+export const isEgoScriptRequest = (p: Pick<PermissionRequestEvent, 'toolName' | 'input'>): boolean =>
+  p.toolName === SITE_TOOL && (p.input as Record<string, unknown> | undefined)?.tool === 'ego_browser';
+
 /** `access`: 操控电脑 asking which applications it may control — answered by a click on the card, never by a key. */
 export type DockKind = 'tool' | 'ask' | 'plan' | 'access';
 
@@ -107,6 +115,7 @@ export function permissionTitle(p: Pick<PermissionRequestEvent, 'toolName' | 'in
     case 'WebSearch': return tr('{agent} 想搜索网页', { agent });
     case SITE_TOOL: {
       const host = String(inp.host ?? '');
+      if (isEgoScriptRequest(p)) return host ? tr('{agent} 想在 ego lite 里运行一段脚本（{h}）', { agent, h: host }) : tr('{agent} 想在 ego lite 里运行一段脚本', { agent });
       if (inp.eval === true) return host ? tr('{agent} 想在 {host} 上运行一段脚本', { agent, host }) : tr('{agent} 想在页面上运行一段脚本', { agent });
       return host ? tr('{agent} 想在 {host} 上操作页面', { agent, host }) : tr('{agent} 想在页面上操作', { agent });
     }

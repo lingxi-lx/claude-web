@@ -23,8 +23,13 @@
   这时每个 `browser_*` 的说明末尾加「ego_browser 能用时优先用它」，`instructions` 也加一句。
 - `web/launcher.ts`：设置 `web.browser.agent`（`auto` 默认 / `builtin`）+ 最近一次探测找到命令 → 启动参数里加 `CW_WEB_BROWSER=ego`。
   Claude / Codex / ACP 三条路都走 `spawnShape`，都生效；改设置只对之后新开的对话生效。
-- 权限：`ego_browser_guide` 进 `webAllowedTools`；`ego_browser` **每次问**（它带着用户的登录在操作网站），权限卡上把脚本画成代码块
-  （`PermissionCards.tsx`），标题「Claude 想在 ego lite 里运行一段脚本（host）」，host 取脚本里第一个网址。
+- 权限（2026-10-26 改，spec 14.1 / 14.4）：**由服务端问，不分 Agent**（以前靠各 Agent 自己的提示，Codex / ACP 可能不问就跑）。
+  `service.ts` 的 `egoGate` 在跑脚本前用 `needsAsk('eval', …)` 判断（除「完全放开」外每次问；没有 gate 不问），经 `gate.ask` 发
+  `browser.site` 卡，`input.tool = 'ego_browser'`、**整段脚本**（`site-gate.ts` 对 ego 不截 400 字）、`host` = 脚本里第一个网址的主机
+  （`scriptHost`）。前端 `isEgoScriptRequest` → `EgoScriptRequest` 卡：标题「Claude 想在 ego lite 里运行一段脚本（host）」、代码块、
+  只有「允许一次 / 拒绝」，不认 Enter。回答 `always` 当一次，永不写允许的网站。拒绝 / 超时 / 对话停下 → 不跑，结果是「用户没有允许…」，
+  **不带 `EGO_FALLBACK`**（不能让模型换内置浏览器做同样的事）。为免 Claude 再弹自己的卡，`mcp__web__ego_browser` 进了 `webAllowedTools`；
+  `ego_browser_guide` 也在里面。`ToolPermission` 里对 `mcp__web__ego_browser` 的老卡留着：别的 Agent 可能还会先自己问一次。
 - 设置 → 联网 →「Agent 用哪个浏览器操作网页」（`WebSettings.tsx`）：ego lite（装了就用它）/ 内置浏览器、检测结果、「重新检测」
   （`web.egoDetect`）、官网链接（系统浏览器打开）。`WebStatus` 多了 `agentBrowser` 和 `ego`。
 

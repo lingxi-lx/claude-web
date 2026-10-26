@@ -777,6 +777,8 @@ export const EN_SERVER: Record<string, string> = {
   "用户在 IM 上拒绝": "Denied by the user on IM",
   "用户没有允许在 {site} 上操作（{tool}）。不要再试，除非用户要求；读页面不受影响。": "The user did not allow acting on {site} ({tool}). Don't try again unless the user asks; reading pages still works.",
   "用户没有允许在 {site} 上运行这段脚本。不要再试，除非用户要求。": "The user did not allow running this script on {site}. Don't try again unless the user asks.",
+  "用户没有允许在 ego lite 里运行这段脚本（{site}）。不要再试，也不要换别的浏览器做同样的事，除非用户要求。": "The user did not allow running this script in ego lite ({site}). Don't try again, and don't do the same in another browser, unless the user asks.",
+  "用户没有允许在 ego lite 里运行这段脚本。不要再试，也不要换别的浏览器做同样的事，除非用户要求。": "The user did not allow running this script in ego lite. Don't try again, and don't do the same in another browser, unless the user asks.",
   "用法：/dispatch [项目名:] <任务>": "Usage: /dispatch [project:] <task>",
   "界面语言": "interface language",
   "百度": "Baidu",

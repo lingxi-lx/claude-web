@@ -8,7 +8,8 @@ import type { BrowserOp, PermissionMode, PermissionRequestEvent, PermissionRespo
  * presses keys, scrolls, hovers, drags, picks from a list, or runs a script — the user is asked once per site, on a
  * card of the conversation ("允许一次 / 总是允许这个网站 / 拒绝"). 总是允许 puts the host name in
  * `web.browser.allowedSites`, after which that site is not asked about again. A script (`browser_eval`) is asked about
- * every time, allowed site or not, with its first 400 characters on the card.
+ * every time, allowed site or not, with its first 400 characters on the card. An ego lite script (`ego_browser`) is a
+ * script too: asked every time, its whole text on the card (EGO_SCRIPT_TOOL below).
  *
  * Like 操控电脑 (computer/access.ts) the card is raised by this server, not by the agent's own permission prompt.
  * A conversation in 「完全放开」 (bypassPermissions) is asked nothing — not about sites, not about scripts — and the
@@ -86,6 +87,18 @@ export function needsAsk(op: BrowserOp, host: string | undefined, o: { list: rea
   return 'site';
 }
 
+/**
+ * ego lite (ego.ts) goes through this gate too, as a script (`op: 'eval'`, `tool: 'ego_browser'`): asked every time
+ * except in 完全放开, by every agent alike, 允许一次 / 拒绝 only, the whole script on the card, titled with the first
+ * site the script names (spec 14.1). The card (web permission-dock.ts) knows it by this tool name.
+ */
+export const EGO_SCRIPT_TOOL = 'ego_browser';
+
+/** The host of the first http(s) address in a script ('' when it names none) — what an ego lite card is titled with. */
+export function scriptHost(script: string): string {
+  return hostOfUrl(/https?:\/\/[^\s'"`)]+/.exec(String(script ?? ''))?.[0]);
+}
+
 /** What the card shows. */
 export interface SiteRequest { host: string; op: BrowserOp; tool: string; eval?: boolean; script?: string }
 export type SiteAnswer = 'once' | 'always' | 'deny';
@@ -117,7 +130,11 @@ export class SiteAsk extends EventEmitter {
     if (signal?.aborted) return Promise.resolve('deny');
     const requestId = randomUUID();
     const input: Record<string, unknown> = { host: req.host, op: req.op, tool: req.tool };
-    if (req.eval) { input.eval = true; input.script = String(req.script ?? '').slice(0, SCRIPT_PREVIEW_CHARS); input.scriptLength = String(req.script ?? '').length; }
+    if (req.eval) {
+      const script = String(req.script ?? '');
+      // an ego lite script runs with the user's sign-ins: the card shows every line of it (at most EGO_MAX_SCRIPT_CHARS)
+      input.eval = true; input.script = req.tool === EGO_SCRIPT_TOOL ? script : script.slice(0, SCRIPT_PREVIEW_CHARS); input.scriptLength = script.length;
+    }
     const event: PermissionRequestEvent = { requestId, sessionId, toolName: SITE_TOOL, input };
     return new Promise<SiteAnswer>((resolve) => {
       const done = (a: SiteAnswer) => {

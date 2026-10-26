@@ -8,7 +8,7 @@ import { BROWSER_TIMEOUT_MS, ENGINES, engineSetting, search, type BrowserSearch,
 import { htmlToText } from './html-text.js';
 import { resolvedRefusal, urlRefusal } from './url-guard.js';
 import { ACTION_CHARS, DEFAULT_CHARS, SEARCH_FAILED_HINT, clampChars, errorResult, formatConsole, formatFind, formatNetwork, formatPage, formatEval, formatSearch, formatSnapshot, formatTabs, textResult, type ToolResult } from './format.js';
-import { ALLOWED_SITES_KEY, MUTATING_OPS, allowedSitesOf, hostOfUrl, needsAsk, normHost, type SiteAnswer, type SiteRequest } from './site-gate.js';
+import { ALLOWED_SITES_KEY, EGO_SCRIPT_TOOL, MUTATING_OPS, allowedSitesOf, hostOfUrl, needsAsk, normHost, scriptHost, type SiteAnswer, type SiteRequest } from './site-gate.js';
 import { tr } from '../i18n/index.js';
 
 /**
@@ -106,10 +106,11 @@ export interface WebDeps {
   themeTool?: (tool: string, args: Record<string, unknown>) => Promise<ToolResult>;
   /**
    * 允许的网站 (site-gate.ts): asks the user on a card of the conversation before a page is changed on a new site,
-   * and before every script; `mode` is the conversation's permission mode (完全放开 asks about no site). Without
-   * it (tests, the CLI) nothing is asked.
+   * and before every script — an ego lite script (ego_browser) included; `mode` is the conversation's permission mode
+   * (完全放开 asks about nothing). `signal`: the tool call went away (the turn was stopped) → the card is withdrawn.
+   * Without it (tests, the CLI) nothing is asked.
    */
-  gate?: { ask: (sessionId: string, req: SiteRequest) => Promise<SiteAnswer>; mode: (sessionId: string) => PermissionMode | undefined };
+  gate?: { ask: (sessionId: string, req: SiteRequest, signal?: AbortSignal) => Promise<SiteAnswer>; mode: (sessionId: string) => PermissionMode | undefined };
 }
 
 interface KeptPage { url: string; title: string; text: string; elements: BrowserElement[]; at: number }
@@ -365,6 +366,26 @@ export class WebService extends EventEmitter {
     }
   }
 
+  /**
+   * An ego lite script runs with the user's sign-ins: the user is asked on the server's card before every one, whatever
+   * the agent (Codex / ACP agents may not ask on their own) — not in 完全放开, and not without a gate (spec 14.1 / 14.4).
+   * The same rule as a script in the built-in browser (`needsAsk('eval')`). An 'always' is this once: no site is ever
+   * added to the allow-list from an ego script. A 拒绝 / no answer in time / the turn stopped throws a refusal — not
+   * EGO_FALLBACK: ego lite works, the user said no, so the model must not redo it in the built-in browser.
+   */
+  private async egoGate(sessionId: string, script: string, signal?: AbortSignal): Promise<void> {
+    const gate = this.d.gate;
+    if (!gate) return;
+    const host = scriptHost(script);
+    if (needsAsk('eval', host, { list: [], mode: gate.mode(sessionId) }) === 'no') return;
+    const answer = await gate.ask(sessionId, { host, op: 'eval', tool: EGO_SCRIPT_TOOL, eval: true, script }, signal);
+    if (answer === 'deny') {
+      throw new Error(host
+        ? tr('用户没有允许在 ego lite 里运行这段脚本（{site}）。不要再试，也不要换别的浏览器做同样的事，除非用户要求。', { site: host })
+        : tr('用户没有允许在 ego lite 里运行这段脚本。不要再试，也不要换别的浏览器做同样的事，除非用户要求。'));
+    }
+  }
+
   /** 总是允许: the host goes on `web.browser.allowedSites` (once). */
   private async allowSite(site: string): Promise<void> {
     const list = allowedSitesOf(this.d.settings());
@@ -551,6 +572,7 @@ export class WebService extends EventEmitter {
       case 'ego_browser': {
         const script = str('script');
         if (script.length > EGO_MAX_SCRIPT_CHARS) throw new Error(tr('ego_browser 的脚本太长（最多 {n} 个字符）', { n: EGO_MAX_SCRIPT_CHARS }));
+        await this.egoGate(sid, script, signal);
         return runEgoScript(sid, script, { timeoutMs: num('timeout_ms'), signal });
       }
       case 'browser_eval': {
