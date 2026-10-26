@@ -348,6 +348,31 @@ describe('RunnerPool: the permission mode a conversation comes back in', () => {
     expect((p.open({ sessionId: 'c', cwd: 'C:/x', permissionMode: 'plan' }) as any).params.permissionMode).toBe('plan');
     expect((setup({}, { 'ui.defaultMode': 'nonsense' }).p.open({ sessionId: 'd', cwd: 'C:/x' }) as any).params.permissionMode).toBeUndefined();
   });
+  // 2026-10-26 (desktop QA): a conversation opened as 每步询问 while 新对话默认权限 is 完全放开 must never come back in
+  // 完全放开 — not even when its process never got as far as reporting its mode (a start that failed, a close before
+  // init) and whoever reopens it says no mode (IM, schedules, goals, another window after a restart)
+  it.each([
+    ['default', 'bypassPermissions'],
+    ['default', 'acceptEdits'],
+    ['plan', 'bypassPermissions'],
+    ['acceptEdits', 'plan'],
+    ['bypassPermissions', 'default'],
+  ] as const)('opened as %s while new conversations default to %s: a reopen without a mode keeps it', (explicit, def) => {
+    const { p, writes } = setup({}, { 'ui.defaultMode': def });
+    const r: any = p.open({ cwd: 'C:/x', permissionMode: explicit });
+    expect(r.params.permissionMode).toBe(explicit);
+    expect(writes).toContainEqual([r.sessionId, { permissionMode: explicit }]);
+    r.setState('error'); // no info ever came
+    const again: any = p.open({ sessionId: r.sessionId, cwd: 'C:/x' });
+    expect(again).not.toBe(r);
+    expect(again.params.permissionMode).toBe(explicit);
+  });
+  it('a resume with an explicit mode is recorded too, and a later one without a mode keeps it', () => {
+    const { p } = setup({ old: { permissionMode: 'bypassPermissions' } }, { 'ui.defaultMode': 'bypassPermissions' });
+    const r: any = p.open({ sessionId: 'old', cwd: 'C:/x', permissionMode: 'default' });
+    r.setState('closed');
+    expect((p.open({ sessionId: 'old', cwd: 'C:/x' }) as any).params.permissionMode).toBe('default');
+  });
   it('a fork starts from the default, not from its source record', () => {
     const { p } = setup({ src: { permissionMode: 'plan' } }, {});
     expect((p.open({ sessionId: 'src', cwd: 'C:/x', fork: true }) as any).params.permissionMode).toBeUndefined();
@@ -359,7 +384,7 @@ describe('RunnerPool: the permission mode a conversation comes back in', () => {
     r.emit('info', { sessionId: 'a', permissionMode: 'bypassPermissions' });
     r.emit('info', { sessionId: 'a', permissionMode: 'acceptEdits' });
     r.emit('info', { sessionId: 'a' });
-    expect(writes).toEqual([['a', { permissionMode: 'bypassPermissions' }], ['a', { permissionMode: 'acceptEdits' }]]);
+    expect(writes).toEqual([['a', { permissionMode: 'default' }], ['a', { permissionMode: 'bypassPermissions' }], ['a', { permissionMode: 'acceptEdits' }]]);
   });
   it('a fork records nothing under its made-up id — under its own once the CLI gives it one', () => {
     const { p, writes } = setup({}, {});

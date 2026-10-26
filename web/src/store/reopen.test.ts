@@ -48,6 +48,10 @@ describe('what a conversation that is not running will continue with (final revi
     expect(resumeView({ conv }, {}, 'acceptEdits').permissionMode).toBe('acceptEdits');
     expect(resumeView({ conv, info: info({ permissionMode: 'plan' }) }, { permissionMode: 'bypassPermissions' }, 'acceptEdits').permissionMode).toBe('plan');
     expect(resumeView({ conv, resume: { permissionMode: 'default' } }, { permissionMode: 'bypassPermissions' }).permissionMode).toBe('default');
+    // 每步询问 is a mode, not 「unset」 (2026-10-26): recorded / live 'default' wins over a 完全放开 default, chip and resume alike
+    expect(resumeView({ conv }, { permissionMode: 'default' }, 'bypassPermissions').permissionMode).toBe('default');
+    expect(resumeView({ conv, info: info({ permissionMode: 'default' }) }, {}, 'bypassPermissions').permissionMode).toBe('default');
+    expect(resumeParams({ conv, info: info({ permissionMode: 'default' }) }).permissionMode).toBe('default');
   });
   it('nothing picked and no live info: the resume params are exactly reopenSettings(undefined) — the server / CLI choose', () => {
     const conv = { items: items('claude-sonnet-5') };

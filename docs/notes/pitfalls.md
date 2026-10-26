@@ -44,3 +44,17 @@
 - 真接口验证：`5b7b91f6` 的分叉（33 万 token 历史），第一轮 400 → 重试 OK；用户两个对话按 unsigned 清掉（备份 `*.bak-unsigned-2026-10-19T13-44-06-426Z`）后，
   新分叉第一轮就 OK。分叉 / 真机脚本的做法：自己起一个 server（`meta.json` 只拷 providers 到临时 `CLAUDE_WEB_DIR`，真 HOME 用账号登录），
   `session.open { sessionId, fork: true, permissionMode: "plan" }`，跑完删掉分叉的 jsonl。
+
+## 每步询问的对话第二轮变成完全放开？（2026-10-26 桌面版 QA）
+
+- 现象：`ui.defaultMode = bypassPermissions`，一个对话显式按 `default` 打开，第一轮 Claude 问了，第二轮什么卡都没出、页面脚本直接跑了，
+  meta 里记成 `bypassPermissions`。
+- 查下来：**同一个 CLI 进程**（`~/.claude/sessions/<pid>.json` 只有一个，jsonl 两轮之间没有重开），第二轮的用户行带 `permissionMode:"bypassPermissions"`。
+  活着的进程只有 `setPermissionMode` 能改模式：`session.setPermissionMode`（输入框的权限菜单；Shift+Tab 跳过危险模式，到不了完全放开）或 IM `/mode`。
+  这台机器没有 IM / 手机 / 联邦，只可能是窗口（菜单，或 CDP 脚本）发了 `session.setPermissionMode`（同一天 2b8065b0 那次用户确认是自己点的）。脚本重放（打开 default → OPEN-GO →
+  允许一次 / 带 suggestions 的总是允许 → SCRIPT-GO）两次都留在 default，meta 第一时间就记了 `default`，第二轮出服务器的脚本卡。
+  标签当时看着是 每步询问，多半是还没收到 info；现在标签和服务器一致（`info.permissionMode`）。
+- 顺手补的真漏洞：pool 以前只在进程**报**模式（info）时才记 `SessionMeta.permissionMode`。进程没起来 / init 前就关了的对话没有记录，
+  之后不带模式的重开（IM、定时任务、目标、重启后别的窗口）就退回 `ui.defaultMode`——每步询问打开的会以完全放开回来。
+  现在 `pool.open` 收到调用方说的模式（不是分叉）就当场记下。测试：`pool.test.ts`「opened as … a reopen without a mode keeps it」五组对称情况；
+  前端 `store.test.ts` / `reopen.test.ts` 锁住「显式 default 不是没设」。

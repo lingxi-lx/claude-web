@@ -194,6 +194,7 @@ export class RunnerPool extends EventEmitter {
     // the permission mode, when the caller did not say (a window that never had it live — after a restart, on the
     // phone — IM, schedules, goals): what this conversation last ran with, else the default for new conversations.
     // It used to fall back to 每步询问 (2026-10-14, a user's friend: 完全放开 came back as 每步询问 after a few turns)
+    const saidMode = params.fork || params.resumeAt ? undefined : asMode(params.permissionMode);
     if (params.permissionMode === undefined && this.providers.meta) {
       const recorded = params.sessionId && !params.fork ? this.providers.meta.sessionMeta(params.sessionId).permissionMode : undefined;
       const mode = recorded ?? asMode(this.providers.meta.settings()['ui.defaultMode']);
@@ -285,6 +286,12 @@ export class RunnerPool extends EventEmitter {
       if (projInstr && meta && id && id !== placeholder && meta.sessionMeta(id).projectInstructions !== projInstr) void meta.setSessionMeta(id, { projectInstructions: projInstr }).catch(() => { /* in memory; the next save persists it */ });
     };
     keepInstr(r.sessionId);
+    // a mode the caller said is the conversation's from the start — not only once the process reports it (below): one
+    // whose start failed, or that closed before init, came back without a record, so in 新对话默认权限 — 完全放开 for
+    // a conversation opened as 每步询问 (2026-10-26, desktop QA)
+    if (saidMode && meta && meta.sessionMeta(r.sessionId).permissionMode !== saidMode) {
+      void meta.setSessionMeta(r.sessionId, { permissionMode: saidMode }).catch(() => { /* in memory; the next save persists it */ });
+    }
     r.on('message', (m) => this.emit('message', r.sessionId, m));
     // the user message a send accepted, from whichever window, IM, schedule or goal sent it (AgentDriver 'sent'). Its
     // own event, not 'message': the canonical mirror records sends itself, the ledger / IM / goals read the agent's stream

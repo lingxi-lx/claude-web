@@ -449,6 +449,17 @@ describe('新对话默认权限 (ui.defaultMode) for new conversations opened an
     await useStore.getState().openSession({ sessionId: 's1', cwd: '/w' }, 'none'); // resume
     expect(opened().map((p: any) => p.permissionMode)).toEqual(['plan', 'plan', 'acceptEdits', undefined]);
   });
+  // 2026-10-26 (desktop QA): 每步询问 is a choice, never 「unset」 — with 完全放开 as the default it must stay 每步询问
+  // when opened and when a send reopens it after its process went away
+  it.each([['default', 'bypassPermissions'], ['default', 'plan'], ['acceptEdits', 'default'], ['plan', 'bypassPermissions']] as const)('explicit %s over a %s default: opened and resumed in it', async (mode, def) => {
+    fake.handlers.set('session.open', (req: any) => ({ sessionId: req.params.sessionId ?? 'n1', info: { sessionId: req.params.sessionId ?? 'n1', state: 'idle', cwd: req.params.cwd, permissionMode: req.params.permissionMode }, history: [], pending: [] }));
+    fake.handlers.set('session.send', () => null);
+    useStore.setState({ settings: { 'ui.defaultMode': def } });
+    const sid = await useStore.getState().openSession({ cwd: '/w', permissionMode: mode }, 'none');
+    useStore.setState((s) => ({ open: { ...s.open, [sid]: { ...s.open[sid], state: 'closed' } } }));
+    await useStore.getState().send(sid, 'again');
+    expect(opened().map((p: any) => [p.sessionId, p.permissionMode])).toEqual([[undefined, mode], [sid, mode]]);
+  });
   it('no setting (or a bogus one): nothing is added', async () => {
     useStore.setState({ settings: { 'ui.defaultMode': 'yolo' } });
     await useStore.getState().openSession({ cwd: '/w' }, 'none');
