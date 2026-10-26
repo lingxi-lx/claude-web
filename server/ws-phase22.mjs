@@ -30,6 +30,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { isEngineSpawn } from './dist/runtime/engine-spawn-log.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-phase22-'));
@@ -38,6 +39,9 @@ const proj = path.join(root, 'proj');
 fs.mkdirSync(home, { recursive: true });
 fs.mkdirSync(proj, { recursive: true });
 fs.writeFileSync(path.join(proj, 'README.md'), '# e2e\n');
+// This phase does not test the gateway; do not contend with the installed app's fixed local listener.
+fs.mkdirSync(path.join(home, '.claude-web'), { recursive: true });
+fs.writeFileSync(path.join(home, '.claude-web', 'meta.json'), JSON.stringify({ version: 1, gateway: { localPort: 0 } }));
 const RELAY_KEY = 'relay-key-e2e';
 const spawnLog = path.join(root, 'spawn-log.jsonl');
 
@@ -148,7 +152,7 @@ const port = await new Promise((res, rej) => {
 const engineSpawns = () => {
   let lines = [];
   try { lines = fs.readFileSync(spawnLog, 'utf8').split('\n').filter(Boolean); } catch { /* none yet */ }
-  return lines.map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter((r) => r && r.role === 'server' && r.args.some((a) => /cli-node\.js/.test(a))).length;
+  return lines.map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter((r) => r && isEngineSpawn(r)).length;
 };
 
 const ws = new WebSocket(`ws://127.0.0.1:${port}/ws?token=${token}`);
