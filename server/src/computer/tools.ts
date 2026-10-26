@@ -1,4 +1,5 @@
 import { tr } from '../i18n/index.js';
+import { ALWAYS_LOAD } from '../mcp/always-load.js';
 /**
  * The tools of 操控电脑, the `computer` MCP server: the same tool names and parameter names as Claude Code's built-in
  * computer-use server, described in our own words for what this one does: the whole Windows desktop, primary
@@ -60,15 +61,20 @@ export interface ToolDef {
   description: string;
   inputSchema: Record<string, unknown>;
   annotations: { title: string; readOnlyHint: boolean; destructiveHint?: boolean; openWorldHint?: boolean };
+  /** ALWAYS_LOAD on the tools that answer with a picture (mcp/always-load.ts): not deferred on our engine */
+  _meta?: typeof ALWAYS_LOAD;
 }
 
-const def = (name: string, title: string, readOnly: boolean, t: { description: string; inputSchema: Record<string, unknown> }): ToolDef => ({
+const def = (name: string, title: string, readOnly: boolean, t: { description: string; inputSchema: Record<string, unknown> }, picture = false): ToolDef => ({
   name,
   title,
   description: t.description,
   inputSchema: t.inputSchema,
   annotations: { title, readOnlyHint: readOnly, ...(readOnly ? {} : { destructiveHint: false }), openWorldHint: true },
+  ...(picture ? { _meta: ALWAYS_LOAD } : {}),
 });
+/** The tool can answer with a screenshot. */
+const PICTURE = true;
 
 const none = { type: 'object', properties: {}, required: [] };
 
@@ -114,7 +120,7 @@ export const TOOLS: ToolDef[] = [
       properties: { save_to_disk: { type: 'boolean', description: 'Also save the image as a file and return its path — only when you are going to hand the picture to the user.' } },
       required: [],
     },
-  }),
+  }, PICTURE),
   def('zoom', 'Look closer at a region', true, {
     description:
       'Capture one region of the screen at the screen\'s full resolution, to read small text or tell apart small controls that the scaled-down screenshot blurs. ' +
@@ -127,7 +133,7 @@ export const TOOLS: ToolDef[] = [
       },
       required: ['region'],
     },
-  }),
+  }, PICTURE),
   def('cursor_position', 'Where the pointer is', true, {
     description: 'Report where the mouse pointer is, in the coordinates of the most recent screenshot (in real screen pixels if no screenshot has been taken yet).',
     inputSchema: none,
@@ -226,7 +232,7 @@ export const TOOLS: ToolDef[] = [
       },
       required: ['actions'],
     },
-  }),
+  }, PICTURE),
 ];
 
 export const TOOL_NAMES = TOOLS.map((t) => t.name);

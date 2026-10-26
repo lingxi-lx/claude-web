@@ -90,3 +90,10 @@
 - 「完全放开」下不声不响批下的应用，对话离开「完全放开」后**仍然有效**：沿用「之前批过的留着」的设计，`computer/service.ts` 的 `grants` 不随模式清空，跟这个对话的 `computer` MCP 进程同生同灭。
 - 界面上的说法跟着改了：模式说明（`terms.ts`）、+ 菜单的操控电脑（`capabilities.ts`）、允许的网站页、脚本卡都写了「完全放开时不问」；给模型看的 `computer/tools.ts` 说明也加了 full access 的例外。
 - 以后新加的服务端询问也照这条：先看模式。测试：`site-gate.test.ts`、`service.test.ts`、`access.test.ts` 里五种模式照旧 / 完全放开零张卡。
+
+## 出图的工具在我们的引擎上不延迟（2026-10-26，spec 14.2）
+
+- ccb 把 MCP 工具藏在 `ExecuteExtraTool` 后面，结果整个 `JSON.stringify` 成文字，截图就成了 base64 字。规则：**会返回图片的工具带
+  `_meta: ALWAYS_LOAD`（`server/src/mcp/always-load.ts`），别的不带**。这里涉及：`browser_screenshot`、`browser_computer`，
+  `computer` 的 `screenshot`、`zoom`、`computer_batch`（`computer/tools.ts` 的 `def(…, PICTURE)`）。完整清单和 e2e（`ws-phase41.mjs`）
+  见「ego lite 作为 Agent 的第一浏览器」的坑一节。

@@ -17,6 +17,13 @@ describe('the tool list', () => {
     expect(new Set(TOOL_NAMES).size).toBe(TOOL_NAMES.length);
   });
 
+  it('the tools that answer with a picture are not deferred on our engine (alwaysLoad), and no other tool is', () => {
+    // ccb hides MCP tools behind ExecuteExtraTool, whose result is one JSON string: a screenshot would be base64 text
+    const loaded = TOOLS.filter((t) => (t as { _meta?: Record<string, unknown> })._meta?.['anthropic/alwaysLoad'] === true).map((t) => t.name);
+    expect(loaded).toEqual(['screenshot', 'zoom', 'computer_batch']);
+    for (const name of ['request_access', 'left_click', 'type', 'key', 'read_clipboard', 'wait']) expect((tool(name) as { _meta?: unknown })._meta, name).toBeUndefined();
+  });
+
   it('takes the same parameter names', () => {
     expect(props('request_access')).toEqual(['apps', 'clipboardRead', 'clipboardWrite', 'reason', 'systemKeyCombos']);
     expect(required('request_access')).toEqual(['apps', 'reason']);

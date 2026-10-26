@@ -1,5 +1,6 @@
 // The character-theme tools of the `web` MCP server (spec 2026-10-22 §5): names and schemas only — web/mcp.ts lists
-// them, themes/tools.ts answers them. No imports: the MCP process loads this.
+// them, themes/tools.ts answers them. No imports (but the import-free mcp/always-load.ts): the MCP process loads this.
+import { ALWAYS_LOAD } from '../mcp/always-load.js';
 
 const files = {
   json: { type: 'object', description: 'theme.json as an object: { id, name: { zh, en }, mode, colors, chatDim, processes }. See theme_guide.' },
@@ -21,6 +22,8 @@ export const THEME_TOOLS = [
     description: 'Check a theme and keep it as a draft (the same id replaces the previous draft). Answers with every problem (format, missing processes, contrast, CSS that reaches outside, code that does not compile) and — when the app is open — a trial run: a picture of the backdrop after 3 seconds plus the 16 process animations, and how long its frames took. Look at the picture and fix what is off before saving.',
     inputSchema: { type: 'object', properties: files, required: ['json', 'backdrop'] },
     annotations: { title: 'Draft a character theme', readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    // answers with a picture (the trial run): not deferred on our engine
+    _meta: ALWAYS_LOAD,
   },
   {
     name: 'theme_get',

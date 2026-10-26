@@ -1,5 +1,7 @@
 // The character tools of the `web` MCP server (spec docs/superpowers/specs/2026-10-13-cafe-design.md §4): their names
-// and schemas only — web/mcp.ts lists them, characters/tools.ts answers them. No imports: the MCP process loads this.
+// and schemas only — web/mcp.ts lists them, characters/tools.ts answers them. No imports (but the import-free
+// mcp/always-load.ts): the MCP process loads this.
+import { ALWAYS_LOAD } from '../mcp/always-load.js';
 
 const character = {
   type: 'object',
@@ -20,6 +22,8 @@ export const CHARACTER_TOOLS = [
     description: 'Check a character and keep it as a draft (the same id replaces the previous draft). Answers with what is wrong, or with a picture of it (front, back, walking, typing, eating) to compare against what the user asked for. The draft also shows up, moving, in the cafe\'s 角色库.',
     inputSchema: { type: 'object', properties: { character }, required: ['character'] },
     annotations: { title: 'Draft a cafe character', readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    // answers with a picture: not deferred on our engine
+    _meta: ALWAYS_LOAD,
   },
   {
     name: 'character_save',

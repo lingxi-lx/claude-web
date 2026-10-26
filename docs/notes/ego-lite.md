@@ -44,7 +44,12 @@
 
 - **我们的引擎（ccb）把 MCP 工具藏在 `ExecuteExtraTool` 后面，而且它的结果是 `JSON.stringify(整个结果)`**：截图会变成一长串
   base64 文字交给模型，模型看不到图。所以两个 ego 工具带 `_meta: {'anthropic/alwaysLoad': true}`（ccb 的 `Vi()` 认它，不再延迟），
-  直接出现在工具列表里，图片按图片块回去。**内置浏览器的 `browser_screenshot` 等在 ccb 上还是这个问题**（没在这次改）。
+  直接出现在工具列表里，图片按图片块回去。
+- **规则：会返回图片的内置工具都要带 alwaysLoad，别的工具都不带**（每轮工具列表会变长）。常量只有一份：
+  `server/src/mcp/always-load.ts` 的 `ALWAYS_LOAD`（无 import，stdio MCP 进程也能加载）。现在带它的：`web` 里的
+  `browser_screenshot`、`browser_computer`、`character_draft`、`theme_draft`、`ego_browser`（加上 `ego_browser_guide`，
+  它是跟着 ego_browser 一起加的，不出图）；`computer` 里的 `screenshot`、`zoom`、`computer_batch`。`preview_*`、`sessions`、
+  `memory` 只回文字，不带。新加出图工具时同时改 `web/mcp.test.ts` / `computer/tools.test.ts` 里的清单（它们查的是「恰好这些」）。
 - 另外，ccb 要求延迟的工具先被 `SearchExtraTools` 找到过才能 `ExecuteExtraTool`，否则返回 `result: null`；写假上游时别忘了先搜。
 - 官方二进制读不出尺寸的图片会被换成「Image could not be processed」文字：测试里的假截图要是真的 PNG（1×1 也行）。
 - 命令行上没有脚本，只有 `await import("file:///…")`；Space 名用对话 id 前 8 位，别的对话的 Space 不会被碰到。
@@ -64,5 +69,9 @@
   web 的 `web-tools.test.ts`。
 - e2e：`server/ws-phase40.mjs`（自己起 server，PATH 前面放假 `ego-browser`，两个真引擎对假上游）：找到版本、工具在列表里且不延迟、
   权限卡带脚本、round 文件逐字节、中文 / 引号 / `$` / `%` 原样回到模型、截图是图片块、选「内置浏览器」后新对话没有 ego 工具。
+- e2e：`server/ws-phase41.mjs`（自己起 server，这个脚本的 WebSocket 当内置浏览器的宿主窗口，截图回一张真 1×1 PNG）：
+  我们的引擎上 `browser_screenshot` 在工具列表里、直接调用而不是经 `ExecuteExtraTool`，模型收到的 tool_result 里是图片块，
+  文字块里没有 base64。默认只跑 ccb，`PHASE41_RUNTIMES=ccb,claude` 再跑官方二进制。把 alwaysLoad 去掉再跑，前四项会 FAIL
+  （tool_result 变成一整段 JSON 字符串）。
 - ui-smoke：设置 → 联网的新一行和「重新检测」，切到内置浏览器后 `web.status` 跟着变。
 - **没在真 ego lite 上验过**（这台电脑没装）：装好并完成首次引导后，让 Claude 打开一个页面，看 ego lite 里出现 `claude-web <id8>` 这个 Space。

@@ -18,6 +18,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { CHARACTER_TOOLS } from '../characters/tool-defs.js';
 import { THEME_TOOLS } from '../themes/tool-defs.js';
+import { ALWAYS_LOAD } from '../mcp/always-load.js';
 import { tr } from '../i18n/index.js';
 
 const PROTOCOL_VERSION = '2025-06-18';
@@ -138,6 +139,8 @@ export const TOOLS = [
     description: 'Take a picture of what the built-in browser shows right now. Use it when the layout or an image matters, or when the text of the page does not explain what you see; for reading, browser_read is cheaper. Needs the desktop app.',
     inputSchema: { type: 'object', properties: {} },
     annotations: { title: 'Screenshot of the page', readOnlyHint: true, openWorldHint: true },
+    // answers with a picture: not deferred on our engine (mcp/always-load.ts)
+    _meta: ALWAYS_LOAD,
   },
   {
     name: 'browser_computer',
@@ -158,6 +161,7 @@ export const TOOLS = [
       required: ['action'],
     },
     annotations: { title: 'Mouse and keyboard in the browser', readOnlyHint: false, openWorldHint: true },
+    _meta: ALWAYS_LOAD,
   },
   {
     name: 'browser_console',
@@ -268,10 +272,10 @@ export const TOOLS = [
 /**
  * ego lite (web/ego.ts): listed only when the launcher found it and the user did not pick the built-in browser
  * (CW_WEB_BROWSER=ego). Then it is the browser for web tasks and the browser_* tools say so. `anthropic/alwaysLoad`
- * keeps them in the model's tool list on our engine, which otherwise defers MCP tools behind ExecuteExtraTool — and
- * that runner hands a result back as one JSON string, so a screenshot would reach the model as base64 text.
+ * (mcp/always-load.ts) keeps them in the model's tool list on our engine, which otherwise defers MCP tools behind
+ * ExecuteExtraTool — and that runner hands a result back as one JSON string, so a screenshot would reach the model as
+ * base64 text. (The guide has it too: it is read once right before the first ego_browser call.)
  */
-const ALWAYS_LOAD = { 'anthropic/alwaysLoad': true } as const;
 export const EGO_TOOLS = [
   {
     name: 'ego_browser_guide',
