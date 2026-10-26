@@ -7,6 +7,7 @@ import { AcpDriver } from './acp-driver.js';
 import { CodexDriver } from './codex-driver.js';
 import { AgentTranscripts } from './transcript.js';
 import { configureWebMcp } from '../web/launcher.js';
+import { egoReset, egoStatus } from '../web/ego.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 let tmp: string;
@@ -23,6 +24,34 @@ const collect = (d: any) => {
   d.on('message', (m: any) => msgs.push(m));
   return msgs;
 };
+const textOf = (msgs: any[]) => msgs.filter((m) => m.type === 'stream_event' && m.event.delta?.type === 'text_delta').map((m) => m.event.delta.text).join('');
+
+/**
+ * Run `fn` with the web server handed out and an `ego-browser` command found (`on`) or surely not found (`off`, PATH
+ * points nowhere so the real one on this machine is not picked up): what decides whether a conversation started now
+ * is given the ego tools (web/launcher.ts egoForNewConversations).
+ */
+async function withEgo<T>(on: boolean, fn: () => Promise<T>): Promise<T> {
+  const webDir = path.join(tmp, 'web-mcp-ego');
+  const bin = path.join(tmp, 'egobin');
+  await fs.mkdir(bin, { recursive: true });
+  const fake = '#!/usr/bin/env node\nprocess.stdout.write("[ego-browser:skill] ego-browser v1.0.0\\n");\n';
+  await fs.writeFile(path.join(bin, 'ego-browser.js'), fake);
+  if (process.platform === 'win32') await fs.writeFile(path.join(bin, 'ego-browser.cmd'), '@ECHO off\r\nnode "%~dp0\\ego-browser.js" %*\r\n');
+  else { await fs.writeFile(path.join(bin, 'ego-browser'), fake); await fs.chmod(path.join(bin, 'ego-browser'), 0o755); }
+  const old = process.env.PATH;
+  configureWebMcp({ url: 'http://127.0.0.1:45679', token: 'z'.repeat(64) }, webDir);
+  try {
+    egoReset();
+    process.env.PATH = on ? `${bin}${path.delimiter}${old}` : path.join(tmp, 'nothing-here');
+    expect((await egoStatus(false)).found).toBe(on);
+    return await fn();
+  } finally {
+    process.env.PATH = old;
+    egoReset();
+    configureWebMcp(null, webDir);
+  }
+}
 const waitFor = (fn: () => boolean, ms = 8000) => new Promise<void>((res, rej) => { const t0 = Date.now(); const i = setInterval(() => { if (fn()) { clearInterval(i); res(); } else if (Date.now() - t0 > ms) { clearInterval(i); rej(new Error('timeout')); } }, 20); });
 
 describe('AcpDriver (mock agent)', () => {
@@ -84,49 +113,97 @@ describe('AcpDriver (mock agent)', () => {
   });
 
   it('ego_browser is asked about by this server (spec 14.1): the agent\'s own prompt for it is answered allow_once with no card, in default and plan; another tool still raises one', async () => {
-    for (const permissionMode of ['default', 'plan'] as const) {
-      const d = new AcpDriver('gemini', { command: process.execPath, args: [path.join(here, '__mocks__', 'acp-agent.mjs')], env: {}, name: 'Mock ACP' }, { cwd: tmp, permissionMode }, transcripts, null);
-      const msgs = collect(d);
-      await waitFor(() => d.state === 'idle');
-      const perms: any[] = [];
-      d.on('permission', (e) => { perms.push(e); });
-      d.send('EGO please');
-      await waitFor(() => msgs.some((m) => m.type === 'result'));
-      const texts = msgs.filter((m) => m.type === 'stream_event' && m.event.delta?.type === 'text_delta').map((m) => m.event.delta.text).join('');
-      expect(texts, permissionMode).toContain('(ego answer: allow)');
-      expect(perms, permissionMode).toEqual([]);
-      // a tool that is not gated by the server still gets the agent's card
-      d.send('use a tool');
-      await waitFor(() => perms.length > 0);
-      expect(perms[0].toolName).toBe('Read');
-      d.respondPermission(perms[0].requestId, { behavior: 'allow' });
-      await waitFor(() => msgs.filter((m) => m.type === 'result').length >= 2);
-      await d.close();
-    }
+    await withEgo(true, async () => {
+      for (const permissionMode of ['default', 'plan'] as const) {
+        const d = new AcpDriver('gemini', { command: process.execPath, args: [path.join(here, '__mocks__', 'acp-agent.mjs')], env: {}, name: 'Mock ACP' }, { cwd: tmp, permissionMode }, transcripts, null);
+        const msgs = collect(d);
+        await waitFor(() => d.state === 'idle');
+        const perms: any[] = [];
+        d.on('permission', (e) => { perms.push(e); });
+        // our call by each of its names: the ACP title, the bare tool name, our MCP name
+        for (const [i, prompt] of ['EGO please', 'EGO:bare', 'EGO:mcpname'].entries()) {
+          d.send(prompt);
+          await waitFor(() => msgs.filter((m) => m.type === 'result').length > i);
+        }
+        const texts = textOf(msgs);
+        expect(texts.match(/\(ego answer: allow\)/g), permissionMode).toHaveLength(3);
+        expect(perms, permissionMode).toEqual([]);
+        // a tool that is not gated by the server still gets the agent's card
+        d.send('use a tool');
+        await waitFor(() => perms.length > 0);
+        expect(perms[0].toolName).toBe('Read');
+        d.respondPermission(perms[0].requestId, { behavior: 'allow' });
+        await waitFor(() => msgs.filter((m) => m.type === 'result').length >= 4);
+        await d.close();
+      }
+    });
   });
 
-  it('only our exact ego_browser is answered without a card: a call that merely mentions it gets the agent\'s card, in default and plan', async () => {
-    const variants = ['shell', 'shellnokind', 'execkind', 'rawname', 'othermcp', 'edit', 'extraarg'];
-    for (const permissionMode of ['default', 'plan'] as const) {
-      const d = new AcpDriver('gemini', { command: process.execPath, args: [path.join(here, '__mocks__', 'acp-agent.mjs')], env: {}, name: 'Mock ACP' }, { cwd: tmp, permissionMode }, transcripts, null);
+  it('the auto-answer is allow_once, else allow_always — never a reject: an agent offering only rejects gets its card', async () => {
+    await withEgo(true, async () => {
+      const d = new AcpDriver('gemini', { command: process.execPath, args: [path.join(here, '__mocks__', 'acp-agent.mjs')], env: {}, name: 'Mock ACP' }, { cwd: tmp, permissionMode: 'default' }, transcripts, null);
       const msgs = collect(d);
       await waitFor(() => d.state === 'idle');
       const perms: any[] = [];
       d.on('permission', (e) => { perms.push(e); });
-      for (const [i, v] of variants.entries()) {
-        d.send(`EGO:${v}`);
+      d.send('EGO+always');
+      await waitFor(() => msgs.some((m) => m.type === 'result'));
+      expect(textOf(msgs)).toContain('(ego answer: always)');
+      expect(perms).toEqual([]);
+      d.send('EGO+reject');
+      await waitFor(() => perms.length > 0);
+      expect(perms[0].toolUseId).toMatch(/^ego-/);
+      expect(d.state).toBe('waiting');
+      d.respondPermission(perms[0].requestId, { behavior: 'deny', message: 'no' });
+      await waitFor(() => msgs.filter((m) => m.type === 'result').length >= 2);
+      expect(textOf(msgs)).toContain('(ego answer: deny)');
+      await d.close();
+    });
+  });
+
+  it('a conversation not given the ego tools never auto-answers, not even our exact call', async () => {
+    await withEgo(false, async () => {
+      const d = new AcpDriver('gemini', { command: process.execPath, args: [path.join(here, '__mocks__', 'acp-agent.mjs')], env: {}, name: 'Mock ACP' }, { cwd: tmp, permissionMode: 'default' }, transcripts, null);
+      const msgs = collect(d);
+      await waitFor(() => d.state === 'idle');
+      const perms: any[] = [];
+      d.on('permission', (e) => { perms.push(e); });
+      for (const [i, prompt] of ['EGO please', 'EGO:bare', 'EGO:mcpname'].entries()) {
+        d.send(prompt);
         await waitFor(() => perms.length > i);
-        expect(perms[i].toolUseId, `${permissionMode} ${v}`).toMatch(/^ego-/);
-        // nothing was answered behind the user's back: the agent is still waiting on the card
-        expect(d.state, `${permissionMode} ${v}`).toBe('waiting');
+        expect(d.state, prompt).toBe('waiting');
         d.respondPermission(perms[i].requestId, { behavior: 'deny', message: 'no' });
         await waitFor(() => msgs.filter((m) => m.type === 'result').length > i);
       }
-      const texts = msgs.filter((m) => m.type === 'stream_event' && m.event.delta?.type === 'text_delta').map((m) => m.event.delta.text).join('');
-      expect(texts.match(/\(ego answer: deny\)/g), permissionMode).toHaveLength(variants.length);
-      expect(texts, permissionMode).not.toContain('(ego answer: allow)');
+      expect(textOf(msgs)).not.toContain('(ego answer: allow)');
       await d.close();
-    }
+    });
+  });
+
+  it('only our exact ego_browser is answered without a card: a call that merely mentions it gets the agent\'s card, in default and plan', async () => {
+    const variants = ['shell', 'shellnokind', 'execkind', 'rawname', 'othermcp', 'edit', 'extraarg', 'noinput', 'noscript', 'ours+reject'];
+    await withEgo(true, async () => {
+      for (const permissionMode of ['default', 'plan'] as const) {
+        const d = new AcpDriver('gemini', { command: process.execPath, args: [path.join(here, '__mocks__', 'acp-agent.mjs')], env: {}, name: 'Mock ACP' }, { cwd: tmp, permissionMode }, transcripts, null);
+        const msgs = collect(d);
+        await waitFor(() => d.state === 'idle');
+        const perms: any[] = [];
+        d.on('permission', (e) => { perms.push(e); });
+        for (const [i, v] of variants.entries()) {
+          d.send(`EGO:${v}`);
+          await waitFor(() => perms.length > i);
+          expect(perms[i].toolUseId, `${permissionMode} ${v}`).toMatch(/^ego-/);
+          // nothing was answered behind the user's back: the agent is still waiting on the card
+          expect(d.state, `${permissionMode} ${v}`).toBe('waiting');
+          d.respondPermission(perms[i].requestId, { behavior: 'deny', message: 'no' });
+          await waitFor(() => msgs.filter((m) => m.type === 'result').length > i);
+        }
+        const texts = textOf(msgs);
+        expect(texts.match(/\(ego answer: deny\)/g), permissionMode).toHaveLength(variants.length);
+        expect(texts, permissionMode).not.toContain('(ego answer: allow)');
+        await d.close();
+      }
+    });
   }, 60_000);
 
   it('plan updates become TodoWrite; denied permission marks the tool result as error', async () => {
@@ -268,6 +345,76 @@ describe('CodexDriver (mock app-server)', () => {
     await waitFor(() => r.state === 'idle');
     await r.close();
     expect((await lines()).find((l) => l.method === 'thread/resume').params.config).toEqual(want);
+  });
+
+  it('MCP tool approvals (mcpServer/elicitation/request): our ego_browser is accepted with no card, any other MCP tool gets the normal card, a server\'s own question is cancelled', async () => {
+    // `app-server` in the argv so the web server's -c overrides are put in front of it, as with the real Codex
+    const args = [path.join(here, '__mocks__', 'codex-server.mjs'), 'app-server'];
+    await withEgo(true, async () => {
+      const d = new CodexDriver('codex', { command: process.execPath, args, env: {}, name: 'Mock' }, { cwd: tmp, permissionMode: 'default' }, transcripts);
+      const msgs = collect(d);
+      await waitFor(() => d.state === 'idle');
+      const perms: any[] = [];
+      d.on('permission', (e) => { perms.push(e); });
+      const results = () => msgs.filter((m) => m.type === 'result').length;
+      const answer = (n: number) => (msgs.filter((m) => m.type === 'assistant').map((m) => m.message.content.find((c: any) => c.type === 'text')?.text ?? '').filter((t) => t.includes('mcp answer'))[n] ?? '');
+      // ours: accepted (the server's own card asks when it runs), never remembered — the server asks every time
+      d.send('MCPTOOL:ego');
+      await waitFor(() => results() >= 1);
+      expect(perms).toEqual([]);
+      expect(answer(0)).toContain('(mcp answer: accept)');
+      // another of our web tools: the normal card, named as Claude names it, with its arguments
+      d.send('MCPTOOL:click');
+      await waitFor(() => perms.length >= 1);
+      expect(perms[0]).toMatchObject({ toolName: 'mcp__web__browser_click', input: { selector: '#go' } });
+      expect(d.state).toBe('waiting');
+      d.respondPermission(perms[0].requestId, { behavior: 'allow' });
+      await waitFor(() => results() >= 2);
+      expect(answer(1)).toContain('(mcp answer: accept)');
+      // look-alikes of ours get the card; a deny declines
+      for (const [i, v] of ['othersrv', 'extraarg'].entries()) {
+        d.send(`MCPTOOL:${v}`);
+        await waitFor(() => perms.length >= 2 + i);
+        expect(d.state, v).toBe('waiting');
+        d.respondPermission(perms[1 + i].requestId, { behavior: 'deny', message: 'no' });
+        await waitFor(() => results() >= 3 + i);
+        expect(answer(2 + i), v).toContain('(mcp answer: decline)');
+      }
+      expect(perms[1].toolName).toBe('mcp__evil__ego_browser');
+      // not an approval: no card, cancelled (as before: there is nothing to show it in)
+      d.send('MCPTOOL:form');
+      await waitFor(() => results() >= 5);
+      expect(perms).toHaveLength(3);
+      expect(answer(4)).toContain('(mcp answer: cancel)');
+      await d.close();
+    });
+  });
+
+  it('MCP tool approvals: ego_browser gets the card when the conversation was not given the ego tools; full access accepts any', async () => {
+    const args = [path.join(here, '__mocks__', 'codex-server.mjs'), 'app-server'];
+    await withEgo(false, async () => {
+      const d = new CodexDriver('codex', { command: process.execPath, args, env: {}, name: 'Mock' }, { cwd: tmp, permissionMode: 'default' }, transcripts);
+      const msgs = collect(d);
+      await waitFor(() => d.state === 'idle');
+      const perms: any[] = [];
+      d.on('permission', (e) => { perms.push(e); });
+      d.send('MCPTOOL:ego');
+      await waitFor(() => perms.length >= 1);
+      expect(perms[0].toolName).toBe('mcp__web__ego_browser');
+      d.respondPermission(perms[0].requestId, { behavior: 'deny', message: 'no' });
+      await waitFor(() => msgs.some((m) => m.type === 'result'));
+      await d.close();
+    });
+    const d = new CodexDriver('codex', { command: process.execPath, args, env: {}, name: 'Mock' }, { cwd: tmp, permissionMode: 'bypassPermissions' }, transcripts);
+    const msgs = collect(d);
+    await waitFor(() => d.state === 'idle');
+    let asked = false;
+    d.on('permission', () => { asked = true; });
+    d.send('MCPTOOL:click');
+    await waitFor(() => msgs.some((m) => m.type === 'result'));
+    expect(asked).toBe(false);
+    expect(JSON.stringify(msgs.filter((m) => m.type === 'assistant'))).toContain('(mcp answer: accept)');
+    await d.close();
   });
 
   it('acceptEdits auto-approves file changes but still asks for commands; bypass approves everything', async () => {

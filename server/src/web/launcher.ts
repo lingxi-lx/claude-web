@@ -45,20 +45,67 @@ export function isServerGatedTool(name: unknown): boolean {
 }
 /** The arguments our ego_browser takes: a call carrying anything else is not ours. */
 const EGO_ARG_KEYS: ReadonlySet<string> = new Set(['script', 'timeout_ms']);
+/** A plain JSON object (what a parsed message holds), not an array, a Date, a class instance. */
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return false;
+  const proto = Object.getPrototypeOf(v);
+  return proto === Object.prototype || proto === null;
+}
+/** Arguments shaped like our ego_browser's: a plain object with a string `script`, keys only script / timeout_ms. */
+function isEgoArgs(v: unknown): boolean {
+  return isPlainObject(v) && typeof v.script === 'string' && Object.keys(v).every((k) => EGO_ARG_KEYS.has(k));
+}
 /**
- * May an ACP agent's permission prompt be answered "allow once" without a card, because the server asks on its own
- * card when the call runs? Only for our exact ego_browser: the prompt's own title matches exactly (not the name we
- * derived for the call: mapToolName turns spaces into _, so 'ego browser' would become ego_browser),
- * its kind is absent or `other` (never execute / edit / delete / move / fetch / read …), and its raw input has no keys
- * besides `script` / `timeout_ms`. The arguments' VALUES are never looked at. Anything else gets the agent's card.
+ * May an ACP agent's permission prompt be answered without a card, because the server asks on its own card when the
+ * call runs? Only when this conversation was given our ego tools (`egoTools`: its web server was started with
+ * CW_WEB_BROWSER=ego, acpServersGiveEgo — without them there is no ego_browser of ours to call, so a call by that name
+ * is someone else's), and only for our exact ego_browser: the prompt's own title matches exactly (not the name we
+ * derived for the call: mapToolName turns spaces into _, so 'ego browser' would become ego_browser), its kind is
+ * absent or `other` (never execute / edit / delete / move / fetch / read …), and its raw input is there, a plain
+ * object with a string `script` and no keys besides `script` / `timeout_ms`. What the script says is never looked at
+ * (the server's card shows it). Anything else gets the agent's card.
  */
-export function isServerGatedAcpCall(tc: { title?: unknown; kind?: unknown; rawInput?: unknown }): boolean {
+export function isServerGatedAcpCall(tc: { title?: unknown; kind?: unknown; rawInput?: unknown }, egoTools: boolean): boolean {
+  if (!egoTools) return false;
   if (tc.kind !== undefined && tc.kind !== null && tc.kind !== 'other') return false;
-  if (tc.rawInput !== undefined && tc.rawInput !== null) {
-    if (typeof tc.rawInput !== 'object' || Array.isArray(tc.rawInput)) return false;
-    if (Object.keys(tc.rawInput).some((k) => !EGO_ARG_KEYS.has(k))) return false;
-  }
+  if (!isEgoArgs(tc.rawInput)) return false;
   return isServerGatedTool(tc.title);
+}
+
+/** Did the ACP `mcpServers` list handed to an agent include our web server with the ego tools (CW_WEB_BROWSER=ego)? */
+export function acpServersGiveEgo(servers: readonly { name?: unknown; env?: unknown }[] | undefined): boolean {
+  return (servers ?? []).some((s) => s.name === 'web' && Array.isArray(s.env) && s.env.some((e: any) => e?.name === 'CW_WEB_BROWSER' && e?.value === 'ego'));
+}
+/** Did the Codex argv carry our web server with the ego tools (webCodexConfigArgs' `mcp_servers.web.env=` override)? */
+export function codexArgsGiveEgo(args: readonly string[]): boolean {
+  return args.some((a) => a.startsWith('mcp_servers.web.env=') && a.includes('CW_WEB_BROWSER = "ego"'));
+}
+
+/**
+ * The tool a Codex MCP tool approval is about. Codex (codex-rs core/src/mcp_tool_call.rs, codex-cli 0.163) does not
+ * send the tool's name on its own: it is in the fixed message `Allow the <server> MCP server to run tool "<tool>"?`.
+ * Undefined when the message is not exactly that for this server.
+ */
+export function codexElicitationTool(p: { serverName?: unknown; message?: unknown }): string | undefined {
+  if (typeof p.serverName !== 'string' || typeof p.message !== 'string') return undefined;
+  const head = `Allow the ${p.serverName} MCP server to run tool "`;
+  if (!p.message.startsWith(head) || !p.message.endsWith('"?')) return undefined;
+  const tool = p.message.slice(head.length, -2);
+  return /^[\w.-]+$/.test(tool) ? tool : undefined;
+}
+/** Is a Codex `mcpServer/elicitation/request` an approval for an MCP tool call (not a server's own question)? */
+export function isCodexToolApproval(p: unknown): p is { serverName: string; message: string; _meta: Record<string, unknown> } {
+  return isPlainObject(p) && p.mode === 'form' && isPlainObject(p._meta) && p._meta.codex_approval_kind === 'mcp_tool_call';
+}
+/**
+ * May Codex's approval of an MCP tool call be accepted without a card, because the server asks on its own card when
+ * the call runs? Only with the ego tools given to this conversation, only for our `web` server's ego_browser (the exact
+ * fixed message) and only with arguments shaped like ours (`_meta.tool_params`: a string script, + timeout_ms).
+ */
+export function isServerGatedCodexElicitation(p: unknown, egoTools: boolean): boolean {
+  if (!egoTools || !isCodexToolApproval(p)) return false;
+  if (p.serverName !== 'web' || codexElicitationTool(p) !== 'ego_browser') return false;
+  return isEgoArgs(p._meta.tool_params);
 }
 
 let enabled = true;

@@ -195,6 +195,25 @@ rl.on('line', async (line) => {
         notify('item/commandExecution/outputDelta', { threadId, turnId: 'turn-1', itemId: 'cmd-1', delta: ok ? 'hi\n' : '' });
         notify('item/completed', { threadId, turnId: 'turn-1', item: { type: 'commandExecution', id: 'cmd-1', command: 'echo hi', cwd: 'C:/x', status: ok ? 'completed' : 'declined', aggregatedOutput: ok ? 'hi\n' : '', exitCode: ok ? 0 : 1, commandActions: [] } });
       }
+      // 'MCPTOOL:<variant>': Codex asks before an MCP tool call through `mcpServer/elicitation/request` with
+      // `_meta.codex_approval_kind = mcp_tool_call` (codex-rs core/src/mcp_tool_call.rs, codex-cli 0.163); 'form' is an
+      // MCP server's own question, not an approval. The answer comes back in the text: accept / decline / cancel / error.
+      let extra = '';
+      const mcpVariant = /MCPTOOL:(\w+)/.exec(text)?.[1];
+      if (mcpVariant) {
+        const script = { script: "await p.goto('https://mail.example/')" };
+        const approval = (server, tool, params) => ({ threadId, turnId: 'turn-1', serverName: server, mode: 'form', message: `Allow the ${server} MCP server to run tool "${tool}"?`, requestedSchema: { type: 'object', properties: {} }, _meta: { codex_approval_kind: 'mcp_tool_call', persist: ['session', 'always'], tool_params: params, tool_params_display: Object.entries(params).map(([name, value]) => ({ name, value, display_name: name })) } });
+        const shapes = {
+          ego: approval('web', 'ego_browser', script),
+          click: approval('web', 'browser_click', { selector: '#go' }),
+          othersrv: approval('evil', 'ego_browser', script),
+          extraarg: approval('web', 'ego_browser', { ...script, command: 'x' }),
+          form: { threadId, turnId: 'turn-1', serverName: 'web', mode: 'form', message: 'Your name?', requestedSchema: { type: 'object', properties: { name: { type: 'string' } } }, _meta: null },
+        };
+        const a = await req('mcpServer/elicitation/request', shapes[mcpVariant] ?? shapes.ego);
+        extra = ` (mcp answer: ${a?.action ?? 'error'}${a?._meta?.persist ? ` persist=${a._meta.persist}` : ''})`;
+        notify('item/agentMessage/delta', { threadId, turnId: 'turn-1', itemId: 'am-1', delta: extra });
+      }
       // a sub-agent thread's usage arrives on the same connection: it is not this thread's turn
       notify('thread/tokenUsage/updated', { threadId: 'thr-subagent', turnId: 'turn-x', tokenUsage: { total: bd(777_000, 1, 0, 5), last: bd(777_000, 1, 0, 5), modelContextWindow: 200000 } });
       for (const call of TURN_CALLS) {
@@ -202,7 +221,7 @@ rl.on('line', async (line) => {
         notify('thread/tokenUsage/updated', { threadId, turnId: 'turn-1', tokenUsage: { total: usageTotal, last: call, modelContextWindow: 200000 } });
       }
       notify('thread/tokenUsage/updated', { threadId, turnId: 'turn-1', tokenUsage: { total: usageTotal, last: TURN_CALLS[1], modelContextWindow: 200000 } });
-      notify('item/completed', { threadId, turnId: 'turn-1', item: { type: 'agentMessage', id: 'am-1', text: `Codex says: ${text}` } });
+      notify('item/completed', { threadId, turnId: 'turn-1', item: { type: 'agentMessage', id: 'am-1', text: `Codex says: ${text}${extra}` } });
       notify('turn/completed', { threadId, turn: { id: 'turn-1', items: [], status: 'completed', error: null } });
       break;
     }

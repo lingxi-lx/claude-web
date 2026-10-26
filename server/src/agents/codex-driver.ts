@@ -6,7 +6,7 @@ import type { AgentKind, AttachmentRef, EffortLevel, OpenSessionParams, Permissi
 import { codexReported } from './reported-models.js';
 import { JsonRpcProcess } from './jsonrpc.js';
 import { insertCodexConfig } from '../memory/launcher.js';
-import { insertWebCodexConfig } from '../web/launcher.js';
+import { codexArgsGiveEgo, codexElicitationTool, insertWebCodexConfig, isCodexToolApproval, isServerGatedCodexElicitation } from '../web/launcher.js';
 import { MessageSynth } from './normalize.js';
 import { codexItemMessages, type CodexItemState } from './codex-items.js';
 import type { AgentTranscripts } from './transcript.js';
@@ -16,7 +16,10 @@ import { unionRoots, userWritableRoots } from './codex-roots.js';
 import type { AgentDriver } from './types.js';
 import { tr } from '../i18n/index.js';
 
-interface PendingPerm { event: PermissionRequestEvent; resolve: (r: any) => void; kind: 'command' | 'file' | 'permissions' }
+interface PendingPerm { event: PermissionRequestEvent; resolve: (r: any) => void; kind: 'command' | 'file' | 'permissions' | 'mcp' }
+
+/** The answer to an MCP elicitation (codex app-server McpServerElicitationRequestResponse); nothing remembered. */
+const elicitationAnswer = (action: 'accept' | 'decline' | 'cancel') => ({ action, content: null, _meta: null });
 
 // Codex's own ladder, verbatim: low | medium | high | xhigh | max | ultra. `max` and `ultra` are real
 // members here (unlike Claude, where the top rung is a separate ultracode flag).
@@ -48,6 +51,8 @@ export class CodexDriver extends EventEmitter implements AgentDriver {
   private model?: string;
   private effort?: EffortLevel;
   private permissionMode: PermissionMode;
+  /** Was this conversation given our ego tools (the web server's -c overrides carry CW_WEB_BROWSER=ego)? */
+  private egoTools = false;
   /** per-turn usage from the cumulative thread totals (cached tokens are inside Codex's inputTokens) */
   private usage = new CodexUsageMeter();
   /** Resolves once the mirror is up to date for this start (`hooks.beforeResume` ran): prompts are recorded after it. */
@@ -120,6 +125,7 @@ export class CodexDriver extends EventEmitter implements AgentDriver {
       // the shared memory store and 联网 (web search + the built-in browser), injected as `-c` overrides so
       // ~/.codex/config.toml is never touched
       const args = insertWebCodexConfig(insertCodexConfig(this.launch.args, { cwd: this.cwd, sessionId: this.sessionId, agent: this.kind }), { sessionId: this.sessionId });
+      this.egoTools = codexArgsGiveEgo(args);
       const rpc = new JsonRpcProcess(this.launch.command, args, { cwd: this.cwd, env: this.launch.env });
       this.rpc = rpc;
       rpc.on('exit', (code, err) => { if (!this.closed) this.setState('error', tr("Codex 退出（{code}）{v}\n{stderrTail}", { code, v: err ? ` ${err}` : '', stderrTail: rpc.stderrTail.slice(-800) })); });
@@ -129,6 +135,7 @@ export class CodexDriver extends EventEmitter implements AgentDriver {
       rpc.onRequest('item/permissions/requestApproval', (p) => this.onApproval('permissions', p));
       rpc.onRequest('execCommandApproval', (p) => this.onApproval('command', p));
       rpc.onRequest('applyPatchApproval', (p) => this.onApproval('file', p));
+      rpc.onRequest('mcpServer/elicitation/request', (p) => this.onElicitation(p));
       await rpc.request('initialize', { clientInfo: { name: 'claude-web', title: 'Claude Web', version: '0.1.0' }, capabilities: null }, 60_000);
       rpc.notify('initialized', {});
       const pol = this.policy();
@@ -239,11 +246,36 @@ export class CodexDriver extends EventEmitter implements AgentDriver {
     });
   }
 
+  /**
+   * `mcpServer/elicitation/request`: Codex asks before an MCP tool call this way (`_meta.codex_approval_kind =
+   * mcp_tool_call`, feature tool_call_mcp_elicitation, on by default; codex-rs core/src/mcp_tool_call.rs, codex-cli
+   * 0.163) — before this handler such a request got -32601 and the call was aborted. Our web server's ego_browser is
+   * accepted with no card: the server asks on its own card when the call runs (launcher.ts
+   * isServerGatedCodexElicitation; never remembered, so it asks every time). Any other MCP tool gets the normal card,
+   * full access / don't-ask accept it as they accept a command. An MCP server's own question (not an approval) has
+   * nothing to show it in here: cancelled, as the -32601 did.
+   */
+  private async onElicitation(p: any) {
+    if (!isCodexToolApproval(p)) return elicitationAnswer('cancel');
+    if (isServerGatedCodexElicitation(p, this.egoTools)) return elicitationAnswer('accept');
+    if (this.permissionMode === 'bypassPermissions' || this.permissionMode === 'dontAsk') return elicitationAnswer('accept');
+    const requestId = randomUUID();
+    const params = p._meta.tool_params;
+    const input = params && typeof params === 'object' && !Array.isArray(params) ? { ...params } : {};
+    const event: PermissionRequestEvent = { requestId, sessionId: this.sessionId, toolName: `mcp__${p.serverName}__${codexElicitationTool(p) ?? 'tool'}`, input };
+    return new Promise((resolve) => {
+      this.pending.set(requestId, { event, resolve, kind: 'mcp' });
+      this.setState('waiting');
+      this.emit('permission', event);
+    });
+  }
+
   respondPermission(requestId: string, r: PermissionResponse): boolean {
     const p = this.pending.get(requestId);
     if (!p) return false;
     this.pending.delete(requestId);
-    p.resolve({ decision: r.behavior === 'allow' ? 'accept' : 'decline' });
+    if (p.kind === 'mcp') p.resolve(elicitationAnswer(r.behavior === 'allow' ? 'accept' : 'decline'));
+    else p.resolve({ decision: r.behavior === 'allow' ? 'accept' : 'decline' });
     this.emit('permissionResolved', requestId);
     if (this.pending.size === 0) this.setState('running');
     return true;
@@ -286,7 +318,7 @@ export class CodexDriver extends EventEmitter implements AgentDriver {
 
   async interrupt() {
     this.queue = [];
-    for (const [id, p] of this.pending) { p.resolve({ decision: 'cancel' }); this.pending.delete(id); this.emit('permissionResolved', id); }
+    for (const [id, p] of this.pending) { p.resolve(p.kind === 'mcp' ? elicitationAnswer('cancel') : { decision: 'cancel' }); this.pending.delete(id); this.emit('permissionResolved', id); }
     if (this.rpc && this.threadId && this.turnId) await this.rpc.request('turn/interrupt', { threadId: this.threadId, turnId: this.turnId }, 15_000).catch(() => {});
   }
   async setPermissionMode(mode: PermissionMode) { this.permissionMode = mode; this.info.permissionMode = mode; this.emit('info', this.info); }

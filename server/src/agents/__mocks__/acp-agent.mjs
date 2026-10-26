@@ -107,12 +107,24 @@ rl.on('line', async (line) => {
           othermcp: { title: 'ego_browser (other MCP Server)', kind: 'other', rawInput: script },
           edit: { title: 'notes/ego_browser.md', kind: 'edit', rawInput: { path: 'notes/ego_browser.md' } },
           extraarg: { title: 'ego_browser (web MCP Server)', kind: 'other', rawInput: { ...script, command: 'x' } },
+          noinput: { title: 'ego_browser (web MCP Server)', kind: 'other' },
+          noscript: { title: 'ego_browser (web MCP Server)', kind: 'other', rawInput: { timeout_ms: 5000 } },
+          // our exact call, by its bare names
+          bare: { title: 'ego_browser', rawInput: script },
+          mcpname: { title: 'mcp__web__ego_browser', kind: 'other', rawInput: script },
         };
+        // the answers the agent offers: all three by default; 'EGO…+always' only "always" and a reject, '+reject' only rejects
+        const offer = /\+(always|reject)\b/.exec(text)?.[1];
+        const options = offer === 'always'
+          ? [{ optionId: 'always', name: 'Always', kind: 'allow_always' }, { optionId: 'deny', name: 'Deny', kind: 'reject_once' }]
+          : offer === 'reject'
+            ? [{ optionId: 'deny', name: 'Deny', kind: 'reject_once' }, { optionId: 'never', name: 'Never', kind: 'reject_always' }]
+            : [{ optionId: 'allow', name: 'Allow', kind: 'allow_once' }, { optionId: 'always', name: 'Always', kind: 'allow_always' }, { optionId: 'deny', name: 'Deny', kind: 'reject_once' }];
         const toolCall = { toolCallId: egoId, ...(shapes[egoVariant[1] ?? 'ours'] ?? shapes.ours) };
         update(sid, { sessionUpdate: 'tool_call', ...toolCall, status: 'pending' });
-        const perm = await req('session/request_permission', { sessionId: sid, toolCall, options: [{ optionId: 'allow', name: 'Allow', kind: 'allow_once' }, { optionId: 'always', name: 'Always', kind: 'allow_always' }, { optionId: 'deny', name: 'Deny', kind: 'reject_once' }] });
+        const perm = await req('session/request_permission', { sessionId: sid, toolCall, options });
         const how = perm?.outcome?.optionId ?? 'cancelled';
-        update(sid, { sessionUpdate: 'tool_call_update', toolCallId: egoId, status: how === 'deny' || how === 'cancelled' ? 'failed' : 'completed', content: [{ type: 'content', content: { type: 'text', text: how } }] });
+        update(sid, { sessionUpdate: 'tool_call_update', toolCallId: egoId, status: how === 'deny' || how === 'never' || how === 'cancelled' ? 'failed' : 'completed', content: [{ type: 'content', content: { type: 'text', text: how } }] });
         update(sid, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: ` (ego answer: ${how})` } });
       }
       if (text.includes('mcp')) update(sid, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: ` [mcp: ${lastMcp.map((s) => s.name).join(',') || 'none'}]` } });

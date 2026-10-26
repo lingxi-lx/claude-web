@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { parse as parseToml } from 'smol-toml';
 import { egoReset, egoStatus } from './ego.js';
-import { SERVER_GATED_TOOLS, isServerGatedAcpCall, isServerGatedTool } from './launcher.js';
+import { SERVER_GATED_TOOLS, acpServersGiveEgo, codexArgsGiveEgo, codexElicitationTool, isServerGatedAcpCall, isServerGatedCodexElicitation, isServerGatedTool } from './launcher.js';
 import { WEB_SEARCH_TOOL, configureWebMcp, setWebAgentBrowser, insertWebCodexConfig, setWebMcpEnabled, sweepWebTokens, webAcpMcpServers, webAllowedTools, webClaudeMcpServer, webCodexConfigArgs, webMcpEnabled, webMcpEntry } from './launcher.js';
 
 let dir: string;
@@ -29,23 +29,83 @@ describe('server-gated tools: one card, the server\'s', () => {
     expect(isServerGatedTool({ name: 'ego_browser' })).toBe(false);
   });
 
-  it('an ACP prompt: exact title, kind absent or other, arguments only script / timeout_ms', () => {
+  it('an ACP prompt: exact title, kind absent or other, arguments a script (+ timeout_ms) and nothing else', () => {
     const script = { script: "await p.goto('https://a.example/')" };
-    expect(isServerGatedAcpCall({ title: 'ego_browser (web MCP Server)', kind: 'other', rawInput: script })).toBe(true);
-    expect(isServerGatedAcpCall({ title: 'ego_browser', rawInput: { ...script, timeout_ms: 5000 } })).toBe(true);
-    expect(isServerGatedAcpCall({ title: 'mcp__web__ego_browser' })).toBe(true);
+    expect(isServerGatedAcpCall({ title: 'ego_browser (web MCP Server)', kind: 'other', rawInput: script }, true)).toBe(true);
+    expect(isServerGatedAcpCall({ title: 'ego_browser', rawInput: { ...script, timeout_ms: 5000 } }, true)).toBe(true);
+    expect(isServerGatedAcpCall({ title: 'mcp__web__ego_browser', kind: null, rawInput: script }, true)).toBe(true);
+    expect(isServerGatedAcpCall({ title: 'ego_browser', rawInput: Object.assign(Object.create(null), script) }, true)).toBe(true);
     // a shell command / file edit / fetch whose title mentions it, or is it: never
-    expect(isServerGatedAcpCall({ title: 'rm -rf ~/proj # ego_browser', kind: 'execute', rawInput: { command: 'rm -rf ~/proj # ego_browser' } })).toBe(false);
-    for (const kind of ['execute', 'edit', 'delete', 'move', 'fetch', 'read', 'search', 'think']) expect(isServerGatedAcpCall({ title: 'ego_browser', kind, rawInput: script }), kind).toBe(false);
-    expect(isServerGatedAcpCall({ title: 'notes/ego_browser.md', kind: 'edit' })).toBe(false);
+    expect(isServerGatedAcpCall({ title: 'rm -rf ~/proj # ego_browser', kind: 'execute', rawInput: { command: 'rm -rf ~/proj # ego_browser' } }, true)).toBe(false);
+    for (const kind of ['execute', 'edit', 'delete', 'move', 'fetch', 'read', 'search', 'think']) expect(isServerGatedAcpCall({ title: 'ego_browser', kind, rawInput: script }, true), kind).toBe(false);
+    expect(isServerGatedAcpCall({ title: 'notes/ego_browser.md', kind: 'edit' }, true)).toBe(false);
     // another tool whose arguments name it; our title with arguments ours does not take
-    expect(isServerGatedAcpCall({ title: 'lookup', kind: 'other', rawInput: { name: 'ego_browser' } })).toBe(false);
-    expect(isServerGatedAcpCall({ title: 'ego_browser (web MCP Server)', kind: 'other', rawInput: { ...script, command: 'x' } })).toBe(false);
-    expect(isServerGatedAcpCall({ title: 'ego_browser', rawInput: 'script' })).toBe(false);
-    expect(isServerGatedAcpCall({ title: 'ego_browser', rawInput: ['script'] })).toBe(false);
+    expect(isServerGatedAcpCall({ title: 'lookup', kind: 'other', rawInput: { name: 'ego_browser' } }, true)).toBe(false);
+    expect(isServerGatedAcpCall({ title: 'ego_browser (web MCP Server)', kind: 'other', rawInput: { ...script, command: 'x' } }, true)).toBe(false);
+    expect(isServerGatedAcpCall({ title: 'ego_browser', rawInput: 'script' }, true)).toBe(false);
+    expect(isServerGatedAcpCall({ title: 'ego_browser', rawInput: ['script'] }, true)).toBe(false);
+    // the arguments must be there and carry the script: no input, an empty one, no script, a script that is no string
+    expect(isServerGatedAcpCall({ title: 'mcp__web__ego_browser' }, true)).toBe(false);
+    expect(isServerGatedAcpCall({ title: 'ego_browser', rawInput: null }, true)).toBe(false);
+    expect(isServerGatedAcpCall({ title: 'ego_browser', rawInput: {} }, true)).toBe(false);
+    expect(isServerGatedAcpCall({ title: 'ego_browser', rawInput: { timeout_ms: 5000 } }, true)).toBe(false);
+    expect(isServerGatedAcpCall({ title: 'ego_browser', rawInput: { script: 42 } }, true)).toBe(false);
+    expect(isServerGatedAcpCall({ title: 'ego_browser', rawInput: new Date() }, true)).toBe(false);
+    expect(isServerGatedAcpCall({ title: 'ego_browser', rawInput: new (class { script = 'x'; })() }, true)).toBe(false);
     // another MCP server's tool of that name
-    expect(isServerGatedAcpCall({ title: 'ego_browser (other MCP Server)', kind: 'other', rawInput: script })).toBe(false);
-    expect(isServerGatedAcpCall({ kind: 'other', rawInput: script })).toBe(false);
+    expect(isServerGatedAcpCall({ title: 'ego_browser (other MCP Server)', kind: 'other', rawInput: script }, true)).toBe(false);
+    expect(isServerGatedAcpCall({ kind: 'other', rawInput: script }, true)).toBe(false);
+  });
+
+  it('an ACP prompt is never ours when the conversation was not given the ego tools — not even our exact call', () => {
+    const script = { script: "await p.goto('https://a.example/')" };
+    for (const title of ['ego_browser (web MCP Server)', 'ego_browser', 'mcp__web__ego_browser']) {
+      expect(isServerGatedAcpCall({ title, kind: 'other', rawInput: script }, false), title).toBe(false);
+      expect(isServerGatedAcpCall({ title, kind: 'other', rawInput: script }, true), title).toBe(true);
+    }
+  });
+
+  it('did a conversation get the ego tools: our web server with CW_WEB_BROWSER=ego in what was handed to the agent', () => {
+    const web = (env: Record<string, string>) => ({ name: 'web', command: 'node', args: [], env: Object.entries(env).map(([name, value]) => ({ name, value })) });
+    expect(acpServersGiveEgo([web({ CW_WEB_URL: 'u', CW_WEB_BROWSER: 'ego' })])).toBe(true);
+    expect(acpServersGiveEgo([web({ CW_WEB_URL: 'u' })])).toBe(false);
+    expect(acpServersGiveEgo([{ ...web({ CW_WEB_BROWSER: 'ego' }), name: 'claude-web-memory' }])).toBe(false);
+    expect(acpServersGiveEgo([])).toBe(false);
+    expect(acpServersGiveEgo(undefined)).toBe(false);
+    expect(codexArgsGiveEgo(['-c', 'mcp_servers.web.command="node"', '-c', 'mcp_servers.web.env={CW_WEB_URL = "u", CW_WEB_BROWSER = "ego"}', 'app-server'])).toBe(true);
+    expect(codexArgsGiveEgo(['-c', 'mcp_servers.web.env={CW_WEB_URL = "u"}', 'app-server'])).toBe(false);
+    expect(codexArgsGiveEgo(['-c', 'mcp_servers.memory.env={CW_WEB_BROWSER = "ego"}', 'app-server'])).toBe(false);
+    expect(codexArgsGiveEgo(['app-server'])).toBe(false);
+  });
+
+  it('a Codex MCP tool approval (mcpServer/elicitation/request): only our web ego_browser with a script, and only with ego tools on', () => {
+    const ours = {
+      threadId: 't', turnId: 'turn-1', serverName: 'web', mode: 'form', message: 'Allow the web MCP server to run tool "ego_browser"?', requestedSchema: { type: 'object', properties: {} },
+      _meta: { codex_approval_kind: 'mcp_tool_call', persist: ['session', 'always'], tool_title: 'Act in ego lite', tool_params: { script: "await p.goto('https://a.example/')" } },
+    };
+    expect(isServerGatedCodexElicitation(ours, true)).toBe(true);
+    expect(isServerGatedCodexElicitation({ ...ours, _meta: { ...ours._meta, tool_params: { script: 'x', timeout_ms: 1000 } } }, true)).toBe(true);
+    expect(isServerGatedCodexElicitation(ours, false)).toBe(false);
+    for (const bad of [
+      { ...ours, serverName: 'evil' },
+      { ...ours, message: 'Allow the web MCP server to run tool "browser_click"?' },
+      { ...ours, message: 'Allow the evil MCP server to run tool "ego_browser"?' },
+      { ...ours, message: 'Allow the web MCP server to run tool "ego_browser"? Also rm -rf /' },
+      { ...ours, mode: 'url' },
+      { ...ours, _meta: { ...ours._meta, codex_approval_kind: 'other' } },
+      { ...ours, _meta: null },
+      { ...ours, _meta: { ...ours._meta, tool_params: undefined } },
+      { ...ours, _meta: { ...ours._meta, tool_params: { script: 'x', command: 'y' } } },
+      { ...ours, _meta: { ...ours._meta, tool_params: { timeout_ms: 1 } } },
+      { ...ours, _meta: { ...ours._meta, tool_params: ['x'] } },
+    ]) expect(isServerGatedCodexElicitation(bad, true), JSON.stringify(bad).slice(0, 200)).toBe(false);
+    expect(isServerGatedCodexElicitation(null, true)).toBe(false);
+  });
+
+  it('names the tool a Codex MCP approval is about, from its fixed message; anything else is unknown', () => {
+    expect(codexElicitationTool({ serverName: 'web', message: 'Allow the web MCP server to run tool "browser_click"?' })).toBe('browser_click');
+    expect(codexElicitationTool({ serverName: 'web', message: 'Approve?' })).toBeUndefined();
+    expect(codexElicitationTool({})).toBeUndefined();
   });
 });
 
