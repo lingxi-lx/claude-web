@@ -1,3 +1,4 @@
+import { EGO_MAX_SCRIPT_CHARS, egoGuide, egoKnown, runEgoScript } from './ego.js';
 import { EventEmitter } from 'node:events';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import dns from 'node:dns';
@@ -171,6 +172,8 @@ export class WebService extends EventEmitter {
       engines: ENGINES.map((e) => (e.needsKey ? { ...e, hasKey: !!this.keys[e.id as 'brave'] } : { ...e })),
       host: this.hosts.size > 0,
       isolated: s['web.browser.isolated'] === true,
+      agentBrowser: s['web.browser.agent'] === 'builtin' ? 'builtin' : 'auto',
+      ego: (({ found, version }) => (version ? { found, version } : { found }))(egoKnown() ?? { found: false }),
     };
   }
 
@@ -444,15 +447,15 @@ export class WebService extends EventEmitter {
   // ---- the MCP surface (POST /api/web/tool) ----
 
   /** One tool call of the `web` MCP server, answered as MCP content. A failure is a result the model can read, not a throw. */
-  async tool(sessionId: string, tool: string, args: Record<string, unknown> = {}): Promise<ToolResult> {
+  async tool(sessionId: string, tool: string, args: Record<string, unknown> = {}, signal?: AbortSignal): Promise<ToolResult> {
     try {
-      return await this.run(String(sessionId ?? '').slice(0, 200), tool, args && typeof args === 'object' ? args : {});
+      return await this.run(String(sessionId ?? '').slice(0, 200), tool, args && typeof args === 'object' ? args : {}, signal);
     } catch (e) {
       return errorResult(String((e as Error)?.message ?? e).slice(0, 4000));
     }
   }
 
-  private async run(sid: string, tool: string, a: Record<string, unknown>): Promise<ToolResult> {
+  private async run(sid: string, tool: string, a: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
     if (tool.startsWith('character_') && this.d.characterTool) return this.d.characterTool(tool, a);
     if (tool.startsWith('theme_') && this.d.themeTool) return this.d.themeTool(tool, a);
     const str = (k: string) => { const v = a[k]; if (typeof v !== 'string' || !v.trim()) throw new Error(tr('{tool} 需要参数 {k}（字符串）', { tool, k })); return v; };
@@ -542,6 +545,13 @@ export class WebService extends EventEmitter {
       case 'browser_select': {
         if (typeof a.value !== 'string') throw new Error(tr('browser_select 需要参数 value（选项的值或显示的文字）'));
         return acted(await this.browser(sid, 'select', { ref: refOf(a.ref, tool), value: a.value.slice(0, 500) }), tr('已选择。'));
+      }
+      case 'ego_browser_guide':
+        return egoGuide(sid);
+      case 'ego_browser': {
+        const script = str('script');
+        if (script.length > EGO_MAX_SCRIPT_CHARS) throw new Error(tr('ego_browser 的脚本太长（最多 {n} 个字符）', { n: EGO_MAX_SCRIPT_CHARS }));
+        return runEgoScript(sid, script, { timeoutMs: num('timeout_ms'), signal });
       }
       case 'browser_eval': {
         const script = str('script');

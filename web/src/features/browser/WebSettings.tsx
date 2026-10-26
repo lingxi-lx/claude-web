@@ -12,6 +12,9 @@ import { tr } from '@/i18n';
 import { Select } from '@/ui/Select';
 import { COOKIES_KEY, COOKIE_MODES, cookieModeText, cookiesMode } from './state';
 import { ALLOWED_SITES_KEY, AllowedSites, readSites } from './AllowedSites';
+import { openExternal } from '@/features/chat/link-route';
+
+const EGO_URL = 'https://lite.ego.app/';
 
 /** The search services that need a key of their own → the setting it is kept in (protected on the server, never sent back). */
 const KEY_SETTING: Record<string, string> = { brave: 'web.search.braveKey' };
@@ -38,6 +41,12 @@ export function WebSettings() {
   const storedSites = useStore((s) => s.settings[ALLOWED_SITES_KEY]);
   const sites = readSites(storedSites);
   const [sitesOpen, setSitesOpen] = useState(false);
+  const [detecting, setDetecting] = useState(false);
+  const detect = async () => {
+    setDetecting(true);
+    try { setSt(await ws.request<WebStatus>({ kind: 'web.egoDetect' })); } catch (e) { toast((e as Error).message); }
+    setDetecting(false);
+  };
 
   const load = () => ws.request<WebStatus>({ kind: 'web.status' }).then(setSt).catch(() => {});
   useEffect(() => { void load(); const off = ws.on((e) => { if (e.kind === 'web.changed') void load(); }); return () => { off(); }; }, []);
@@ -68,6 +77,23 @@ export function WebSettings() {
         <h5>{tr('Agent 上网')}</h5>
         <Row label={tr('让 Agent 能搜索和打开网页')} hint={tr('每个对话里的 Agent 多出「搜索」和「浏览器」两类工具，Claude、Codex、Gemini 都一样。改动对之后新开的对话生效。')}>
           <button className={clsx('toggle', st?.enabled && 'on')} role="switch" aria-checked={!!st?.enabled} aria-label={tr('让 Agent 能搜索和打开网页')} disabled={!st} data-id="web-on" onClick={() => void set('web.mcp', !st?.enabled)} />
+        </Row>
+        <Row label={tr('Agent 用哪个浏览器操作网页')} hint={
+          <>
+            {st?.ego.found
+              ? tr('找到了 ego lite{v}。选它时，Agent 打开、点击、填表、截图都在 ego lite 里做，用的是你在 ego lite 里的登录，每个对话一个单独的 Space，不动你自己的标签页；它用不了时退回内置浏览器。', { v: st.ego.version ? ` v${st.ego.version}` : '' })
+              : tr('没找到 ego lite。装好它并完成首次引导（会装上 ego-browser 命令）后点「重新检测」；在那之前用内置浏览器。')}
+            {' '}{tr('改动对之后新开的对话生效。')}
+            {' '}<button type="button" className="link" data-id="web-ego-get" onClick={() => openExternal(EGO_URL)}>{tr('ego lite 官网')}</button>
+          </>
+        }>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <Select className="field" aria-label={tr('Agent 用哪个浏览器操作网页')} data-id="web-agent-browser" disabled={!st} value={st?.agentBrowser ?? 'auto'} onValueChange={(value) => void set('web.browser.agent', String(value) === 'builtin' ? 'builtin' : undefined)} options={[
+              { value: 'auto', label: tr('ego lite（装了就用它）'), description: st && !st.ego.found ? tr('没找到，现在用内置浏览器') : undefined },
+              { value: 'builtin', label: tr('内置浏览器') },
+            ]} />
+            <button className="btn sm ghost" data-id="web-ego-detect" disabled={detecting} onClick={() => void detect()}>{detecting ? tr('检测中…') : tr('重新检测')}</button>
+          </div>
         </Row>
         <Row label={tr('用什么搜索')} hint={st && !st.host
           ? tr('现在没有桌面窗口连着（网页版、手机）：只能由这台电脑直接去抓 Bing 和 DuckDuckGo 的结果页，容易被限流；Google、Yahoo、百度要桌面版的内置浏览器。')

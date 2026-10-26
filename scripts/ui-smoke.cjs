@@ -923,6 +923,17 @@ function driver() {
         check('settings · IM 机器人: a bot picks its provider (跟新对话一样 · Claude 账号 · providers)', /^跟新对话一样/.test(imOpts[0] ?? '') && imOpts[1] === 'Claude 账号' && imOpts.some((t) => t.startsWith('Smoke 中转')), JSON.stringify(imOpts));
         await shot('settings-im-provider');
         await srvReq({ kind: 'im.set', id: 'smoke-dd', patch: null }).catch(() => {});
+        // ego lite (2026-10-26): 联网 says which browser Agents act in, whether its ego-browser command was found, 重新检测
+        await js(`window.__store.getState().openSettings({ section: 'web' })`);
+        const egoRow = await waitFor(`!!document.querySelector('.modal.settings [data-id="web-agent-browser"]') && !!document.querySelector('.modal.settings [data-id="web-ego-detect"]')`, 8000);
+        const egoHint = await js(`document.querySelector('.modal.settings [data-id="web-agents"]')?.textContent ?? ''`);
+        check('settings · 联网: 「Agent 用哪个浏览器操作网页」 with 重新检测, saying whether ego lite was found', egoRow && /没找到 ego lite|找到了 ego lite/.test(egoHint), egoHint.slice(0, 200));
+        await click('.modal.settings [data-id="web-ego-detect"]');
+        await sleep(800);
+        await js(`window.__store.getState().setSetting('web.browser.agent', 'builtin')`);
+        const egoSt = await srvReq({ kind: 'web.status' }).catch(() => null);
+        check('… 内置浏览器 picked: the server says so', egoSt?.agentBrowser === 'builtin' && typeof egoSt?.ego?.found === 'boolean', JSON.stringify(egoSt && { agentBrowser: egoSt.agentBrowser, ego: egoSt.ego }));
+        await js(`window.__store.getState().setSetting('web.browser.agent', undefined)`);
         if (tmpProv) await srvReq({ kind: 'providers.remove', id: tmpProv.id }).catch(() => {});
         await js('window.__store.getState().loadProviders()');
 

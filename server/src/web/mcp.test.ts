@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
-import { TOOLS, callServer, callTimeoutOf } from './mcp.js';
+import { EGO_TOOLS, TOOLS, callServer, callTimeoutOf, instructionsFor, toolsFor } from './mcp.js';
 import { SITE_ASK_TIMEOUT_MS } from './site-gate.js';
 import { webMcpEntry } from './launcher.js';
 import { formatSnapshot } from './format.js';
@@ -141,7 +141,42 @@ describe('the web MCP server over stdio', () => {
   }, 60_000);
 });
 
+describe('a cancelled call', () => {
+  it('closes its request to the server at once, so the work there stops too', async () => {
+    let closed = false;
+    const srv = http.createServer((q) => { q.on('close', () => { closed = true; }); });
+    await new Promise<void>((r) => srv.listen(0, '127.0.0.1', () => r()));
+    const port = (srv.address() as { port: number }).port;
+    const ac = new AbortController();
+    const t0 = Date.now();
+    const p = callServer('ego_browser', { script: 'x' }, { CW_WEB_URL: `http://127.0.0.1:${port}`, CW_WEB_TOKEN: 't', CW_SESSION_ID: 's' }, 60_000, ac.signal);
+    setTimeout(() => ac.abort(), 300);
+    const r = await p;
+    expect(r.isError).toBe(true);
+    expect(Date.now() - t0).toBeLessThan(5_000);
+    await new Promise((res) => setTimeout(res, 200));
+    expect(closed).toBe(true);
+    srv.close();
+  });
+});
+
 describe('the tool list', () => {
+  it('ego lite: its tools are listed only with CW_WEB_BROWSER=ego, and then the browser_* tools defer to it', () => {
+    const names = (env: NodeJS.ProcessEnv) => toolsFor(env).map((t) => t.name);
+    expect(names({})).not.toContain('ego_browser');
+    expect(names({ CW_WEB_BROWSER: 'ego' })).toEqual([...TOOLS.map((t) => t.name), 'ego_browser_guide', 'ego_browser']);
+    const open = (env: NodeJS.ProcessEnv) => toolsFor(env).find((t) => t.name === 'browser_open')!.description;
+    expect(open({})).not.toMatch(/ego_browser/);
+    expect(open({ CW_WEB_BROWSER: 'ego' })).toMatch(/use it instead for web tasks/);
+    expect(toolsFor({ CW_WEB_BROWSER: 'ego' }).find((t) => t.name === 'web_search')!.description).not.toMatch(/ego_browser/);
+    expect(instructionsFor({ CW_WEB_BROWSER: 'ego' })).toMatch(/ego_browser .* first/);
+    expect(instructionsFor({})).not.toMatch(/ego/);
+    for (const t of EGO_TOOLS) { expect(t.description.length, t.name).toBeGreaterThan(60); expect(t._meta['anthropic/alwaysLoad'], t.name).toBe(true); }
+    // the script's own limit plus room for the permission card
+    expect(callTimeoutOf('ego_browser', {})).toBe(240_000);
+    expect(callTimeoutOf('ego_browser', { timeout_ms: 10 ** 9 })).toBe(720_000);
+  });
+
   it('every tool has a description the model can act on, a schema, and an honest read-only hint', () => {
     for (const t of TOOLS) {
       expect(t.description.length, t.name).toBeGreaterThan(60);

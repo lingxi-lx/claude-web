@@ -88,7 +88,8 @@ import { usable } from '../themes/tools.js';
 import { handleOrchestra, isOrchestraRequest } from '../orchestra/handlers.js';
 import { handleBackground, isBackgroundRequest, type BackgroundService } from '../background/service.js';
 import { isWebKeySetting, maskWebSettings, type WebService } from '../web/service.js';
-import { setWebMcpEnabled } from '../web/launcher.js';
+import { setWebAgentBrowser, setWebMcpEnabled } from '../web/launcher.js';
+import { egoStatus } from '../web/ego.js';
 import type { ComputerAccess } from '../computer/access.js';
 import type { SiteAsk } from '../web/site-gate.js';
 import { computerSupported, defaultFeaturesOf } from '../computer/launcher.js';
@@ -688,6 +689,7 @@ export class Hub {
         if (req.key === 'sessions.mcp') setSessionsMcpEnabled(req.value !== false);
         if (req.key === 'claude.desktopSkills') setDesktopSkillsEnabled(req.value !== false);
         if (req.key === 'web.mcp') setWebMcpEnabled(req.value !== false);
+        if (req.key === 'web.browser.agent') setWebAgentBrowser(req.value);
         if (req.key.startsWith('web.')) s.web.settingsChanged(); // web.status reads differently now
         // 在外面也能用: brokers / STUN / the shell address / on-off / keep-awake (restarts only when it has to)
         if (req.key === 'remote.anywhere' || req.key.startsWith('remote.anywhere.') || req.key === 'remote.keepAwake') await s.anywhere?.refresh();
@@ -857,6 +859,9 @@ export class Hub {
       }
       // ---- 联网: search + the built-in browser (every agent reaches them over MCP; see web/mcp.ts) ----
       case 'web.status':
+        return s.web.status();
+      case 'web.egoDetect':
+        await egoStatus(true);
         return s.web.status();
       case 'web.search':
         return s.web.search(req.query, { count: req.count });

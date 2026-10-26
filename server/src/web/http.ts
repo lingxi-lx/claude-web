@@ -50,7 +50,10 @@ export function handleWebTool(web: WebService, req: http.IncomingMessage, res: h
     if (!j || typeof j !== 'object' || typeof j.tool !== 'string') { reply(400, { error: 'tool required' }); return; }
     const args = j.args && typeof j.args === 'object' && !Array.isArray(j.args) ? j.args : {};
     // WebService.tool never throws: a failure is a tool result the model reads
-    void web.tool(typeof j.sessionId === 'string' ? j.sessionId : '', j.tool, args).then((r) => reply(200, r), (e) => reply(500, { error: String(e?.message ?? e) }));
+    // the MCP process closed the request (the call was cancelled, the agent went away): the work stops too
+    const ac = new AbortController();
+    res.on('close', () => { if (!res.writableEnded) ac.abort(); });
+    void web.tool(typeof j.sessionId === 'string' ? j.sessionId : '', j.tool, args, ac.signal).then((r) => { if (!res.destroyed) reply(200, r); }, (e) => { if (!res.destroyed) reply(500, { error: String(e?.message ?? e) }); });
   });
   return true;
 }

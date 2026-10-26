@@ -4,7 +4,7 @@ import type { IconName } from '@/ui/icons';
 import { tr } from '@/i18n';
 import { VIEWPORT_IDS, viewportLabel, type ViewportId } from './viewport';
 
-export const WEB_TOOLS = ['web_search', 'browser_open', 'browser_read', 'browser_find', 'browser_click', 'browser_type', 'browser_press_key', 'browser_scroll', 'browser_back', 'browser_screenshot', 'browser_computer', 'browser_console', 'browser_network', 'browser_snapshot', 'browser_wait', 'browser_tabs', 'browser_viewport', 'character_guide', 'character_draft', 'character_save', 'character_assign', 'character_list', 'theme_guide', 'theme_draft', 'theme_get', 'theme_save', 'theme_apply', 'theme_list', 'theme_delete'] as const;
+export const WEB_TOOLS = ['web_search', 'browser_open', 'browser_read', 'browser_find', 'browser_click', 'browser_type', 'browser_press_key', 'browser_scroll', 'browser_back', 'browser_screenshot', 'browser_computer', 'browser_console', 'browser_network', 'browser_snapshot', 'browser_wait', 'browser_tabs', 'browser_viewport', 'ego_browser', 'ego_browser_guide', 'character_guide', 'character_draft', 'character_save', 'character_assign', 'character_list', 'theme_guide', 'theme_draft', 'theme_get', 'theme_save', 'theme_apply', 'theme_list', 'theme_delete'] as const;
 export type WebTool = (typeof WEB_TOOLS)[number];
 
 /** `mcp__web__browser_open` (Claude), `web__browser_open` / `web.browser_open` / the bare name (other agents) → the tool. */
@@ -55,6 +55,9 @@ export function webToolLabel(tool: WebTool, input: Record<string, unknown> | und
       const preset = str(input, 'preset') as ViewportId;
       return { icon: 'web', verb: tr('把网页显示成:'), arg: VIEWPORT_IDS.includes(preset) ? viewportLabel(preset) : preset };
     }
+    // ego lite (server/src/web/ego.ts): a script round in the user's own browser app
+    case 'ego_browser': return { icon: 'web', verb: tr('在 ego lite 里操作网页'), arg: egoGist(str(input, 'script')) };
+    case 'ego_browser_guide': return { icon: 'web', verb: tr('看 ego lite 的用法'), arg: '' };
     // 网吧's characters (server/src/characters/tool-defs.ts) ride on the same server
     case 'character_guide': return { icon: 'user', verb: tr('看捏角色的说明'), arg: '' };
     case 'character_draft': { const c = input?.character as Record<string, unknown> | undefined; return { icon: 'user', verb: tr('画角色草稿:'), arg: str(c, 'name') || str(c, 'id') }; }
@@ -99,6 +102,9 @@ function computerLabel(input: Record<string, unknown> | undefined): WebToolLabel
     default: return { icon: 'cursor', verb: tr('操作网页'), arg: '' };
   }
 }
+/** The first address a script goes to — what a row and a card name. */
+export const firstUrl = (script: string) => /https?:\/\/[^\s'"`)]+/.exec(script)?.[0] ?? '';
+const egoGist = (script: string) => { const u = firstUrl(script); return u ? shortAddress(u) : ''; };
 const refText = (ref: unknown) => (typeof ref === 'string' || typeof ref === 'number' ? `[${String(ref).replace(/^\[|\]$/g, '')}]` : '');
 
 /** 「Claude 想在浏览器里打开 github.com」: what a permission card asks for a web tool. */
@@ -134,6 +140,8 @@ export function webToolAsk(tool: WebTool, input: Record<string, unknown> | undef
       return h ? tr('{agent} 想新开一个标签打开 {h}', { agent, h }) : tr('{agent} 想管理它打开的浏览器标签', { agent });
     }
     case 'browser_viewport': return tr('{agent} 想换网页的显示尺寸', { agent });
+    case 'ego_browser': { const h = host(firstUrl(str(input, 'script'))); return h ? tr('{agent} 想在 ego lite 里运行一段脚本（{h}）', { agent, h }) : tr('{agent} 想在 ego lite 里运行一段脚本', { agent }); }
+    case 'ego_browser_guide': return tr('{agent} 想看 ego lite 的用法', { agent });
     case 'character_assign': return input?.id === null ? tr('{agent} 想把{targetText}换回默认形象', { agent, targetText: targetText(str(input, 'target')) }) : tr('{agent} 想把角色 {str} 给{targetText}', { agent, str: str(input, 'id'), targetText: targetText(str(input, 'target')) });
     case 'character_guide': case 'character_draft': case 'character_save': case 'character_list': return tr('{agent} 想改网吧的角色库', { agent });
     case 'theme_apply': return tr('{agent} 想把界面换成主题「{id}」', { agent, id: str(input, 'id') });

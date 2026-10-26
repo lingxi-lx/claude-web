@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { parse as parseToml } from 'smol-toml';
-import { WEB_SEARCH_TOOL, configureWebMcp, insertWebCodexConfig, setWebMcpEnabled, sweepWebTokens, webAcpMcpServers, webAllowedTools, webClaudeMcpServer, webCodexConfigArgs, webMcpEnabled, webMcpEntry } from './launcher.js';
+import { egoReset, egoStatus } from './ego.js';
+import { WEB_SEARCH_TOOL, configureWebMcp, setWebAgentBrowser, insertWebCodexConfig, setWebMcpEnabled, sweepWebTokens, webAcpMcpServers, webAllowedTools, webClaudeMcpServer, webCodexConfigArgs, webMcpEnabled, webMcpEntry } from './launcher.js';
 
 let dir: string;
 beforeAll(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-webmcp-')); });
@@ -44,7 +45,7 @@ describe('web MCP launcher', () => {
     expect(JSON.stringify(s)).not.toContain(SECRET);
     expect(fs.readFileSync(tokenFile, 'utf8')).toBe(SECRET);
     // searching is the one tool pre-allowed
-    expect(webAllowedTools()).toEqual(['mcp__web__web_search', 'mcp__web__character_guide', 'mcp__web__character_draft', 'mcp__web__character_save', 'mcp__web__character_list', 'mcp__web__theme_guide', 'mcp__web__theme_draft', 'mcp__web__theme_get', 'mcp__web__theme_save', 'mcp__web__theme_list']);
+    expect(webAllowedTools()).toEqual(['mcp__web__web_search', 'mcp__web__ego_browser_guide', 'mcp__web__character_guide', 'mcp__web__character_draft', 'mcp__web__character_save', 'mcp__web__character_list', 'mcp__web__theme_guide', 'mcp__web__theme_draft', 'mcp__web__theme_get', 'mcp__web__theme_save', 'mcp__web__theme_list']);
     expect(WEB_SEARCH_TOOL).toBe('mcp__web__web_search');
     // a conversation whose id is not known yet still gets the server
     expect(webClaudeMcpServer({}, NODE).web.env.CW_SESSION_ID).toBe('');
@@ -113,5 +114,33 @@ describe('web MCP launcher', () => {
     expect(env.CW_WEB_TOKEN_FILE).toBeUndefined();
     configureWebMcp(null, blocked);
     fs.rmSync(blocked);
+  });
+
+  it('ego lite: CW_WEB_BROWSER=ego only when its command was found and the setting is not the built-in browser', async () => {
+    configureWebMcp({ url: 'http://127.0.0.1:3090', token: SECRET }, dir);
+    const bin = path.join(dir, 'egobin');
+    fs.mkdirSync(bin, { recursive: true });
+    const fake = '#!/usr/bin/env node\nprocess.stdout.write("[ego-browser:skill] ego-browser v1.0.0\\n");\n';
+    fs.writeFileSync(path.join(bin, 'ego-browser.js'), fake);
+    if (process.platform === 'win32') fs.writeFileSync(path.join(bin, 'ego-browser.cmd'), '@ECHO off\r\nnode "%~dp0\\ego-browser.js" %*\r\n');
+    else { fs.writeFileSync(path.join(bin, 'ego-browser'), fake); fs.chmodSync(path.join(bin, 'ego-browser'), 0o755); }
+    const old = process.env.PATH;
+    try {
+      egoReset();
+      process.env.PATH = path.join(dir, 'nothing-here');
+      await egoStatus(false);
+      expect(webClaudeMcpServer(target, NODE).web.env.CW_WEB_BROWSER).toBeUndefined();
+      egoReset();
+      process.env.PATH = `${bin}${path.delimiter}${old}`;
+      await egoStatus(false);
+      expect(webClaudeMcpServer(target, NODE).web.env.CW_WEB_BROWSER).toBe('ego');
+      expect(webAcpMcpServers(target, NODE)[0].env).toContainEqual({ name: 'CW_WEB_BROWSER', value: 'ego' });
+      setWebAgentBrowser('builtin');
+      expect(webClaudeMcpServer(target, NODE).web.env.CW_WEB_BROWSER).toBeUndefined();
+    } finally {
+      process.env.PATH = old;
+      setWebAgentBrowser('auto');
+      egoReset();
+    }
   });
 });
