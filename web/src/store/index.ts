@@ -109,6 +109,13 @@ interface State {
   toast(text: string, ok?: boolean, ms?: number, key?: string): void;
   workspaces: Workspace[];
   sessionMeta: Record<string, SessionMeta>;
+  /**
+   * The server's answer to session.resumeMode per conversation: the permission mode a resume that names none runs in
+   * (its record, else 新对话默认权限). The chip of a conversation that is not running shows it over this window's copy
+   * of the record (2026-10-26 QA). Absent = not asked yet, or an older server.
+   */
+  resumeModes: Record<string, PermissionMode>;
+  loadResumeMode(sessionId: string): Promise<void>;
   schedules: Schedule[];
   limits: Limits | null;
   /**
@@ -441,6 +448,7 @@ export const useStore = create<State>((set, get) => ({
   toasts: [],
   workspaces: [],
   sessionMeta: {},
+  resumeModes: {},
   schedules: [],
   limits: null,
   auth: null,
@@ -542,6 +550,16 @@ export const useStore = create<State>((set, get) => ({
   async addWorkspace(path) {
     await ws.request({ kind: 'workspaces.add', path });
     await get().loadMeta();
+  },
+  async loadResumeMode(sessionId) {
+    const r = await ws.request<{ permissionMode?: PermissionMode } | null>({ kind: 'session.resumeMode', sessionId }).catch(() => null);
+    const mode = r?.permissionMode;
+    if (get().resumeModes[sessionId] === mode) return;
+    set((s) => {
+      const next = { ...s.resumeModes };
+      if (mode) next[sessionId] = mode; else delete next[sessionId];
+      return { resumeModes: next };
+    });
   },
   async setSessionMeta(sessionId, patch) {
     set((s) => ({ sessionMeta: { ...s.sessionMeta, [sessionId]: { ...s.sessionMeta[sessionId], ...patch } } }));

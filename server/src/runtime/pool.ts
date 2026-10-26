@@ -166,6 +166,18 @@ export class RunnerPool extends EventEmitter {
     if (why) throw new Error(why);
   }
 
+  /**
+   * The permission mode a conversation is resumed in when whoever reopens it names none: what it last ran with, else
+   * 新对话默认权限; undefined = the CLI's own default. `open` uses this, and so does the permission chip of a
+   * conversation that is not running (session.resumeMode) — the chip shows what the next send will really run in,
+   * not the window's own guess (2026-10-26 QA).
+   */
+  resumeMode(sessionId?: string): PermissionMode | undefined {
+    const meta = this.providers.meta;
+    if (!meta) return undefined;
+    return (sessionId ? meta.sessionMeta(sessionId).permissionMode : undefined) ?? asMode(meta.settings()['ui.defaultMode']);
+  }
+
   open(params: OpenSessionParams, resumeHistory: unknown[] | null = null): AgentDriver {
     if (!params.fork) this.assertWritable(params.sessionId);
     void proxy.refresh(); // IM / schedules / goals come straight here: a stale look is redone for the next start (net/proxy.ts)
@@ -195,9 +207,8 @@ export class RunnerPool extends EventEmitter {
     // phone — IM, schedules, goals): what this conversation last ran with, else the default for new conversations.
     // It used to fall back to 每步询问 (2026-10-14, a user's friend: 完全放开 came back as 每步询问 after a few turns)
     const saidMode = params.fork || params.resumeAt ? undefined : asMode(params.permissionMode);
-    if (params.permissionMode === undefined && this.providers.meta) {
-      const recorded = params.sessionId && !params.fork ? this.providers.meta.sessionMeta(params.sessionId).permissionMode : undefined;
-      const mode = recorded ?? asMode(this.providers.meta.settings()['ui.defaultMode']);
+    if (params.permissionMode === undefined) {
+      const mode = this.resumeMode(params.sessionId && !params.fork ? params.sessionId : undefined);
       if (mode) params = { ...params, permissionMode: mode };
     }
     // 只聊天 is the conversation's, whoever reopens it (a window, another conversation's message, IM, goals, schedules,

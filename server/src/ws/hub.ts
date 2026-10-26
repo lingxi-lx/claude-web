@@ -781,6 +781,9 @@ export class Hub {
       case 'session.close':
         await s.pool.close(req.sessionId);
         return null;
+      case 'session.resumeMode':
+        // the chip of a conversation that is not running shows what the next send really runs in (pool.open uses the same)
+        return { permissionMode: s.pool.resumeMode(req.sessionId) };
       case 'session.setPermissionMode':
         await afterSwitch(req.sessionId);
         await this.runner(req.sessionId).setPermissionMode(req.mode);

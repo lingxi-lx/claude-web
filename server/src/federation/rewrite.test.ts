@@ -40,6 +40,8 @@ describe('planRoute', () => {
       { kind: 'usage.session', sessionId: 'peer_b1~s1' },
       { kind: 'files.changed', sessionId: 'peer_b1~s1' },
       { kind: 'files.diff', sessionId: 'peer_b1~s1', path: '/r/a.ts' },
+      // the mode a conversation there resumes in is that machine's record (the chip of one not running)
+      { kind: 'session.resumeMode', sessionId: 'peer_b1~s1' },
     ] as ClientRequest[]) expect(planRoute(req)).toEqual({ kind: 'forward', peerId: 'b1' });
   });
   it('every sessionId-carrying request the web client sends is routed somewhere (no surprise "不支持")', () => {

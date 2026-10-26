@@ -367,6 +367,17 @@ describe('RunnerPool: the permission mode a conversation comes back in', () => {
     expect(again).not.toBe(r);
     expect(again.params.permissionMode).toBe(explicit);
   });
+  // the permission chip of a conversation that is not running asks the server this (session.resumeMode): it is what
+  // open() without a mode uses, so the chip can never say 每步询问 while the next send runs in 完全放开 (2026-10-26 QA)
+  it('resumeMode: the mode a resume without one gets — the record, else the default for new conversations', () => {
+    const { p } = setup({ a: { permissionMode: 'bypassPermissions' }, b: { permissionMode: 'default' } }, { 'ui.defaultMode': 'default' });
+    expect(p.resumeMode('a')).toBe('bypassPermissions');
+    expect((p.open({ sessionId: 'a', cwd: 'C:/x' }) as any).params.permissionMode).toBe('bypassPermissions');
+    const q = setup({ b: { permissionMode: 'default' } }, { 'ui.defaultMode': 'bypassPermissions' }).p;
+    expect(q.resumeMode('b')).toBe('default');
+    expect(q.resumeMode('never-ran')).toBe('bypassPermissions');
+    expect(setup({}, {}).p.resumeMode('x')).toBeUndefined();
+  });
   it('a resume with an explicit mode is recorded too, and a later one without a mode keeps it', () => {
     const { p } = setup({ old: { permissionMode: 'bypassPermissions' } }, { 'ui.defaultMode': 'bypassPermissions' });
     const r: any = p.open({ sessionId: 'old', cwd: 'C:/x', permissionMode: 'default' });

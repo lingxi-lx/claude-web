@@ -517,3 +517,23 @@ describe('isLastPrompt (重跑 the last one asks again in place; an earlier one 
     expect(isLastPrompt(items, 'nope')).toBe(false);
   });
 });
+
+// 2026-10-26 QA: the permission chip of a conversation that is not running shows the server's answer to
+// session.resumeMode — what the next send will really run in — not this window's copy of the record and default
+describe('loadResumeMode', () => {
+  it('keeps what the server would resume the conversation in; an older server (no answer) leaves the window\'s copy', async () => {
+    useStore.setState({ resumeModes: {} });
+    fake.handlers.set('session.resumeMode', (req) => ({ permissionMode: req.sessionId === 's1' ? 'bypassPermissions' : undefined }));
+    await useStore.getState().loadResumeMode('s1');
+    expect(fake.sent.find((r) => r.kind === 'session.resumeMode')).toEqual({ kind: 'session.resumeMode', sessionId: 's1' });
+    expect(useStore.getState().resumeModes.s1).toBe('bypassPermissions');
+    fake.handlers.set('session.resumeMode', () => ({ permissionMode: 'default' }));
+    await useStore.getState().loadResumeMode('s1');
+    expect(useStore.getState().resumeModes.s1).toBe('default');
+    fake.handlers.set('session.resumeMode', () => { throw new Error('unknown request'); });
+    await useStore.getState().loadResumeMode('s1');
+    expect(useStore.getState().resumeModes.s1).toBeUndefined();
+    await useStore.getState().loadResumeMode('s2');
+    expect(useStore.getState().resumeModes.s2).toBeUndefined();
+  });
+});

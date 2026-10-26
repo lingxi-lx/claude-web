@@ -53,6 +53,24 @@ describe('what a conversation that is not running will continue with (final revi
     expect(resumeView({ conv, info: info({ permissionMode: 'default' }) }, {}, 'bypassPermissions').permissionMode).toBe('default');
     expect(resumeParams({ conv, info: info({ permissionMode: 'default' }) }).permissionMode).toBe('default');
   });
+  // 2026-10-26 QA: the chip of a conversation that is not running shows what the server will resume it in — its
+  // answer to session.resumeMode (the record, else 新对话默认权限) beats this window's copy of the record and default
+  it('the permission chip: the server\'s resume mode beats the window\'s copy; a pick or live info still beats it', () => {
+    const conv = { items: items('claude-sonnet-5') };
+    // recorded 完全放开, default 每步询问 → 完全放开 (from the window's copy, and from the server)
+    expect(resumeView({ conv }, { permissionMode: 'bypassPermissions' }, 'default').permissionMode).toBe('bypassPermissions');
+    expect(resumeView({ conv }, {}, 'default', 'bypassPermissions').permissionMode).toBe('bypassPermissions');
+    // and vice versa: recorded 每步询问, default 完全放开 → 每步询问
+    expect(resumeView({ conv }, { permissionMode: 'default' }, 'bypassPermissions').permissionMode).toBe('default');
+    expect(resumeView({ conv }, {}, 'bypassPermissions', 'default').permissionMode).toBe('default');
+    // a stale copy (or none: a conversation on another machine) loses to the server
+    expect(resumeView({ conv }, { permissionMode: 'default' }, 'default', 'bypassPermissions').permissionMode).toBe('bypassPermissions');
+    expect(resumeView({ conv }, { permissionMode: 'bypassPermissions' }, 'bypassPermissions', 'default').permissionMode).toBe('default');
+    expect(resumeView({ conv }, undefined, undefined, 'bypassPermissions').permissionMode).toBe('bypassPermissions');
+    // what goes with the send explicitly still wins (it is what the server runs)
+    expect(resumeView({ conv, resume: { permissionMode: 'plan' } }, {}, 'default', 'bypassPermissions').permissionMode).toBe('plan');
+    expect(resumeView({ conv, info: info({ permissionMode: 'acceptEdits' }) }, {}, 'default', 'bypassPermissions').permissionMode).toBe('acceptEdits');
+  });
   it('nothing picked and no live info: the resume params are exactly reopenSettings(undefined) — the server / CLI choose', () => {
     const conv = { items: items('claude-sonnet-5') };
     expect(resumeParams({ conv })).toEqual({});

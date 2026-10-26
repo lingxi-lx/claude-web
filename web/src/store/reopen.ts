@@ -58,14 +58,17 @@ export function lastAssistantModel(items: readonly unknown[]): string | undefine
  * conversation to it (re-review I-1). The permission mode is not read from the transcript at all: the SDK does not
  * return it (re-review M-2).
  */
-export function resumeView(o: ResumeSource, meta: { providerId?: string; permissionMode?: PermissionMode } | undefined, defaultMode?: PermissionMode): { providerId: string; model?: string; permissionMode: PermissionMode; effort?: EffortLevel; ultracode: boolean; lastModel?: string } {
+export function resumeView(o: ResumeSource, meta: { providerId?: string; permissionMode?: PermissionMode } | undefined, defaultMode?: PermissionMode, serverMode?: PermissionMode): { providerId: string; model?: string; permissionMode: PermissionMode; effort?: EffortLevel; ultracode: boolean; lastModel?: string } {
   const r = o.resume ?? {};
   return {
     // live info knows the provider it ran on (none = the agent's own login); before that, the recorded one
     providerId: r.providerId ?? (o.info ? o.info.providerId || 'claude' : meta?.providerId ?? 'claude'),
     // '' = a picked default: shown by name like no model
     model: r.model !== undefined ? r.model || undefined : o.info?.model ?? undefined,
-    permissionMode: r.permissionMode ?? o.info?.permissionMode ?? meta?.permissionMode ?? defaultMode ?? 'default',
+    // the server's own answer (session.resumeMode: what pool.open gives a resume that names no mode) beats this
+    // window's copy of the record and the default — a stale copy, or none for a conversation on another machine,
+    // showed 每步询问 while the send ran in 完全放开 (2026-10-26 QA)
+    permissionMode: r.permissionMode ?? o.info?.permissionMode ?? serverMode ?? meta?.permissionMode ?? defaultMode ?? 'default',
     effort: r.effort ?? o.info?.effort ?? undefined,
     ultracode: r.ultracode ?? !!o.info?.ultracode,
     lastModel: lastAssistantModel(o.conv.items),

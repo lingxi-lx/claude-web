@@ -913,6 +913,14 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   const listed = sessions.find((s) => s.sessionId === active?.sessionId);
   const inClaude = !info && !!listed?.caps?.continueInClaude;
   const sessionAgent: AgentKind = info?.agent ?? (inClaude ? 'claude' : listed?.agent) ?? 'claude';
+  // the permission chip of a conversation that is not running: ask the server what the next send will really run in
+  // (its record, else 新对话默认权限 — on the machine the conversation is on), again whenever this window's copy of the
+  // record or the default changes; the chip shows that over the window's own guess (2026-10-26 QA)
+  const resumeSid = !welcome && active && !liveOk && !inClaude ? active.sessionId : undefined;
+  const serverMode = useStore((s) => (resumeSid ? s.resumeModes[resumeSid] : undefined));
+  const loadResumeMode = useStore((s) => s.loadResumeMode);
+  const copiedMode = resumeSid ? sessionMeta[resumeSid]?.permissionMode : undefined;
+  useEffect(() => { if (resumeSid) void loadResumeMode(resumeSid); }, [resumeSid, active?.state, copiedMode, defaultMode, loadResumeMode]);
   const liveProvider = info?.providerId && info.providerId !== 'claude' ? info.providerId : 'claude';
   const liveAgentDefault = liveAgent !== 'claude' ? agents.find((a) => a.kind === liveAgent)?.model || undefined : undefined;
   // the account's default model by name for a chip with no model (final review §9 #2): this conversation's CLI says
@@ -1116,7 +1124,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     // not running (history, reaped, crashed — every conversation after a restart): the chips show what the next
     // send resumes it with, and a pick there changes that (final review §9 #1)
     const cont = inClaude ? sessionMeta[active.sessionId]?.continuedAs : undefined;
-    const v = resumeView(active, !inClaude ? sessionMeta[active.sessionId] : cont ? sessionMeta[cont] ?? {} : { providerId: (settings.defaultProviderId as string | undefined) || 'claude' }, remote ? undefined : defaultMode);
+    const v = resumeView(active, !inClaude ? sessionMeta[active.sessionId] : cont ? sessionMeta[cont] ?? {} : { providerId: (settings.defaultProviderId as string | undefined) || 'claude' }, remote ? undefined : defaultMode, inClaude ? undefined : serverMode);
     const rAgent = sessionAgent;
     const rProvider = remote ? 'claude' : v.providerId;
     const rP = providers.find((p) => p.id === rProvider);

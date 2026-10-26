@@ -533,6 +533,8 @@ export type ClientRequest =
   | { kind: 'session.side'; sessionId: string; question: string; history?: SideTurn[] }
   | { kind: 'session.close'; sessionId: string }
   | { kind: 'session.setPermissionMode'; sessionId: string; mode: PermissionMode }
+  /** The permission mode a resume of this conversation that names none would run in (its record, else 新对话默认权限): what the chip of one that is not running shows. `{ permissionMode?: PermissionMode }` */
+  | { kind: 'session.resumeMode'; sessionId: string }
   /** `providerId`: the provider the pick was made for ('claude' = the account); a switch in between drops the pick */
   | { kind: 'session.setModel'; sessionId: string; model: string; providerId?: string }
   | { kind: 'session.setEffort'; sessionId: string; effort: EffortLevel }
