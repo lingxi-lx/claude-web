@@ -5,7 +5,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 import type { SidecarManager } from './sidecar.js';
-import type { SidecarDriver } from './drivers.js';
+import type { SidecarDriver, SidecarReadOptions } from './drivers.js';
 import type {
   MaintenanceKind, SidecarAccount, SidecarAccountInput, SidecarAccountPatch, SidecarId,
   SidecarProxy, SidecarProxyInput, SidecarProxyPatch, TaskResult,
@@ -105,6 +105,11 @@ export class GeminiAdapter implements SidecarDriver {
     });
   }
 
+  private async prepareRead(options?: SidecarReadOptions): Promise<void> {
+    if (options?.start !== false) return this.ensureReady();
+    if (!this.fixed && this.manager?.status('gemini').health !== 'ok') throw new Error(tr('组件未运行，请先启动'));
+  }
+
   async health(): Promise<{ ok: boolean; version?: string; detail?: string }> {
     try {
       await this.ensureReady();
@@ -115,14 +120,14 @@ export class GeminiAdapter implements SidecarDriver {
     }
   }
 
-  async models(): Promise<string[]> {
-    await this.ensureReady();
+  async models(options?: SidecarReadOptions): Promise<string[]> {
+    await this.prepareRead(options);
     const j = await this.admin<{ models?: string[] }>('/admin/api/config');
     return j.models ?? [];
   }
 
-  async listAccounts(): Promise<SidecarAccount[]> {
-    await this.ensureReady();
+  async listAccounts(options?: SidecarReadOptions): Promise<SidecarAccount[]> {
+    await this.prepareRead(options);
     const j = await this.admin<{ items?: CookieItem[] }>('/admin/api/cookies');
     return (j.items ?? []).map((it) => ({
       remoteId: String(it.id),

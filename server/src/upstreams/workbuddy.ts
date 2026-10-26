@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { SidecarManager } from './sidecar.js';
-import type { SidecarDriver } from './drivers.js';
+import type { SidecarDriver, SidecarReadOptions } from './drivers.js';
 import type { MaintenanceKind, QuotaSnapshot, SidecarAccount, SidecarAccountInput, SidecarAccountPatch, SidecarId, TaskResult } from './types.js';
 import { tr } from '../i18n/index.js';
 
@@ -102,6 +102,11 @@ export class WorkBuddyAdapter implements SidecarDriver {
     });
   }
 
+  private async prepareRead(options?: SidecarReadOptions): Promise<void> {
+    if (options?.start !== false) return this.ensureReady();
+    if (!this.fixed && this.manager?.status('workbuddy').health !== 'ok') throw new Error(tr('组件未运行，请先启动'));
+  }
+
   async health(): Promise<{ ok: boolean; version?: string; detail?: string }> {
     try {
       await this.ensureReady();
@@ -112,8 +117,8 @@ export class WorkBuddyAdapter implements SidecarDriver {
     }
   }
 
-  async models(): Promise<string[]> {
-    await this.ensureReady();
+  async models(options?: SidecarReadOptions): Promise<string[]> {
+    await this.prepareRead(options);
     const r = await this.api<{ data?: { id: string }[] }>('/v1/models');
     return (r.data ?? []).map((m) => m.id);
   }
@@ -127,8 +132,8 @@ export class WorkBuddyAdapter implements SidecarDriver {
     };
   }
 
-  async listAccounts(): Promise<SidecarAccount[]> {
-    await this.ensureReady();
+  async listAccounts(options?: SidecarReadOptions): Promise<SidecarAccount[]> {
+    await this.prepareRead(options);
     const o = await this.api<{ accounts?: WbAccount[] }>('/panel/api/overview');
     return (o.accounts ?? []).map((a) => {
       const health: SidecarAccount['health'] = a.disabled ? 'disabled' : a.cooling || a.paused ? 'cooling' : 'ok';

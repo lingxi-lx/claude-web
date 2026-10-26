@@ -136,6 +136,14 @@ describe('UpstreamService: sidecar families', () => {
     expect(svc.store.list().filter((a) => a.kind === 'gemini')).toHaveLength(1);
   });
 
+  it('propagates sidecar synchronization failures in non-starting mode', async () => {
+    const { svc, driver } = await make();
+    driver.listAccounts = async () => { throw new Error('sidecar synchronization failed'); };
+
+    await expect(svc.syncFamily('gemini', { start: false })).rejects.toThrow('sidecar synchronization failed');
+    expect(driver.calls).not.toContain('ensureReady');
+  });
+
   it('two syncs at once mirror the same account once', async () => {
     const { svc, driver } = await make();
     driver.remote.set('r9', { remoteId: 'r9', name: 'Once', enabled: true, health: 'ok' });

@@ -156,6 +156,34 @@ describe('ChannelService', () => {
     expect(deps.providers.refreshModels).not.toHaveBeenCalled();
   });
 
+  it.each(['error', 'expired', 'cooling', 'disabled', 'unknown'] as const)('fails a Claude refresh for %s health', async (health) => {
+    const { service, deps } = fixture({ upstream: upstream([account('claude', 'c1')]) });
+    deps.upstreams.probe = vi.fn(async () => ({ ...account('claude', 'c1'), health, lastError: 'sanitized health failure' }));
+
+    await expect(service.refresh('upstream:claude')).rejects.toThrow('sanitized health failure');
+    expect(deps.upstreams.status).toHaveBeenCalledExactlyOnceWith();
+  });
+
+  it('uses a generic translated error for a failed Claude probe without detail', async () => {
+    const { service, deps } = fixture({ upstream: upstream([account('claude', 'c1')]) });
+    deps.upstreams.probe = vi.fn(async () => ({ ...account('claude', 'c1'), health: 'error' }));
+
+    await expect(service.refresh('upstream:claude')).rejects.toThrow('账号健康检查失败');
+    expect(deps.upstreams.status).toHaveBeenCalledExactlyOnceWith();
+  });
+
+  it('stops Claude probing at the first failed account', async () => {
+    const { service, deps } = fixture({
+      upstream: upstream([account('claude', 'c1'), account('claude', 'c2'), account('claude', 'c3')]),
+    });
+    deps.upstreams.probe = vi.fn(async (id) => ({ ...account('claude', id), health: id === 'c2' ? 'expired' : 'ok' }));
+
+    await expect(service.refresh('upstream:claude')).rejects.toThrow('账号健康检查失败');
+    expect(deps.upstreams.probe).toHaveBeenCalledTimes(2);
+    expect(deps.upstreams.probe).not.toHaveBeenCalledWith('c3');
+    expect(deps.upstreams.status).toHaveBeenCalledExactlyOnceWith();
+  });
+
   it('does nothing when there are no Claude accounts', async () => {
     const { service, deps } = fixture({ upstream: upstream([account('gemini', 'g1')]) });
 
@@ -170,7 +198,7 @@ describe('ChannelService', () => {
 
     await service.refresh(`upstream:${kind}`);
 
-    expect(deps.upstreams.syncFamily).toHaveBeenCalledExactlyOnceWith(kind);
+    expect(deps.upstreams.syncFamily).toHaveBeenCalledExactlyOnceWith(kind, { start: false });
     expect(deps.providers.refreshModels).not.toHaveBeenCalled();
     expect(deps.upstreams.probe).not.toHaveBeenCalled();
   });

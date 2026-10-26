@@ -25,11 +25,13 @@ export class ChannelService {
       if (!result.ok) throw new Error(result.error);
     } else if (id === 'upstream:claude') {
       for (const account of this.deps.upstreams.status().accounts) {
-        if (account.kind === 'claude') await this.deps.upstreams.probe(account.id);
+        if (account.kind !== 'claude') continue;
+        const result = await this.deps.upstreams.probe(account.id);
+        if (result.health !== 'ok') throw new Error(result.lastError || tr('账号健康检查失败'));
       }
     } else if (/^upstream:[A-Za-z0-9_-]+$/.test(id)) {
       if (id === 'upstream:gemini' || id === 'upstream:workbuddy') {
-        await this.deps.upstreams.syncFamily(id === 'upstream:gemini' ? 'gemini' : 'workbuddy');
+        await this.deps.upstreams.syncFamily(id === 'upstream:gemini' ? 'gemini' : 'workbuddy', { start: false });
       } else {
         throw new Error(tr('没有这个来源'));
       }

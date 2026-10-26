@@ -7,8 +7,11 @@ import { MetaStore } from '../meta/store.js';
 import { ProviderService } from '../providers/service.js';
 import { SecretService } from '../secrets/service.js';
 import { UpstreamService } from '../upstreams/service.js';
-import { SidecarManager } from '../upstreams/sidecar.js';
-import type { SidecarDriver } from '../upstreams/drivers.js';
+import { SidecarManager, assetFor } from '../upstreams/sidecar.js';
+import { GeminiAdapter } from '../upstreams/gemini.js';
+import { WorkBuddyAdapter } from '../upstreams/workbuddy.js';
+import { ClaudeAdapter } from '../upstreams/claude.js';
+import { EventEmitter } from 'node:events';
 import type { SidecarId } from '../upstreams/types.js';
 import { ChannelService } from './service.js';
 
@@ -16,28 +19,10 @@ let dir = '';
 let server: http.Server;
 let requests: string[] = [];
 let sidecars: SidecarManager;
-let gemini: SidecarDriver;
-let workbuddy: SidecarDriver;
 let meta: MetaStore;
 let upstreams: UpstreamService;
 let channels: ChannelService;
 let providerId = '';
-
-function fakeDriver(id: SidecarId): SidecarDriver {
-  return {
-    id,
-    ensureReady: vi.fn(async () => {}),
-    health: vi.fn(async () => ({ ok: false })),
-    models: vi.fn(async () => []),
-    listAccounts: vi.fn(async () => []),
-    addAccount: vi.fn(),
-    updateAccount: vi.fn(),
-    removeAccount: vi.fn(async () => {}),
-    checkAccount: vi.fn(),
-    runTask: vi.fn(),
-    endpoint: vi.fn(async () => null),
-  };
-}
 
 let previousDir: string | undefined;
 
@@ -63,9 +48,8 @@ beforeEach(async () => {
   sidecars = new SidecarManager({ dir: path.join(dir, 'no-installed-sidecars') });
   for (const method of ['ensure', 'install', 'start'] as const) vi.spyOn(sidecars, method);
   vi.spyOn(sidecars, 'stopAll');
-  gemini = fakeDriver('gemini');
-  workbuddy = fakeDriver('workbuddy');
-  upstreams = new UpstreamService({ meta, secrets, sidecars, gemini, workbuddy });
+  const claude = new ClaudeAdapter({ fetch: vi.fn(async () => new Response('{}', { status: 200 })) });
+  upstreams = new UpstreamService({ meta, secrets, sidecars, claude, gemini: new GeminiAdapter(sidecars), workbuddy: new WorkBuddyAdapter(sidecars) });
   channels = new ChannelService({ providers, upstreams });
   const address = server.address() as { port: number };
   const provider = await meta.upsertProvider({
@@ -115,21 +99,51 @@ describe('ChannelService with real legacy services', () => {
     await upstreams.remove(meta.upstreamAccounts()[0].id);
     const before = snapshot();
 
-    await channels.refresh('upstream:gemini');
+    await expect(channels.refresh('upstream:gemini')).rejects.toThrow('组件未运行，请先启动');
+    await expect(channels.refresh('upstream:workbuddy')).rejects.toThrow('组件未运行，请先启动');
     await channels.refresh('upstream:claude');
 
     for (const method of ['ensure', 'install', 'start'] as const) expect(sidecars[method]).not.toHaveBeenCalled();
     expect(sidecars.stopAll).not.toHaveBeenCalled();
-    // Empty-family sync is still an explicit driver refresh; its fake never starts a real component.
-    for (const driver of [gemini, workbuddy]) {
-      for (const method of ['health', 'endpoint'] as const) expect(driver[method]).not.toHaveBeenCalled();
-    }
-    expect(gemini.ensureReady).toHaveBeenCalledOnce();
-    expect(gemini.models).toHaveBeenCalledOnce();
-    expect(gemini.listAccounts).toHaveBeenCalledOnce();
-    expect(workbuddy.ensureReady).not.toHaveBeenCalled();
     expect(requests).toEqual([]);
     expect(snapshot()).toEqual(before);
+  });
+
+  it.each(['gemini', 'workbuddy'] as const)('rejects a stopped installed %s component without restarting it', async (kind) => {
+    const asset = assetFor(kind)!;
+    const installed = path.join(sidecars.dir(kind), 'installed', asset.entry);
+    await fs.mkdir(path.dirname(installed), { recursive: true });
+    await fs.writeFile(installed, '');
+    const binary = vi.spyOn(sidecars, 'binary').mockReturnValue(installed);
+
+    await expect(channels.refresh(`upstream:${kind}`)).rejects.toThrow('组件未运行，请先启动');
+    expect(binary).toHaveBeenCalledWith(kind);
+    for (const method of ['ensure', 'install', 'start'] as const) expect(sidecars[method]).not.toHaveBeenCalled();
+    expect(requests).toEqual([]);
+  });
+
+  it.each(['gemini', 'workbuddy'] as const)('refreshes a running %s component through its real adapter without lifecycle calls', async (kind) => {
+    const sidecarServer = http.createServer((request, response) => {
+      response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(
+        request.url === '/v1/models' ? { data: [{ id: 'glm-5.2' }] }
+          : request.url === '/panel/api/overview' ? { accounts: [] }
+            : { models: ['gemini-3.6-flash'], items: [] },
+      ));
+    });
+    await new Promise<void>((resolve, reject) => { sidecarServer.once('error', reject); sidecarServer.listen(0, '127.0.0.1', resolve); });
+    try {
+      const port = (sidecarServer.address() as { port: number }).port;
+      (sidecars as any).runs.set(kind, {
+        child: new EventEmitter(), port, stopping: false, restarts: 0, health: 'ok', healthFails: 0, checking: false,
+      });
+
+      await channels.refresh(`upstream:${kind}`);
+
+      for (const method of ['ensure', 'install', 'start'] as const) expect(sidecars[method]).not.toHaveBeenCalled();
+    } finally {
+      sidecarServer.closeAllConnections();
+      await new Promise<void>((resolve, reject) => sidecarServer.close((error) => error ? reject(error) : resolve()));
+    }
   });
 
   it('refreshes the existing provider through exactly one loopback model-list request', async () => {

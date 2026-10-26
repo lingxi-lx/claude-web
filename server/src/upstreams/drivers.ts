@@ -5,13 +5,16 @@ import type {
   SidecarProxy, SidecarProxyInput, SidecarProxyPatch, TaskResult,
 } from './types.js';
 
+/** Account/model reads retain ensure-and-start by default; false is lifecycle-free. */
+export interface SidecarReadOptions { start?: boolean }
+
 export interface SidecarDriver {
   readonly id: SidecarId;
   /** install + start if needed; resolves when its health check answers */
   ensureReady(): Promise<void>;
   health(): Promise<{ ok: boolean; version?: string; detail?: string }>;
-  models(): Promise<string[]>;
-  listAccounts(): Promise<SidecarAccount[]>;
+  models(options?: SidecarReadOptions): Promise<string[]>;
+  listAccounts(options?: SidecarReadOptions): Promise<SidecarAccount[]>;
   addAccount(input: SidecarAccountInput): Promise<SidecarAccount>;
   updateAccount(remoteId: string, patch: SidecarAccountPatch): Promise<SidecarAccount>;
   removeAccount(remoteId: string): Promise<void>;

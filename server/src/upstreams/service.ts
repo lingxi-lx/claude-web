@@ -13,7 +13,7 @@ import { GeminiAdapter } from './gemini.js';
 import { WorkBuddyAdapter } from './workbuddy.js';
 import { maskProxyUrl, normalizeAccountProxy } from './proxy.js';
 import { probeExit, startExitTunnel, type ExitTunnel } from './exit-tunnel.js';
-import type { SidecarDriver } from './drivers.js';
+import type { SidecarDriver, SidecarReadOptions } from './drivers.js';
 import type {
   LoginTunnel,
   MaintenanceKind,
@@ -720,9 +720,9 @@ export class UpstreamService extends EventEmitter {
     return this.familyModelsCache.get(id) ?? [];
   }
 
-  private async rememberModels(kind: SidecarId): Promise<void> {
+  private async rememberModels(kind: SidecarId, options?: SidecarReadOptions): Promise<void> {
     try {
-      const models = await this.driver(kind)!.models();
+      const models = await this.driver(kind)!.models(options);
       if (models.length) {
         this.familyModelsCache.set(kind, models);
         this.familyModelsAt.set(kind, Date.now());
@@ -767,19 +767,19 @@ export class UpstreamService extends EventEmitter {
   }
 
   /** Mirror the accounts a sidecar already has (its own OAuth / QR login) into the account list. */
-  async syncFamily(id: SidecarId): Promise<UpstreamAccountView[]> {
+  async syncFamily(id: SidecarId, options?: SidecarReadOptions): Promise<UpstreamAccountView[]> {
     const inFlight = this.syncing.get(id);
     if (inFlight) return inFlight;
-    const p = this.doSyncFamily(id).finally(() => { if (this.syncing.get(id) === p) this.syncing.delete(id); });
+    const p = this.doSyncFamily(id, options).finally(() => { if (this.syncing.get(id) === p) this.syncing.delete(id); });
     this.syncing.set(id, p);
     return p;
   }
 
-  private async doSyncFamily(id: SidecarId): Promise<UpstreamAccountView[]> {
+  private async doSyncFamily(id: SidecarId, options?: SidecarReadOptions): Promise<UpstreamAccountView[]> {
     const driver = this.driver(id)!;
-    await driver.ensureReady();
-    const remotes = await driver.listAccounts();
-    await this.rememberModels(id);
+    if (options?.start !== false) await driver.ensureReady();
+    const remotes = await driver.listAccounts(options);
+    await this.rememberModels(id, options);
     for (const r of remotes) {
       const known = this.store.list().find((a) => a.kind === id && a.sidecar?.remoteId === r.remoteId);
       if (known) {
