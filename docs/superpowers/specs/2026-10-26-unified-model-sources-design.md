@@ -391,5 +391,5 @@ ego lite 作为 Agent 第一浏览器已经在 main（5614f2e、e078b74），并
 ### 14.3 测试与验收
 
 - 单元：gate 对 ego_browser 在「完全放开」外每种模式都问、「完全放开」不问、拒绝不运行、超时、无 gate 不问；mcp 列表里出图工具带 alwaysLoad、其它不带。
-- e2e：phase40 扩展，在 Codex / ACP 路径与「完全放开」下也必须出现服务端卡；新增一个阶段验证 ccb 上 `browser_screenshot` 的结果是图片块而不是文字。
+- e2e：phase40 扩展，默认模式下 Claude / Codex / ACP 路径都只出现一张服务端卡，「完全放开」下零张卡且脚本照常运行；新增一个阶段验证 ccb 上 `browser_screenshot` 的结果是图片块而不是文字。
 - 真实桌面：权限卡外观与按钮、设置 → 联网的检测和切换、截图被模型看到。装了真 ego lite 时再跑一次真联调，没装则如实说明。
