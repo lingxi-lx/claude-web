@@ -19,7 +19,7 @@ import { atQueryAt, pickAt } from './at-mention';
 import { RunCard } from '@/features/chat/RunCard';
 import { BackgroundPill } from '@/features/background/BackgroundPill';
 import { PermissionDock, runDockPrimary, setAskNote } from '@/features/chat/PermissionCards';
-import { denyResponse, dockAction, dockDecide, dockKind, isSlashCommand, primaryKey, splitPending, type DockSeen, type DockWhy } from '@/features/chat/permission-dock';
+import { denyResponse, dockAction, dockDecide, dockKind, dockPlaceholder, isSlashCommand, primaryKey, splitPending, type DockSeen, type DockWhy } from '@/features/chat/permission-dock';
 import { attachmentFolderPath, joinPath, projectRoots } from '@/features/paths';
 import { Icon } from '@/ui/icons';
 import { imeComposing } from '@/ui/ime';
@@ -43,7 +43,7 @@ import { providersLoaded, useGatewayStatus } from '@/features/models/data';
 import { needsModel, welcomeProvider } from './welcome-provider';
 import { connectModel, useConnect } from '@/features/providers/ConnectModel';
 import { dlg, useDialogStore } from '@/ui/dialog';
-import { DOCK_BLOCKED, DOCK_CARRIED, DOCK_ENTER_IGNORED, DOCK_PLACEHOLDER, DOCK_REQUEUED, DOCK_SEND, EFFORT_LABEL, TERMS, ULTRACODE } from '@/ui/terms';
+import { DOCK_BLOCKED, DOCK_CARRIED, DOCK_ENTER_IGNORED, DOCK_REQUEUED, DOCK_SEND, EFFORT_LABEL, TERMS, ULTRACODE } from '@/ui/terms';
 import { showGoals } from '@/features/workbench/right-panel';
 import { ComposerBar, ComposerUnder } from './ComposerBar';
 import { ConvStatsLine } from './ConvStatsLine';
@@ -1316,7 +1316,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
             rows={1}
             value={text}
             disabled={disabled}
-            placeholder={suggestion ? `${suggestion}   ${tr('Tab 采用')}` : disabled ? tr('对话已被删除，不能继续') : docked ? DOCK_PLACEHOLDER[dockKind(docked)](dockAgent) : welcome && !ultraOn ? tr('描述一个任务，或者问个问题。输入 / 查看命令，拖入文件作为附件') : busy ? tr('Enter 排到这一轮之后，Ctrl+Enter 马上插话 · Esc 中断') : ultraOn ? ULTRACODE.placeholder : active?.state === 'history' ? tr('发送即可继续这个对话…') : tr('回复 {agentName}… 输入 / 查看命令，拖入文件作为附件', { agentName: info?.agentName && info.agent !== 'claude' ? info.agentName : 'Claude' })}
+            placeholder={suggestion ? `${suggestion}   ${tr('Tab 采用')}` : disabled ? tr('对话已被删除，不能继续') : docked ? dockPlaceholder(docked, dockAgent) : welcome && !ultraOn ? tr('描述一个任务，或者问个问题。输入 / 查看命令，拖入文件作为附件') : busy ? tr('Enter 排到这一轮之后，Ctrl+Enter 马上插话 · Esc 中断') : ultraOn ? ULTRACODE.placeholder : active?.state === 'history' ? tr('发送即可继续这个对话…') : tr('回复 {agentName}… 输入 / 查看命令，拖入文件作为附件', { agentName: info?.agentName && info.agent !== 'claude' ? info.agentName : 'Claude' })}
             onChange={(e) => { setCaret(e.target.selectionStart ?? e.target.value.length); onChange(e.target.value); }}
             onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
             onKeyDown={onKey}

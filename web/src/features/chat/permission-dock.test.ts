@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { PermissionRequestEvent } from '@shared';
 import type { AssistantItem, Item, ToolUseBlock } from '@/model/conversation';
-import { alwaysDetails, alwaysLabel, DOCK_COOLDOWN_MS, dockAction, dockDecide, denyResponse, dockKind, dockStatus, isEgoScriptRequest, isSlashCommand, permissionTitle, primaryKey, splitPending, waitingToolIds, type DockSeen } from './permission-dock';
-import { DOCK_STATUS, DOCK_STATUS_CLICK } from '@/ui/terms';
+import { alwaysDetails, alwaysLabel, DOCK_COOLDOWN_MS, dockAction, dockDecide, denyResponse, dockKind, dockPlaceholder, dockStatus, isEgoScriptRequest, isSlashCommand, permissionTitle, primaryKey, splitPending, waitingToolIds, type DockSeen } from './permission-dock';
+import { DOCK_PLACEHOLDER, DOCK_STATUS, DOCK_STATUS_CLICK } from '@/ui/terms';
 
 const req = (toolName: string, input: Record<string, unknown> = {}, extra: Partial<PermissionRequestEvent> = {}): PermissionRequestEvent => ({ requestId: `r-${toolName}`, sessionId: 's', toolName, input, ...extra });
 
@@ -195,6 +195,19 @@ describe('dockKind / permissionTitle', () => {
     expect(dockStatus(req('Bash', { command: 'ls' }))).toBe(DOCK_STATUS.tool);
     expect(dockStatus(req('ExitPlanMode', { plan: 'x' }))).toBe(DOCK_STATUS.plan);
     expect(dockStatus(req('mcp__computer__request_access', { apps: ['记事本'] }))).toBe(DOCK_STATUS.access);
+  });
+  it('the composer placeholder under a script card says nothing about Enter allowing it; other cards keep theirs', () => {
+    const ego = req('browser.site', { host: 'mail.example', op: 'eval', tool: 'ego_browser', eval: true, script: '1' });
+    const evalCard = req('browser.site', { host: 'a.example', op: 'eval', tool: 'browser_eval', eval: true, script: '1' });
+    const site = req('browser.site', { host: 'a.example', op: 'click', tool: 'browser_click' });
+    expect(dockPlaceholder(ego, 'Claude')).toBe('告诉 Claude 换个做法（发送 = 拒绝并说明）');
+    expect(dockPlaceholder(evalCard, 'Claude')).toBe(DOCK_PLACEHOLDER.click('Claude'));
+    expect(dockPlaceholder(ego, 'Claude')).not.toMatch(/Enter/);
+    expect(dockPlaceholder(site, 'Claude')).toBe(DOCK_PLACEHOLDER.tool('Claude'));
+    expect(dockPlaceholder(site, 'Claude')).toMatch(/空着按 Enter = 允许一次/);
+    expect(dockPlaceholder(req('Bash', { command: 'ls' }), 'Codex')).toBe(DOCK_PLACEHOLDER.tool('Codex'));
+    expect(dockPlaceholder(req('ExitPlanMode', { plan: 'x' }), 'Claude')).toBe(DOCK_PLACEHOLDER.plan());
+    expect(dockPlaceholder(req('mcp__computer__request_access', { apps: ['记事本'] }), 'Claude')).toBe(DOCK_PLACEHOLDER.access('Claude'));
   });
 });
 

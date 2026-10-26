@@ -7,7 +7,7 @@ import { basename } from '@/util';
 import { webToolAsk, webToolOf } from '@/features/browser/web-tools';
 import { accessTitle, computerToolLabel, computerToolOf, isAccessRequest } from '@/features/computer/computer-tools';
 import { tr } from '@/i18n';
-import { DOCK_STATUS, DOCK_STATUS_CLICK } from '@/ui/terms';
+import { DOCK_PLACEHOLDER, DOCK_STATUS, DOCK_STATUS_CLICK } from '@/ui/terms';
 
 /** 允许的网站 (server/src/web/site-gate.ts SITE_TOOL): the built-in browser asks before Claude changes a page of a new site, and before every script. */
 export const SITE_TOOL = 'browser.site';
@@ -27,9 +27,16 @@ export const isEgoScriptRequest = (p: Pick<PermissionRequestEvent, 'toolName' | 
  * built-in browser) is allowed only with a click, like 操控电脑 — it never says Enter allows it.
  */
 export function dockStatus(p: Pick<PermissionRequestEvent, 'toolName' | 'input'>): string {
-  if (isEgoScriptRequest(p) || (p.toolName === SITE_TOOL && (p.input as Record<string, unknown> | undefined)?.eval === true)) return DOCK_STATUS_CLICK;
-  return DOCK_STATUS[dockKind(p)];
+  return isClickOnly(p) ? DOCK_STATUS_CLICK : DOCK_STATUS[dockKind(p)];
 }
+
+/** A script card (ego lite, or a script in the built-in browser): only a click on the card allows it, never a key. */
+export const isClickOnly = (p: Pick<PermissionRequestEvent, 'toolName' | 'input'>): boolean =>
+  isEgoScriptRequest(p) || (p.toolName === SITE_TOOL && (p.input as Record<string, unknown> | undefined)?.eval === true);
+
+/** The composer's placeholder under a docked card: a click-only card's says nothing about Enter allowing it. */
+export const dockPlaceholder = (p: Pick<PermissionRequestEvent, 'toolName' | 'input'>, agent: string): string =>
+  isClickOnly(p) ? DOCK_PLACEHOLDER.click(agent) : DOCK_PLACEHOLDER[dockKind(p)](agent);
 
 /** `access`: 操控电脑 asking which applications it may control — answered by a click on the card, never by a key. */
 export type DockKind = 'tool' | 'ask' | 'plan' | 'access';

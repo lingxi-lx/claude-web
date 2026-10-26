@@ -177,6 +177,8 @@ export const DOCK_PLACEHOLDER = {
   plan: () => tr('写下修改意见后按 Enter 发出 · 批准请点「批准并开始」或按 Ctrl+Enter'),
   ask: (agent: string) => tr('直接回复 {agent}（发送 = 不回答这些问题）', { agent }),
   access: (agent: string) => tr('告诉 {agent} 为什么不行（发送 = 不允许并说明）· 允许请点卡片上的按钮', { agent }),
+  /** A script card (ego lite, or a script in the built-in browser): allowed only with a click, so no Enter part. */
+  click: (agent: string) => tr('告诉 {agent} 换个做法（发送 = 拒绝并说明）', { agent }),
 } as const;
 /** The send slot while a card is docked and the box has words. */
 export const DOCK_SEND = { tool: tr('拒绝并发送'), plan: tr('要求修改'), ask: tr('跳过并发送'), access: tr('不允许并发送') } as const;

@@ -20,6 +20,21 @@ const EGO_URL = 'https://lite.ego.app/';
 const KEY_SETTING: Record<string, string> = { brave: 'web.search.braveKey' };
 
 /**
+ * The search choices' names in the page's language: the server's labels are read once in its own process's language
+ * (server/src/web/search.ts ENGINES), which need not be the page's. Ids not here keep the server's label.
+ */
+const ENGINE_LABEL: Record<string, string> = {
+  auto: tr('自动（DuckDuckGo → Bing → Yahoo → 百度）'),
+  duckduckgo: 'DuckDuckGo',
+  bing: 'Bing',
+  google: 'Google',
+  yahoo: 'Yahoo',
+  baidu: tr('百度'),
+  brave: tr('Brave Search（API，要密钥）'),
+};
+export const engineChoiceLabel = (e: { id: string; label: string }): string => ENGINE_LABEL[e.id] ?? e.label;
+
+/**
  * 设置 → 联网 (spec 2026-10-10-ui-structure §5): whether Agents get the web tools at all, what searches for them, and
  * whose logins the pages they open carry. The status comes from the server (`web.status`), which also keeps the keys.
  */
@@ -69,7 +84,7 @@ export function WebSettings() {
     try { setFound(await ws.request<WebSearchAnswer>({ kind: 'web.search', query, count: 5 })); } catch (e) { setFound(null); setErr((e as Error).message); }
     setSearching(false);
   };
-  const label = (id: string) => st?.engines.find((e) => e.id === id)?.label ?? id;
+  const label = (id: string) => { const e = st?.engines.find((x) => x.id === id); return e ? engineChoiceLabel(e) : id; };
 
   return (
     <>
@@ -98,7 +113,7 @@ export function WebSettings() {
         <Row label={tr('用什么搜索')} hint={st && !st.host
           ? tr('现在没有桌面窗口连着（网页版、手机）：只能由这台电脑直接去抓 Bing 和 DuckDuckGo 的结果页，容易被限流；Google、Yahoo、百度要桌面版的内置浏览器。')
           : tr('搜索是在内置浏览器里做的：打开搜索网站的结果页，把结果读出来，不用密钥。自动 = 依次试 DuckDuckGo、Bing、Yahoo、百度，哪个给出对题的结果就用哪个。哪一家能用和你的网络有关，用下面的「试一下」看看。')}>
-          <Select className="field" aria-label={tr('用什么搜索')} data-id="web-search" disabled={!st} value={st?.engine ?? 'auto'} onValueChange={(value) => void set('web.search.engine', String(value))} options={(st?.engines ?? []).map((e) => ({ value: e.id, label: e.label, description: e.browser && !st?.host ? tr('要桌面版') : undefined }))} />
+          <Select className="field" aria-label={tr('用什么搜索')} data-id="web-search" disabled={!st} value={st?.engine ?? 'auto'} onValueChange={(value) => void set('web.search.engine', String(value))} options={(st?.engines ?? []).map((e) => ({ value: e.id, label: engineChoiceLabel(e), description: e.browser && !st?.host ? tr('要桌面版') : undefined }))} />
         </Row>
         {current?.needsKey && (
           <Row label={tr('Brave Search 的密钥')} hint={current.hasKey ? tr('已经保存在这台电脑上（加密）。填一个新的会替换它。') : tr('保存在这台电脑上（加密），只在搜索时发给这家服务。')}>
