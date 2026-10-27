@@ -178,7 +178,21 @@ export class RunnerPool extends EventEmitter {
     return (sessionId ? meta.sessionMeta(sessionId).permissionMode : undefined) ?? asMode(meta.settings()['ui.defaultMode']);
   }
 
+  /**
+   * 发送前核对权限 (compare-and-refuse): the mode a send would really resume `params` in, when it differs from what
+   * the chip showed (`expectMode`); null = go ahead. Only a resume that names no mode is checked (a named mode is the
+   * user's pick), and not a conversation already running (it keeps its own). Reads only: nothing is recorded.
+   */
+  modeMismatch(params: OpenSessionParams): PermissionMode | null {
+    if (!params.expectMode || !params.sessionId || params.fork || params.resumeAt || params.permissionMode !== undefined) return null;
+    const live = this.runners.get(params.sessionId);
+    if (live && live.state !== 'closed' && live.state !== 'error') return null;
+    const actual = this.resumeMode(params.sessionId) ?? 'default';
+    return actual === params.expectMode ? null : actual;
+  }
+
   open(params: OpenSessionParams, resumeHistory: unknown[] | null = null): AgentDriver {
+    if (params.expectMode !== undefined) { params = { ...params }; delete params.expectMode; }
     if (!params.fork) this.assertWritable(params.sessionId);
     void proxy.refresh(); // IM / schedules / goals come straight here: a stale look is redone for the next start (net/proxy.ts)
     if (params.sessionId && !params.fork && !params.resumeAt) {

@@ -36,6 +36,9 @@ import { tr } from '../i18n/index.js';
 import { PrivacyBlocked, type PrivacyGuard, type PrivacyService } from '../privacy/service.js';
 import { PrivacyRelay, RELAY_PREFIX } from '../privacy/relay.js';
 import type { PrivacyRecord } from '../privacy/types.js';
+import { Router, type RoutePlan } from '../routing/router.js';
+import type { CandidateLookup, Eligible } from '../routing/candidates.js';
+import { DEFAULT_ROUTING, ROUTING_MODELS, ROUTING_POLICIES, candidateKey, type RoutingCandidate, type RoutingConfig, type RoutingStatus } from '../routing/types.js';
 
 /** Streaming: time from sending a request to the first body byte before the member counts as failed. */
 export const FIRST_BYTE_MS = 60_000;
@@ -97,10 +100,12 @@ interface Ctx {
   surface?: 'loopback' | 'lan';
   /** what the privacy pipeline did to this request (types / counts / placeholders, for the audit line) */
   privacy?: PrivacyRecord;
+  /** a routing group's plan for this request (智能路由) */
+  plan?: RoutePlan | null;
 }
 
 /** A group member expanded into one concrete upstream: the state-table key is the ref or the account. */
-interface ResolvedMember { m: GatewayMember; key: string; target: GatewayTarget; model: string }
+interface ResolvedMember { m: GatewayMember; key: string; target: GatewayTarget; model: string; /** the routing candidate it came from */ route?: Eligible }
 
 type Attempt =
   | { kind: 'done'; status: number; usage: IrUsage | null; firstByteMs: number; model: string }
@@ -144,6 +149,8 @@ export class GatewayService extends EventEmitter {
   /** Main server port; set once listening (desktop mode picks a new one every start). */
   port = 0;
   readonly states = new MemberStates();
+  /** 智能路由: plans, affinity, the decision record and the paid budget (routing groups only) */
+  readonly router: Router;
   /** openai / grok profiles' prompt-cache shim (/gateway/~p/…): works whether or not the gateway is enabled */
   readonly shim: CacheShim;
   /** 隐私保护's relay for providers not behind the gateway / shim (privacy/relay.ts; `/gateway/~v/…`) */
@@ -178,6 +185,10 @@ export class GatewayService extends EventEmitter {
     super();
     this.firstByteMs = deps.firstByteMs ?? FIRST_BYTE_MS;
     this.nonStreamMs = deps.nonStreamMs ?? NONSTREAM_MS;
+    this.router = new Router({
+      load: () => { const v = deps.meta.settings()['routing.spend'] as { day?: unknown; usd?: unknown } | undefined; return v && typeof v.day === 'string' && typeof v.usd === 'number' ? { day: v.day, usd: v.usd } : undefined; },
+      save: (v) => { void deps.meta.setSetting('routing.spend', v).catch(() => { /* in memory until the next save */ }); },
+    });
     this.localPortWanted = deps.meta.gatewayConfig().localPort ?? 61697;
     this.shim = new CacheShim({ meta: deps.meta, member: deps.member, ledger: deps.ledger, privacy: deps.privacy });
     this.relay = deps.privacy ? new PrivacyRelay(deps.privacy, () => (this.port ? this.baseUrl() : null)) : null;
@@ -394,7 +405,7 @@ export class GatewayService extends EventEmitter {
   }
   revealKey() { return this.key; }
 
-  async upsertGroup(patch: Partial<GatewayGroup> & { id?: string }): Promise<GatewayGroup> {
+  async upsertGroup(patch: Omit<Partial<GatewayGroup>, 'routing'> & { id?: string; routing?: Partial<RoutingConfig> | null }): Promise<GatewayGroup> {
     const list = this.groups();
     let g = patch.id ? list.find((x) => x.id === patch.id) : undefined;
     if (!g) {
@@ -420,6 +431,7 @@ export class GatewayService extends EventEmitter {
     }
     if (patch.modelMap !== undefined) g.modelMap = Object.fromEntries(Object.entries(patch.modelMap ?? {}).map(([k, v]) => [k.trim(), String(v).trim()]).filter(([k, v]) => k && v));
     if (patch.cache1h !== undefined) { if (patch.cache1h) g.cache1h = true; else delete g.cache1h; }
+    if (patch.routing !== undefined) this.applyRouting(g, patch.routing);
     this.states.reset(g.id); // edited group: disabled members get another chance
     await this.deps.meta.saveGateway();
     await this.syncProfiles();
@@ -434,6 +446,102 @@ export class GatewayService extends EventEmitter {
     await this.syncProfiles();
     this.emit('changed');
   }
+  // ---- 智能路由 (routing groups) ----
+
+  /** The routing group (the first group with `routing`), if any. */
+  routingGroup(): GatewayGroup | undefined { return this.groups().find((g) => !!g.routing); }
+
+  /** Clean a routing patch onto `g`: candidates checked and de-duplicated, numbers clamped, members derived. */
+  private applyRouting(g: GatewayGroup, patch: Partial<RoutingConfig> | null) {
+    if (patch === null) { delete g.routing; return; }
+    const cur: RoutingConfig = { ...DEFAULT_ROUTING, ...(g.routing ?? {}) };
+    const next: RoutingConfig = { ...cur, ...patch };
+    if (!ROUTING_POLICIES.includes(next.policy)) next.policy = 'auto';
+    next.maxAttempts = Math.max(1, Math.min(5, Math.floor(Number(next.maxAttempts) || 1)));
+    next.failover = next.failover !== false;
+    next.allowPaid = !!next.allowPaid;
+    if (next.budgetUsd !== undefined) next.budgetUsd = Math.max(0, Number(next.budgetUsd) || 0);
+    const seen = new Set<string>();
+    next.candidates = (next.candidates ?? [])
+      .filter((c) => c && (c.providerId || c.accountId || c.upstreamGroupId) && String(c.model ?? '').trim())
+      .map((c): RoutingCandidate => ({
+        ...(c.accountId ? { accountId: c.accountId } : c.upstreamGroupId ? { upstreamGroupId: c.upstreamGroupId } : { providerId: c.providerId }),
+        model: String(c.model).trim(),
+        allowAuto: !!c.allowAuto,
+        ...(c.cost === 'free' || c.cost === 'subscription' || c.cost === 'paid' ? { cost: c.cost } : {}),
+        ...(c.caps && typeof c.caps === 'object' ? { caps: c.caps } : {}),
+        ...(c.price && Number(c.price.input) >= 0 && Number(c.price.output) >= 0 ? { price: { input: Number(c.price.input), output: Number(c.price.output) } } : {}),
+      }))
+      .filter((c) => { const k = candidateKey(c); return !seen.has(k) && !!seen.add(k); });
+    next.rules = (next.rules ?? []).filter((r) => r && Array.isArray(r.prefer)).map((r, i) => ({ id: String(r.id || `rule-${i + 1}`), when: r.when ?? {}, prefer: r.prefer.map(String) }));
+    if (typeof next.ruleText === 'string') next.ruleText = next.ruleText.slice(0, 4000);
+    g.routing = next;
+    // one member per source (status, the engine's runtime / lean-tools checks); the candidates are what is tried
+    const refs = new Map<string, GatewayMember>();
+    for (const c of next.candidates) {
+      const m: GatewayMember = c.accountId ? { accountId: c.accountId } : c.upstreamGroupId ? { upstreamGroupId: c.upstreamGroupId } : { providerId: c.providerId };
+      refs.set(memberKey(m), m);
+    }
+    g.members = [...refs.values()];
+    g.strategy = 'failover';
+    this.router.affinity.clear(g.id);
+  }
+
+  /** 智能路由 → make its group (and so its model-menu entry) when there is none. */
+  async ensureRoutingGroup(): Promise<GatewayGroup> {
+    const g = this.routingGroup();
+    if (g) return g;
+    return this.upsertGroup({ id: 'smart', name: tr('智能路由'), routing: { ...DEFAULT_ROUTING } });
+  }
+
+  async setRouting(patch: Partial<RoutingConfig>): Promise<RoutingStatus> {
+    const g = await this.ensureRoutingGroup();
+    await this.upsertGroup({ id: g.id, routing: patch });
+    return this.routingStatus();
+  }
+
+  private routingLook(): CandidateLookup {
+    return {
+      provider: (id) => this.deps.meta.provider(id),
+      accountKind: (c) => c.accountId ? this.deps.upstreams?.store.get(c.accountId)?.kind
+        : c.upstreamGroupId ? this.deps.upstreams?.groups().find((x) => x.id === c.upstreamGroupId)?.kind : undefined,
+    };
+  }
+
+  /** Why a candidate's source cannot be used right now; null = usable. */
+  private routingUnusable(groupId: string, c: RoutingCandidate, key: string): string | null {
+    if (c.providerId && !this.deps.meta.provider(c.providerId)) return tr('来源不存在');
+    if (c.accountId && !this.deps.upstreams?.store.get(c.accountId)) return tr('账号不存在');
+    if (c.upstreamGroupId && !this.deps.upstreams?.groups().some((x) => x.id === c.upstreamGroupId)) return tr('账号池不存在');
+    const st = this.states.peek(groupId, key);
+    if (st?.disabled) return tr('已停用（鉴权失败）');
+    if (st && st.cooldownUntil > Date.now()) return tr('冷却中');
+    return null;
+  }
+
+  routingStatus(limit = 50): RoutingStatus {
+    const g = this.routingGroup();
+    const config: RoutingConfig = { ...DEFAULT_ROUTING, ...(g?.routing ?? {}) };
+    const look = this.routingLook();
+    const plan = this.router.plan({ groupId: g?.id ?? '', config, model: '', ir: null, json: {}, look, unusable: (c, k) => (g ? this.routingUnusable(g.id, c, k) : null) });
+    const now = Date.now();
+    const views = new Map(plan.decision.candidates.map((v) => [v.key, v]));
+    return {
+      groupId: g?.id ?? null,
+      config,
+      candidates: config.candidates.map((c) => {
+        const key = candidateKey(c);
+        const v = views.get(key)!;
+        const n = this.router.log.numbers(key);
+        const st = g ? this.states.peek(g.id, key) : undefined;
+        return { ...v, key, ok: n.ok, fail: n.fail, latencyMs: n.latencyMs, health: st?.disabled ? 'disabled' : st && st.cooldownUntil > now ? 'cooling' : n.ok ? 'ok' : 'unknown', ...(st && st.cooldownUntil > now ? { cooldownUntil: st.cooldownUntil } : {}) };
+      }),
+      spentTodayUsd: Math.round(this.router.log.spentToday() * 10000) / 10000,
+      switchesToday: this.router.log.switchesToday(),
+      decisions: this.router.log.recent(g?.id, limit),
+    };
+  }
+
   reset(groupId: string, ref?: string) {
     // the request carries a provider id (old callers) or already a `p:` / `a:` / `u:` key
     this.states.reset(groupId, ref && !ref.includes(':') ? `p:${ref}` : ref);
@@ -911,6 +1019,9 @@ export class GatewayService extends EventEmitter {
 
   private serveModels(res: http.ServerResponse, g: GatewayGroup, inbound: GatewayProtocol, keyGroup?: GatewayKeyGroup) {
     const ids = new Set<string>();
+    // a routing group offers its strategies, never its candidates' models (picking one there is not routing)
+    if (g.routing) for (const p of ROUTING_POLICIES) ids.add(ROUTING_MODELS[p]);
+    else {
     for (const k of Object.keys(g.modelMap ?? {})) if (!k.includes('*')) ids.add(k);
     // a concrete allowlist entry is a model this key is meant to use even when no member lists one
     for (const m of keyGroup?.modelAllowlist ?? []) if (!m.includes('*')) ids.add(m);
@@ -933,6 +1044,7 @@ export class GatewayService extends EventEmitter {
         }
       }
     }
+    }
     // a key group's model allow/deny applies to the list too: what it may not use is not offered
     const list = [...ids]
       .filter((id) => !keyGroup || modelAllowed(id, keyGroup.modelAllowlist, keyGroup.modelDeny))
@@ -954,8 +1066,34 @@ export class GatewayService extends EventEmitter {
     return ctx.ir;
   }
 
-  /** Try the group's members in order until one answers (or the failure is the request's own fault). */
+  /**
+   * A routing group's request (智能路由): plan who to try, run, then log the decision and tell the conversation which
+   * model it really got. Any other group goes straight to `runMembers`.
+   */
   private async run(ctx: Ctx) {
+    if (!ctx.group.routing) return this.runMembers(ctx);
+    let ir: IrRequest | null = null;
+    try { ir = this.irOf(ctx); } catch { /* malformed: needs unknown, the member reports the error */ }
+    const sessionId = String(ctx.req.headers['x-claude-code-session-id'] ?? '') || undefined;
+    const g = ctx.group;
+    ctx.plan = this.router.plan({
+      groupId: g.id, config: g.routing, model: ctx.model, ir, json: ctx.json, sessionId,
+      sessionKey: cacheKeyOf(ctx.json, ctx.req.headers), look: this.routingLook(),
+      unusable: (c, k) => this.routingUnusable(g.id, c, k),
+    });
+    try {
+      await this.runMembers(ctx);
+    } finally {
+      // a token count is a side request: it decides nothing worth logging
+      if (ctx.route.op !== 'count') {
+        const info = this.router.finish(ctx.plan);
+        if (info) this.emit('routed', info);
+      }
+    }
+  }
+
+  /** Try the group's members in order until one answers (or the failure is the request's own fault). */
+  private async runMembers(ctx: Ctx) {
     const { group, route, res } = ctx;
     const inbound = route.inbound;
     const counting = route.op === 'count';
@@ -964,7 +1102,19 @@ export class GatewayService extends EventEmitter {
     // is what the pool mapped it to
     const sessionKey = cacheKeyOf(ctx.json, ctx.req.headers);
     const order: ResolvedMember[] = [];
-    for (const m of this.states.order(group)) {
+    // a routing group: its plan's candidates, each pinned to its model (the state key carries the model too)
+    if (ctx.plan) for (const e of ctx.plan.order) {
+      const c = e.c;
+      const m: GatewayMember = c.accountId ? { accountId: c.accountId, model: c.model } : c.upstreamGroupId ? { upstreamGroupId: c.upstreamGroupId, model: c.model } : { providerId: c.providerId, model: c.model };
+      const targets: GatewayTarget[] = this.deps.resolveMember
+        ? await this.deps.resolveMember(m, c.model, sessionKey)
+        : m.providerId && this.deps.member(m.providerId) ? [this.deps.member(m.providerId)!] : [];
+      for (const t0 of targets) {
+        const t: GatewayTarget = t0.type === 'claude-account' && !t0.auth ? { ...t0, auth: 'oauth', forceTranslate: true } : t0;
+        order.push({ m, key: t.account ? `a:${t.id}` : e.key, target: t, model: t.model || c.model, route: e });
+      }
+    }
+    else for (const m of this.states.order(group)) {
       const mapped = mapModel(group, m, ctx.model);
       const targets: GatewayTarget[] = this.deps.resolveMember
         ? await this.deps.resolveMember(m, mapped, sessionKey)
@@ -1019,6 +1169,9 @@ export class GatewayService extends EventEmitter {
         if (accountId) this.deps.upstreams?.release(accountId);
       }
       last = a;
+      if (ctx.plan && r.route && !counting) {
+        this.router.attempt(ctx.plan, r.route, { status: a.status, kind: a.kind, firstByteMs: a.kind === 'done' || a.kind === 'broken' ? a.firstByteMs : undefined, usage: a.kind === 'done' ? a.usage : null });
+      }
       if (a.kind === 'switch') continue;
       if (counting) {
         this.audit.write({
@@ -1037,6 +1190,7 @@ export class GatewayService extends EventEmitter {
     // gets an estimate rather than an error (and never changes any member's state)
     if (counting) return estimate();
     if (!tried) {
+      if (ctx.plan && !ctx.plan.order.length) return fail(503, tr('智能路由没有可用的候选：{reason}', { reason: ctx.plan.decision.reason }));
       if (unsupported.length) return fail(400, tr('组「{name}」里没有能接 {v} 入口的成员：{unsupported} 需要的转换方向暂不支持', { name: group.name, v: PROTOCOL_LABEL[inbound], unsupported: unsupported.join('、') }));
       const next = this.states.nextAvailable(group);
       const wait = next ? Math.max(1, Math.ceil((next.at - Date.now()) / 1000)) : 0;
@@ -1070,7 +1224,10 @@ export class GatewayService extends EventEmitter {
       error: a.kind === 'done' ? undefined : a.kind === 'final' ? `HTTP ${a.status} ${upstreamErrorMessage(a.text)}`.slice(0, 200) : a.message.slice(0, 200),
       providerId: p.id,
       kind: 'gateway',
-      gateway: { group: ctx.group.name, inbound: ctx.route.inbound, member: p.name, memberId: p.id, outbound, upstreamStatus: a.status, switches, firstByteMs: fb, stream: ctx.route.stream },
+      gateway: {
+        group: ctx.group.name, inbound: ctx.route.inbound, member: p.name, memberId: p.id, outbound, upstreamStatus: a.status, switches, firstByteMs: fb, stream: ctx.route.stream,
+        ...(ctx.plan ? { route: { policy: ctx.plan.decision.policy, reason: ctx.plan.decision.reason, chosen: ctx.plan.decision.chosen?.label, attempts: ctx.plan.decision.attempts.map((x) => `${x.label} ${x.outcome} ${x.status}`) } } : {}),
+      },
     });
     const tokensIn = (usage?.input ?? 0) + (usage?.cacheRead ?? 0);
     const tokensOut = usage?.output ?? 0;

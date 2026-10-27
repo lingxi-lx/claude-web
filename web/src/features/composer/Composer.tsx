@@ -1,10 +1,10 @@
 import { cloneElement, isValidElement, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { ownClaudeName } from '@/store/auth';
-import { useScopedSession, useStore } from '@/store';
+import { ModeChangedError, useScopedSession, useStore } from '@/store';
 import { ws } from '@/ws/client';
 import { desktop } from '@/desktop';
 import { clsx, shortModel } from '@/util';
-import { parsePeerId, type AgentKind, type AttachmentRef, type EffortLevel, type PeerInfo, type PermissionMode, type PermissionRequestEvent, type SessionFeatures, type WslDistro, wslToWin } from '@shared';
+import { parsePeerId, policyOfModel, type AgentKind, type AttachmentRef, type EffortLevel, type PeerInfo, type PermissionMode, type PermissionRequestEvent, type SessionFeatures, type WslDistro, wslToWin } from '@shared';
 import { MachineChip } from './MachineChip';
 import { machineOf } from './machine';
 import { installClaudeInWsl } from '@/features/remote/wsl-install';
@@ -34,7 +34,7 @@ import { ModelChip } from '@/features/models/ModelMenu';
 import { EffortChip, type EffortChipProps } from '@/features/models/EffortChip';
 import { SubagentChip, subagentLabel } from '@/features/models/SubagentChip';
 import { subagentModelFor } from '../../../../server/src/models/subagent';
-import { OWN_PROVIDER, agentModels, effectiveRuntime, usableProfile, type AgentSource, type ModelMenuItem } from '@/features/models/menu';
+import { OWN_PROVIDER, agentModels, effectiveRuntime, routingPolicyLabel, usableProfile, type AgentSource, type ModelMenuItem } from '@/features/models/menu';
 import { mergeResume, resumeView } from '@/store/reopen';
 import { routePick, switchedNote } from '@/features/models/route';
 import { claudeEffortView, modelChipText } from '@/features/models/intelligence';
@@ -157,6 +157,12 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   const [refs, setRefs] = useState<{ id: string; title: string }[]>([]); // referenced sessions → <session-ref /> markers on send
   const pane = usePaneCtx();
   const [upload, setUpload] = useState<{ done: number; total: number; name: string } | null>(null);
+  // 发送前核对权限: the mode the chip of a conversation that is not running shows (set while rendering it), and the
+  // short notice when a send was refused because the conversation would really resume in another one
+  const shownMode = useRef<PermissionMode | undefined>(undefined);
+  // 智能路由: the model this conversation really got last (shown after the strategy on the chip)
+  const routed = useStore((s) => (active ? s.routed[active.sessionId] : undefined));
+  const [modeNotice, setModeNotice] = useState<{ sid: string; text: string } | null>(null);
   const [palIdx, setPalIdx] = useState(0);
   // Shift+Tab in the empty box: the next permission mode (like the CLI) — set by whichever chip is drawn below
   const permCycle = useRef<(() => void) | null>(null);
@@ -735,13 +741,27 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
       setFiles([]);
       const sid = active.sessionId;
       const before = useStore.getState().open[sid]?.queue.length ?? 0;
-      await send(sid, withPrefix(rec.prefix, full), [...im, ...parts.map((p) => p.image), ...rec.images], false, [...atts, ...parts.map((p) => p.text), ...uploaded, ...rec.atts]);
+      setModeNotice(null);
+      await send(sid, withPrefix(rec.prefix, full), [...im, ...parts.map((p) => p.image), ...rec.images], false, [...atts, ...parts.map((p) => p.text), ...uploaded, ...rec.atts], { expectMode: shownMode.current });
       if (requeue && seenRef.current?.requestId === docked?.requestId) {
         const q = useStore.getState().open[sid]?.queue ?? [];
         const mine = q.length > before ? q[q.length - 1] : undefined;
         setSeen({ carried: false, queued: mine && mine.text === full ? { id: mine.id, text: mine.text } : undefined });
       }
     } catch (e: any) {
+      if (e instanceof ModeChangedError) {
+        // nothing was sent: the draft comes back, the chip already shows the real mode, and a line under the box says so
+        setUpload(null);
+        setModeNotice({ sid: active.sessionId, text: e.message });
+        setText((cur) => cur || t);
+        if (t) setDraft(active.sessionId, t);
+        setImgs((cur) => (cur.length ? cur : sentImgs));
+        setAtts((cur) => (cur.length ? cur : sentAtts));
+        setRefs((cur) => (cur.length ? cur : sentRefs));
+        setRecordings((cur) => (cur.length ? cur : sentRecs));
+        setBundles((cur) => (cur.length ? cur : sentBundles));
+        return;
+      }
       toast(e.message);
       setUpload(null);
       // a 页面标注 that did not go is not lost: back in the box (its picture exists nowhere else)
@@ -1052,6 +1072,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   ) : null;
 
   let model: React.ReactNode = null, subagent: React.ReactNode = null, effort: React.ReactNode = null, permission: React.ReactNode = null, meter: React.ReactNode = null, status: React.ReactNode = null;
+  shownMode.current = undefined;
   // Shift+Tab steps only the permission chip drawn below — none drawn (a conversation starting), nothing to step
   permCycle.current = null;
   // 深度编排 on: the placeholder says what to ask for (user report: the switch looked clear, but not how to use it)
@@ -1090,12 +1111,15 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     const defaultEffort = liveView.defaultLevel;
     const t = modelChipText({ agent: liveAgent, agentName: info.agentName, providers, providerId: remote ? 'claude' : liveProvider, providerName: info.providerName, model: info.model, builtin: liveProvider === 'claude' && info.models?.length ? info.models : undefined, agentDefault: liveAgentDefault, efforts: liveEfforts, effort: info.effort, defaultEffort, ultracode: ultraOk && !!info.ultracode, accountDefault });
     const remoteLabel = `${info.providerName ? `${info.providerName} / ` : ''}${info.models?.find((m) => m.value === info.model)?.displayName ?? (shortModel(info.model) || tr('模型'))}`;
+    // 智能路由: 「自动 → 实际：<model>」 — the real model is never hidden behind the strategy (spec §7.2)
+    const pol = info.model ? policyOfModel(info.model) : undefined;
+    const routedNote = pol && routed ? { label: tr('{policy} → 实际：{model}', { policy: routingPolicyLabel(pol), model: routed.model }), title: tr('智能路由实际用的是 {label}（{reason}）{switched}', { label: routed.label, reason: routed.reason, switched: routed.switched ? tr('，这次换过候选') : '' }) } : undefined;
     model = (
       <ModelChip
         agent={liveAgent}
         current={{ providerId: remote ? 'claude' : liveProvider, model: info.model }}
-        label={remote ? remoteLabel : t.main}
-        title={remote ? tr('模型（其它机器上的对话：换供应商请在那台机器上操作）') : tr("{main}{v}\n同一供应商直接换模型；换供应商会无感重启对话；选其它 Agent 的模型 = 交给它继续", { main: t.main, v: t.isDefault ? tr('（默认）') : '' })}
+        label={routedNote ? routedNote.label : remote ? remoteLabel : t.main}
+        title={(remote ? tr('模型（其它机器上的对话：换供应商请在那台机器上操作）') : tr("{main}{v}\n同一供应商直接换模型；换供应商会无感重启对话；选其它 Agent 的模型 = 交给它继续", { main: t.main, v: t.isDefault ? tr('（默认）') : '' })) + (routedNote ? '\n' + routedNote.title : '')}
         builtin={(remote || liveProvider === 'claude') && info.models?.length ? info.models : undefined}
         builtinTitle={remote ? info.providerName ?? info.agentName ?? tr('模型') : liveAgent === 'claude' ? ownName : tr('{agentName} 账号', { agentName: info.agentName ?? liveAgent })}
         agentDefault={liveAgentDefault}
@@ -1164,8 +1188,11 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
       />
     );
     permCycle.current = () => setResume(sid, { permissionMode: nextPermissionMode(v.permissionMode) });
-    permission = <PermissionChip mode={v.permissionMode} compact={mobile} onPick={(m) => setResume(sid, { permissionMode: m })} />;
-    status = <span className="cb-status opt" title={tr('对话没在运行，发送后按这里选的模型和权限继续')}>{tr('发送后继续')}</span>;
+    permission = <PermissionChip mode={v.permissionMode} compact={mobile} onPick={(m) => { setModeNotice(null); setResume(sid, { permissionMode: m }); }} />;
+    shownMode.current = v.permissionMode;
+    status = modeNotice?.sid === sid
+      ? <span className="cb-status mode-notice" role="status">{modeNotice.text}</span>
+      : <span className="cb-status opt" title={tr('对话没在运行，发送后按这里选的模型和权限继续')}>{tr('发送后继续')}</span>;
   } else if (active) {
     status = <span className="cb-status">{disabled ? tr('对话已删除') : tr('启动中…')}</span>;
   }

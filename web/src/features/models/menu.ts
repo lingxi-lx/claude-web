@@ -1,4 +1,4 @@
-import type { AgentKind, GatewayGroup, Provider, ProviderType, RuntimeKind } from '@shared';
+import { ROUTING_MODELS, ROUTING_POLICIES, policyOfModel, type AgentKind, type GatewayGroup, type Provider, type ProviderType, type RoutingPolicy, type RuntimeKind } from '@shared';
 import { isChatModel, modelsFor, preferredRuntime, profileFitError, providerTypesFor } from '@catalog';
 import { accountWindowOf, familyWindows } from '@account-window';
 import { contextWindowFor } from '../../../../server/src/models/context-window';
@@ -177,6 +177,8 @@ export function gatewayModels(
 ): string[] {
   const ids = new Set<string>();
   const g = groups?.find((x) => x.id === p.gatewayGroupId);
+  // 智能路由: its strategies are its models (the candidates are not offered one by one there)
+  if (g?.routing) return ROUTING_POLICIES.map((x) => ROUTING_MODELS[x]);
   if (g) {
     for (const k of Object.keys(g.modelMap ?? {})) if (!k.includes('*')) ids.add(k);
     for (const m of g.members) {
@@ -205,6 +207,18 @@ export function profileModels(
   const list = (p.models ?? []).filter(isChatModel);
   if (p.defaultModel && !list.includes(p.defaultModel)) list.unshift(p.defaultModel);
   return list;
+}
+
+/** 智能路由's strategies as the model menu names them. */
+export const routingPolicyLabel = (p: RoutingPolicy): string =>
+  p === 'auto' ? tr('自动') : p === 'free' ? tr('免费优先') : p === 'performance' ? tr('性能优先') : p === 'capability' ? tr('能力优先') : tr('自定义');
+export const routingPolicyHint = (p: RoutingPolicy): string =>
+  p === 'auto' ? tr('综合能力、可用性、额度、速度和成本') : p === 'free' ? tr('只用免费的，都不能用就停下') : p === 'performance' ? tr('先挑快的、稳的') : p === 'capability' ? tr('先挑能力最强、支持工具的') : tr('按你写的规则');
+/** A routing group's model id → its strategy label, else undefined. */
+export function routingModelName(groups: GatewayGroup[] | undefined, p: Pick<Provider, 'type' | 'gatewayGroupId'> | undefined, model: string): string | undefined {
+  if (p?.type !== 'gateway' || !groups?.find((g) => g.id === p.gatewayGroupId)?.routing) return undefined;
+  const pol = policyOfModel(model);
+  return pol ? routingPolicyLabel(pol) : undefined;
 }
 
 /** How a provider's model shows: the name its model list gave (「DeepSeek-V4.1-Flash」 for `deepseek-flash`), else the id. */
@@ -288,6 +302,8 @@ export function buildModelMenu(i: BuildMenuInput): ModelMenu {
     const list = models.length
       ? models.map((m) => {
         // a gateway model is a raw id from an account pool: say what it is good for (speed / coding / thinking)
+        const pol = p.type === 'gateway' && i.gatewayGroups?.find((g) => g.id === p.gatewayGroupId)?.routing ? policyOfModel(m) : undefined;
+        if (pol) return make(p.id, p.name, m, routingPolicyLabel(pol), compatible, { unavailable, hint: routingPolicyHint(pol) });
         const hint = p.type === 'gateway' ? gatewayModelHint(m) : providerModelName(p, m) !== m ? m : undefined;
         const window = acctWindows ? accountWindowOf(m, acctWindows) : contextWindowFor(p, m);
         return make(p.id, p.name, m, providerModelName(p, m), compatible, { profileDefault: m === p.defaultModel, unavailable, ...(hint ? { hint } : {}), ...windowMark(window) });
@@ -389,6 +405,9 @@ export function chipLabel(o: { agent: AgentKind; agentName?: string; providers: 
   const p = o.providers.find((x) => x.id === pid);
   const name = p?.name ?? o.providerName ?? pid;
   const m = model || p?.defaultModel || '';
+  // 智能路由's strategy ids read as their names (智能路由 / 自动)
+  const pol = p?.type === 'gateway' && m ? policyOfModel(m) : undefined;
+  if (pol) return `${name} / ${routingPolicyLabel(pol)}`;
   return m ? `${name} / ${providerModelName(p, m)}` : name;
 }
 

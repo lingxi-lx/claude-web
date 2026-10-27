@@ -124,6 +124,12 @@ export interface OpenSessionParams {
   cwd: string;
   model?: string;
   permissionMode?: PermissionMode;
+  /**
+   * The permission mode the chip of a conversation that is not running showed when the user sent (no permissionMode
+   * named). The server resolves the resume mode as usual; when it differs it does not start and answers
+   * `{ modeChanged: <actual> }` — the client updates the chip and asks for another send. Never recorded, never escalates.
+   */
+  expectMode?: PermissionMode;
   effort?: EffortLevel;
   ultracode?: boolean;
   /** the model subagents run on ('' = the same as the main model); absent = the conversation's own pick for its
@@ -920,6 +926,7 @@ export type WireUp = { type: 'request'; request: RequestEnvelope };
 export * from './gateway/types.js';
 export * from './privacy/types.js';
 import type { PrivacyRequest, PrivacyStatus } from './privacy/types.js';
+export * from './routing/types.js';
 import type { GatewayEvent, GatewayLedgerInfo, GatewayRequest } from './gateway/types.js';
 
 // ---- stage F: local versions of claude.ai features (handoff, project page, dispatch, claude.ai import, publish) ----

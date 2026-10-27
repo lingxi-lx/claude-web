@@ -63,6 +63,15 @@ export async function handleGatewayRequest(gw: GatewayService, req: GatewayReque
       return null;
     case 'gateway.audit.export':
       return gw.audit.exportText();
+    case 'gateway.routing.status':
+      return gw.routingStatus(req.limit);
+    case 'gateway.routing.ensure':
+      await gw.ensureRoutingGroup();
+      return gw.routingStatus();
+    case 'gateway.routing.set':
+      return gw.setRouting(req.patch ?? {});
+    case 'gateway.routing.decisions':
+      return gw.router.log.recent(gw.routingGroup()?.id, req.limit ?? 50);
     case 'gateway.settings.set':
       if (req.patch.audit) await gw.setAudit(req.patch.audit);
       if (req.patch.allowQueryKey !== undefined) await gw.setAllowQueryKey(req.patch.allowQueryKey);
