@@ -34,6 +34,7 @@ import type { SplitMain, SplitSub } from './split.js';
 import { UpstreamError, decoded, decoder, errorHeaders, forwardHeaders, passthroughHeaders, readText, replaceTopLevelString, responseHeaders, sendUpstream, translatedHeaders, waitDrain, withTimeout, type UpstreamResponse } from './upstream.js';
 import { tr } from '../i18n/index.js';
 import { PrivacyBlocked, type PrivacyGuard, type PrivacyService } from '../privacy/service.js';
+import { PrivacyRelay, RELAY_PREFIX } from '../privacy/relay.js';
 import type { PrivacyRecord } from '../privacy/types.js';
 
 /** Streaming: time from sending a request to the first body byte before the member counts as failed. */
@@ -145,6 +146,8 @@ export class GatewayService extends EventEmitter {
   readonly states = new MemberStates();
   /** openai / grok profiles' prompt-cache shim (/gateway/~p/…): works whether or not the gateway is enabled */
   readonly shim: CacheShim;
+  /** 隐私保护's relay for providers not behind the gateway / shim (privacy/relay.ts; `/gateway/~v/…`) */
+  readonly relay: PrivacyRelay | null;
   /** key groups and keys: what a request may use, from where, how often */
   readonly keys: GatewayKeyStore;
   /** one whitelisted line per request */
@@ -177,6 +180,7 @@ export class GatewayService extends EventEmitter {
     this.nonStreamMs = deps.nonStreamMs ?? NONSTREAM_MS;
     this.localPortWanted = deps.meta.gatewayConfig().localPort ?? 61697;
     this.shim = new CacheShim({ meta: deps.meta, member: deps.member, ledger: deps.ledger, privacy: deps.privacy });
+    this.relay = deps.privacy ? new PrivacyRelay(deps.privacy, () => (this.port ? this.baseUrl() : null)) : null;
     this.keys = deps.keys ?? new GatewayKeyStore(deps.meta, deps.secrets);
     this.audit = deps.audit ?? new AuditLog(path.join(os.tmpdir(), 'cw-gateway-audit'), () => deps.meta.gatewayAudit());
     this.audit.on('lines', (lines) => this.emit('audit', lines));
@@ -286,6 +290,10 @@ export class GatewayService extends EventEmitter {
   }
 
   /** The cache shim's base for a profile (the session appends `/k/<key>[/s/<id>]/v1`) + its per-profile key; null before listening. */
+  /** The privacy relay's base for an upstream base URL, or null (privacy off, a skipped local upstream, not listening). */
+  privacyBase(target: string): string | null {
+    return this.relay && this.deps.privacy?.wants(target) ? this.relay.base(target) : null;
+  }
   shimEndpoint(providerId: string): { base: string; key: string } | null {
     return this.port ? { base: `${this.baseUrl()}/~p/${encodeURIComponent(providerId)}`, key: this.shim.keyFor(providerId) } : null;
   }
@@ -619,6 +627,14 @@ export class GatewayService extends EventEmitter {
     if (legacy && p.startsWith(`/gateway/${SPLIT_PREFIX}/`)) {
       void this.serveSplit(req, res, url).catch((e) => {
         console.error('[gateway split]', e);
+        if (!res.headersSent) res.writeHead(500, { 'content-type': 'application/json' }).end(JSON.stringify({ error: { message: String(e?.message ?? e) } }));
+        else res.destroy();
+      });
+      return true;
+    }
+    if (legacy && p.startsWith(RELAY_PREFIX) && this.relay) {
+      void this.relay.serve(req, res, url).catch((e) => {
+        console.error('[privacy relay]', e);
         if (!res.headersSent) res.writeHead(500, { 'content-type': 'application/json' }).end(JSON.stringify({ error: { message: String(e?.message ?? e) } }));
         else res.destroy();
       });

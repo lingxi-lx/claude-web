@@ -443,6 +443,8 @@ export const EN_SERVER: Record<string, string> = {
   "失败：{error}": "Failed: {error}",
   "子代理": "Subagent",
   "子代理分流": "subagent route",
+  "隐私中转地址不对": "Wrong privacy relay address",
+  "隐私中转地址无效（只接受本进程发出的地址）": "Invalid privacy relay address (only addresses issued by this process are accepted)",
   "子代理分流的密钥无效": "Invalid key for the subagent split",
   "字符画主题": "Character themes",
   "安装要先确认": "Confirm the install first",

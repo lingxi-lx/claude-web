@@ -101,6 +101,10 @@ export function compile(s: PrivacySettings): Compiled {
 
 function find(text: string, c: Compiled): Match[] {
   const all: Match[] = [];
+  // placeholders already in the text (an earlier hop redacted it; the model echoed one): nothing inside them is matched
+  const held: [number, number][] = [];
+  if (text.includes('{{')) for (const m of text.matchAll(PLACEHOLDER)) held.push([m.index!, m.index! + m[0].length]);
+  const inHeld = (s: number, e: number) => held.some(([a, b]) => s < b && e > a);
   for (const d of c.detectors) {
     d.re.lastIndex = 0;
     for (let m = d.re.exec(text); m; m = d.re.exec(text)) {
@@ -109,6 +113,7 @@ function find(text: string, c: Compiled): Match[] {
       if (!v) continue;
       const start = d.group ? m.index + m[0].lastIndexOf(v) : m.index;
       if (c.allow.has(v.trim())) continue;
+      if (held.length && inHeld(start, start + v.length)) continue;
       if (d.check && !d.check(v)) continue;
       // already a placeholder (an earlier pass, or the model echoing one)
       if (/^\{\{[A-Z][A-Z_]*_[a-f0-9]{8}\}\}$/.test(v)) continue;

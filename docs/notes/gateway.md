@@ -99,11 +99,18 @@
 
 - **代码**：`server/src/privacy/`（`detect.ts` 检测器与占位符、`pipeline.ts` 出站遍历 / 入站还原 / 响应包装、`service.ts` 设置与计数、`types.ts`）；界面 `web/src/features/privacy/PrivacyCenter.tsx`（自成一体，等网关界面挂载）。设置在 meta.json 顶层 `privacy`（含每装一份的占位符 secret，不上 wire）；请求 `privacy.get` / `privacy.set` / `privacy.preview`（预览只算不存、不计数）。默认关。
 - **占位符** `{{API_KEY_a1b2c3d4}}`：值的 HMAC（per-install secret）前 8 位，同值同占位符，前缀字节不变、提示缓存还在。反查表只在进程内存（上限 2 万条，先进先出），重启后随请求重建——客户端手里的历史是原文，每轮重新脱敏。
-- **覆盖**：网关每次成员尝试（直通和翻译都算，`body` 和各个重试变体 retry / noThinking / noEffort / bare 都换成同样的占位符）、`~s` 子代理分流的直接转发、缓存垫片（openai / grok 档案的 Claude 对话、Codex）——垫片在 `serve()` 里先脱敏 `raw` 再解析，下面所有分支都从脱敏后的 body 构造。**不覆盖**：直连的 anthropic / gemini / claude-account 档案（CLI 自己连上游）、关掉缓存优化的 openai / grok 档案、Codex / ACP 直连。
+- **覆盖**（10-26 第二轮）：开着（`enabled` 且有一类不是 off，`PrivacyService.active()`）时所有对话的模型流量都经过管道：
+  - 网关每次成员尝试（直通和翻译都算，`body` 和各个重试变体 retry / noThinking / noEffort / bare 都换成同样的占位符）、`~s` 子代理分流的直接转发、缓存垫片（`serve()` 里先脱敏 `raw` 再解析）。
+  - **隐私中转** `/gateway/~v/<sig>/<base64url 上游 base>/…`（`privacy/relay.ts`）：`privacy/route.ts` 的 `privacyRoute(target)` 钩子（index.ts 设成 `gateway.privacyBase`）把 base 换成中转地址；关着返回 null，env 和以前一字不差，没有多一跳。sig = 进程内随机密钥对上游 base 的 HMAC（不是开放代理）。客户端自己的凭据和头原样转（`forwardHeaders` 保序保大小写）；**没有命中时 body 是客户端原字节、回答是上游原字节（含压缩）**，只有插了占位符的请求才重新序列化、要 identity、包装还原。上游 ≥400 的正文先 scrub。
+  - 用中转的地方（`providers/service.ts`）：anthropic 档案 `ANTHROPIC_BASE_URL`；claude-account（`ANTHROPIC_BASE_URL` 原本是 ''，开着时指向中转 → api.anthropic.com——CLI 拿 OAuth 令牌照样发给自定义 base，子代理分流对账号 / 本机登录一直就是这么做的）；gemini `GEMINI_BASE_URL`（没填 base 时写出厂商默认 `…/v1beta`）；grok 关垫片 `GROK_BASE_URL`（默认 `https://api.x.ai/v1`）；openai 关垫片 `OPENAI_BASE_URL`；`agentLaunch` 里 Codex 直连 openai、ACP 的 `OPENAI_BASE_URL`、Gemini CLI 的 `GOOGLE_GEMINI_BASE_URL`；本机登录（没选档案，claude.ai 或用户 settings 里的中转）在 `session-runner` 里设 `ANTHROPIC_BASE_URL` 并进 `ours` 盖过 settings.json（分流已占用 base 时不设，分流自己脱敏）。
+  - 连接测试：`chatProbe`（经 `providerEnv`，补了 loopback NO_PROXY）、`openaiChatProbe` / `openaiResponsesProbe`、模型列表 GET 都走中转；网关的「测试」本来就走网关。
+  - 嵌套（分流 → 中转、垫片 → 中转不会发生，垫片直连上游）：已有占位符里的检测命中被丢掉（`detect.find` 先找占位符区间），第二层不会把 `{{API_KEY_…}}` 再包一层。
+  - **不覆盖**：开关只在对话进程启动时生效（打开后已在跑的对话要重开；关掉后已在跑的仍多一跳但原样转发）；Codex / Gemini CLI / 其它 ACP 用自己登录（没选档案）的；网关档案本来就在网关里。
 - **不动的东西**：`thinking` / `redacted_thinking` / `reasoning` 块整块跳过（签名）；id、model、tool 名、schema、`data`、图片、`encrypted_content`、`thoughtSignature` 跳过。tool_use 的 `input` 对象、Gemini `args` / `response` 全部叶子都算内容；OpenAI `arguments`（JSON 文本）先解析再脱敏再序列化，保证 JSON 合法。没有命中时 body 字节原样（指纹中转不受影响）。
 - **还原**：`restoreResponse(res)` 包住 `writeHead / write / end`：SSE 按事件解析，`data:` 是 JSON 的才改；某个字符串叶子结尾像占位符的开头（`{{API_`）就把整个事件扣住，等同一个 slot（type + index 字段 + 叶子路径）的下一个事件把两段拼起来再还原；先来了别的事件就原样放出（宁可留占位符，不出错值）。`partial_json` / `arguments` / `*arguments*.delta` 里还原成 JSON 转义后的值。非流式 JSON 解析后逐叶子还原。直通且有脱敏时出站 `accept-encoding: identity`，上游仍压缩就在包装里解压再发。
 - **fail closed**：开着时 `forRequest` / 脱敏抛错 → 500「隐私保护处理失败，请求没有发出」；命中 block → 403「按隐私设置拦截」。都走 `final`（不冷却成员，不换下一个）。
 - **本机跳过**：`skipLocal` 按上游 URL（127/10/192.168/172.16-31/169.254、localhost、.local、fc/fd/fe80）判断；sidecar（`sidecar:` 成员，地址在本机但转发到云）永不跳过。路由切到云端成员时每次尝试各自判断，不继承。
+- **推送**：设置或计数变了，hub 最多每秒广播一次 `privacy.changed { status }`，PrivacyCenter 听它（不再轮询）。
 - **记录**：审计行加 `privacy: { count, categories, placeholders, blocked?, warned? }`（`audit.ts` 白名单），不含原值、不含来源名。上游错误正文先 `privacy.scrub()`（固定遮 key / 私钥 / JWT / 配置密码，开着时再加自定义词，换成 `[API_KEY]`），再进日志、账本、客户端。
 - **authStyle**：`Provider.authStyle` 未设 = 原行为（Claude 对话 Bearer；模型列表和网关翻译两个头都带；OpenAI Bearer）。设了：会话 env（anthropic：x-api-key → `ANTHROPIC_API_KEY` + `ANTHROPIC_AUTH_TOKEN=''`；both → 两个变量）、`listModels` / chat 探测、`translatedHeaders` 都照它。直通请求仍沿用客户端自己的头风格。
 - **base URL**：`providers/endpoint.ts` 的 `anthropicBase()` 去尾斜杠、`/messages`、`/v1`；会话 env、模型列表、保存档案时都用它（web 的快速连接对 anthropic 预设也用 `anthropicBase`）。网关的 `joinUrl` 本来就去重版本段。

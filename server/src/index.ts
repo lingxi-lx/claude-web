@@ -78,6 +78,7 @@ import { CursorSource } from './library/cursor-source.js';
 import { DshSource } from './library/dsh-source.js';
 import { AcpListSource } from './library/acp-source.js';
 import { PrivacyService } from './privacy/service.js';
+import { setPrivacyRoute } from './privacy/route.js';
 import { GatewayService } from './gateway/service.js';
 import { AuditLog } from './gateway/audit.js';
 import { UpstreamService } from './upstreams/service.js';
@@ -480,6 +481,8 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   upstreams.onGatewayGroups = () => { void gateway.syncProfiles().catch(() => {}); };
   providers.gatewayEndpoint = (groupId) => gateway.endpoint(groupId);
   providers.shimEndpoint = (providerId) => gateway.shimEndpoint(providerId);
+  // 隐私保护 on: providers not behind the gateway / shim get the privacy relay as their base URL (privacy/route.ts)
+  setPrivacyRoute((target) => gateway.privacyBase(target));
   setSplitHook({ endpoint: (main, sub, model) => gateway.splitEndpoint(main, sub, model), target: (id) => providers.subagentTarget(id) });
   remote = new RemoteService(meta, () => { const s = http.createServer(handler); s.on('upgrade', upgrade); return s; });
   // 在外面也能用: bridges phones' links to the remote-access listener above (never to this main one)

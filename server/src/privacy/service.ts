@@ -111,6 +111,16 @@ export class PrivacyService {
     return Buffer.from(cfg.secret, 'hex');
   }
 
+  /** On = the switch is on and at least one type is looked for. */
+  static on(s: PrivacySettings): boolean { return s.enabled && Object.values(s.actions).some((a) => a !== 'off'); }
+  active(): boolean { return PrivacyService.on(this.settings()); }
+
+  /** Does traffic to `url` need the relay (on, and not a local upstream skipped by 本机跳过)? */
+  wants(url: string): boolean {
+    const s = this.settings();
+    return PrivacyService.on(s) && !(s.skipLocal && isLocalUrl(url));
+  }
+
   private compiledNow(): Compiled { return (this.compiled ??= compile(this.settings())); }
 
   status(): PrivacyStatus {
@@ -144,7 +154,7 @@ export class PrivacyService {
    */
   forRequest(o: { url?: string; source: string; cloud?: boolean }): PrivacyGuard | null {
     const s = this.settings();
-    if (!s.enabled) return null;
+    if (!PrivacyService.on(s)) return null;
     if (s.skipLocal && !o.cloud && isLocalUrl(o.url)) return null;
     let c: Compiled;
     try { c = this.compiledNow(); } catch (e: any) { throw new PrivacyFailed(e?.message ?? String(e)); }

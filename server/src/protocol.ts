@@ -832,6 +832,8 @@ export type ServerEvent =
   | { kind: 'permission.request'; request: PermissionRequestEvent }
   | { kind: 'permission.resolved'; requestId: string }
   | { kind: 'sessions.changed' }
+  /** 隐私保护's settings or counters changed (at most once a second): the privacy center shows this */
+  | { kind: 'privacy.changed'; status: PrivacyStatus }
   /** conversations whose record changed on disk (a CLI in a terminal, Codex): an open one that is not running here re-reads it */
   | { kind: 'transcripts.changed'; sessionIds: string[] }
   /** what was said in DeepSeek Harness since went into this conversation (in the background): an open view re-reads */
@@ -915,7 +917,7 @@ export type WireUp = { type: 'request'; request: RequestEnvelope };
 // ---------- model gateway (sub-project 4) ----------
 export * from './gateway/types.js';
 export * from './privacy/types.js';
-import type { PrivacyRequest } from './privacy/types.js';
+import type { PrivacyRequest, PrivacyStatus } from './privacy/types.js';
 import type { GatewayEvent, GatewayLedgerInfo, GatewayRequest } from './gateway/types.js';
 
 // ---- stage F: local versions of claude.ai features (handoff, project page, dispatch, claude.ai import, publish) ----

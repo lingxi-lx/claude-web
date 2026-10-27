@@ -56,9 +56,9 @@ export function PrivacyCenter() {
   };
   useEffect(() => {
     void load();
-    // the hit counts move while requests go out: refreshed while the window is in front
-    const t = setInterval(() => { if (document.visibilityState === 'visible') void load(); }, 5000);
-    return () => clearInterval(t);
+    // settings and hit counts are pushed by the server (privacy.changed, at most once a second)
+    const off = ws.on((ev) => { if (ev.kind === 'privacy.changed') setSt(ev.status); });
+    return () => { off(); };
   }, []);
 
   const set = async (patch: Partial<Omit<PrivacySettings, 'actions'>> & { actions?: Partial<Record<PrivacyCategory, PrivacyAction>> }) => {
@@ -78,10 +78,10 @@ export function PrivacyCenter() {
         {tr('发给模型前先脱敏')}
       </label>
       <div className="sub">
-        {tr('经模型网关和缓存垫片发出的请求：敏感内容换成占位符（如 {example}）再发，回答里的占位符换回原文。原文只留在本机内存里。开着但处理出错时，请求不会发出。', { example: '{{API_KEY_a1b2c3d4}}' })}
+        {tr('对话、Agent 和连接测试发给模型的请求：敏感内容换成占位符（如 {example}）再发，回答里的占位符换回原文。原文只留在本机内存里。开着但处理出错时，请求不会发出。', { example: '{{API_KEY_a1b2c3d4}}' })}
       </div>
       <div className="sub">
-        {tr('直连的 Claude 格式 / Gemini 供应商不经过这里；需要模型看到原文才能做的事（比如用这个 Key 调接口），脱敏后做不了。图片里的文字不处理。')}
+        {tr('打开以后，已经在跑的对话要重新开始才会经过这里。需要模型看到原文才能做的事（比如用这个 Key 调接口），脱敏后做不了。图片里的文字不处理。')}
       </div>
 
       <label className="privacy-row" style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' }}>
