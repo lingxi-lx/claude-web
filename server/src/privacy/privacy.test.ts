@@ -212,7 +212,9 @@ describe('relay: fail closed', () => {
     await new Promise<void>((r) => s.listen(0, '127.0.0.1', () => r()));
     return `http://127.0.0.1:${(s.address() as AddressInfo).port}`;
   };
-  const setup = async (settings: Partial<PrivacySettings>) => {
+  type Reply = (j: any, res: http.ServerResponse) => void;
+  const echo: Reply = (j, res) => res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ content: [{ type: 'text', text: `echo: ${j.messages[0].content}` }] }));
+  const setup = async (settings: Partial<PrivacySettings>, reply: Reply = echo) => {
     const cfg: any = { ...ALL_REDACT, skipLocal: false, ...settings };
     const meta: any = { privacyConfig: () => cfg, savePrivacy: async () => {} };
     const privacy = new PrivacyService(meta);
@@ -222,8 +224,7 @@ describe('relay: fail closed', () => {
       req.on('data', (d) => (b += d));
       req.on('end', () => {
         seen.push(b);
-        const j = JSON.parse(b);
-        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ content: [{ type: 'text', text: `echo: ${j.messages[0].content}` }] }));
+        reply(JSON.parse(b), res);
       });
     });
     let relayBase = '';
@@ -245,6 +246,40 @@ describe('relay: fail closed', () => {
     expect(seen[0]).not.toContain(ANT_KEY);
     expect(seen[0]).toMatch(/\{\{API_KEY_[a-f0-9]{8}\}\}/);
     expect(JSON.parse(r.text).content[0].text).toBe(`echo: key ${ANT_KEY}`);
+  });
+
+  it('an answer only gets back what its own request redacted, never an earlier request\'s secret', async () => {
+    const GH = 'ghp_abcdefghijklmnopqrstuvwxyz0123456789';
+    // the upstream (or a prompt injection) emits whatever placeholder it has learned, in every answer
+    let learned = '';
+    const { seen, post } = await setup({}, (j, res) => {
+      const own = /\{\{API_KEY_[a-f0-9]{8}\}\}/.exec(String(j.messages[0].content))?.[0] ?? '';
+      learned ||= own;
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ content: [{ type: 'text', text: `own=${own} learned=${learned}` }] }));
+    });
+    // request A (another conversation / a LAN share-key caller) redacts ANT_KEY
+    const a = await post(`key ${ANT_KEY}`);
+    const phA = /\{\{API_KEY_[a-f0-9]{8}\}\}/.exec(seen[0])![0];
+    expect(JSON.parse(a.text).content[0].text).toBe(`own=${ANT_KEY} learned=${ANT_KEY}`);
+    // request B redacts a different secret: its own comes back, A's placeholder stays a placeholder
+    const b = await post(`token ${GH}`);
+    expect(seen[1]).not.toContain(GH);
+    const tb = JSON.parse(b.text).content[0].text;
+    expect(tb).toBe(`own=${GH} learned=${phA}`);
+    expect(tb).not.toContain(ANT_KEY);
+  });
+
+  it('a placeholder cut across two SSE deltas of the same request is still restored', async () => {
+    const { post } = await setup({}, (j, res) => {
+      const ph = /\{\{API_KEY_[a-f0-9]{8}\}\}/.exec(String(j.messages[0].content))![0];
+      const ev = (text: string) => `event: content_block_delta\ndata: ${JSON.stringify({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } })}\n\n`;
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.write(ev(`a ${ph.slice(0, 7)}`));
+      setTimeout(() => res.end(ev(`${ph.slice(7)} b`)), 10);
+    });
+    const r = await post(`key ${ANT_KEY}`);
+    const texts = r.text.split('\n').filter((l) => l.startsWith('data:')).map((l) => JSON.parse(l.slice(5)).delta.text);
+    expect(texts.join('')).toBe(`a ${ANT_KEY} b`);
   });
 
   it('a pipeline failure refuses the request (500) and nothing reaches the upstream', async () => {

@@ -1,6 +1,5 @@
 // The privacy pipeline's owner (spec 2026-10-26 §4): settings in meta.json (`privacy`), the per-install placeholder
-// secret, the in-memory reverse map (placeholder → value; never written anywhere, rebuilt as requests are redacted
-// after a restart), and the hit counters the privacy center shows. Request paths ask `forRequest()` for a guard.
+// secret, and the hit counters the privacy center shows. Request paths ask `forRequest()` for a guard.
 import crypto from 'node:crypto';
 import type { MetaStore } from '../meta/store.js';
 import { tr } from '../i18n/index.js';
@@ -35,7 +34,6 @@ export function categoryLabel(c: PrivacyCategory): string {
 }
 
 const RECENT = 50;
-const MAP_LIMIT = 20_000;
 
 /** Host on this machine or the local network (an upstream that keeps the prompt here). */
 export function isLocalUrl(url: string | undefined): boolean {
@@ -51,14 +49,21 @@ export function isLocalUrl(url: string | undefined): boolean {
   return /^f[cd][0-9a-f]{2}:/.test(h) || /^fe80:/.test(h);
 }
 
-/** One request's view of the pipeline (one upstream attempt). */
+/**
+ * One request's view of the pipeline (one upstream attempt). Its answer only gets back the values THIS request
+ * redacted (`own`): a placeholder from another conversation, another agent or a LAN share-key caller that an upstream
+ * or a prompt injection makes the model emit stays a placeholder. History is re-sent every turn, so an echo of an
+ * earlier turn's secret is still covered — that turn's text is redacted again in this request.
+ */
 export class PrivacyGuard {
   readonly hits: PrivacyHit[] = [];
+  /** placeholder → value, filled only by this request's own bodies */
+  private readonly own = new Map<string, string>();
   constructor(private svc: PrivacyService, private c: Compiled, readonly source: string) {}
   /** A body before it leaves. Throws PrivacyBlocked / PrivacyFailed — the caller refuses the request. */
   body(b: Buffer): Buffer {
     let r: { body: Buffer; hits: PrivacyHit[] };
-    try { r = redactBody(b, this.c, this.svc.secret(), this.svc.map); } catch (e: any) { throw new PrivacyFailed(e?.message ?? String(e)); }
+    try { r = redactBody(b, this.c, this.svc.secret(), this.own); } catch (e: any) { throw new PrivacyFailed(e?.message ?? String(e)); }
     const blocked = [...new Set(r.hits.filter((h) => h.action === 'block').map((h) => h.category))];
     this.hits.push(...r.hits);
     if (blocked.length) throw new PrivacyBlocked(blocked);
@@ -69,21 +74,21 @@ export class PrivacyGuard {
     if (!b) return b;
     const before = this.hits.length;
     let r: { body: Buffer; hits: PrivacyHit[] };
-    try { r = redactBody(b, this.c, this.svc.secret(), this.svc.map); } catch (e: any) { throw new PrivacyFailed(e?.message ?? String(e)); }
+    try { r = redactBody(b, this.c, this.svc.secret(), this.own); } catch (e: any) { throw new PrivacyFailed(e?.message ?? String(e)); }
     if (r.hits.some((h) => h.action === 'block')) throw new PrivacyBlocked([...new Set(r.hits.filter((h) => h.action === 'block').map((h) => h.category))]);
     this.hits.length = before;
     return r.body;
   }
   get redacted(): boolean { return this.hits.some((h) => h.action === 'redact'); }
-  /** Put placeholders back in what goes to the client. */
-  restore(res: http.ServerResponse, stream: boolean) { if (this.redacted) restoreResponse(res, this.svc.map, stream); }
+  /** Put this request's own placeholders back in what goes to the client (never another request's). */
+  restore(res: http.ServerResponse, stream: boolean) { if (this.redacted) restoreResponse(res, this.own, stream); }
   /** Count it, and the audit line's summary (types, counts, placeholders — never values). */
   done(blocked = false): PrivacyRecord | undefined { return this.svc.note(this.source, this.hits, blocked); }
 }
 
 export class PrivacyService {
-  /** placeholder → original value, this process only */
-  readonly map = new Map<string, string>();
+  // No process-wide placeholder → value map: a placeholder is an HMAC of the value (same value, same placeholder, no
+  // cache needed), and the way back is each guard's own map, so one request can never restore another's secrets.
   private compiled: Compiled | null = null;
   private stats: PrivacyStats = { since: Date.now(), requests: 0, redacted: 0, warned: 0, blocked: 0, hits: {}, recent: [] };
   private onChange: (() => void) | null = null;
@@ -180,12 +185,6 @@ export class PrivacyService {
 
   note(source: string, hits: PrivacyHit[], blocked: boolean): PrivacyRecord | undefined {
     this.stats.requests++;
-    if (this.map.size > MAP_LIMIT) {
-      // oldest first: a long-running process keeps the recent placeholders, which are the ones a stream can echo
-      const drop = this.map.size - MAP_LIMIT;
-      let i = 0;
-      for (const k of this.map.keys()) { if (i++ >= drop) break; this.map.delete(k); }
-    }
     if (!hits.length) return undefined;
     const categories: Partial<Record<PrivacyCategory, number>> = {};
     for (const h of hits) { categories[h.category] = (categories[h.category] ?? 0) + 1; this.stats.hits[h.category] = (this.stats.hits[h.category] ?? 0) + 1; }
