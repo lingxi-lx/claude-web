@@ -4,14 +4,14 @@ import type { ChannelStatus, SourceCategory, SourceHealth, SourceKind, SourceSum
 
 export interface ChannelProjectionInput { providers: Provider[]; upstream: UpstreamStatus }
 
-const categories: Record<SourceCategory, number> = { free: 0, subscription: 1, api: 2, 'local-engine': 3 };
-const families: { kind: UpstreamKind; sourceKind: SourceKind; name: string }[] = [
+export const categories: Record<SourceCategory, number> = { free: 0, subscription: 1, api: 2, 'local-engine': 3 };
+export const families: { kind: UpstreamKind; sourceKind: SourceKind; name: string }[] = [
   { kind: 'claude', sourceKind: 'claude-account', name: 'Claude' },
   { kind: 'gemini', sourceKind: 'gemini-web', name: 'Gemini' },
   { kind: 'workbuddy', sourceKind: 'workbuddy', name: 'WorkBuddy' },
 ];
 
-function projectProvider(provider: Provider): SourceSummary {
+export function projectProvider(provider: Provider): SourceSummary {
   const seen = new Set<string>();
   const models = (provider.models ?? []).filter((id) => {
     if (seen.has(id)) return false;
@@ -36,7 +36,7 @@ function projectProvider(provider: Provider): SourceSummary {
   };
 }
 
-function projectFamily(kind: UpstreamKind, sourceKind: SourceKind, name: string, upstream: UpstreamStatus): SourceSummary {
+export function projectFamily(kind: UpstreamKind, sourceKind: SourceKind, name: string, upstream: UpstreamStatus): SourceSummary {
   const accounts = upstream.accounts.filter((account) => account.kind === kind);
   const healthyAccountCount = accounts.filter((account) => account.enabled && account.health === 'ok').length;
   const health: SourceHealth = !accounts.length ? 'unconfigured'
