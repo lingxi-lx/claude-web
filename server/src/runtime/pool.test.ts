@@ -533,3 +533,38 @@ describe('RunnerPool: the provider when the caller does not name one (IM, schedu
     expect(s.p.defaultProviderFor('claude')).toBeUndefined();
   });
 });
+
+// 发送前核对权限 (spec §14.4): the chip showed one mode, the resume would run in another → refuse, record nothing
+describe('expectMode (compare-and-refuse before a send)', () => {
+  const setup = (recorded: Record<string, any>, settings: Record<string, unknown>) => {
+    const writes: [string, any][] = [];
+    const meta = { sessionMeta: (id: string) => recorded[id] ?? {}, settings: () => settings, setSessionMeta: async (id: string, patch: any) => { writes.push([id, patch]); } };
+    return { p: new RunnerPool({ forSession: () => undefined, meta } as any), writes };
+  };
+  it('a mismatch is reported with the mode it would really run in, and nothing is recorded or started', () => {
+    const { p, writes } = setup({ a: { permissionMode: 'bypassPermissions' } }, { 'ui.defaultMode': 'default' });
+    expect(p.modeMismatch({ sessionId: 'a', cwd: 'C:/x', expectMode: 'default' })).toBe('bypassPermissions');
+    expect(writes).toEqual([]);
+    expect(p.stateOf('a')).toBeUndefined();
+  });
+  it('no default either: the CLI default counts as default', () => {
+    const { p } = setup({}, {});
+    expect(p.modeMismatch({ sessionId: 'n', cwd: 'C:/x', expectMode: 'default' })).toBeNull();
+    expect(p.modeMismatch({ sessionId: 'n', cwd: 'C:/x', expectMode: 'plan' })).toBe('default');
+  });
+  it('a match, a named mode, a fork, a resumeAt or no expectMode: go ahead', () => {
+    const { p } = setup({ a: { permissionMode: 'bypassPermissions' } }, {});
+    expect(p.modeMismatch({ sessionId: 'a', cwd: 'C:/x', expectMode: 'bypassPermissions' })).toBeNull();
+    expect(p.modeMismatch({ sessionId: 'a', cwd: 'C:/x', expectMode: 'default', permissionMode: 'default' })).toBeNull();
+    expect(p.modeMismatch({ sessionId: 'a', cwd: 'C:/x', expectMode: 'default', fork: true })).toBeNull();
+    expect(p.modeMismatch({ sessionId: 'a', cwd: 'C:/x', expectMode: 'default', resumeAt: 'u1' })).toBeNull();
+    expect(p.modeMismatch({ sessionId: 'a', cwd: 'C:/x' })).toBeNull();
+  });
+  it('a conversation already running keeps its own mode: not checked; open() never passes expectMode on', () => {
+    const { p } = setup({ a: { permissionMode: 'bypassPermissions' } }, {});
+    const r: any = p.open({ sessionId: 'a', cwd: 'C:/x', expectMode: 'bypassPermissions' });
+    expect(r.params.expectMode).toBeUndefined();
+    r.setState('idle');
+    expect(p.modeMismatch({ sessionId: 'a', cwd: 'C:/x', expectMode: 'default' })).toBeNull();
+  });
+});
