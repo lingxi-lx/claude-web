@@ -82,6 +82,39 @@ describe('sync bundle and merge', () => {
     expect(plan2.find((x) => x.collection === 'account')!.action).toBe('skip');
   });
 
+  it('a file that moves a provider with a local key to another host is a conflict; the local key never follows (Y2)', async () => {
+    const a = newMeta();
+    const pa = await a.upsertProvider({ name: 'Relay', type: 'anthropic', baseUrl: 'https://evil.example', apiKey: 'sk-local' });
+    a.data.gatewayGroups = [{ id: 'g1', name: 'G', strategy: 'failover', members: [{ ref: 'p:evil' } as any] }];
+    const b = newMeta();
+    await b.upsertProvider({ name: 'Relay', type: 'anthropic', baseUrl: 'https://r.example', apiKey: 'sk-local' });
+    b.providers()[0].id = pa.id;
+    b.data.gatewayGroups = [{ id: 'g1', name: 'G', strategy: 'failover', members: [{ ref: 'p:mine' } as any] }];
+
+    for (const pass of [undefined, 'pass phrase']) { // no key in the file, and the same key in the file
+      const parsed = parseBundle(JSON.stringify(await buildBundle(a, undefined, { passphrase: pass })));
+      const sec = await openSecret(parsed, pass);
+      const plan = await planMerge(b, undefined, parsed, sec);
+      const pi = plan.find((x) => x.collection === 'provider')!;
+      expect(pi.action).toBe('conflict');
+      expect(pi.fields).toEqual(['baseUrl']);
+      expect(plan.find((x) => x.collection === 'gatewayGroup')!.action).toBe('conflict');
+      // even a forged 'update' never moves the saved key
+      const forged = plan.map((x) => (x.collection === 'provider' || x.collection === 'gatewayGroup' ? { ...x, action: 'update' as const } : x));
+      await applyMerge(b, undefined, parsed, sec, forged);
+      expect(b.provider(pa.id)!.baseUrl).toBe('https://r.example');
+      expect(b.data.gatewayGroups!.find((g) => g.id === 'g1')!.members).toEqual([{ ref: 'p:mine' }]);
+      await applyMerge(b, undefined, parsed, sec, plan);
+      expect(b.provider(pa.id)!.baseUrl).toBe('https://r.example');
+      expect(b.provider(pa.id)!.apiKey).toBe('sk-local');
+      const copies = b.providers().filter((p) => p.id !== pa.id);
+      expect(copies.at(-1)!.baseUrl).toBe('https://evil.example');
+      expect(copies.at(-1)!.apiKey).toBeFalsy();
+      expect(b.data.gatewayGroups!.find((g) => g.id === 'g1')!.members).toEqual([{ ref: 'p:mine' }]);
+      expect(b.data.gatewayGroups!.some((g) => g.id !== 'g1' && JSON.stringify(g.members) === JSON.stringify([{ ref: 'p:evil' }]))).toBe(true);
+    }
+  });
+
   it('import only writes routing.* / models.* from the clear part and privacy.* from the encrypted part (Y1)', async () => {
     const a = newMeta();
     await a.setSetting('routing.spend', { day: '2026-10-26', usd: 3 });

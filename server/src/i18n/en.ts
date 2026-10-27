@@ -297,6 +297,8 @@ export const EN_SERVER: Record<string, string> = {
   "两个分支没有共同历史。确认远程地址正确，或用 --allow-unrelated-histories。": "The two branches have no common history. Make sure the remote address is right, or use --allow-unrelated-histories.",
   "两边的凭据不同：都保留，传入的另存为「{name}（同步）」": "The credentials differ on the two sides: both are kept, the incoming one is saved as \"{name} (synced)\"",
   "两边的密钥不同：都保留，传入的另存为「{name}（同步）」": "The keys differ on the two sides: both are kept, the incoming one is saved as \"{name} (synced)\"",
+  "两边的成员不同：都保留，传入的另存为「{name}（同步）」": "The members differ on the two sides: both are kept, the incoming one is saved as \"{name} (synced)\"",
+  "文件把「{name}」指到了别的地址：本机的密钥不跟过去，传入的另存为「{name}（同步）」": "The file points \"{name}\" somewhere else: the key saved here does not go with it, the incoming one is saved as \"{name} (synced)\"",
   "为下面的需求写一份实现计划：要改哪些文件、每一步做什么、怎么验证。只写计划，不要改代码。\n\n需求：{{input}}": "Write an implementation plan for the requirement below: which files to change, what to do in each step, and how to verify it. Write only the plan, do not change any code.\n\nRequirement: {{input}}",
   "主机不存在": "Host does not exist",
   "主题": "Theme",

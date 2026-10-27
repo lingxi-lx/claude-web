@@ -14,6 +14,10 @@ import type { SyncPlanItem } from './types.js';
 export type { SyncCollection, SyncPlanItem } from './types.js';
 
 const IGNORE = new Set(['createdAt', 'updatedAt', 'hasKey', 'hasCredential', 'id']);
+/** Provider fields that decide where (and how) its saved key is sent. */
+const PROVIDER_ROUTE_FIELDS = new Set(['baseUrl', 'type', 'authStyle', 'gatewayGroupId']);
+/** Route-group fields that decide which sources its traffic reaches. */
+const GROUP_ROUTE_FIELDS = new Set(['members', 'routing']);
 const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
 function diffFields(local: Record<string, any>, incoming: Record<string, any>): string[] {
@@ -43,6 +47,13 @@ export async function planMerge(meta: MetaStore, secrets: SecretService | undefi
       out.push({ key: `provider:${p.id}`, collection: 'provider', id: p.id, name: p.name, action: 'conflict', withSecret: true, note: tr('两边的密钥不同：都保留，传入的另存为「{name}（同步）」', { name: p.name }) });
       continue;
     }
+    // Y2: where the saved key goes must not change under it — a new host / protocol / auth / route group for a
+    // provider that has a local key is a conflict: the incoming one is added as a copy without the local key.
+    const moved = fields.filter((f) => PROVIDER_ROUTE_FIELDS.has(f));
+    if (localKey && moved.length) {
+      out.push({ key: `provider:${p.id}`, collection: 'provider', id: p.id, name: p.name, action: 'conflict', withSecret: !!key && key !== localKey, fields: moved, note: tr('文件把「{name}」指到了别的地址：本机的密钥不跟过去，传入的另存为「{name}（同步）」', { name: p.name }) });
+      continue;
+    }
     const fillsKey = !!key && !localKey;
     out.push({ key: `provider:${p.id}`, collection: 'provider', id: p.id, name: p.name, action: fields.length || fillsKey ? 'update' : 'same', ...(fields.length ? { fields } : {}), withSecret: fillsKey });
   }
@@ -68,6 +79,11 @@ export async function planMerge(meta: MetaStore, secrets: SecretService | undefi
   for (const g of b.public.gatewayGroups) {
     const local = groups.find((x) => x.id === g.id);
     const fields = local ? diffFields(local as any, g as any) : [];
+    if (local && fields.some((f) => GROUP_ROUTE_FIELDS.has(f))) {
+      // Y2: changed members re-route this group's existing traffic; keep the local group, add the incoming as a copy
+      out.push({ key: `gatewayGroup:${g.id}`, collection: 'gatewayGroup', id: g.id, name: g.name, action: 'conflict', fields, note: tr('两边的成员不同：都保留，传入的另存为「{name}（同步）」', { name: g.name }) });
+      continue;
+    }
     out.push({ key: `gatewayGroup:${g.id}`, collection: 'gatewayGroup', id: g.id, name: g.name, action: !local ? 'add' : fields.length ? 'update' : 'same', ...(fields.length ? { fields } : {}) });
   }
   for (const g of b.public.keyGroups) {
@@ -98,14 +114,20 @@ export async function applyMerge(meta: MetaStore, secrets: SecretService | undef
       const p = b.public.providers.find((x) => x.id === it.id) as SyncProvider;
       const { hasKey: _h, createdAt: _c, ...rest } = p;
       const key = sec?.providers[it.id];
+      const local = meta.provider(it.id);
       if (it.action === 'conflict') {
-        await meta.upsertProvider({ ...rest, id: `${it.id}-${copyId()}`, name: tr('{name}（同步）', { name: p.name }), ...(key ? { apiKey: key } : {}) } as Partial<Provider>);
+        // only the file's own key goes on the copy — never the local one (the copy may point at another host)
+        const localKey = local ? await reveal(secrets, local.apiKey) : '';
+        const carry = !!key && key !== localKey;
+        await meta.upsertProvider({ ...rest, id: `${it.id}-${copyId()}`, name: tr('{name}（同步）', { name: p.name }), ...(carry ? { apiKey: key } : {}) } as Partial<Provider>);
         conflicts++;
       } else {
-        const local = meta.provider(it.id);
         const patch: Partial<Provider> = { id: it.id };
         if (!local) Object.assign(patch, rest);
-        else for (const f of it.fields ?? []) (patch as any)[f] = (rest as any)[f];
+        else for (const f of it.fields ?? []) {
+          if (local.apiKey && PROVIDER_ROUTE_FIELDS.has(f)) continue; // never move a saved key to a new host
+          (patch as any)[f] = (rest as any)[f];
+        }
         if (key && (!local || !local.apiKey)) patch.apiKey = key;
         await meta.upsertProvider(patch);
       }
@@ -140,8 +162,14 @@ export async function applyMerge(meta: MetaStore, secrets: SecretService | undef
       const g = b.public.gatewayGroups.find((x) => x.id === it.id)!;
       const list = (meta.data.gatewayGroups ??= []);
       const i = list.findIndex((x) => x.id === it.id);
-      if (i < 0) list.push(g);
-      else for (const f of it.fields ?? []) (list[i] as any)[f] = (g as any)[f];
+      if (it.action === 'conflict') {
+        list.push({ ...JSON.parse(JSON.stringify(g)), id: `${it.id}-${copyId()}`, name: tr('{name}（同步）', { name: g.name }) });
+        conflicts++;
+      } else if (i < 0) list.push(g);
+      else for (const f of it.fields ?? []) {
+        if (GROUP_ROUTE_FIELDS.has(f)) continue; // member changes only arrive as a copy
+        (list[i] as any)[f] = (g as any)[f];
+      }
       touchedGateway = true;
       applied++;
     } else if (it.collection === 'keyGroup') {
