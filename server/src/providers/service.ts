@@ -393,6 +393,9 @@ export class ProviderService {
   gatewayEndpoint: ((groupId: string) => { baseUrl: string; key: string; runtime?: RuntimeKind; leanTools?: boolean } | null) | null = null;
   /** Set by the server: the prompt-cache shim for an openai / grok profile (null = not listening yet). */
   shimEndpoint: ((providerId: string) => { base: string; key: string } | null) | null = null;
+  /** Set by the channel service: a free-only source keeps only its free models from the pulled list (channels/catalog.ts). */
+  modelFilter: ((providerId: string, models: string[]) => string[]) | null = null;
+  private keepModels(id: string, models: string[]): string[] { return this.modelFilter ? this.modelFilter(id, models) : models; }
   constructor(readonly meta: MetaStore, private secrets?: SecretService) {
     if (secrets) meta.secretCodec = { protect: async (plain, id) => { const enc = await secrets.protect(plain, id); this.revealed.set(enc, plain); return enc; } };
   }
@@ -541,7 +544,7 @@ export class ProviderService {
         return { ...base, ok: false, count: 0, error, ms: r.ms };
       }
       // null clears the field (upsertProvider drops null-valued optional keys)
-      if (!(await this.meta.upsertProvider({ id: t.id, models: r.models, modelNames: (r.modelNames ?? null) as unknown as undefined, modelEfforts: (r.modelEfforts ?? null) as unknown as undefined, modelContext: (r.modelContext ?? null) as unknown as undefined, modelsAt: Date.now(), modelsError: null as unknown as undefined }, { mustExist: true }))) return gone;
+      if (!(await this.meta.upsertProvider({ id: t.id, models: this.keepModels(t.id, r.models), modelNames: (r.modelNames ?? null) as unknown as undefined, modelEfforts: (r.modelEfforts ?? null) as unknown as undefined, modelContext: (r.modelContext ?? null) as unknown as undefined, modelsAt: Date.now(), modelsError: null as unknown as undefined }, { mustExist: true }))) return gone;
       return { ...base, ok: true, count: r.models.length, ms: r.ms };
     };
     let next = 0;
@@ -615,7 +618,7 @@ export class ProviderService {
     const p = { type: draft?.type ?? saved?.type ?? 'anthropic', baseUrl: (draft?.baseUrl ?? saved?.baseUrl ?? '').trim(), apiKey: key.trim() } as Pick<Provider, 'type' | 'baseUrl' | 'apiKey'>;
     if (!p.apiKey) return { ok: false, models: [], error: tr('没有 API Key'), ms: 0 };
     const r = await probeProvider(p);
-    if (r.ok && saved && r.models.length) await this.meta.upsertProvider({ id: saved.id, models: r.models, modelNames: (r.modelNames ?? null) as unknown as undefined, modelEfforts: (r.modelEfforts ?? null) as unknown as undefined, modelContext: (r.modelContext ?? null) as unknown as undefined, modelsAt: Date.now(), modelsError: null as unknown as undefined }, { mustExist: true });
+    if (r.ok && saved && r.models.length) await this.meta.upsertProvider({ id: saved.id, models: this.keepModels(saved.id, r.models), modelNames: (r.modelNames ?? null) as unknown as undefined, modelEfforts: (r.modelEfforts ?? null) as unknown as undefined, modelContext: (r.modelContext ?? null) as unknown as undefined, modelsAt: Date.now(), modelsError: null as unknown as undefined }, { mustExist: true });
     if (opts.listOnly || !r.ok || (p.type !== 'anthropic' && p.type !== 'openai')) return r;
     // Real chat check, with automatic fallback to the official binary when the endpoint rejects ccb.
     const full: Provider = { id: saved?.id ?? 'draft', name: draft?.name ?? saved?.name ?? 'draft', createdAt: 0, ...saved, ...p, defaultModel: draft?.defaultModel ?? saved?.defaultModel, modelMap: draft?.modelMap ?? saved?.modelMap };
