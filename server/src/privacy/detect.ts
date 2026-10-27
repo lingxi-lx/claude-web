@@ -64,7 +64,8 @@ const DETECTORS: Detector[] = [
   { category: 'jwt', re: /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g },
   { category: 'api_key', re: API_KEY },
   // config-like `password = …`, `"api_key": "…"`, `TOKEN=…`: only the value
-  { category: 'password', re: /\b(?:[A-Za-z0-9]+[_-])*(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret|auth[_-]?token|密码|口令)\b["']?\s*[:=]\s*["']?([^\s"'`,;\\<>{}]{4,})/gi, group: 1, check: (v) => !/^(?:true|false|null|none|undefined|\*+|x+|\$\{?\w+\}?|<[^>]*>|process\.env.*|os\.environ.*)$/i.test(v) },
+  // (ASCII lookarounds, not \b: \b never matches next to 密码 / 口令, so those keys were never found; ： is accepted too)
+  { category: 'password', re: /(?<![A-Za-z0-9_])(?:[A-Za-z0-9]+[_-])*(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret|auth[_-]?token|密码|口令)(?![A-Za-z0-9_])["']?\s*[:=：]\s*["']?([^\s"'`,;\\<>{}]{4,})/gi, group: 1, check: (v) => !/^(?:true|false|null|none|undefined|\*+|x+|\$\{?\w+\}?|<[^>]*>|process\.env.*|os\.environ.*)$/i.test(v) },
   { category: 'email', re: /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g },
   // Chinese mobile (optionally +86), and international numbers written with their + country code
   { category: 'phone', re: /(?<![\d+])(?:(?:\+|00)86[- ]?)?1[3-9]\d[- ]?\d{4}[- ]?\d{4}(?!\d)|(?<![\w+])\+[1-9]\d{0,2}[- ]?(?:\(\d{1,4}\)[- ]?)?\d{2,4}[- ]?\d{3,4}[- ]?\d{3,4}(?!\d)/g },
