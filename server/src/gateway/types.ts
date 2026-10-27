@@ -143,6 +143,25 @@ export interface GatewayKey {
   createdAt: number;
   lastUsedAt?: number;
   stats: { requests: number; tokensIn: number; tokensOut: number; costUsd: number; day: string };
+  /** 共享 (share/): narrower rules for this one key, on top of its key group's */
+  share?: ShareRules;
+  /** this week's / month's counters (local ISO week `2026-W43`, month `2026-10`), for the share quotas */
+  period?: { week: string; weekRequests: number; weekTokens: number; month: string; monthRequests: number; monthTokens: number };
+}
+
+/** A quota over one period; 0 / absent = no limit. */
+export interface ShareQuota { requests?: number; tokens?: number }
+/** What a share key may use, beyond its key group: a subset of route groups and models, concurrency, quotas. */
+export interface ShareRules {
+  /** route group ids (sources) — empty / absent = whatever the key group allows */
+  routeGroupIds?: string[];
+  /** model ids / `*` globs — empty / absent = whatever the key group allows */
+  models?: string[];
+  concurrent?: number;
+  daily?: ShareQuota;
+  weekly?: ShareQuota;
+  monthly?: ShareQuota;
+  note?: string;
 }
 
 export type GatewayKeyView = Omit<GatewayKey, 'hash' | 'salt' | 'secret'>;
