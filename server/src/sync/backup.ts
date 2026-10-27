@@ -56,6 +56,22 @@ export interface SyncBundle {
 const PROVIDER_LOCAL = ['models', 'modelNames', 'modelEfforts', 'modelContext', 'modelsAt', 'modelsError', 'promptEffortModels', 'noPromptCacheKey', 'noResponsesApi', 'noCacheRetention'] as const;
 const PUBLIC_SETTINGS = /^(routing|models)\./;
 const PRIVATE_SETTINGS = /^privacy\./;
+/** Matches a sync prefix but is this machine's process state (the paid-budget counter), never synced. */
+const LOCAL_SETTINGS = new Set(['routing.spend']);
+
+/** May this setting travel in (and be imported from) the clear part? Import re-checks this: a crafted file
+ *  must not set `ui.defaultMode`, `network.proxy`, `remote.*`, `gateway.allowQueryKey` or the like. */
+export const isPublicSetting = (k: string): boolean => PUBLIC_SETTINGS.test(k) && !LOCAL_SETTINGS.has(k);
+/** May this setting travel in (and be imported from) the encrypted part? */
+export const isPrivateSetting = (k: string): boolean => PRIVATE_SETTINGS.test(k) && !LOCAL_SETTINGS.has(k);
+
+/** Keep only the keys `allow` accepts (paths stripped). */
+export function filterSettings(v: unknown, allow: (k: string) => boolean): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return out;
+  for (const [k, x] of Object.entries(v)) if (allow(k)) { const y = stripPaths(x); if (y !== undefined) out[k] = y; }
+  return out;
+}
 
 /** A string that is an absolute path on some OS (C:\…, \\server\…, /home/…, ~/…). */
 export function looksLikePath(v: unknown): boolean {
@@ -72,12 +88,6 @@ export function stripPaths(v: unknown): unknown {
     return out;
   }
   return v;
-}
-
-function pickSettings(all: Record<string, unknown>, re: RegExp): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(all)) if (re.test(k)) { const y = stripPaths(v); if (y !== undefined) out[k] = y; }
-  return out;
 }
 
 export function publicProvider(p: Provider): SyncProvider {
@@ -105,7 +115,7 @@ export async function buildBundle(meta: MetaStore, secrets: SecretService | unde
     accounts: meta.upstreamAccounts().map(accountRef),
     gatewayGroups: JSON.parse(JSON.stringify(meta.data.gatewayGroups ?? [])),
     keyGroups: JSON.parse(JSON.stringify(meta.gatewayKeyGroups())),
-    settings: pickSettings(settings, PUBLIC_SETTINGS),
+    settings: filterSettings(settings, isPublicSetting),
   };
   const bundle: SyncBundle = {
     format: 'claude-web-sync', version: 1, createdAt: Date.now(),
@@ -113,7 +123,7 @@ export async function buildBundle(meta: MetaStore, secrets: SecretService | unde
     public: pub,
   };
   if (o.passphrase) {
-    const sec: SyncSecret = { providers: {}, accounts: {}, privacy: pickSettings(settings, PRIVATE_SETTINGS) };
+    const sec: SyncSecret = { providers: {}, accounts: {}, privacy: filterSettings(settings, isPrivateSetting) };
     for (const p of meta.providers()) if (p.apiKey) sec.providers[p.id] = await reveal(p.apiKey);
     for (const a of meta.upstreamAccounts()) {
       if (!a.credential) continue;
@@ -137,7 +147,7 @@ export function parseBundle(text: string): SyncBundle {
       accounts: arr(pub.accounts).filter((a: any) => a && typeof a.id === 'string'),
       gatewayGroups: arr(pub.gatewayGroups).filter((g: any) => g && typeof g.id === 'string'),
       keyGroups: arr(pub.keyGroups).filter((g: any) => g && typeof g.id === 'string'),
-      settings: pub.settings && typeof pub.settings === 'object' ? (stripPaths(pub.settings) as Record<string, unknown>) : {},
+      settings: filterSettings(pub.settings, isPublicSetting),
     },
     ...(v.secret ? { secret: v.secret as SealedBox } : {}),
   };
@@ -147,5 +157,5 @@ export async function openSecret(b: SyncBundle, passphrase?: string): Promise<Sy
   if (!b.secret) return null;
   if (!passphrase) throw new Error(tr('这个文件带着加密的密钥，要输入导出时的口令'));
   const v = JSON.parse(await open(b.secret, passphrase));
-  return { providers: v.providers ?? {}, accounts: v.accounts ?? {}, privacy: v.privacy ?? {} };
+  return { providers: v.providers ?? {}, accounts: v.accounts ?? {}, privacy: filterSettings(v.privacy, isPrivateSetting) };
 }

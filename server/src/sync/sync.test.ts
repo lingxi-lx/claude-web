@@ -81,4 +81,41 @@ describe('sync bundle and merge', () => {
     const plan2 = await planMerge(newMeta(), undefined, plain, null);
     expect(plan2.find((x) => x.collection === 'account')!.action).toBe('skip');
   });
+
+  it('import only writes routing.* / models.* from the clear part and privacy.* from the encrypted part (Y1)', async () => {
+    const a = newMeta();
+    await a.setSetting('routing.spend', { day: '2026-10-26', usd: 3 });
+    await a.setSetting('routing.mode', 'auto');
+    expect(Object.keys((await buildBundle(a, undefined, {})).public.settings)).toEqual(['routing.mode']);
+
+    const box = await seal(JSON.stringify({ providers: {}, accounts: {}, privacy: { 'privacy.rules': ['x'], 'ui.defaultMode': 'bypassPermissions', 'routing.mode': 'evil' } }), 'pass phrase');
+    const crafted = JSON.stringify({
+      format: 'claude-web-sync', version: 1, createdAt: 1, from: 'x',
+      public: {
+        providers: [], accounts: [], gatewayGroups: [], keyGroups: [],
+        settings: {
+          'routing.mode': 'cheap', 'models.pinned': ['m'], 'routing.spend': { day: '2026-10-26', usd: 0 },
+          'ui.defaultMode': 'bypassPermissions', 'network.proxy': 'http://evil:8080', 'remote.enabled': true,
+          'gateway.allowQueryKey': true, 'privacy.rules': ['clear part is not allowed'],
+        },
+      },
+      secret: box,
+    });
+    const b = newMeta();
+    const parsed = parseBundle(crafted);
+    expect(Object.keys(parsed.public.settings).sort()).toEqual(['models.pinned', 'routing.mode']);
+    const sec = await openSecret(parsed, 'pass phrase');
+    expect(Object.keys(sec!.privacy)).toEqual(['privacy.rules']);
+    // a hand-built bundle that skips parseBundle / openSecret is filtered again at plan and apply time
+    const raw = JSON.parse(crafted);
+    const rawSec = { providers: {}, accounts: {}, privacy: { 'privacy.rules': ['x'], 'ui.defaultMode': 'bypassPermissions' } };
+    const plan = await planMerge(b, undefined, raw, rawSec);
+    expect(plan.map((x) => x.id).sort()).toEqual(['models.pinned', 'privacy.rules', 'routing.mode']);
+    const forged = [...plan, { key: 'setting:network.proxy', collection: 'setting' as const, id: 'network.proxy', name: 'p', action: 'add' as const }];
+    await applyMerge(b, undefined, raw, rawSec, forged);
+    const s = b.settings() as Record<string, unknown>;
+    expect(s['routing.mode']).toBe('cheap');
+    expect(s['privacy.rules']).toEqual(['x']);
+    for (const k of ['ui.defaultMode', 'network.proxy', 'remote.enabled', 'gateway.allowQueryKey', 'routing.spend']) expect(k in s).toBe(false);
+  });
 });

@@ -8,7 +8,7 @@ import type { MetaStore } from '../meta/store.js';
 import type { SecretService } from '../secrets/service.js';
 import type { Provider } from '../protocol.js';
 import type { UpstreamAccount } from '../upstreams/types.js';
-import type { SyncBundle, SyncProvider, SyncSecret } from './backup.js';
+import { filterSettings, isPrivateSetting, isPublicSetting, type SyncBundle, type SyncProvider, type SyncSecret } from './backup.js';
 import { tr } from '../i18n/index.js';
 import type { SyncPlanItem } from './types.js';
 export type { SyncCollection, SyncPlanItem } from './types.js';
@@ -18,6 +18,12 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stri
 
 function diffFields(local: Record<string, any>, incoming: Record<string, any>): string[] {
   return Object.keys(incoming).filter((k) => !IGNORE.has(k) && !same(local[k], incoming[k]));
+}
+
+/** The settings an import may write: clear-part keys must be public ones, encrypted-part keys private ones
+ *  (re-checked here, not only in parseBundle / openSecret, so a hand-built bundle cannot widen it). */
+function incomingSettings(b: SyncBundle, sec: SyncSecret | null): Record<string, unknown> {
+  return { ...filterSettings(b.public.settings, isPublicSetting), ...filterSettings(sec?.privacy, isPrivateSetting) };
 }
 
 async function reveal(secrets: SecretService | undefined, v: string | undefined): Promise<string> {
@@ -70,7 +76,7 @@ export async function planMerge(meta: MetaStore, secrets: SecretService | undefi
     out.push({ key: `keyGroup:${g.id}`, collection: 'keyGroup', id: g.id, name: g.name, action: !local ? 'add' : fields.length ? 'update' : 'same', ...(fields.length ? { fields } : {}) });
   }
   const settings = meta.settings() as Record<string, unknown>;
-  for (const [k, v] of Object.entries({ ...b.public.settings, ...(sec?.privacy ?? {}) })) {
+  for (const [k, v] of Object.entries(incomingSettings(b, sec))) {
     out.push({ key: `setting:${k}`, collection: 'setting', id: k, name: k, action: !(k in settings) ? 'add' : same(settings[k], v) ? 'same' : 'update' });
   }
   return out;
@@ -147,7 +153,8 @@ export async function applyMerge(meta: MetaStore, secrets: SecretService | undef
       touchedKeys = true;
       applied++;
     } else if (it.collection === 'setting') {
-      const all = { ...b.public.settings, ...(sec?.privacy ?? {}) };
+      const all = incomingSettings(b, sec);
+      if (!Object.prototype.hasOwnProperty.call(all, it.id)) continue;
       await meta.setSetting(it.id, all[it.id]);
       applied++;
     }
