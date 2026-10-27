@@ -55,6 +55,9 @@ const cliproxyapi: EngineManifest = {
   repo: 'router-for-me/CLIProxyAPI',
   entry: 'cli-proxy-api',
   defaultPort: 8317,
+  // releases (v8.0.44, 2026-10-26) ship CLIProxyAPI_<v>_<os>_<amd64|aarch64>.tar.gz|zip plus `_no-plugin` builds:
+  // the full one; every asset carries a GitHub sha256 digest and checksums.txt is published
+  prefer: /^(?!.*no-plugin)/i,
   baseUrl: (port) => `http://127.0.0.1:${port}`,
   managementKey: true,
   args: (ctx) => ['--config', path.join(ctx.dir, 'config.yaml')],
@@ -109,8 +112,9 @@ const magpie: EngineManifest = {
   repo: 'yetone/magpie-releases',
   entry: 'magpie',
   defaultPort: 3425,
-  // the terminal build (`make cli`: no cgo, no webview) when the release has one
-  prefer: /cli/i,
+  // the terminal build: releases (v0.1.1657, 2026-10-26) ship magpie-cli-<os>-<arch>[.exe] next to the desktop app
+  // (magpie-<os>-<arch>, .dmg / .zip); every asset has a GitHub sha256 digest, SHA256SUMS is published too
+  prefer: /magpie-cli-/i,
   baseUrl: (port) => `http://127.0.0.1:${port}`,
   fixedClientKey: 'magpie-claudeweb',
   managementKey: false,
