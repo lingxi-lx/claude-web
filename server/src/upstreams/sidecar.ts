@@ -21,7 +21,7 @@ const READY_MS = 30_000;
  * Unpack a release asset. On Windows `tar` on PATH is Git's GNU tar (it reads `C:\…` as a remote host, and has no
  * zip support), so zip goes through PowerShell and tar.gz through the bsdtar Windows ships.
  */
-async function unpack(archive: 'zip' | 'tar.gz', file: string, dest: string): Promise<void> {
+export async function unpack(archive: 'zip' | 'tar.gz', file: string, dest: string): Promise<void> {
   const opts = { windowsHide: true, timeout: 120_000 };
   if (archive === 'zip') {
     if (process.platform === 'win32') {

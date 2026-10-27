@@ -19,6 +19,8 @@ import type { UpstreamRequest } from './upstreams/types.js';
 import type { ChannelRequest } from './channels/types.js';
 export * from './upstreams/types.js';
 export type * from './channels/types.js';
+import type { EngineRequest } from './engines/types.js';
+export type * from './engines/types.js';
 /** stage E5: WSL ↔ Windows paths (pure, the web side uses them too) */
 export * from './wsl/paths.js';
 
@@ -809,6 +811,8 @@ export type ClientRequest =
   | PluginRequest
   | SyncRequest
   | ShareRequest
+  // ---- 来源 / 托管程序 (channels/, engines/; no sessionId → no federation routing entry) ----
+  | EngineRequest
   // ---- other agents' configuration center (phase 17) ----
   | AgentConfigRequest
   // ---- multi-agent orchestration ----

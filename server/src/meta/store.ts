@@ -44,6 +44,12 @@ interface Data {
   peers?: PeerRecord[]; // other machines this one federates with (tokens enc:)
   serverId?: string; // this server's stable id (federation loop guard)
   workflows?: Workflow[]; // orchestration templates (runs live in <dataDir>/orchestra/)
+  /** 来源 (channels/): provider id → the catalog entry it was added from (keyless / engine marks) */
+  channelLinks?: Record<string, { catalogId: string; keyless?: boolean; engine?: string }>;
+  /** 来源目录: the user's own changes to catalog entries (win over the baseline and the remote catalog) */
+  channelCatalog?: Record<string, { hidden?: boolean; patch?: Record<string, unknown> }>;
+  /** 托管程序 (engines/): installed versions, hashes, port, keys (enc:… via SecretService) */
+  engines?: Record<string, Record<string, unknown>>;
 }
 
 const defaultFile = () => path.join(process.env.CLAUDE_WEB_DIR ?? path.join(os.homedir(), '.claude-web'), 'meta.json');
@@ -328,4 +334,9 @@ export class MetaStore extends EventEmitter {
   async saveTasks() { await this.queueSave(true); }
   async saveUpstreams() { await this.queueSave(true); }
   async saveGatewayKeys() { await this.queueSave(true); }
+  // ---- 来源 / 托管程序 (channels/, engines/) ----
+  channelLinks(): NonNullable<Data['channelLinks']> { return this.data.channelLinks ??= {}; }
+  channelCatalog(): NonNullable<Data['channelCatalog']> { return this.data.channelCatalog ??= {}; }
+  engineState(): NonNullable<Data['engines']> { return this.data.engines ??= {}; }
+  async saveChannels() { await this.queueSave(true); }
 }

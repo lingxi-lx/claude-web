@@ -78,6 +78,8 @@ import type { PluginService } from '../plugins/service.js';
 import { handlePluginRequest, isPluginRequest } from '../plugins/handlers.js';
 import { handleSyncRequest, isSyncRequest, type SyncService } from '../sync/service.js';
 import { handleShareRequest, isShareRequest, type ShareService } from '../share/service.js';
+import type { EngineManager } from '../engines/manager.js';
+import { handleEngineRequest, isEngineRequest } from '../engines/handlers.js';
 
 import type { AgentConfigService } from '../agent-config/service.js';
 import { handleAgentConfig, isAgentConfigRequest } from '../agent-config/handlers.js';
@@ -167,6 +169,8 @@ export interface Services {
   plugins?: PluginService;
   sync?: SyncService;
   share?: ShareService;
+  /** 托管程序: CLIProxyAPI / Magpie (engines.*) */
+  engines: EngineManager;
   /** 任务中心: the scheduler behind tasks.* (check-in, keepalive, growth, …). */
   tasks: MaintenanceScheduler;
   /** 联网: web search, and the browser tools carried out by the window hosting the built-in browser (web.* / browser.*). */
@@ -1309,6 +1313,7 @@ export class Hub {
     if (isPluginRequest(req) && s.plugins) return handlePluginRequest(s.plugins, req);
     if (isSyncRequest(req) && s.sync) return handleSyncRequest(s.sync, req);
     if (isShareRequest(req) && s.share) return handleShareRequest(s.share, req);
+    if (isEngineRequest(req)) return handleEngineRequest(s.engines, req);
     if (isUpstreamRequest(req)) return handleUpstreamRequest(s.upstreams, s.tasks, req);
     if (isGatewayRequest(req)) return handleGatewayRequest(s.gateway, req);
     if (isPrivacyRequest(req)) return handlePrivacyRequest(s.privacy, req);
