@@ -42,6 +42,7 @@ import { useAccountDefault } from '@/features/models/account-default';
 import { providersLoaded, useGatewayStatus } from '@/features/models/data';
 import { needsModel, welcomeProvider } from './welcome-provider';
 import { connectModel, useConnect } from '@/features/providers/ConnectModel';
+import { openAddSource, useAddSource } from '@/features/gateway/add-source';
 import { dlg, useDialogStore } from '@/ui/dialog';
 import { DOCK_BLOCKED, DOCK_CARRIED, DOCK_ENTER_IGNORED, DOCK_REQUEUED, DOCK_SEND, EFFORT_LABEL, TERMS, ULTRACODE } from '@/ui/terms';
 import { showGoals } from '@/features/workbench/right-panel';
@@ -463,7 +464,8 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   // the 接一个模型 dialog is a dialog too: an Enter meant for it must not answer a docked card underneath
   const dlgOpen = useDialogStore((s) => s.queue.length > 0);
   const connectOpen = useConnect((s) => !!s.req);
-  const dialogOpen = dlgOpen || connectOpen;
+  const addOpen = useAddSource((s) => s.open);
+  const dialogOpen = dlgOpen || connectOpen || addOpen;
   const covered = useStore((s) => composerCovered({ settingsOpen: !!s.settingsOpen, automationOpen: autoOver, shortcutsOpen: s.shortcutsOpen, paletteOpen: s.paletteOpen, dialogOpen, mobile: s.mobile, sheetAt: s.sheetAt, dockOpen: s.layout.dock.open, dockTabs: s.layout.dock.tabs.length, inspect: !!s.inspect }));
   const inView = visible && !covered;
   useEffect(() => { if (inView && seenRef.current) setSeen({ shownAt: Date.now() }); }, [inView]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1244,6 +1246,14 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
         {active && !welcome && (docked && dockReq
           ? <PermissionDock sessionId={active.sessionId} reason={text} onReasonUsed={() => onChange('')} scope={dockScope} note={dockNote} onDenyQueued={queuedOffer ? denyQueued : undefined} />
           : <RunCard sessionId={active.sessionId} />)}
+        {/* nothing to send with (spec 2026-10-26 §2.4): 添加来源 opens over this conversation; the draft stays in the box and
+            a source added there is picked up by welcomeProvider, so this line goes away by itself */}
+        {welcome && needsModel({ provider: wProviderId, foreignAgent: foreign, loggedIn }) && (
+          <div className="cmp-add-source" role="status">
+            <span>{tr('还没有能用的模型来源。')}</span>
+            <button type="button" className="link" onClick={() => openAddSource()}>{tr('添加来源')}</button>
+          </div>
+        )}
         <div className={clsx('composer-box', under && 'one-line')} data-state={face} onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
           {glow && <span className="composer-glow" aria-hidden><i /></span>}
           {hasChips && (

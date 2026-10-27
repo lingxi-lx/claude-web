@@ -1,4 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { Popover } from '@/features/composer/Popover';
+import { SyncDrawer, PluginsDrawer } from './ExtraDrawers';
 import { OverPage } from '@/features/sections/OverPage';
 import { useStore } from '@/store';
 import { Icon } from '@/ui/icons';
@@ -19,6 +21,9 @@ function HeaderActions() {
   const query = useGateway((s) => s.query);
   const drawer = useGateway((s) => s.drawer);
   const shared = useGateway((s) => !!s.status?.enabled);
+  const [more, setMore] = useState(false);
+  const moreBtn = useRef<HTMLButtonElement>(null);
+  const pick = (d: 'sync' | 'plugins') => () => { setMore(false); showDrawer(d); };
   return (
     <div className="gw-head-actions">
       <label className="gw-search">
@@ -43,6 +48,13 @@ function HeaderActions() {
       <button className="btn sm ghost" data-id="share" aria-pressed={drawer === 'share'} onClick={() => showDrawer(drawer === 'share' ? null : 'share')} title={tr('让其它应用也能用这些模型')}>
         <Icon name="share" size={13} /> {tr('共享')}{shared && <span className="gw-on-dot" aria-label={tr('已打开')} />}
       </button>
+      <button ref={moreBtn} className="icon-btn" data-id="more" aria-haspopup="menu" aria-expanded={more} title={tr('更多')} aria-label={tr('更多')} onClick={() => setMore((v) => !v)}><Icon name="more" size={15} /></button>
+      {more && (
+        <Popover anchor={moreBtn} onClose={() => setMore(false)} prefer="down" align="right" label={tr('更多')}>
+          <button data-mi="" role="menuitem" data-id="sync" onClick={pick('sync')}><Icon name="cloud" size={13} /> {tr('备份与同步')}</button>
+          <button data-mi="" role="menuitem" data-id="plugins" onClick={pick('plugins')}><Icon name="puzzle" size={13} /> {tr('插件')}</button>
+        </Popover>
+      )}
       <button className="btn sm" data-id="add" onClick={() => openAddSource()}><Icon name="plus" size={13} /> {tr('添加来源')}</button>
     </div>
   );
@@ -88,6 +100,8 @@ export function GatewayPage() {
       {seenDrawers.includes('share') && <ShareDrawer />}
       {seenDrawers.includes('privacy') && <PrivacyDrawer />}
       {seenDrawers.includes('activity') && <ActivityView />}
+      {seenDrawers.includes('sync') && <SyncDrawer />}
+      {seenDrawers.includes('plugins') && <PluginsDrawer />}
     </OverPage>
   );
 }

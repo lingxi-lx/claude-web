@@ -10,7 +10,7 @@ import { checkGeminiCookie, parseGeminiInput, SESSION_COOKIE } from './gemini-co
 import { canSignIn, signInGemini } from './gemini-login';
 import { Select } from '@/ui/Select';
 import { Segmented } from '@/ui/Segmented';
-import { imeComposing } from '@/ui/ime';
+import { useEscClose } from './use-esc-close';
 
 interface Login { url: string; state: string }
 
@@ -48,6 +48,7 @@ export function AddAccountWizard({ onClose, kind: fixed, embedded, onAdded }: {
   const toast = useStore((s) => s.toast);
   const [kind, setKind] = useState<UpstreamKind>(fixed ?? 'claude');
   const done = () => (onAdded ?? onClose)();
+  const escRef = useEscClose<HTMLDivElement>(() => { if (!busy) onClose(); }, !!embedded);
   const [wbMode, setWbMode] = useState<'qr' | 'json'>('qr');
   const [gMode, setGMode] = useState<'login' | 'paste'>(canSignIn() ? 'login' : 'paste');
   const [gNote, setGNote] = useState('');
@@ -263,8 +264,7 @@ export function AddAccountWizard({ onClose, kind: fixed, embedded, onAdded }: {
   );
   if (embedded) return <div className="gw-embedded-add">{body}</div>;
   return (
-    <div className="modal-bg dialog-bg" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}
-      onKeyDown={(e) => { if (e.key === 'Escape' && !imeComposing(e.nativeEvent) && !busy) { e.preventDefault(); e.stopPropagation(); onClose(); } }}>
+    <div ref={escRef} className="modal-bg dialog-bg" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
       <div className="modal" style={{ width: 560 }} role="dialog" aria-label={tr('添加账号')}>{body}</div>
     </div>
   );

@@ -1,3 +1,4 @@
+import { useEscClose } from './use-esc-close';
 import { useState } from 'react';
 import { ws } from '@/ws/client';
 import { useStore } from '@/store';
@@ -53,8 +54,9 @@ export function TaskEditor({ task, onClose, onSaved }: { task?: MaintenanceTask;
     } catch (e: any) { toast(e.message); } finally { setBusy(false); }
   };
 
+  const escRef = useEscClose<HTMLDivElement>(() => { if (!busy) onClose(); });
   return (
-    <div className="modal-bg dialog-bg" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
+    <div ref={escRef} className="modal-bg dialog-bg" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
       <div className="modal" style={{ width: 560 }}>
         <h3>{task ? tr('编辑任务') : tr('新建任务')}</h3>
         <label className="field"><span>{tr('名称（可留空）')}</span><input value={name} onChange={(e) => setName(e.target.value)} placeholder={tr('用任务类型作名字')} /></label>

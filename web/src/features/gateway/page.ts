@@ -7,7 +7,7 @@ import { tr } from '@/i18n';
 export const GATEWAY_TITLE = tr('上游');
 
 export type SourceFilter = 'all' | 'free' | 'subscription' | 'api' | 'local-engine' | 'attention';
-export type GatewayDrawer = 'share' | 'privacy' | 'activity';
+export type GatewayDrawer = 'share' | 'privacy' | 'activity' | 'sync' | 'plugins';
 
 export interface FilterDef { id: SourceFilter; label: string; icon: IconName }
 

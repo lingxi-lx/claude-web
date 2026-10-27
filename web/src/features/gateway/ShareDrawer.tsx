@@ -5,6 +5,7 @@ import { useGateway, showDrawer } from './state';
 import { Drawer } from './Drawer';
 import { KeysTab } from './KeysTab';
 import { ShareSettings } from './ShareSettings';
+import { ExternalShareDrawer } from './mounts';
 import { tr } from '@/i18n';
 
 /**
@@ -13,6 +14,16 @@ import { tr } from '@/i18n';
  */
 export function ShareDrawer() {
   const open = useGateway((s) => s.drawer === 'share');
+  return (
+    <Drawer id="share" title={tr('共享')} open={open} onClose={() => showDrawer(null)}>
+      {/* MOUNT POINT: features/share/ShareDrawer.tsx (mounts.tsx) fills the body once it exists; ours is the fallback */}
+      {ExternalShareDrawer ? <ExternalShareDrawer /> : <ShareFallback />}
+    </Drawer>
+  );
+}
+
+/** The 共享 body until features/share lands: the switch, address and key, key groups, port / LAN. */
+function ShareFallback() {
   const status = useGateway((s) => s.status);
   const toast = useStore((s) => s.toast);
   const reload = () => useGateway.getState().load().catch(() => {});
@@ -39,7 +50,7 @@ export function ShareDrawer() {
     } catch (e: any) { toast(e.message); }
   };
   return (
-    <Drawer id="share" title={tr('共享')} open={open} onClose={() => showDrawer(null)}>
+    <>
       <div className="gateway-tab">
         <div className="gateway-card gw-share-switch">
           <div className="gateway-row">
@@ -73,6 +84,6 @@ export function ShareDrawer() {
       <KeysTab />
       <h4 className="gw-drawer-h">{tr('连接设置')}</h4>
       <ShareSettings />
-    </Drawer>
+    </>
   );
 }

@@ -11,6 +11,7 @@ import {
 } from './page';
 import { SourceCard, type CardModel } from './SourceCard';
 import { openAddSource } from './add-source';
+import { ExternalRoutingDetail } from './mounts';
 import { tr } from '@/i18n';
 
 const FAMILY_ICON: Partial<Record<SourceSummary['kind'], IconName>> = { 'claude-account': 'claude', 'gemini-web': 'gemini', workbuddy: 'agent' };
@@ -100,12 +101,12 @@ export function SourceDashboard({ showFilters }: { showFilters: boolean }) {
   };
 
   // 智能路由: the route groups, as one virtual source (only under 全部 and when nothing is searched)
-  const routing: CardModel | null = filter === 'all' && !query.trim() && routeGroups.length
+  const routing: CardModel | null = filter === 'all' && !query.trim() && (routeGroups.length || ExternalRoutingDetail)
     ? {
       id: ROUTING_ID,
       name: tr('智能路由'),
       icon: 'orchestra',
-      sub: tr('{n} 个路由组 · 按顺序换来源', { n: routeGroups.length }),
+      sub: routeGroups.length ? tr('{n} 个路由组 · 按顺序换来源', { n: routeGroups.length }) : tr('失败或没额度时自动换来源'),
       status: status?.enabled ? { l: tr('可用'), c: 'ok' } : { l: tr('没打开'), c: '' },
       action: { label: tr('调整'), run: () => showSource(ROUTING_ID) },
     }

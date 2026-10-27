@@ -4,6 +4,7 @@ import { useStore } from '@/store';
 import { Icon } from '@/ui/icons';
 import { useGateway, showSource, showDrawer } from './state';
 import { RoutesTab } from './RoutesTab';
+import { ExternalRoutingDetail } from './mounts';
 import { tr } from '@/i18n';
 
 /**
@@ -11,6 +12,22 @@ import { tr } from '@/i18n';
  * was. A group can also be used in this app's conversations as a provider of its own.
  */
 export function RoutingDetail() {
+  // MOUNT POINT: features/routing/RoutingDetail.tsx (mounts.tsx) replaces the body once it exists
+  if (ExternalRoutingDetail) {
+    return (
+      <div className="gw-detail" data-source="routing">
+        <div className="gw-detail-head">
+          <button className="btn sm ghost" onClick={() => showSource(null)} title={tr('返回 (Esc)')}><Icon name="arrowLeft" size={13} /> {tr('全部来源')}</button>
+        </div>
+        <ExternalRoutingDetail />
+      </div>
+    );
+  }
+  return <RouteGroupsDetail />;
+}
+
+/** The route groups (what 分组与路由 was) — the 智能路由 detail until features/routing lands. */
+function RouteGroupsDetail() {
   const routeGroups = useGateway((s) => s.routeGroups);
   const status = useGateway((s) => s.status);
   const providers = useStore((s) => s.providers);

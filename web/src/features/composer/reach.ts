@@ -68,6 +68,7 @@ export const COMPOSER_REACH: ReachEntry[] = [
   { was: 'ultracode', place: 'depth', sel: idSel(EFFORT_MENU_ID.ultracode) },
   { was: tr('刷新全部模型'), place: 'model', sel: idSel(MODEL_MENU_ID.refresh) },
   { was: tr('管理模型…'), place: 'model', sel: idSel(MODEL_MENU_ID.manage) },
+  { was: tr('管理来源'), place: 'model', sel: idSel(MODEL_MENU_ID.sources) },
   { was: tr('强度 ›'), place: 'model', sel: idSel(MODEL_MENU_ID.effort) },
   { was: tr('快速模式'), place: 'model', sel: idSel(MODEL_MENU_ID.fast), when: 'fast' },
   { was: tr('更多模型 ›'), place: 'model', sel: idSel(MODEL_MENU_ID.more), when: 'manyModels' },

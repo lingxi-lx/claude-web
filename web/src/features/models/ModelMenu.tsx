@@ -17,6 +17,7 @@ import { imeComposing } from '@/ui/ime';
 import { useMenuMotion } from '@/ui/menu-motion';
 import { ActionSheet, useSheetMenu } from '@/ui/ActionSheet';
 import { tr } from '@/i18n';
+import { openGateway } from '@/features/gateway/state';
 
 /** `5 分钟前` / `刚刚` / a date */
 export function agoText(t: number): string {
@@ -333,6 +334,9 @@ export function ModelMenu(p: ModelMenuProps) {
             <Icon name="agent" size={13} /> {TERMS.agents}…
           </button>
         )}
+        <button data-id={MODEL_MENU_ID.sources} onClick={() => { p.onClose(); openGateway(); }} title={tr('上游：账号、免费额度和 API 来源')}>
+          <Icon name="gateway" size={13} /> {tr('管理来源')}
+        </button>
         <button data-id={MODEL_MENU_ID.manage} onClick={() => { p.onClose(); useStore.getState().openSettings({ section: 'models' }); }}>
           <Icon name="settings" size={13} /> {tr('管理模型与供应商…')}
         </button>

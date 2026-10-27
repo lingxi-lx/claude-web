@@ -115,3 +115,6 @@
 .gateway-page.phone .gw-grid { grid-template-columns: 1fr; }
 .gateway-page.phone .gw-search input { width: 96px; }
 @media (max-width: 640px) { .gw-choices { grid-template-columns: 1fr; } }
+
+/* the composer's light 添加来源 line (no usable source on the start page) */
+.cmp-add-source { display: flex; align-items: center; gap: 8px; margin: 0 4px 6px; font-size: var(--fs-sm); color: var(--ink-3); animation: gw-fade 160ms var(--ease-out) both; }
