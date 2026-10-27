@@ -9,13 +9,15 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { dataDir } from '../files/service.js';
-import { tr } from '../i18n/index.js';
+import { tr, trAs } from '../i18n/index.js';
 import type { CatalogEntry, CatalogSummary, ChannelCatalogOverride } from './types.js';
 import { pluginSourceDefs } from '../plugins/declarative.js';
 import type { DeclarativeSource } from '../plugins/protocol.js';
 
-const FREE_NOTES = 'research_notes/免费模型来源深度调研/B_official_free_tiers.md';
-const CHERRY = 'research_notes/可反代的模型上游调研/cherry-studio.md (Cherry Studio providers.json)';
+// FREE_NOTES = research_notes/免费模型来源深度调研/B_official_free_tiers.md; CHERRY = research_notes/可反代的模型上游调研/cherry-studio.md;
+// KEYLESS = …/免费模型来源深度调研/A_keyless_pools.md; engines: …/可反代的模型上游调研/cliproxyapi.md, magpie.md
+const FREE_NOTES = 'notes:free-tiers/B_official_free_tiers.md';
+const CHERRY = 'notes:upstreams/cherry-studio.md (Cherry Studio providers.json)';
 
 /** An Anthropic-compatible endpoint from Cherry Studio's list: a key, a base URL, nothing else known. */
 // authStyle: OpenAI-compatible entries are Bearer; Anthropic's own API x-api-key; third-party Anthropic endpoints whose
@@ -38,7 +40,7 @@ export const BASELINE: CatalogEntry[] = [
       { id: 'poolside/laguna-s-2.1:free', free: true },
     ],
     limits: '200 requests/hour per IP (aggregator)', notes: ['logged'], driver: 'provider',
-    source: 'research_notes/免费模型来源深度调研/A_keyless_pools.md §2',
+    source: 'notes:free-tiers/A_keyless_pools.md §2',
   },
   // ---- free, the user's own free key ----
   {
@@ -71,7 +73,7 @@ export const BASELINE: CatalogEntry[] = [
     notes: ['region'], driver: 'provider', source: FREE_NOTES,
   },
   {
-    id: 'glm-flash', name: '智谱 GLM-4.7-Flash', category: 'free', needs: 'key', protocol: 'openai', authStyle: 'bearer',
+    id: 'glm-flash', name: 'Zhipu GLM-4.7-Flash', category: 'free', needs: 'key', protocol: 'openai', authStyle: 'bearer',
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4', signupUrl: 'https://open.bigmodel.cn/usercenter/apikeys', free: 'some',
     modelFilter: '^glm-[\\d.]+v?-flash$',
     models: [{ id: 'glm-4.7-flash', free: true, contextWindow: 200_000, capabilities: { reasoning: true } }],
@@ -85,7 +87,7 @@ export const BASELINE: CatalogEntry[] = [
     limits: 'permanently free, 1 concurrent request', notes: ['one-concurrent'], driver: 'provider', source: FREE_NOTES,
   },
   {
-    id: 'modelscope', name: 'ModelScope 魔搭', category: 'free', needs: 'key', protocol: 'openai', authStyle: 'bearer',
+    id: 'modelscope', name: 'ModelScope', category: 'free', needs: 'key', protocol: 'openai', authStyle: 'bearer',
     baseUrl: 'https://api-inference.modelscope.cn/v1', signupUrl: 'https://modelscope.cn', free: true,
     limits: '2,000 RPD total, at most 500 RPD per model', notes: ['real-name', 'list-any-key'], driver: 'provider', source: FREE_NOTES,
   },
@@ -106,7 +108,7 @@ export const BASELINE: CatalogEntry[] = [
     limits: '5 RPM, 30K uncached TPM, 1M TPD', driver: 'provider', source: FREE_NOTES,
   },
   {
-    id: 'siliconflow-free', name: '硅基流动（免费模型）', category: 'free', needs: 'key', protocol: 'openai', authStyle: 'bearer',
+    id: 'siliconflow-free', name: 'SiliconFlow (free models)', category: 'free', needs: 'key', protocol: 'openai', authStyle: 'bearer',
     baseUrl: 'https://api.siliconflow.cn/v1', signupUrl: 'https://cloud.siliconflow.cn/account/ak', free: 'some',
     notes: ['real-name'], driver: 'provider', source: FREE_NOTES,
   },
@@ -121,20 +123,20 @@ export const BASELINE: CatalogEntry[] = [
     signupUrl: 'https://platform.deepseek.com/api_keys', models: [{ id: 'deepseek-v4-pro', capabilities: { tools: true, reasoning: true } }],
     source: 'DeepSeek Anthropic API docs (B_official_free_tiers.md Q2)',
   }),
-  anthropicPreset('zhipu', '智谱 GLM', 'https://open.bigmodel.cn/api/anthropic', { authStyle: 'bearer', signupUrl: 'https://open.bigmodel.cn/usercenter/apikeys' }),
+  anthropicPreset('zhipu', 'Zhipu GLM', 'https://open.bigmodel.cn/api/anthropic', { authStyle: 'bearer', signupUrl: 'https://open.bigmodel.cn/usercenter/apikeys' }),
   anthropicPreset('zai', 'Z.ai', 'https://api.z.ai/api/anthropic', { authStyle: 'bearer' }),
   anthropicPreset('moonshot', 'Kimi', 'https://api.moonshot.cn/anthropic', { authStyle: 'bearer', signupUrl: 'https://platform.moonshot.cn/console/api-keys' }),
   anthropicPreset('moonshot-global', 'Kimi (Global)', 'https://api.moonshot.ai/anthropic', { authStyle: 'bearer' }),
   anthropicPreset('minimax', 'MiniMax', 'https://api.minimaxi.com/anthropic', { authStyle: 'bearer' }),
   anthropicPreset('minimax-global', 'MiniMax (Global)', 'https://api.minimax.io/anthropic', { authStyle: 'bearer' }),
-  anthropicPreset('dashscope', '阿里百炼', 'https://dashscope.aliyuncs.com/apps/anthropic', { authStyle: 'bearer', signupUrl: 'https://bailian.console.aliyun.com/' }),
-  anthropicPreset('stepfun', '阶跃星辰', 'https://api.stepfun.com'),
-  anthropicPreset('longcat', '美团 LongCat', 'https://api.longcat.chat/anthropic', { free: 'some', limits: 'daily free quota' }),
-  anthropicPreset('mimo', '小米 MiMo', 'https://api.xiaomimimo.com/anthropic'),
-  anthropicPreset('modelscope-anthropic', 'ModelScope 魔搭 (Anthropic)', 'https://api-inference.modelscope.cn', { free: true, notes: ['real-name'] }),
-  anthropicPreset('qiniu', '七牛云', 'https://api.qnaigc.com'),
+  anthropicPreset('dashscope', 'Alibaba Bailian', 'https://dashscope.aliyuncs.com/apps/anthropic', { authStyle: 'bearer', signupUrl: 'https://bailian.console.aliyun.com/' }),
+  anthropicPreset('stepfun', 'StepFun', 'https://api.stepfun.com'),
+  anthropicPreset('longcat', 'Meituan LongCat', 'https://api.longcat.chat/anthropic', { free: 'some', limits: 'daily free quota' }),
+  anthropicPreset('mimo', 'Xiaomi MiMo', 'https://api.xiaomimimo.com/anthropic'),
+  anthropicPreset('modelscope-anthropic', 'ModelScope (Anthropic)', 'https://api-inference.modelscope.cn', { free: true, notes: ['real-name'] }),
+  anthropicPreset('qiniu', 'Qiniu', 'https://api.qnaigc.com'),
   anthropicPreset('fireworks', 'Fireworks', 'https://api.fireworks.ai/inference'),
-  anthropicPreset('siliconflow', '硅基流动', 'https://api.siliconflow.cn', { signupUrl: 'https://cloud.siliconflow.cn/account/ak' }),
+  anthropicPreset('siliconflow', 'SiliconFlow', 'https://api.siliconflow.cn', { signupUrl: 'https://cloud.siliconflow.cn/account/ak' }),
   anthropicPreset('302ai', '302.AI', 'https://api.302.ai'),
   anthropicPreset('openrouter', 'OpenRouter', 'https://openrouter.ai/api', { authStyle: 'bearer', signupUrl: 'https://openrouter.ai/keys' }),
   anthropicPreset('poe', 'Poe', 'https://api.poe.com'),
@@ -144,7 +146,7 @@ export const BASELINE: CatalogEntry[] = [
   anthropicPreset('aihubmix', 'AiHubMix', 'https://aihubmix.com'),
   anthropicPreset('dmxapi', 'DMXAPI', 'https://www.dmxapi.cn'),
   anthropicPreset('tokendance', 'TokenDance', 'https://tokendance.space/gateway'),
-  anthropicPreset('tokenhub', '腾讯 TokenHub', 'https://tokenhub.tencentmaas.com'),
+  anthropicPreset('tokenhub', 'Tencent TokenHub', 'https://tokenhub.tencentmaas.com'),
   anthropicPreset('ollama', 'Ollama', 'http://localhost:11434', { needs: 'none', authStyle: 'none', category: 'local-engine' }),
   anthropicPreset('lmstudio', 'LM Studio', 'http://localhost:1234', { needs: 'none', authStyle: 'none', category: 'local-engine' }),
   anthropicPreset('omlx', 'oMLX', 'http://localhost:8000', { needs: 'none', authStyle: 'none', category: 'local-engine' }),
@@ -152,11 +154,11 @@ export const BASELINE: CatalogEntry[] = [
   {
     id: 'cliproxyapi', name: 'CLIProxyAPI', category: 'local-engine', needs: 'engine', protocol: 'anthropic',
     signupUrl: 'https://github.com/router-for-me/CLIProxyAPI', driver: 'engine:cliproxyapi',
-    source: 'research_notes/可反代的模型上游调研/cliproxyapi.md',
+    source: 'notes:upstreams/cliproxyapi.md',
   },
   {
     id: 'magpie', name: 'Magpie', category: 'local-engine', needs: 'engine', protocol: 'anthropic', authStyle: 'both',
-    signupUrl: 'https://usemagpie.ai', driver: 'engine:magpie', source: 'research_notes/可反代的模型上游调研/magpie.md',
+    signupUrl: 'https://usemagpie.ai', driver: 'engine:magpie', source: 'notes:upstreams/magpie.md',
   },
   // ---- logins we already run (upstreams/) ----
   { id: 'claude-account', name: 'Claude', category: 'subscription', needs: 'login', protocol: 'anthropic', driver: 'upstream:claude' },
@@ -253,8 +255,27 @@ export function mergeCatalog(baseline: CatalogEntry[], remote: CatalogEntry[], u
   return out;
 }
 
+/** A built-in vendor's name in the interface language (the data holds the English one). */
+export function localName(name: string): string {
+  switch (name) {
+    case 'Zhipu GLM-4.7-Flash': return trAs('智谱 GLM-4.7-Flash', 'Zhipu GLM-4.7-Flash');
+    case 'ModelScope (Anthropic)': return trAs('ModelScope 魔搭 (Anthropic)', 'ModelScope (Anthropic)');
+    case 'ModelScope': return trAs('ModelScope 魔搭', 'ModelScope');
+    case 'SiliconFlow (free models)': return trAs('硅基流动（免费模型）', 'SiliconFlow (free models)');
+    case 'Zhipu GLM': return trAs('智谱 GLM', 'Zhipu GLM');
+    case 'Alibaba Bailian': return trAs('阿里百炼', 'Alibaba Bailian');
+    case 'StepFun': return trAs('阶跃星辰', 'StepFun');
+    case 'Meituan LongCat': return trAs('美团 LongCat', 'Meituan LongCat');
+    case 'Xiaomi MiMo': return trAs('小米 MiMo', 'Xiaomi MiMo');
+    case 'Qiniu': return trAs('七牛云', 'Qiniu');
+    case 'SiliconFlow': return trAs('硅基流动', 'SiliconFlow');
+    case 'Tencent TokenHub': return trAs('腾讯 TokenHub', 'Tencent TokenHub');
+    default: return name;
+  }
+}
+
 export function summarize(entries: CatalogEntry[], added: Set<string>, user: Record<string, ChannelCatalogOverride> = {}): CatalogSummary[] {
-  return entries.map(({ source: _s, ...e }) => ({ ...e, added: added.has(e.id), ...(user[e.id] ? { overridden: true } : {}) }));
+  return entries.map(({ source: _s, ...e }) => ({ ...e, ...(e.plugin ? {} : { name: localName(e.name) }), added: added.has(e.id), ...(user[e.id] ? { overridden: true } : {}) }));
 }
 
 /**

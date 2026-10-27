@@ -3,7 +3,7 @@ import { tr } from '../../i18n/index.js';
 import type { MetaStore } from '../../meta/store.js';
 import type { Provider, ProviderType } from '../../protocol.js';
 import type { ProviderService } from '../../providers/service.js';
-import { filterModels } from '../catalog.js';
+import { filterModels, localName } from '../catalog.js';
 import { planModels } from '../plan.js';
 import { projectProvider } from '../registry.js';
 import type { CatalogEntry, SourceSummary } from '../types.js';
@@ -82,7 +82,7 @@ export class ProviderDriver implements ChannelDriver {
     if (!key) throw new Error(tr('这个来源需要 API Key'));
     if (entry.retired) throw new Error(tr('这个来源已经下线'));
     const type = typeOf(entry.protocol);
-    const name = uniqueName(input.name?.trim() || entry.name, this.providers.list().map((p) => p.name));
+    const name = uniqueName(input.name?.trim() || localName(entry.name), this.providers.list().map((p) => p.name));
     // Provider.authStyle (spec §5.1): what the catalog knows; 'none' (keyless) leaves it unset
     const auth: Pick<Provider, 'authStyle'> = entry.authStyle && entry.authStyle !== 'none' ? { authStyle: entry.authStyle } : {};
     const saved = await this.providers.upsert({ name, type, baseUrl: entry.baseUrl ?? '', apiKey: key, ...auth });
