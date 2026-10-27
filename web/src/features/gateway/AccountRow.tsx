@@ -54,7 +54,7 @@ export function AccountRow(p: {
       <span className="grow" />
       {p.a.quota?.windows.slice(0, 2).map((w) => <QuotaBar key={w.id} w={w} />)}
       <span className={`gateway-badge ${h.c}`}>{h.l}</span>
-      {!p.routed && <button className="btn sm" disabled={p.busy} onClick={p.onAttach}>{tr('加入默认入口')}</button>}
+      {!p.routed && <button className="btn sm" disabled={p.busy} onClick={p.onAttach}>{tr('开始使用')}</button>}
       {relogin && <button className="btn sm" disabled={p.busy} onClick={p.onSignIn}>{tr('重新登录')}</button>}
       <button className="btn sm ghost" disabled={p.busy} onClick={p.onProbe}>{tr('检查')}</button>
       <button className="btn sm ghost" disabled={p.busy} onClick={p.onEdit}>{tr('编辑')}</button>

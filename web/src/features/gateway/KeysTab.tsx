@@ -42,7 +42,7 @@ export function KeysTab() {
         <span className="grow">{tr('密钥组')}</span>
         <button className="btn sm" onClick={() => setEdit(blank())}>{tr('新建密钥组')}</button>
       </div>
-      {groups.length === 0 && <div className="empty">{tr('还没有密钥组。先在设置里启用网关，会自动建立一个默认密钥组。')}</div>}
+      {groups.length === 0 && <div className="empty">{tr('还没有密钥组。打开共享后会自动建一个。')}</div>}
       {groups.map((g) => (
         <div className="gateway-card" key={g.id} style={{ marginTop: 10 }}>
           <div className="gateway-row">

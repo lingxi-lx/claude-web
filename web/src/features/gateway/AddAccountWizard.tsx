@@ -10,6 +10,7 @@ import { checkGeminiCookie, parseGeminiInput, SESSION_COOKIE } from './gemini-co
 import { canSignIn, signInGemini } from './gemini-login';
 import { Select } from '@/ui/Select';
 import { Segmented } from '@/ui/Segmented';
+import { useEscClose } from './use-esc-close';
 
 interface Login { url: string; state: string }
 
@@ -35,9 +36,19 @@ function geminiProblems(list: string[]): { block: string[]; warn: string[] } {
  * WorkBuddy cockpit JSON) or scan WorkBuddy's QR; on the desktop a Gemini account is a Google sign-in in a window of
  * its own instead. One risk checkbox, one button.
  */
-export function AddAccountWizard({ onClose }: { onClose(): void }) {
+export function AddAccountWizard({ onClose, kind: fixed, embedded, onAdded }: {
+  onClose(): void;
+  /** only this kind (a source's detail, the 添加来源 wizard): no kind chips */
+  kind?: UpstreamKind;
+  /** drawn inside another dialog (添加来源): no backdrop of its own */
+  embedded?: boolean;
+  /** after a successful add (default: onClose) */
+  onAdded?(): void;
+}) {
   const toast = useStore((s) => s.toast);
-  const [kind, setKind] = useState<UpstreamKind>('claude');
+  const [kind, setKind] = useState<UpstreamKind>(fixed ?? 'claude');
+  const done = () => (onAdded ?? onClose)();
+  const escRef = useEscClose<HTMLDivElement>(() => { if (!busy) onClose(); }, !!embedded);
   const [wbMode, setWbMode] = useState<'qr' | 'json'>('qr');
   const [gMode, setGMode] = useState<'login' | 'paste'>(canSignIn() ? 'login' : 'paste');
   const [gNote, setGNote] = useState('');
@@ -103,7 +114,7 @@ export function AddAccountWizard({ onClose }: { onClose(): void }) {
       }
       if (failed.length) toast(tr('已添加，但检查没通过：{e}', { e: failed[0] }));
       else toast(dup ? tr('已添加 {n} 个，{d} 个已经在里面了', { n: added, d: dup }) : tr('已添加 {n} 个账号', { n: added }), true);
-      onClose();
+      done();
     } catch (e: any) { toast(e.message); } finally { setBusy(false); }
   };
 
@@ -122,7 +133,7 @@ export function AddAccountWizard({ onClose }: { onClose(): void }) {
           await ws.request({ kind: 'upstreams.sync', id: 'workbuddy' });
           toast(tr('登录成功，账号已添加'), true);
           setLogining(false);
-          onClose();
+          done();
         } catch (e: any) {
           stopPolling();
           setLogining(false);
@@ -143,7 +154,7 @@ export function AddAccountWizard({ onClose }: { onClose(): void }) {
       }
       if (r.account.health === 'ok') toast(r.duplicate ? tr('这个账号已经在里面了，登录已更新') : tr('已添加，登录有效'), true);
       else toast(tr('已添加，但检查没通过：{e}', { e: r.account.lastError ?? tr('没有登录态') }));
-      onClose();
+      done();
     } catch (e: any) { setGNote(e.message); } finally { setBusy(false); }
   };
 
@@ -155,17 +166,16 @@ export function AddAccountWizard({ onClose }: { onClose(): void }) {
     ? tr('sk-ant-oat… 令牌，或 Claude Code 的 .credentials.json')
     : tr('cockpit 导出（含 uid / accessToken / refreshToken 的 JSON）');
   const placeholder = kind === 'claude' ? tr('粘贴令牌或 JSON') : kind === 'gemini' ? '__Secure-1PSID=…; __Secure-1PSIDTS=…' : '[{"uid":"…","accessToken":"…","refreshToken":"…"}]';
-  return (
-    <div className="modal-bg dialog-bg" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
-      <div className="modal" style={{ width: 560 }}>
-        <h3>{tr('添加账号')}</h3>
-        <div className="row gw-kind-row" style={{ gap: 6, marginBottom: 8 }}>
+  const body = (
+    <>
+        {!embedded && <h3>{fixed ? tr('添加 {name} 账号', { name: FAMILY_LABEL[fixed] }) : tr('添加账号')}</h3>}
+        {!fixed && <div className="row gw-kind-row" style={{ gap: 6, marginBottom: 8 }}>
           {(['claude', 'gemini', 'workbuddy'] as const).map((k) => (
             <button key={k} className={kind === k ? 'chip gateway-kind on' : 'chip gateway-kind'} aria-pressed={kind === k} onClick={() => { setKind(k); setText(''); }}>
               <Icon name={k === 'workbuddy' ? 'agent' : k} size={13} /> {FAMILY_LABEL[k]}
             </button>
           ))}
-        </div>
+        </div>}
         {kind === 'workbuddy' && (
           <Segmented
             className="gw-mode"
@@ -243,14 +253,19 @@ export function AddAccountWizard({ onClose }: { onClose(): void }) {
           </div>
         )}
         {geminiBlocked && <div className="sub" role="status">{tr('cookie 还缺必需项，补齐后才能添加。')}</div>}
-        <div className="sub">{tr('添加后会直接进入默认入口，根地址 /v1 马上就能用。')}</div>
+        <div className="sub">{tr('添加后马上就能用。')}</div>
         <div className="actions">
           <button className="btn ghost" onClick={onClose} disabled={busy}>{tr('取消')}</button>
           {!(kind === 'workbuddy' && wbMode === 'qr') && !(kind === 'gemini' && gMode === 'login') && (
             <button className="btn" onClick={() => void save()} disabled={busy || geminiBlocked}>{busy ? tr('添加中…') : tr('添加')}</button>
           )}
         </div>
-      </div>
+    </>
+  );
+  if (embedded) return <div className="gw-embedded-add">{body}</div>;
+  return (
+    <div ref={escRef} className="modal-bg dialog-bg" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
+      <div className="modal" style={{ width: 560 }} role="dialog" aria-label={tr('添加账号')}>{body}</div>
     </div>
   );
 }

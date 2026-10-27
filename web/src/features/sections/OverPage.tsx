@@ -50,6 +50,8 @@ export function OverPage(p: {
   onTab(id: string): void;
   actions?: React.ReactNode;
   narrow?: boolean;
+  /** Esc: put away something inside the page first (a drawer, a detail view); true = handled, the page stays */
+  onEscape?(): boolean;
   children: React.ReactNode;
 }) {
   const mobile = useStore((s) => s.mobile);
@@ -65,6 +67,8 @@ export function OverPage(p: {
   // — unless something else owns it
   const close = useRef(p.onClose);
   close.current = p.onClose;
+  const inner = useRef(p.onEscape);
+  inner.current = p.onEscape;
   useEffect(() => {
     if (!p.open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -74,6 +78,7 @@ export function OverPage(p: {
       if (a && a !== document.body && !a.closest('.sect-side')) return;
       if (a?.closest('input, textarea, select, [contenteditable="true"]')) return;
       if (escTaken()) return;
+      if (inner.current?.()) return;
       close.current();
     };
     window.addEventListener('keydown', onKey);
@@ -93,7 +98,10 @@ export function OverPage(p: {
         if (e.key !== 'Escape' || e.defaultPrevented) return;
         const t = e.target as HTMLElement;
         if (t.closest('input, textarea, select, [contenteditable="true"]')) return;
+        // a dialog / menu inside the page has the key: it closes itself, not the page under it
+        if (t.closest('.modal-bg, .menu, [role="dialog"]') || escTaken()) return;
         e.preventDefault();
+        if (p.onEscape?.()) return;
         p.onClose();
       }}
     >

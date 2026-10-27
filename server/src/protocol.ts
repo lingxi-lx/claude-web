@@ -16,6 +16,7 @@ export * from './characters/core/types.js';
 import type { LinkKind } from './remote/anywhere/core/link.js';
 export type { LinkKind } from './remote/anywhere/core/link.js';
 import type { UpstreamRequest } from './upstreams/types.js';
+import type { ChannelRequest } from './channels/types.js';
 export * from './upstreams/types.js';
 export type * from './channels/types.js';
 /** stage E5: WSL ↔ Windows paths (pure, the web side uses them too) */
@@ -797,6 +798,7 @@ export type ClientRequest =
   // ---- privacy pipeline (privacy/service.ts) ----
   | PrivacyRequest
   | UpstreamRequest
+  | ChannelRequest
   // ---- other agents' configuration center (phase 17) ----
   | AgentConfigRequest
   // ---- multi-agent orchestration ----

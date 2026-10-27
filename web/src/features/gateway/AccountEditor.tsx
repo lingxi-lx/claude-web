@@ -1,3 +1,4 @@
+import { useEscClose } from './use-esc-close';
 import { useEffect, useState } from 'react';
 import { ws } from '@/ws/client';
 import { useStore } from '@/store';
@@ -41,8 +42,9 @@ export function AccountEditor({ account, onClose, onSaved }: { account: Upstream
       onSaved();
     } catch (e: any) { toast(e.message); } finally { setBusy(false); }
   };
+  const escRef = useEscClose<HTMLDivElement>(() => { if (!busy) onClose(); });
   return (
-    <div className="modal-bg dialog-bg" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
+    <div ref={escRef} className="modal-bg dialog-bg" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
       <div className="modal" style={{ width: 520 }}>
         <h3>{tr('编辑账号')}</h3>
         <label className="field"><span>{tr('名称')}</span><input value={name} onChange={(e) => setName(e.target.value)} /></label>

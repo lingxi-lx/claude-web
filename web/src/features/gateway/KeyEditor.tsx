@@ -1,3 +1,4 @@
+import { useEscClose } from './use-esc-close';
 import { useState } from 'react';
 import { ws } from '@/ws/client';
 import { useStore } from '@/store';
@@ -41,8 +42,9 @@ export function KeyEditor({ group, onClose, onSaved }: { group: GatewayKeyGroup;
       onSaved();
     } catch (e: any) { toast(e.message); }
   };
+  const escRef = useEscClose<HTMLDivElement>(onClose);
   return (
-    <div className="modal-bg dialog-bg" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div ref={escRef} className="modal-bg dialog-bg" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal" style={{ width: 560 }}>
         <h3>{group.id ? tr('编辑密钥组') : tr('新建密钥组')}</h3>
         <label className="field"><span>{tr('名称')}</span><input value={g.name} onChange={(e) => setG({ ...g, name: e.target.value })} /></label>

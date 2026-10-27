@@ -13,7 +13,6 @@ import { tr } from '@/i18n';
  */
 export function SidecarCard({ s }: { s: SidecarStatus }) {
   const toast = useStore((st) => st.toast);
-  const advanced = useGateway((st) => st.advanced);
   const [busy, setBusy] = useState<string | null>(null);
   const [logs, setLogs] = useState<string | null>(null);
   const reload = () => useGateway.getState().load().catch(() => {});
@@ -43,10 +42,10 @@ export function SidecarCard({ s }: { s: SidecarStatus }) {
             {busy === 'start' ? tr('启动中…') : tr('启动')}
           </button>
         )}
-        {advanced && s.running && (
+        {s.running && (
           <button className="btn sm ghost" disabled={busy !== null} onClick={() => void act('stop', () => ws.request({ kind: 'upstreams.sidecars.stop', id: s.id }), tr('已停止'))}>{tr('停止')}</button>
         )}
-        {advanced && (
+        {(
           <button className="btn sm ghost" disabled={busy !== null} onClick={() => void act('sync', () => ws.request({ kind: 'upstreams.sync', id: s.id }), tr('已同步账号'))}>{tr('同步账号')}</button>
         )}
         {s.running && (

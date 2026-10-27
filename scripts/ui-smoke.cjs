@@ -1606,25 +1606,19 @@ function driver() {
           // the account menu over a full page (扩展): nothing of it under the page (user report, macOS)
           await js(`(() => { const b = [...document.querySelectorAll('.rail [data-id]')].find((e) => e.dataset.id === 'extensions'); b && b.click(); })()`);
           await waitFor(`!!document.querySelector('.ext-page')`, 3000);
-          // 网关: an ordinary user sees 概览 / 账号 / 任务; the sharing / tuning parts are behind 高级设置
+          // 上游: one page of sources under a filter (no tabs, no 高级设置); 共享 is a drawer and Esc closes it, not the page
           await js(`(() => { const b = [...document.querySelectorAll('.rail [data-id]')].find((e) => e.dataset.id === 'gateway'); b && b.click(); })()`);
-          const gwReady = await waitFor(`(() => { const p = document.querySelector('.gateway-page'); return !!p && !p.hidden && (!!document.querySelector('.gateway-side') || !!document.querySelector('.gateway-tabs')); })()`, 4000);
-          if (!gwReady) {
-            const diag = await js(`({ app: document.querySelector('.app')?.className ?? null, rail: [...document.querySelectorAll('.rail [data-id]')].map((x) => x.dataset.id).join(','), page: !!document.querySelector('.gateway-page'), hidden: document.querySelector('.gateway-page')?.hidden ?? null, side: !!document.querySelector('.gateway-side'), sections: [...document.querySelectorAll('.sb-sect')].map((x) => x.dataset.section + ':' + x.hidden).join(','), active: document.querySelector('.rail [data-id="gateway"]')?.className ?? null })`);
-            log('gateway diag ' + JSON.stringify(diag));
-          }
-          const tabIds = `(p) => [...p.querySelectorAll('.gateway-side .nav, .gateway-tabs [role=tab]')].map((x) => x.dataset.id).filter((id) => id !== '__advanced').join(',')`;
-          const gw = gwReady ? await js(`(() => { const p = document.querySelector('.gateway-page'); return { tabs: (${tabIds})(p), tab: p.dataset.tab, side: !!document.querySelector('.gateway-side') || !!document.querySelector('.gateway-tabs') }; })()`) : null;
-          check('网关 opens with 概览 · 账号 · 任务 · 分组与路由 (no advanced parts)', gw && gw.tab === 'overview' && gw.side && gw.tabs === 'overview,accounts,tasks,routes', JSON.stringify(gw));
-          // the toggle is a link in the section's sidebar, or the extra tab in the page strip when the sidebar is away
-          const advOpen = await js(`(() => { const b = [...document.querySelectorAll('.gateway-side .link, .gateway-tabs [data-id="__advanced"]')].find((x) => x.textContent.includes('高级设置')); if (!b) return false; b.click(); return true; })()`);
-          await sleep(300);
-          const gwAll = advOpen ? await js(`(() => { const p = document.querySelector('.gateway-page'); return (${tabIds})(p); })()`) : '';
-          check('高级设置 reveals 分组与路由 · 密钥 · 日志 · 设置', advOpen && gwAll === 'overview,accounts,tasks,routes,keys,logs,settings', gwAll);
-          await js(`(() => { const b = [...document.querySelectorAll('.gateway-side .link, .gateway-tabs [data-id="__advanced"]')].find((x) => x.textContent.includes('收起高级')); if (b) b.click(); })()`);
+          const gwReady = await waitFor(`(() => { const p = document.querySelector('.gateway-page'); return !!p && !p.hidden && (!!document.querySelector('.gateway-side .nav') || !!document.querySelector('.gw-filter-strip')); })()`, 4000);
+          const filterIds = `[...document.querySelectorAll('.gateway-side .nav, .gw-filter-strip [role=tab]')].map((x) => x.dataset.id).join(',')`;
+          const gw = gwReady ? await js(`(() => ({ filters: ${filterIds}, tabs: !!document.querySelector('.gateway-page .over-tabs'), adv: document.body.innerText.includes('高级设置') }))()`) : null;
+          check('上游 opens on the source filter (全部 · 免费 · 订阅 · API · 本机 · 需要处理), no tabs, no 高级设置', gw && gw.filters.startsWith('all,free,subscription,api,local-engine,attention') && !gw.tabs && !gw.adv, JSON.stringify(gw));
+          await js(`document.querySelector('.gateway-page .gw-head-actions [data-id="share"]')?.click()`);
+          const drawerOpen = await waitFor(`!!document.querySelector('.gw-drawer-wrap[data-drawer="share"]:not([hidden])')`, 2000);
+          await js(`document.querySelector('.gw-drawer-wrap[data-drawer="share"] .gw-drawer')?.focus?.()`);
+          await key('Escape');
           await sleep(200);
-          const gwBack = await js(`(() => { const p = document.querySelector('.gateway-page'); return (${tabIds})(p); })()`);
-          check('收起高级 goes back to the ordinary parts (routing stays)', gwBack === 'overview,accounts,tasks,routes', gwBack);
+          const afterEsc = await js(`({ drawer: !!document.querySelector('.gw-drawer-wrap[data-drawer="share"]:not([hidden])'), page: !!document.querySelector('.gateway-page:not([hidden])') })`);
+          check('共享 opens as a drawer; Esc closes the drawer and leaves the page open', drawerOpen && !afterEsc.drawer && afterEsc.page, JSON.stringify(afterEsc));
           await js(`(() => { const b = [...document.querySelectorAll('.rail [data-id]')].find((e) => e.dataset.id === 'chat'); b && b.click(); })()`);
           await waitFor(`!document.querySelector('.gateway-page:not([hidden])')`, 3000);
           await click('.rail-acct');

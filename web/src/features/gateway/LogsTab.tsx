@@ -1,13 +1,15 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { linesFor } from './page';
 import { ws } from '@/ws/client';
 import { useGateway } from './state';
 import { useStore } from '@/store';
 import { dlg } from '@/ui/dialog';
 import { tr } from '@/i18n';
 
-/** 日志: the whitelisted audit lines. Prompts and bodies are never in here. */
-export function LogsTab() {
-  const logs = useGateway((s) => s.logs);
+/** 活动: the whitelisted audit lines (`names`: only the lines of these members — one source's). No prompts or bodies. */
+export function LogsTab({ names }: { names?: string[] }) {
+  const all = useGateway((s) => s.logs);
+  const logs = useMemo(() => (names ? linesFor(all, names) : all), [all, names]);
   const toast = useStore((s) => s.toast);
   const [onlyErrors, setOnlyErrors] = useState(false);
   const rows = onlyErrors ? logs.filter((l) => l.status >= 400) : logs;
@@ -31,8 +33,8 @@ export function LogsTab() {
       <div className="gateway-row">
         <label className="chip"><input type="checkbox" checked={onlyErrors} onChange={(e) => setOnlyErrors(e.target.checked)} /> {tr('只看错误')}</label>
         <span className="grow" />
-        <button className="btn sm ghost" onClick={() => void exportAll()}>{tr('导出')}</button>
-        <button className="btn sm ghost danger" onClick={() => void clear()}>{tr('清空')}</button>
+        {!names && <button className="btn sm ghost" onClick={() => void exportAll()}>{tr('导出')}</button>}
+        {!names && <button className="btn sm ghost danger" onClick={() => void clear()}>{tr('清空')}</button>}
       </div>
       <div className="gateway-log">
         {rows.map((l, i) => (

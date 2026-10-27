@@ -1,29 +1,28 @@
+import { useMemo } from 'react';
 import { SectionSide } from '@/features/sections/SectionSide';
-import { useGateway, showGatewayTab, toggleGatewayAdvanced } from './state';
-import { GATEWAY_TITLE, gatewayTabsFor, type GatewayTab } from './page';
+import { useGateway, setGatewayFilter } from './state';
+import { FILTERS, GATEWAY_TITLE, filterCounts, isListed, type SourceFilter } from './page';
 import { tr } from '@/i18n';
 
-/** The sidebar while the gateway section is in front: its parts as rows; 高级 holds the sharing / tuning parts. */
+/** The sidebar while 上游 is in front: only the source filter (with counts) — no parts, no 高级. */
 export function GatewaySide() {
-  const tab = useGateway((s) => s.tab);
-  const advanced = useGateway((s) => s.advanced);
-  const accounts = useGateway((s) => s.accounts.length);
+  const filter = useGateway((s) => s.filter);
+  const sources = useGateway((s) => s.sources);
+  const counts = useMemo(() => filterCounts(sources.filter(isListed)), [sources]);
   return (
     <SectionSide
       name="gateway"
       title={GATEWAY_TITLE}
-      tab={tab}
-      onTab={(id) => showGatewayTab(id as GatewayTab)}
-      tabs={gatewayTabsFor(advanced).map((t) => ({
-        id: t.id,
-        label: t.label,
-        icon: t.icon,
-        title: t.title,
-        count: t.id === 'accounts' && accounts ? <span className="count">{accounts}</span> : undefined,
+      tab={filter}
+      onTab={(id) => setGatewayFilter(id as SourceFilter)}
+      tabs={FILTERS.map((f) => ({
+        id: f.id,
+        label: f.label,
+        icon: f.icon,
+        count: counts[f.id] ? <span className="count">{counts[f.id]}</span> : undefined,
       }))}
     >
-      <div className="sect-note">{tr('账号只保存在这台电脑上。')}</div>
-      <button className="link" onClick={toggleGatewayAdvanced}>{advanced ? tr('收起高级') : tr('高级设置')}</button>
+      <div className="sect-note">{tr('账号和密钥只保存在这台电脑上。')}</div>
     </SectionSide>
   );
 }
