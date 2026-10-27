@@ -275,6 +275,10 @@ export class Hub {
     // 智能路由: which model a conversation on a routing group really got (the composer's 「自动 → 实际：…」)
     s.gateway.on('routed', (e: import('../routing/types.js').RoutedInfo) => this.broadcast({ kind: 'gateway.routed', ...e }));
     s.upstreams.on('changed', () => this.broadcast({ kind: 'upstreams.changed' }));
+    // 托管程序: each step of a long install / start, every state change, and a stop nobody asked for
+    s.engines.on('progress', (id: import('../engines/types.js').EngineId, step: import('../engines/types.js').EngineStep) => this.broadcast({ kind: 'engines.changed', id, step }));
+    s.engines.on('changed', (id: import('../engines/types.js').EngineId) => this.broadcast({ kind: 'engines.changed', id }));
+    s.engines.on('crash', (id: import('../engines/types.js').EngineId, why: string) => this.broadcast({ kind: 'engines.changed', id, crash: why }));
     s.tasks.on('changed', () => this.broadcast({ kind: 'upstreams.changed' }));
     s.tasks.on('notice', (text: string, notify?: boolean) => this.broadcast({ kind: 'notice', text, notify: !!notify }));
     s.web.on('changed', () => this.broadcast({ kind: 'web.changed' }));

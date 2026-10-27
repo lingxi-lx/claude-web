@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { ws } from '@/ws/client';
 import { useStore } from '@/store';
 import { dlg } from '@/ui/dialog';
@@ -10,8 +10,9 @@ import { tr } from '@/i18n';
 const blank = (): GatewayKeyGroup => ({ id: '', name: '', routeGroupIds: [], allowLan: false, ipAllowlist: [], createdAt: 0 });
 
 /** 密钥: groups first (what a key may do), then the keys themselves. A new key's plaintext is shown once. */
-export function KeysTab() {
-  const groups = useGateway((s) => s.keyGroups);
+export function KeysTab({ exclude }: { exclude?: string[] } = {}) {
+  const allGroups = useGateway((s) => s.keyGroups);
+  const groups = useMemo(() => (exclude?.length ? allGroups.filter((g) => !exclude.includes(g.id)) : allGroups), [allGroups, exclude?.join(',')]);
   const keys = useGateway((s) => s.keys);
   const toast = useStore((s) => s.toast);
   const [created, setCreated] = useState<string | null>(null);

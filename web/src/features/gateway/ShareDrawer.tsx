@@ -17,13 +17,17 @@ export function ShareDrawer() {
   return (
     <Drawer id="share" title={tr('共享')} open={open} onClose={() => showDrawer(null)}>
       <ShareLocal />
-      {/* 远程共享: share keys with their own sources / models / quotas, and the LAN listener (features/share) */}
-      <ExternalShareDrawer />
+      {/* 共享密钥 (own sources / models / quotas) and the one 局域网 section, whose listener fields come from here */}
+      <ExternalShareDrawer lanAdvanced={<ShareSettings part="lan" />} />
+      <h4 className="gw-drawer-h">{tr('其它密钥组')}</h4>
+      <div className="sub gw-drawer-note">{tr('每组密钥能用哪些模型、能不能从局域网来、限速和预算。共享密钥在上面。')}</div>
+      <KeysTab exclude={['share']} />
+      <ShareSettings part="local" />
     </Drawer>
   );
 }
 
-/** 共享 on this computer: the switch, address and key, key groups, port / LAN. */
+/** 共享 on this computer: the switch, address and key. */
 function ShareLocal() {
   const status = useGateway((s) => s.status);
   const toast = useStore((s) => s.toast);
@@ -80,11 +84,6 @@ function ShareLocal() {
           </div>
         )}
       </div>
-      <h4 className="gw-drawer-h">{tr('密钥和权限')}</h4>
-      <div className="sub gw-drawer-note">{tr('每组密钥能用哪些模型、能不能从局域网来、限速和预算。')}</div>
-      <KeysTab />
-      <h4 className="gw-drawer-h">{tr('连接设置')}</h4>
-      <ShareSettings />
     </>
   );
 }

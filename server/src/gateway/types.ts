@@ -206,7 +206,12 @@ export interface GatewayAuditLine {
   errorCode: string;
   /** 隐私保护: what was found / replaced — types, counts and placeholders, never a value */
   privacy?: { count: number; categories: Partial<Record<string, number>>; placeholders: string[]; blocked?: boolean; warned?: number };
+  /** 插件 hooks that were skipped on this request (the body went on without that plugin's change) */
+  plugins?: PluginHookSkip[];
 }
+
+/** A plugin hook that did not apply: its result was over the size cap, it timed out, or it failed. */
+export interface PluginHookSkip { id: string; hook: 'request-before' | 'response-after'; why: 'too-large' | 'timeout' | 'error' }
 
 export interface GatewayKeyStatus { groups: GatewayKeyGroup[]; keys: GatewayKeyView[]; defaultKeyId: string }
 export interface GatewayLanStatus extends GatewayLanConfig { running: boolean; port: number; addresses: string[]; audit: GatewayAuditConfig }

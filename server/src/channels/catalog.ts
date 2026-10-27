@@ -11,11 +11,15 @@ import path from 'node:path';
 import { dataDir } from '../files/service.js';
 import { tr } from '../i18n/index.js';
 import type { CatalogEntry, CatalogSummary, ChannelCatalogOverride } from './types.js';
+import { pluginSourceDefs } from '../plugins/declarative.js';
+import type { DeclarativeSource } from '../plugins/protocol.js';
 
 const FREE_NOTES = 'research_notes/免费模型来源深度调研/B_official_free_tiers.md';
 const CHERRY = 'research_notes/可反代的模型上游调研/cherry-studio.md (Cherry Studio providers.json)';
 
 /** An Anthropic-compatible endpoint from Cherry Studio's list: a key, a base URL, nothing else known. */
+// authStyle: OpenAI-compatible entries are Bearer; Anthropic's own API x-api-key; third-party Anthropic endpoints whose
+// Claude Code setup uses ANTHROPIC_AUTH_TOKEN Bearer; left out where unknown (unset = both headers, as before).
 const anthropicPreset = (id: string, name: string, baseUrl: string, extra: Partial<CatalogEntry> = {}): CatalogEntry => ({
   id, name, category: 'api', needs: 'key', protocol: 'anthropic', baseUrl, driver: 'provider', source: CHERRY, ...extra,
 });
@@ -38,7 +42,7 @@ export const BASELINE: CatalogEntry[] = [
   },
   // ---- free, the user's own free key ----
   {
-    id: 'openrouter-free', name: 'OpenRouter (:free)', category: 'free', needs: 'key', protocol: 'openai',
+    id: 'openrouter-free', name: 'OpenRouter (:free)', category: 'free', needs: 'key', protocol: 'openai', authStyle: 'bearer',
     baseUrl: 'https://openrouter.ai/api/v1', signupUrl: 'https://openrouter.ai/keys', free: true, mayTrain: true,
     modelFilter: '(:free|^openrouter/free)$',
     models: [
@@ -52,7 +56,7 @@ export const BASELINE: CatalogEntry[] = [
     driver: 'provider', source: FREE_NOTES,
   },
   {
-    id: 'nvidia-nim', name: 'NVIDIA NIM', category: 'free', needs: 'key', protocol: 'openai',
+    id: 'nvidia-nim', name: 'NVIDIA NIM', category: 'free', needs: 'key', protocol: 'openai', authStyle: 'bearer',
     baseUrl: 'https://integrate.api.nvidia.com/v1', signupUrl: 'https://build.nvidia.com', free: true, mayTrain: true,
     models: [
       { id: 'nvidia/nemotron-3-ultra-550b-a55b', free: true },
@@ -67,26 +71,26 @@ export const BASELINE: CatalogEntry[] = [
     notes: ['region'], driver: 'provider', source: FREE_NOTES,
   },
   {
-    id: 'glm-flash', name: '智谱 GLM-4.7-Flash', category: 'free', needs: 'key', protocol: 'openai',
+    id: 'glm-flash', name: '智谱 GLM-4.7-Flash', category: 'free', needs: 'key', protocol: 'openai', authStyle: 'bearer',
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4', signupUrl: 'https://open.bigmodel.cn/usercenter/apikeys', free: 'some',
     modelFilter: '^glm-[\\d.]+v?-flash$',
     models: [{ id: 'glm-4.7-flash', free: true, contextWindow: 200_000, capabilities: { reasoning: true } }],
     limits: 'permanently free, 1 concurrent request', notes: ['one-concurrent'], driver: 'provider', source: FREE_NOTES,
   },
   {
-    id: 'zai-glm-flash', name: 'Z.ai GLM-4.7-Flash', category: 'free', needs: 'key', protocol: 'openai',
+    id: 'zai-glm-flash', name: 'Z.ai GLM-4.7-Flash', category: 'free', needs: 'key', protocol: 'openai', authStyle: 'bearer',
     baseUrl: 'https://api.z.ai/api/paas/v4', free: 'some',
     modelFilter: '^glm-[\\d.]+v?-flash$',
     models: [{ id: 'glm-4.7-flash', free: true, contextWindow: 200_000, capabilities: { reasoning: true } }],
     limits: 'permanently free, 1 concurrent request', notes: ['one-concurrent'], driver: 'provider', source: FREE_NOTES,
   },
   {
-    id: 'modelscope', name: 'ModelScope 魔搭', category: 'free', needs: 'key', protocol: 'openai',
+    id: 'modelscope', name: 'ModelScope 魔搭', category: 'free', needs: 'key', protocol: 'openai', authStyle: 'bearer',
     baseUrl: 'https://api-inference.modelscope.cn/v1', signupUrl: 'https://modelscope.cn', free: true,
     limits: '2,000 RPD total, at most 500 RPD per model', notes: ['real-name', 'list-any-key'], driver: 'provider', source: FREE_NOTES,
   },
   {
-    id: 'groq', name: 'Groq', category: 'free', needs: 'key', protocol: 'openai',
+    id: 'groq', name: 'Groq', category: 'free', needs: 'key', protocol: 'openai', authStyle: 'bearer',
     baseUrl: 'https://api.groq.com/openai/v1', signupUrl: 'https://console.groq.com', free: true,
     models: [
       { id: 'openai/gpt-oss-120b', free: true, contextWindow: 131_000 },
@@ -96,34 +100,34 @@ export const BASELINE: CatalogEntry[] = [
     limits: '30 RPM, 1,000 RPD per chat model (aggregator)', driver: 'provider', source: FREE_NOTES,
   },
   {
-    id: 'cerebras', name: 'Cerebras', category: 'free', needs: 'key', protocol: 'openai',
+    id: 'cerebras', name: 'Cerebras', category: 'free', needs: 'key', protocol: 'openai', authStyle: 'bearer',
     baseUrl: 'https://api.cerebras.ai/v1', free: true,
     models: [{ id: 'gpt-oss-120b', free: true }, { id: 'qwen-3.8-27b', free: true }],
     limits: '5 RPM, 30K uncached TPM, 1M TPD', driver: 'provider', source: FREE_NOTES,
   },
   {
-    id: 'siliconflow-free', name: '硅基流动（免费模型）', category: 'free', needs: 'key', protocol: 'openai',
+    id: 'siliconflow-free', name: '硅基流动（免费模型）', category: 'free', needs: 'key', protocol: 'openai', authStyle: 'bearer',
     baseUrl: 'https://api.siliconflow.cn/v1', signupUrl: 'https://cloud.siliconflow.cn/account/ak', free: 'some',
     notes: ['real-name'], driver: 'provider', source: FREE_NOTES,
   },
   {
-    id: 'mistral-free', name: 'Mistral', category: 'free', needs: 'key', protocol: 'openai',
+    id: 'mistral-free', name: 'Mistral', category: 'free', needs: 'key', protocol: 'openai', authStyle: 'bearer',
     baseUrl: 'https://api.mistral.ai/v1', free: true, mayTrain: true,
     limits: '~$10/month of credits', driver: 'provider', source: FREE_NOTES,
   },
   // ---- official Anthropic-compatible endpoints (Cherry Studio's list) ----
-  anthropicPreset('anthropic', 'Anthropic', 'https://api.anthropic.com'),
-  anthropicPreset('deepseek', 'DeepSeek', 'https://api.deepseek.com/anthropic', {
+  anthropicPreset('anthropic', 'Anthropic', 'https://api.anthropic.com', { authStyle: 'x-api-key' }),
+  anthropicPreset('deepseek', 'DeepSeek', 'https://api.deepseek.com/anthropic', { authStyle: 'bearer',
     signupUrl: 'https://platform.deepseek.com/api_keys', models: [{ id: 'deepseek-v4-pro', capabilities: { tools: true, reasoning: true } }],
     source: 'DeepSeek Anthropic API docs (B_official_free_tiers.md Q2)',
   }),
-  anthropicPreset('zhipu', '智谱 GLM', 'https://open.bigmodel.cn/api/anthropic', { signupUrl: 'https://open.bigmodel.cn/usercenter/apikeys' }),
-  anthropicPreset('zai', 'Z.ai', 'https://api.z.ai/api/anthropic'),
-  anthropicPreset('moonshot', 'Kimi', 'https://api.moonshot.cn/anthropic', { signupUrl: 'https://platform.moonshot.cn/console/api-keys' }),
-  anthropicPreset('moonshot-global', 'Kimi (Global)', 'https://api.moonshot.ai/anthropic'),
-  anthropicPreset('minimax', 'MiniMax', 'https://api.minimaxi.com/anthropic'),
-  anthropicPreset('minimax-global', 'MiniMax (Global)', 'https://api.minimax.io/anthropic'),
-  anthropicPreset('dashscope', '阿里百炼', 'https://dashscope.aliyuncs.com/apps/anthropic', { signupUrl: 'https://bailian.console.aliyun.com/' }),
+  anthropicPreset('zhipu', '智谱 GLM', 'https://open.bigmodel.cn/api/anthropic', { authStyle: 'bearer', signupUrl: 'https://open.bigmodel.cn/usercenter/apikeys' }),
+  anthropicPreset('zai', 'Z.ai', 'https://api.z.ai/api/anthropic', { authStyle: 'bearer' }),
+  anthropicPreset('moonshot', 'Kimi', 'https://api.moonshot.cn/anthropic', { authStyle: 'bearer', signupUrl: 'https://platform.moonshot.cn/console/api-keys' }),
+  anthropicPreset('moonshot-global', 'Kimi (Global)', 'https://api.moonshot.ai/anthropic', { authStyle: 'bearer' }),
+  anthropicPreset('minimax', 'MiniMax', 'https://api.minimaxi.com/anthropic', { authStyle: 'bearer' }),
+  anthropicPreset('minimax-global', 'MiniMax (Global)', 'https://api.minimax.io/anthropic', { authStyle: 'bearer' }),
+  anthropicPreset('dashscope', '阿里百炼', 'https://dashscope.aliyuncs.com/apps/anthropic', { authStyle: 'bearer', signupUrl: 'https://bailian.console.aliyun.com/' }),
   anthropicPreset('stepfun', '阶跃星辰', 'https://api.stepfun.com'),
   anthropicPreset('longcat', '美团 LongCat', 'https://api.longcat.chat/anthropic', { free: 'some', limits: 'daily free quota' }),
   anthropicPreset('mimo', '小米 MiMo', 'https://api.xiaomimimo.com/anthropic'),
@@ -132,7 +136,7 @@ export const BASELINE: CatalogEntry[] = [
   anthropicPreset('fireworks', 'Fireworks', 'https://api.fireworks.ai/inference'),
   anthropicPreset('siliconflow', '硅基流动', 'https://api.siliconflow.cn', { signupUrl: 'https://cloud.siliconflow.cn/account/ak' }),
   anthropicPreset('302ai', '302.AI', 'https://api.302.ai'),
-  anthropicPreset('openrouter', 'OpenRouter', 'https://openrouter.ai/api', { signupUrl: 'https://openrouter.ai/keys' }),
+  anthropicPreset('openrouter', 'OpenRouter', 'https://openrouter.ai/api', { authStyle: 'bearer', signupUrl: 'https://openrouter.ai/keys' }),
   anthropicPreset('poe', 'Poe', 'https://api.poe.com'),
   // Cherry lists `https://router.huggingface.co/v1/`; the CLI appends /v1/messages itself
   anthropicPreset('huggingface', 'Hugging Face', 'https://router.huggingface.co'),
@@ -251,6 +255,36 @@ export function mergeCatalog(baseline: CatalogEntry[], remote: CatalogEntry[], u
 
 export function summarize(entries: CatalogEntry[], added: Set<string>, user: Record<string, ChannelCatalogOverride> = {}): CatalogSummary[] {
   return entries.map(({ source: _s, ...e }) => ({ ...e, added: added.has(e.id), ...(user[e.id] ? { overridden: true } : {}) }));
+}
+
+/**
+ * Sources from enabled plugins as catalog entries (ids `plugin:<plugin>/<source>`, `plugin` set): data only, added
+ * through the provider driver like any key preset. They come after every other layer and never replace a built-in id.
+ */
+export function pluginEntry(pluginId: string, s: DeclarativeSource): CatalogEntry {
+  const free = s.models.length && s.models.every((m) => m.free) ? true : s.models.some((m) => m.free) ? 'some' as const : undefined;
+  return {
+    id: `plugin:${pluginId}/${s.id}`,
+    name: s.name,
+    category: s.category ?? (free === true ? 'free' : 'api'),
+    needs: s.auth === 'none' ? 'none' : 'key',
+    protocol: s.protocol === 'openai-responses' ? 'openai' : s.protocol,
+    baseUrl: s.endpoint,
+    authStyle: s.auth,
+    ...(s.docs ? { signupUrl: s.docs } : {}),
+    ...(free ? { free } : {}),
+    ...(s.models.some((m) => m.mayTrain) ? { mayTrain: true } : {}),
+    models: s.models.map((m) => ({ id: m.id, ...(m.contextWindow ? { contextWindow: m.contextWindow } : {}), ...(m.free ? { free: true } : {}), ...(m.capabilities ? { capabilities: { tools: m.capabilities.tools, images: m.capabilities.images, reasoning: m.capabilities.reasoning } } : {}) })),
+    driver: 'provider',
+    plugin: { id: pluginId },
+  };
+}
+
+/** The merged catalog plus the enabled plugins' sources (a plugin id that collides with an entry is skipped). */
+export function withPluginEntries(entries: CatalogEntry[]): CatalogEntry[] {
+  const have = new Set(entries.map((e) => e.id));
+  const extra = pluginSourceDefs().map(({ pluginId, source }) => pluginEntry(pluginId, source)).filter((e) => !have.has(e.id));
+  return extra.length ? [...entries, ...extra] : entries;
 }
 
 /** Keep the ids a free-only source's filter accepts (no filter = all). */

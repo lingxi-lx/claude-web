@@ -45,6 +45,11 @@ export function LogsTab({ names }: { names?: string[] }) {
             <span className="sub">{l.member}</span>
             <span className={`gateway-badge ${l.status >= 400 ? 'bad' : 'ok'}`}>{l.status}</span>
             <span className="sub">{l.ms}ms</span>
+            {l.plugins?.map((p) => (
+              <span key={`${p.id}-${p.hook}`} className="gateway-badge bad" title={p.why === 'too-large' ? tr('插件「{id}」返回的内容超过上限，这次没用上它的改动', { id: p.id }) : p.why === 'timeout' ? tr('插件「{id}」超时，这次没用上它的改动', { id: p.id }) : tr('插件「{id}」出错，这次没用上它的改动', { id: p.id })}>
+                {p.why === 'too-large' ? tr('插件 {id} 结果过大', { id: p.id }) : p.why === 'timeout' ? tr('插件 {id} 超时', { id: p.id }) : tr('插件 {id} 出错', { id: p.id })}
+              </span>
+            ))}
           </div>
         ))}
         {rows.length === 0 && <div className="empty">{tr('还没有记录')}</div>}

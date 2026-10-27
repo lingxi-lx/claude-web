@@ -10,7 +10,7 @@ import { machineOf } from './machine';
 import { installClaudeInWsl } from '@/features/remote/wsl-install';
 import { bundleParts, compressImage, expandDataTransfer, fmtSize, isLongPaste, pasteAsAttachment, uploadAttachment, type DroppedFile, type PendingBundle, type PendingImage } from '@/model/attachments';
 import { pickFolderFiles } from '@/model/attachment-filter';
-import { StatusStrip } from '@/features/chat/StatusStrip';
+import { StatusStrip, noLoginChipShown } from '@/features/chat/StatusStrip';
 import { QueueCards } from '@/features/chat/QueueCards';
 import { SideChat } from '@/features/chat/SideChat';
 import { openSideChat } from '@/features/chat/side-chat';
@@ -947,7 +947,9 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   // a conversation already going with nothing to send on (spec 2026-10-26 §2.4): the Claude account logged out, or
   // its profile deleted since — the 添加来源 line shows over the box (on this machine's Claude conversations only)
   const convProvider = info?.providerId ?? (active ? sessionMeta[active.sessionId]?.providerId : undefined) ?? 'claude';
-  const liveNoSource = !welcome && !!active && !remote && !disabled && sessionAgent === 'claude'
+  // the status strip's 「not logged in」 chip already offers 添加来源 (and resends): then only it shows
+  const stripAsks = useStore((s) => (active ? noLoginChipShown(s.open[active.sessionId]) : false));
+  const liveNoSource = !welcome && !!active && !remote && !disabled && sessionAgent === 'claude' && !stripAsks
     && (convProvider === 'claude' ? needsModel({ provider: 'claude', foreignAgent: false, loggedIn }) : providers.length > 0 && !providers.some((p) => p.id === convProvider)); // (an empty list may just not be loaded yet)
   const liveAgentDefault = liveAgent !== 'claude' ? agents.find((a) => a.kind === liveAgent)?.model || undefined : undefined;
   // the account's default model by name for a chip with no model (final review §9 #2): this conversation's CLI says

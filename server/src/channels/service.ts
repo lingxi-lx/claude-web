@@ -3,7 +3,7 @@ import type { EngineManager } from '../engines/manager.js';
 import type { MetaStore } from '../meta/store.js';
 import type { ProviderService } from '../providers/service.js';
 import type { UpstreamService } from '../upstreams/service.js';
-import { BASELINE, filterModels, loadRemote, mergeCatalog, summarize, updateRemote, type RemoteCatalogSetting } from './catalog.js';
+import { BASELINE, filterModels, loadRemote, mergeCatalog, summarize, updateRemote, withPluginEntries, type RemoteCatalogSetting } from './catalog.js';
 import { createDrivers, type ChannelDriver, type DriverContext } from './drivers/index.js';
 import { categories } from './registry.js';
 import type { CatalogEntry, ChannelCatalogOverride, ChannelStatus, SourceSummary } from './types.js';
@@ -53,9 +53,9 @@ export class ChannelService {
     return (this.deps.meta?.channelCatalog() ?? {}) as Record<string, ChannelCatalogOverride>;
   }
 
-  /** baseline < signed remote < the user's own changes */
+  /** baseline < signed remote < the user's own changes; then the enabled plugins' sources */
   catalog(): CatalogEntry[] {
-    return mergeCatalog(BASELINE, this.remote, this.overrides());
+    return withPluginEntries(mergeCatalog(BASELINE, this.remote, this.overrides()));
   }
 
   private async ensureRemote() {

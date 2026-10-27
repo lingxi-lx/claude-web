@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { ws } from '@/ws/client';
 import { useStore } from '@/store';
 import { dlg } from '@/ui/dialog';
@@ -66,7 +66,7 @@ function RulesEditor({ rules, groups, onSave, onCancel }: { rules: ShareRules; g
  * models, concurrency and quotas. Reaching it from the network is off until turned on here; only model calls
  * are served there, never management. Self-contained: the gateway page mounts it.
  */
-export function ShareDrawer() {
+export function ShareDrawer({ lanAdvanced }: { lanAdvanced?: ReactNode } = {}) {
   const toast = useStore((s) => s.toast);
   const [st, setSt] = useState<ShareStatus | null>(null);
   const [created, setCreated] = useState<string | null>(null);
@@ -164,6 +164,8 @@ export function ShareDrawer() {
           <button className="btn sm ghost" disabled={busy} onClick={() => void editAllow()}>{tr('修改')}</button>
         </div>
         <div className="sub">{tr('其它设备用「地址 + 共享密钥」连接；OpenAI 格式的客户端在地址后加 /v1。')}</div>
+        {/* the listener's own address / port / allowlist (the gateway page passes them in: one 局域网 section) */}
+        {lanAdvanced && <details className="gw-share-adv"><summary>{tr('监听地址和端口')}</summary>{lanAdvanced}</details>}
       </div>
 
       {created && (

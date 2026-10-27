@@ -60,6 +60,8 @@ export interface CatalogEntry {
   source?: string;
   /** the remote catalog marked it gone: shown as unavailable, never swapped for something else */
   retired?: boolean;
+  /** it comes from an enabled plugin (plugins/declarative.ts), not from the built-in / remote catalog */
+  plugin?: { id: string };
 }
 
 /** A catalog entry as the add-source wizard sees it. */

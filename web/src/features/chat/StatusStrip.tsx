@@ -29,6 +29,16 @@ function countdown(at: number) {
 }
 
 /**
+ * The 「not logged in」 chip shows (its own 添加来源 + resend): the last turn failed because the Claude account isn't
+ * signed in. The composer leaves out its own 添加来源 line then, so only one of the two asks.
+ */
+export function noLoginChipShown(o: { state: string; conv: { lastResult?: { isError?: boolean; errorKind?: string; text?: string } | null; items: { kind: string }[] } } | undefined): boolean {
+  if (!o || o.state === 'running' || o.state === 'waiting') return false;
+  const res = o.conv.lastResult;
+  return !!res?.isError && res.errorKind === 'credential' && o.conv.items[o.conv.items.length - 1]?.kind === 'result' && /not logged in|run \/login/i.test(res.text ?? '');
+}
+
+/**
  * Chips between the transcript and the composer: stall / error taxonomy / rate limit / auto-continue / context.
  * The queued messages are not here any more: they are cards of their own under this strip (QueueCards.tsx).
  */

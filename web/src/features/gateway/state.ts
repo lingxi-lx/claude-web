@@ -6,7 +6,7 @@ import { closeOtherPages, registerPage } from '@/features/sections/pages';
 import { markPageOpened } from '@/features/automation/state';
 import { ws } from '@/ws/client';
 import type {
-  ChannelStatus, GatewayAuditLine, GatewayGroup, GatewayKeyGroup, GatewayKeyStatus, GatewayKeyView,
+  CatalogSummary, ChannelStatus, EngineId, EngineStatus, EngineStep, GatewayAuditLine, GatewayGroup, GatewayKeyGroup, GatewayKeyStatus, GatewayKeyView,
   GatewayLanStatus, GatewayStatus, MaintenanceRun, MaintenanceTask, SidecarStatus, SourceSummary,
   UpstreamAccountView, UpstreamGroup, UpstreamStatus,
 } from '@shared';
@@ -26,6 +26,14 @@ interface GatewayState {
   /** channels.status: every source, already sorted by the server */
   sources: SourceSummary[];
   sourceWarnings: string[];
+  /** channels.status `available`: the add-source catalog (incl. the enabled plugins' sources) */
+  catalog: CatalogSummary[];
+  /** engines.status: CLIProxyAPI / Magpie, installed or not */
+  engines: EngineStatus[];
+  /** what a long install / start is doing now (engines.changed with a step); cleared when it settles */
+  engineStep: Partial<Record<EngineId, EngineStep>>;
+  /** the last thing that went wrong with an engine, in words (a failed action or a stop nobody asked for) */
+  engineError: Partial<Record<EngineId, string>>;
   /** 账号池 (UpstreamGroup): what a gateway member can point at */
   pools: UpstreamGroup[];
   /** 网关组 (GatewayGroup): what keys are allowed to use */
@@ -43,9 +51,13 @@ interface GatewayState {
   logs: GatewayAuditLine[];
   loaded: boolean;
   load(): Promise<void>;
+  /** only what the add-source wizard needs (catalog + engines): it opens without the page too */
+  loadCatalog(): Promise<void>;
+  loadEngines(): Promise<void>;
 }
 
 const EMPTY_CH: ChannelStatus = { sources: [], warnings: [] };
+const EMPTY_EN: { engines: EngineStatus[] } = { engines: [] };
 
 export const useGateway = create<GatewayState>((set) => ({
   open: false,
@@ -57,6 +69,10 @@ export const useGateway = create<GatewayState>((set) => ({
   seenDrawers: [],
   sources: [],
   sourceWarnings: [],
+  catalog: [],
+  engines: [],
+  engineStep: {},
+  engineError: {},
   pools: [],
   routeGroups: [],
   accounts: [],
@@ -72,7 +88,7 @@ export const useGateway = create<GatewayState>((set) => ({
   logs: [],
   loaded: false,
   async load() {
-    const [up, keys, lan, logs, st, tk, ch] = await Promise.all([
+    const [up, keys, lan, logs, st, tk, ch, en] = await Promise.all([
       ws.request<UpstreamStatus>({ kind: 'upstreams.status' }),
       ws.request<GatewayKeyStatus>({ kind: 'gateway.keys.status' }),
       ws.request<GatewayLanStatus>({ kind: 'gateway.lan.status' }),
@@ -81,13 +97,25 @@ export const useGateway = create<GatewayState>((set) => ({
       ws.request<{ tasks: MaintenanceTask[]; runs: MaintenanceRun[] }>({ kind: 'tasks.list' }),
       // a server without channels.* (an older peer) still shows the rest
       ws.request<ChannelStatus>({ kind: 'channels.status' }).catch(() => EMPTY_CH),
+      ws.request<{ engines: EngineStatus[] }>({ kind: 'engines.status' }).catch(() => EMPTY_EN),
     ]);
     // every array is replaced as a whole, so selectors keep stable references between loads
     set({
       accounts: up.accounts, families: up.families, warnings: up.warnings ?? [], sidecars: up.sidecars ?? [], pools: up.groups,
       routeGroups: st.groups, keyGroups: keys.groups, keys: keys.keys, lan, status: st, logs, tasks: tk.tasks, runs: tk.runs,
-      sources: ch.sources, sourceWarnings: ch.warnings, loaded: true,
+      sources: ch.sources, sourceWarnings: ch.warnings, catalog: ch.available ?? [], engines: en.engines, loaded: true,
     });
+  },
+  async loadCatalog() {
+    const [ch, en] = await Promise.all([
+      ws.request<ChannelStatus>({ kind: 'channels.status' }).catch(() => EMPTY_CH),
+      ws.request<{ engines: EngineStatus[] }>({ kind: 'engines.status' }).catch(() => EMPTY_EN),
+    ]);
+    set({ sources: ch.sources, sourceWarnings: ch.warnings, catalog: ch.available ?? [], engines: en.engines });
+  },
+  async loadEngines() {
+    const en = await ws.request<{ engines: EngineStatus[] }>({ kind: 'engines.status' }).catch(() => EMPTY_EN);
+    set({ engines: en.engines });
   },
 }));
 
@@ -102,6 +130,18 @@ export function installGatewayEvents(): void {
   useStore.subscribe((s) => { if (s.providers !== providers) { providers = s.providers; reloadSoon(); } });
   ws.on((e) => {
     if (e.kind === 'upstreams.changed' || e.kind === 'gateway.changed') reloadSoon();
+    // 托管程序: a step of a long action shows in words; a settled change re-reads the statuses (and the sources: a
+    // started engine is a provider now); a stop nobody asked for is kept as the engine's error
+    if (e.kind === 'engines.changed') {
+      const g = useGateway.getState();
+      if (e.step) useGateway.setState({ engineStep: { ...g.engineStep, [e.id]: e.step } });
+      else {
+        const { [e.id]: _, ...rest } = g.engineStep;
+        useGateway.setState({ engineStep: rest, ...(e.crash ? { engineError: { ...g.engineError, [e.id]: e.crash } } : {}) });
+        void g.loadEngines();
+        if (g.open) reloadSoon(); else void g.loadCatalog().catch(() => {});
+      }
+    }
     if (e.kind === 'gateway.log') useGateway.setState((s) => ({ logs: [...e.lines, ...s.logs].slice(0, 500) }));
   });
 }

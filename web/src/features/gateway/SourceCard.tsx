@@ -1,6 +1,7 @@
 import { Icon, type IconName } from '@/ui/icons';
 import { clsx } from '@/util';
 import { tr } from '@/i18n';
+import { SourceTags } from './CatalogForm';
 
 export interface CardModel {
   id: string;
@@ -9,7 +10,13 @@ export interface CardModel {
   icon?: IconName;
   sub: string;
   status: { l: string; c: string };
-  free?: boolean;
+  free?: boolean | 'some';
+  /** the vendor says it may train on prompts */
+  mayTrain?: boolean;
+  /** it comes from a plugin */
+  plugin?: boolean;
+  /** not added yet: a catalog entry / engine offered under 免费 / 本机运行内核 */
+  offer?: boolean;
   /** known quota left in %, with its words (never made up: absent when unknown) */
   quota?: { pct: number; label: string };
   action: { label: string; run(): void; busy?: boolean };
@@ -21,7 +28,7 @@ const letters = (name: string) => (name.replace(/[^\p{L}\p{N}]/gu, '').slice(0, 
 export function SourceCard({ c, onOpen }: { c: CardModel; onOpen(): void }) {
   return (
     <div
-      className={clsx('gw-source', c.free && 'free')}
+      className={clsx('gw-source', c.free && 'free', c.offer && 'offer')}
       data-source={c.id}
       role="button"
       tabIndex={0}
@@ -35,7 +42,7 @@ export function SourceCard({ c, onOpen }: { c: CardModel; onOpen(): void }) {
           <b>{c.name}</b>
           <span className="sub">{c.sub}</span>
         </span>
-        {c.free && <span className="gw-tag">{tr('免费')}</span>}
+        <SourceTags free={c.free} mayTrain={c.mayTrain} plugin={c.plugin} />
         <span className={clsx('gw-status', c.status.c)} title={c.status.l}><i />{c.status.l}</span>
       </div>
       {c.quota && (

@@ -255,6 +255,7 @@ export class EngineManager extends EventEmitter {
   private async installNow(id: EngineId, tag?: string): Promise<string> {
     const m = this.manifest(id);
     const st = this.state(id);
+    this.emit('progress', id, 'release');
     const rel = await this.release(m, tag ?? m.pin);
     const version = rel.tag_name;
     if (this.binary(id, version)) {
@@ -269,6 +270,7 @@ export class EngineManager extends EventEmitter {
     await fs.mkdir(tmp, { recursive: true });
     try {
       let res: Response;
+      this.emit('progress', id, 'download');
       try {
         res = await fetch(asset.browser_download_url, { signal: AbortSignal.timeout(10 * 60_000) });
       } catch (e) {
@@ -277,6 +279,7 @@ export class EngineManager extends EventEmitter {
       if (!res.ok) throw new Error(tr('下载 {name} 失败：HTTP {status}', { name: m.name, status: res.status }));
       const buf = Buffer.from(await res.arrayBuffer());
       if (asset.size && buf.length !== asset.size) throw new Error(tr('{name} 下载不完整（{got} / {want} 字节）', { name: m.name, got: buf.length, want: asset.size }));
+      this.emit('progress', id, 'verify');
       const hash = crypto.createHash('sha256').update(buf).digest('hex');
       if (expected && hash !== expected) throw new Error(tr('{name} 校验失败（SHA-256 和发布的不一致），已丢弃', { name: m.name }));
       // no published hash: one we recorded earlier for the same file must still match
@@ -286,6 +289,7 @@ export class EngineManager extends EventEmitter {
       const dl = path.join(tmp, kind === 'zip' ? 'download.zip' : kind ? 'download.tar.gz' : `${m.entry}${exe}`);
       await fs.writeFile(dl, buf);
       if (kind) {
+        this.emit('progress', id, 'unpack');
         const out = path.join(tmp, 'x');
         await fs.mkdir(out, { recursive: true });
         await unpack(kind, dl, out);
@@ -392,6 +396,7 @@ export class EngineManager extends EventEmitter {
     const bin = this.binary(id);
     if (!bin) throw new Error(tr('{name} 没有装好', { name: m.name }));
     const { clientKey, managementKey } = await this.keys(id, m);
+    this.emit('progress', id, 'start');
     // the port it had last time when it is free (the provider's address stays the same), else a new one
     const port = st.port && st.port !== m.defaultPort && await portFree(st.port) ? st.port : await freePort();
     if (st.port !== port) { st.port = port; await this.save(); }
@@ -476,8 +481,8 @@ export class EngineManager extends EventEmitter {
     const m = this.manifest(id);
     const st = this.state(id);
     const exists = st.providerId && this.deps.providers.list().some((p) => p.id === st.providerId);
-    // authStyle (spec §5.1, added by the privacy slice): magpie takes Bearer or x-api-key; unknown for CLIProxyAPI
-    const auth = (m.id === 'magpie' ? { authStyle: 'both' } : {}) as Record<string, unknown>;
+    // Provider.authStyle (spec §5.1): magpie takes Bearer or x-api-key; unknown for CLIProxyAPI (unset = both headers)
+    const auth: { authStyle?: 'both' } = m.id === 'magpie' ? { authStyle: 'both' } : {};
     const saved = await this.deps.providers.upsert({ ...(exists ? { id: st.providerId } : {}), name: m.name, type: 'anthropic', baseUrl, apiKey: key, ...auth });
     st.providerId = saved.id;
     this.deps.meta.channelLinks()[saved.id] = { catalogId: id, engine: id };

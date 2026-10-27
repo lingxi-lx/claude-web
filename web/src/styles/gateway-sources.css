@@ -66,6 +66,14 @@
 .gw-kvs { display: flex; flex-direction: column; gap: 4px; }
 .gw-kvs .gw-kv { display: flex; gap: 10px; font-size: var(--fs-sm); align-items: baseline; }
 .gw-kvs .gw-kv .muted { min-width: 84px; color: var(--ink-3); }
+.gw-tag.free { color: var(--ok); box-shadow: inset 0 0 0 var(--hairline) color-mix(in srgb, var(--ok) 45%, transparent); }
+.gw-tag.warn { color: var(--warn); box-shadow: inset 0 0 0 var(--hairline) color-mix(in srgb, var(--warn) 45%, transparent); }
+/* 托管程序 (EnginePanel) and the catalog form: the same key / value rows as a detail module, a step line while it works */
+.gw-engine { display: flex; flex-direction: column; gap: 6px; }
+.gw-engine .gw-kv, .gw-embedded-add .gw-kv { display: flex; gap: 10px; font-size: var(--fs-sm); align-items: baseline; }
+.gw-engine .gw-kv .muted, .gw-embedded-add .gw-kv .muted { min-width: 84px; color: var(--ink-3); }
+.gw-engine .gw-warn, .gw-embedded-add .gw-warn { margin: 0; }
+.gw-engine-step { display: flex; align-items: center; gap: 6px; color: var(--ink-2); font-size: var(--fs-sm); }
 .gw-kvs .err { color: var(--err); word-break: break-word; }
 .gw-models { display: flex; flex-direction: column; max-height: 320px; overflow: auto; }
 .gw-model { display: flex; align-items: center; gap: 8px; padding: 5px 2px; border-bottom: var(--hairline) solid var(--edge-subtle); font-size: var(--fs-sm); min-width: 0; }
@@ -88,7 +96,7 @@
 .modal.gw-add { width: 620px; max-height: 86vh; display: flex; flex-direction: column; overflow: auto; }
 .gw-add-head { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
 .gw-add-head h3 { margin: 0; }
-.gw-choices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.gw-choices { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .gw-choice { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 12px; border-radius: var(--r-lg); border: 0; background: var(--surface-1); box-shadow: inset 0 0 0 var(--hairline) var(--edge-subtle); color: var(--ink-2); cursor: pointer; text-align: left; transition: background 150ms var(--ease-out), box-shadow 150ms var(--ease-out); }
 .gw-choice b { color: var(--ink-1); font-size: var(--fs-base); }
 .gw-choice:hover { background: var(--surface-2); }
@@ -116,3 +124,4 @@
 
 /* the composer's light 添加来源 line (no usable source on the start page) */
 .cmp-add-source { display: flex; align-items: center; gap: 8px; margin: 0 4px 6px; font-size: var(--fs-sm); color: var(--ink-3); animation: gw-fade 160ms var(--ease-out) both; }
+.gw-share-adv { margin-top: 6px; } .gw-share-adv summary { cursor: pointer; color: var(--ink-2); font-size: var(--fs-sm); }

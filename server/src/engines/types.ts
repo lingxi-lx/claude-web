@@ -28,6 +28,12 @@ export interface EngineStatus {
   warnings: string[];
 }
 
+/** What a long engine action is doing now (the wizard / source card shows it in words). */
+export type EngineStep = 'release' | 'download' | 'verify' | 'unpack' | 'start' | 'connect';
+
+/** engines.* pushes: a step began, the state changed (step absent), or it stopped by itself (crash = why). */
+export type EngineEvent = { kind: 'engines.changed'; id: EngineId; step?: EngineStep; crash?: string };
+
 export type EngineRequest =
   | { kind: 'engines.status' }
   /** download + verify (version = a release tag; absent = latest) */

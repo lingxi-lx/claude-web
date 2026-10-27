@@ -10,7 +10,7 @@ import { StringDecoder } from 'node:string_decoder';
 import type { MetaStore } from '../meta/store.js';
 import type { SecretService } from '../secrets/service.js';
 import type { LedgerEntry, Provider } from '../protocol.js';
-import { memberKey, type GatewayAuditConfig, type GatewayGroup, type GatewayKeyGroup, type GatewayLanConfig, type GatewayLanStatus, type GatewayMember, type GatewayMemberState, type GatewayProtocol, type GatewayStatus, type GatewayTarget, type GatewayTestResult } from './types.js';
+import { memberKey, type GatewayAuditConfig, type GatewayGroup, type GatewayKeyGroup, type GatewayLanConfig, type GatewayLanStatus, type GatewayMember, type GatewayMemberState, type GatewayProtocol, type GatewayStatus, type GatewayTarget, type GatewayTestResult, type PluginHookSkip } from './types.js';
 import { GatewayListener } from './listener.js';
 import { CLAUDE_CODE_SYSTEM_PREFIX, OAUTH_BETA } from '../upstreams/claude.js';
 import { accountProxyAgent } from '../upstreams/proxy.js';
@@ -71,7 +71,7 @@ export interface GatewayHookPayload {
 /** 插件's gateway hooks (plugins/service.ts). Not set, or no enabled plugin declares the hook → nothing is called. */
 export interface GatewayPluginHooks {
   hasHook(hook: 'request-before' | 'response-after'): boolean;
-  runHook<T>(hook: 'request-before' | 'response-after', payload: T): Promise<T>;
+  runHook<T>(hook: 'request-before' | 'response-after', payload: T, onSkip?: (pluginId: string, why: PluginHookSkip['why']) => void): Promise<T>;
 }
 
 export interface GatewayDeps {
@@ -117,6 +117,8 @@ interface Ctx {
   surface?: 'loopback' | 'lan';
   /** what the privacy pipeline did to this request (types / counts / placeholders, for the audit line) */
   privacy?: PrivacyRecord;
+  /** plugin hooks skipped on this request (too large / timed out / failed), for the audit line */
+  plugins?: PluginHookSkip[];
   /** a routing group's plan for this request (智能路由) */
   plan?: RoutePlan | null;
 }
@@ -138,12 +140,15 @@ const newKey = () => `cwg-${crypto.randomBytes(24).toString('hex')}`;
  * untouched passthrough request keeps its exact bytes), re-serialised only when a plugin returned a different body.
  * A plugin that fails / times out is skipped by PluginService.runHook.
  */
-async function pluginBody(plugins: GatewayPluginHooks, hook: 'request-before' | 'response-after', meta: Omit<GatewayHookPayload, 'body'>, buf: Buffer | null): Promise<Buffer | null> {
+async function pluginBody(plugins: GatewayPluginHooks, hook: 'request-before' | 'response-after', meta: Omit<GatewayHookPayload, 'body'>, buf: Buffer | null, skipped?: PluginHookSkip[]): Promise<Buffer | null> {
   if (!buf || !buf.length) return buf;
   let json: unknown;
   try { json = JSON.parse(buf.toString('utf8')); } catch { return buf; }
   const before = JSON.stringify(json);
-  const out = await plugins.runHook<GatewayHookPayload>(hook, { ...meta, body: json });
+  const out = await plugins.runHook<GatewayHookPayload>(hook, { ...meta, body: json }, (id, why) => {
+    console.warn(`[plugins] ${id} ${hook} skipped: ${why}`);
+    if (skipped && !skipped.some((s) => s.id === id && s.hook === hook)) skipped.push({ id, hook, why });
+  });
   if (!out || out.body === undefined) return buf;
   const after = JSON.stringify(out.body);
   return after === before ? buf : Buffer.from(after);
@@ -1168,7 +1173,7 @@ export class GatewayService extends EventEmitter {
       this.audit.write({
         ts: Date.now(), keyId: ctx.keyId ?? '', ip: ctx.ip ?? '', protocol: inbound,
         model: ctx.model, routeGroupId: group.id, member: '', status, ms: Date.now() - ctx.t0,
-        tokensIn: 0, tokensOut: 0, errorCode: String(status), privacy: ctx.privacy,
+        tokensIn: 0, tokensOut: 0, errorCode: String(status), privacy: ctx.privacy, ...(ctx.plugins?.length ? { plugins: ctx.plugins } : {}),
       });
       return this.sendError(res, inbound, status, message, extra);
     };
@@ -1281,6 +1286,7 @@ export class GatewayService extends EventEmitter {
       tokensOut,
       errorCode: a.kind === 'done' ? '' : String(a.status),
       privacy: ctx.privacy,
+      ...(ctx.plugins?.length ? { plugins: ctx.plugins } : {}),
     });
     if (p.auth) this.deps.upstreams?.noteUse(p.id, { input: tokensIn, output: tokensOut });
   }
@@ -1396,11 +1402,12 @@ export class GatewayService extends EventEmitter {
     const hookMeta = { source: p.name, model, path };
     const plugins = route.op === 'generate' ? this.plugins : null;
     if (plugins?.hasHook('request-before')) {
-      body = (await pluginBody(plugins, 'request-before', hookMeta, body)) ?? body;
-      retryBody = await pluginBody(plugins, 'request-before', hookMeta, retryBody);
-      noThinkingBody = await pluginBody(plugins, 'request-before', hookMeta, noThinkingBody);
-      noEffortBody = await pluginBody(plugins, 'request-before', hookMeta, noEffortBody);
-      bareBody = await pluginBody(plugins, 'request-before', hookMeta, bareBody);
+      const skipped = (ctx.plugins ??= []);
+      body = (await pluginBody(plugins, 'request-before', hookMeta, body, skipped)) ?? body;
+      retryBody = await pluginBody(plugins, 'request-before', hookMeta, retryBody, skipped);
+      noThinkingBody = await pluginBody(plugins, 'request-before', hookMeta, noThinkingBody, skipped);
+      noEffortBody = await pluginBody(plugins, 'request-before', hookMeta, noEffortBody, skipped);
+      bareBody = await pluginBody(plugins, 'request-before', hookMeta, bareBody, skipped);
     }
     // response-after sees a whole (non-streamed) answer: ask for it uncompressed so it can be read
     const afterHook = !!plugins?.hasHook('response-after') && !route.stream;
@@ -1492,7 +1499,7 @@ export class GatewayService extends EventEmitter {
         const bufs: Buffer[] = [first.value];
         for (let r = await withTimeout(it.next(), IDLE_MS); !r.done; r = await withTimeout(it.next(), IDLE_MS)) bufs.push(r.value);
         const whole = Buffer.concat(bufs);
-        const changed = await pluginBody(plugins!, 'response-after', hookMeta, whole);
+        const changed = await pluginBody(plugins!, 'response-after', hookMeta, whole, (ctx.plugins ??= []));
         first = { done: false, value: changed ?? whole };
       } catch (e: any) {
         up.body.destroy();

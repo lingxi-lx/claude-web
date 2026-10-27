@@ -3,18 +3,23 @@
 import { create } from 'zustand';
 import type { Provider } from '@shared';
 
-export type AddStart = 'free' | 'login' | 'api';
+export type AddStart = 'free' | 'login' | 'api' | 'local';
 
 /** Told what was added: the new profile for an API source, null for an account (it shows up in the model menu). */
 export type OnAdded = (p: Provider | null) => void;
 
-interface AddSourceState { open: boolean; start: AddStart | null; seq: number; onAdded: OnAdded | null }
+interface AddSourceState { open: boolean; start: AddStart | null; seq: number; onAdded: OnAdded | null; entry: string | null }
 
-export const useAddSource = create<AddSourceState>(() => ({ open: false, start: null, seq: 0, onAdded: null }));
+export const useAddSource = create<AddSourceState>(() => ({ open: false, start: null, seq: 0, onAdded: null, entry: null }));
 
 /** Open the wizard (on one of the three big choices when `start` is given); `onAdded` hears each source added. */
 export function openAddSource(start?: AddStart, onAdded?: OnAdded): void {
-  useAddSource.setState((s) => ({ open: true, start: start ?? null, seq: s.seq + 1, onAdded: onAdded ?? null }));
+  useAddSource.setState((s) => ({ open: true, start: start ?? null, seq: s.seq + 1, onAdded: onAdded ?? null, entry: null }));
+}
+
+/** Open the wizard straight on one catalog entry's form (a dashboard card's 添加 / 安装). */
+export function openAddSourceEntry(entry: string): void {
+  useAddSource.setState((s) => ({ open: true, start: null, seq: s.seq + 1, onAdded: null, entry }));
 }
 
 export function closeAddSource(): void {

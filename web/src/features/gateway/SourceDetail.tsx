@@ -10,6 +10,8 @@ import { AccountsTab } from './AccountsTab';
 import { TasksTab } from './TasksTab';
 import { LogsTab } from './LogsTab';
 import { SidecarCard } from './SidecarCard';
+import { EnginePanel } from './EnginePanel';
+import type { EngineId } from '@shared';
 import { tr } from '@/i18n';
 
 const ctx = (n?: number) => (n ? (n >= 1_000_000 ? `${Math.round(n / 100_000) / 10}M` : `${Math.round(n / 1000)}K`) : '');
@@ -128,6 +130,12 @@ export function SourceDetail({ source }: { source: SourceSummary }) {
       {kind && (
         <Module id="tasks" title={tr('每日任务')} note={tr('签到、保活和额度刷新，到点自动跑。')}>
           <TasksTab kind={kind} />
+        </Module>
+      )}
+
+      {source.kind === 'engine' && (
+        <Module id="engine" title={tr('本机程序')} note={tr('它在这台电脑上运行；安装、启动、停止、更新都在这里。')}>
+          <EnginePanel id={source.id.slice(7) as EngineId} />
         </Module>
       )}
 

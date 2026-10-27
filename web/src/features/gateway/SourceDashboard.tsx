@@ -3,14 +3,15 @@ import { ws } from '@/ws/client';
 import { useStore } from '@/store';
 import { clsx } from '@/util';
 import { Icon, type IconName } from '@/ui/icons';
-import type { ChannelStatus, SourceSummary, UpstreamAccountView } from '@shared';
+import type { CatalogSummary, ChannelStatus, EngineStatus, SourceSummary, UpstreamAccountView } from '@shared';
 import { useGateway, setGatewayFilter, showSource } from './state';
 import {
   FILTERS, HEALTH_TEXT, CATEGORY_TEXT, ROUTING_ID, accountsOf, familyModels, filterCounts, isFree, isListed,
   matchesFilter, matchesQuery, quotaLeft,
 } from './page';
 import { SourceCard, type CardModel } from './SourceCard';
-import { openAddSource } from './add-source';
+import { openAddSource, openAddSourceEntry } from './add-source';
+import { engineStateText, ENGINE_STEP_TEXT } from './EnginePanel';
 import { tr } from '@/i18n';
 
 const FAMILY_ICON: Partial<Record<SourceSummary['kind'], IconName>> = { 'claude-account': 'claude', 'gemini-web': 'gemini', workbuddy: 'agent' };
@@ -49,6 +50,9 @@ export function SourceDashboard({ showFilters }: { showFilters: boolean }) {
   const query = useGateway((s) => s.query);
   const loaded = useGateway((s) => s.loaded);
   const warnings = useGateway((s) => s.sourceWarnings);
+  const catalog = useGateway((s) => s.catalog);
+  const engines = useGateway((s) => s.engines);
+  const engineStep = useGateway((s) => s.engineStep);
   const toast = useStore((s) => s.toast);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -93,7 +97,9 @@ export function SourceDashboard({ showFilters }: { showFilters: boolean }) {
       icon: FAMILY_ICON[s.kind],
       sub: parts.join(' · '),
       status: s.detail && s.health !== 'ready' ? { l: HEALTH_TEXT[s.health].l, c: HEALTH_TEXT[s.health].c } : HEALTH_TEXT[s.health],
-      free: isFree(s),
+      free: isFree(s) || (s.models.some((m) => m.free) ? 'some' : undefined),
+      mayTrain: s.mayTrain,
+      plugin: !!s.catalogId?.startsWith('plugin:'),
       ...(q ? { quota: { pct: q.pct, label: resetText(q.resetAt) || tr('剩余额度') } } : {}),
       action,
     };
@@ -112,6 +118,28 @@ export function SourceDashboard({ showFilters }: { showFilters: boolean }) {
       action: { label: tr('调整'), run: () => showSource(ROUTING_ID) },
     }
     : null;
+
+  // 免费 / 本机运行内核: what the catalog offers that is not added yet, next to what is (one click → its form)
+  const offerCard = (c: CatalogSummary): CardModel => {
+    const engine: EngineStatus | undefined = c.driver.startsWith('engine:') ? engines.find((e) => e.id === c.driver.slice(7)) : undefined;
+    const step = engine ? engineStep[engine.id] : undefined;
+    return {
+      id: `offer:${c.id}`,
+      name: c.name,
+      sub: step ? ENGINE_STEP_TEXT[step] : engine ? engineStateText(engine) : c.plugin ? tr('来自插件「{id}」', { id: c.plugin.id }) : c.limits ?? CATEGORY_TEXT[c.category],
+      status: { l: tr('未添加'), c: '' },
+      free: c.free,
+      mayTrain: c.mayTrain,
+      plugin: !!c.plugin,
+      offer: true,
+      action: { label: engine ? (engine.detected ? tr('连接') : engine.installed ? tr('启动') : tr('安装')) : tr('添加'), run: () => openAddSourceEntry(c.id), busy: !!step },
+    };
+  };
+  const q = query.trim().toLowerCase();
+  const offers = (filter === 'free' || filter === 'local-engine')
+    ? catalog.filter((c) => !c.added && !c.retired && (filter === 'free' ? c.category === 'free' || !!c.free : c.category === 'local-engine')
+      && (!q || c.name.toLowerCase().includes(q) || c.id.includes(q)))
+    : [];
 
   return (
     <div className="gw-dash">
@@ -144,7 +172,15 @@ export function SourceDashboard({ showFilters }: { showFilters: boolean }) {
         {routing && <SourceCard c={routing} onOpen={() => showSource(ROUTING_ID)} />}
         {shown.map((s) => <SourceCard key={s.id} c={card(s)} onOpen={() => showSource(s.id)} />)}
       </div>
-      {loaded && !shown.length && !routing && (
+      {offers.length > 0 && (
+        <>
+          <div className="gw-section-head"><b>{filter === 'free' ? tr('还可以添加的免费来源') : tr('可以在这台电脑上运行')}</b></div>
+          <div className="gw-grid">
+            {offers.map((c) => <SourceCard key={c.id} c={offerCard(c)} onOpen={() => openAddSourceEntry(c.id)} />)}
+          </div>
+        </>
+      )}
+      {loaded && !shown.length && !routing && !offers.length && (
         <div className="empty">{listed.length ? tr('这一类里还没有来源') : tr('还没有来源。点「添加来源」接一个模型或登录一个账号。')}</div>
       )}
       <button className="gw-more" onClick={() => openAddSource()}>

@@ -83,8 +83,8 @@ export class ProviderDriver implements ChannelDriver {
     if (entry.retired) throw new Error(tr('这个来源已经下线'));
     const type = typeOf(entry.protocol);
     const name = uniqueName(input.name?.trim() || entry.name, this.providers.list().map((p) => p.name));
-    // authStyle is the privacy slice's field (spec §5.1); stored as is until that type lands
-    const auth = (entry.authStyle && entry.authStyle !== 'none' ? { authStyle: entry.authStyle } : {}) as Record<string, unknown>;
+    // Provider.authStyle (spec §5.1): what the catalog knows; 'none' (keyless) leaves it unset
+    const auth: Pick<Provider, 'authStyle'> = entry.authStyle && entry.authStyle !== 'none' ? { authStyle: entry.authStyle } : {};
     const saved = await this.providers.upsert({ name, type, baseUrl: entry.baseUrl ?? '', apiKey: key, ...auth });
     if (this.meta) {
       this.meta.channelLinks()[saved.id] = { catalogId: entry.id, ...(entry.needs === 'none' && key === KEYLESS_KEY ? { keyless: true } : {}) };

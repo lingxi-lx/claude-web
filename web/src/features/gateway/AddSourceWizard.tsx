@@ -2,23 +2,25 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { clsx } from '@/util';
 import { Icon, type IconName } from '@/ui/icons';
 import { imeComposing } from '@/ui/ime';
-import type { UpstreamKind } from '@shared';
+import type { CatalogSummary, EngineId, UpstreamKind } from '@shared';
 import { QuickConnect } from '@/features/providers/QuickConnect';
 import { PRESETS } from '@/features/providers/quick';
 import { useStore } from '@/store';
 import { AddAccountWizard } from './AddAccountWizard';
 import { useAddSource, closeAddSource, type AddStart } from './add-source';
 import type { Provider } from '@shared';
-import { useGateway } from './state';
+import { useGateway, installGatewayEvents } from './state';
+import { CatalogForm, SourceTags } from './CatalogForm';
+import { EnginePanel } from './EnginePanel';
 import { tr } from '@/i18n';
 
-type How = { type: 'account'; kind: UpstreamKind } | { type: 'api'; preset: string };
-interface Entry { id: string; name: string; groups: AddStart[]; icon?: IconName; note: string; how: How }
+type How = { type: 'account'; kind: UpstreamKind } | { type: 'api'; preset: string } | { type: 'catalog'; entry: CatalogSummary } | { type: 'engine'; id: EngineId };
+interface Entry { id: string; name: string; groups: AddStart[]; icon?: IconName; note: string; how: How; free?: boolean | 'some'; mayTrain?: boolean; plugin?: boolean; added?: boolean }
 
 const presetName = (id: string) => PRESETS.find((p) => p.id === id)?.name ?? id;
 
-/** The full list. Only what can really be added today — nothing that would end in 「暂不支持」. */
-export const CATALOG: Entry[] = [
+/** The list for a server without the channels catalog (an older peer). Only what can really be added there. */
+const FALLBACK: Entry[] = [
   { id: 'openrouter-free', name: tr('OpenRouter 免费模型'), groups: ['free'], note: tr('注册拿一个 Key，名字带 :free 的模型不花钱'), how: { type: 'api', preset: 'openrouter' } },
   { id: 'gemini-key', name: tr('Gemini 官方免费 Key'), groups: ['free'], icon: 'gemini', note: tr('Google AI Studio 的 Key 自带免费额度'), how: { type: 'api', preset: 'gemini' } },
   { id: 'siliconflow-free', name: tr('硅基流动免费模型'), groups: ['free'], note: tr('部分模型免费，用自己的 Key'), how: { type: 'api', preset: 'siliconflow' } },
@@ -35,26 +37,59 @@ export const CATALOG: Entry[] = [
   })),
 ];
 
+const ICONS: [RegExp, IconName][] = [[/gemini/i, 'gemini'], [/claude|anthropic/i, 'claude'], [/kimi|moonshot/i, 'kimi'], [/qwen|dashscope|bailian/i, 'qwen'], [/workbuddy/i, 'agent']];
+const GROUP_OF: Record<CatalogSummary['category'], AddStart> = { free: 'free', subscription: 'login', api: 'api', 'local-engine': 'local' };
+
+/** A catalog entry (built-in, remote, or a plugin's) as a wizard row: which choice it is under and what adding it takes. */
+function fromCatalog(c: CatalogSummary): Entry {
+  const groups: AddStart[] = [GROUP_OF[c.category]];
+  if (c.free && !groups.includes('free')) groups.push('free');
+  const how: How = c.driver.startsWith('upstream:') ? { type: 'account', kind: c.driver.slice(9) as UpstreamKind }
+    : c.driver.startsWith('engine:') ? { type: 'engine', id: c.driver.slice(7) as EngineId }
+      : { type: 'catalog', entry: c };
+  const note = c.plugin ? tr('来自插件「{id}」', { id: c.plugin.id })
+    : how.type === 'engine' ? tr('在这台电脑上运行，把你的订阅账号变成可用的模型')
+      : c.limits ?? (c.needs === 'none' ? tr('不用 Key') : c.needs === 'login' ? tr('登录账号') : tr('填 {name} 的 Key', { name: c.name }));
+  return { id: c.id, name: c.name, groups, icon: ICONS.find(([re]) => re.test(c.id))?.[1], note, how, free: c.free, mayTrain: c.mayTrain, plugin: !!c.plugin, added: c.added };
+}
+
+/** The live catalog (with the relay form kept for any other address), or the fixed list on an older server. */
+function entriesOf(catalog: CatalogSummary[]): Entry[] {
+  if (!catalog.length) return FALLBACK;
+  const relay = FALLBACK.find((e) => e.id === 'api-relay');
+  return [...catalog.filter((c) => !c.retired).map(fromCatalog), ...(relay ? [relay] : [])];
+}
+
 const CHOICES: { id: AddStart; title: string; note: string; icon: IconName }[] = [
   { id: 'free', title: tr('免费使用'), note: tr('不花钱的模型和免费额度'), icon: 'sparkle' },
   { id: 'login', title: tr('登录账号'), note: tr('Claude、Gemini 网页、WorkBuddy'), icon: 'user' },
   { id: 'api', title: tr('填写 API 地址'), note: tr('官方或中转的地址和 Key'), icon: 'cloud' },
+  { id: 'local', title: tr('本机运行内核'), note: tr('CLIProxyAPI、Magpie 在这台电脑上跑'), icon: 'terminal' },
 ];
 
 /** 添加来源: three big choices, a search over the full list, then only the steps the picked source needs. */
 function AddSourceWizard() {
   const start = useAddSource((s) => s.start);
+  const catalog = useGateway((s) => s.catalog);
+  useEffect(() => { installGatewayEvents(); void useGateway.getState().loadCatalog().catch(() => {}); }, []);
   const [group, setGroup] = useState<AddStart | null>(start);
   const [query, setQuery] = useState('');
   const [entry, setEntry] = useState<Entry | null>(null);
+  // opened on one entry (a dashboard card's 添加): straight to its form once the catalog is in
+  const startEntry = useAddSource((s) => s.entry);
+  useEffect(() => {
+    if (!startEntry || entry) return;
+    const e = entriesOf(catalog).find((x) => x.id === startEntry);
+    if (e) setEntry(e);
+  }, [catalog, startEntry]);
   const [done, setDone] = useState<string | null>(null);
   const search = useRef<HTMLInputElement>(null);
   useEffect(() => { setTimeout(() => search.current?.focus({ preventScroll: true }), 0); }, []);
 
   const list = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return CATALOG.filter((e) => (!group || e.groups.includes(group)) && (!q || e.name.toLowerCase().includes(q) || e.note.toLowerCase().includes(q)));
-  }, [group, query]);
+    return entriesOf(catalog).filter((e) => (!group || e.groups.includes(group)) && (!q || e.name.toLowerCase().includes(q) || e.note.toLowerCase().includes(q)));
+  }, [catalog, group, query]);
 
   const finished = (name: string, p: Provider | null = null) => {
     setDone(name);
@@ -104,6 +139,12 @@ function AddSourceWizard() {
         {!done && entry?.how.type === 'api' && (
           <QuickConnect key={entry.id} preset={entry.how.preset} makeDefault={false} onDone={(p) => finished(p.name, p)} />
         )}
+        {!done && entry?.how.type === 'catalog' && (
+          <CatalogForm key={entry.id} entry={entry.how.entry} onDone={finished} />
+        )}
+        {!done && entry?.how.type === 'engine' && (
+          <EnginePanel key={entry.id} id={entry.how.id} onReady={(p) => finished(entry.name, p)} />
+        )}
 
         {!done && !entry && (
           <>
@@ -135,7 +176,8 @@ function AddSourceWizard() {
                 <button key={e.id} className="gw-catalog-row" data-id={e.id} onClick={() => setEntry(e)}>
                   <span className="gw-logo sm">{e.icon ? <Icon name={e.icon} size={14} /> : e.name.slice(0, 1).toUpperCase()}</span>
                   <span className="gw-source-who"><b>{e.name}</b><span className="sub">{e.note}</span></span>
-                  {e.groups.includes('free') && <span className="gw-tag">{tr('免费')}</span>}
+                  <SourceTags free={e.free ?? (e.groups.includes('free') ? true : undefined)} mayTrain={e.mayTrain} plugin={e.plugin} />
+                  {e.added && <span className="gw-tag">{tr('已添加')}</span>}
                   <Icon name="chevronRight" size={13} />
                 </button>
               ))}

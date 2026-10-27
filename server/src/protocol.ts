@@ -19,7 +19,7 @@ import type { UpstreamRequest } from './upstreams/types.js';
 import type { ChannelRequest } from './channels/types.js';
 export * from './upstreams/types.js';
 export type * from './channels/types.js';
-import type { EngineRequest } from './engines/types.js';
+import type { EngineEvent, EngineRequest } from './engines/types.js';
 export type * from './engines/types.js';
 /** stage E5: WSL ↔ Windows paths (pure, the web side uses them too) */
 export * from './wsl/paths.js';
@@ -884,6 +884,7 @@ export type ServerEvent =
   /** `web.status` would answer differently now (a host came or went, a setting changed). */
   | { kind: 'web.changed' }
   | GatewayEvent
+  | EngineEvent
   | PeerEvent
   | OrchestraEvent
   | BackgroundEvent

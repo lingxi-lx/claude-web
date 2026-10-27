@@ -208,7 +208,7 @@ export class PluginService {
    * gateway/service.ts calls `request-before` on each attempt's body after 隐私保护 redacted it, and
    * `response-after` on a whole non-streamed answer before it is restored (GatewayHookPayload).
    */
-  async runHook<T>(hook: Exclude<PluginHook, 'source-provider'>, payload: T): Promise<T> {
+  async runHook<T>(hook: Exclude<PluginHook, 'source-provider'>, payload: T, onSkip?: (pluginId: string, why: 'too-large' | 'timeout' | 'error') => void): Promise<T> {
     let cur = payload;
     for (const e of this.executables) {
       const m = e.manifest;
@@ -217,7 +217,10 @@ export class PluginService {
         const out = await e.runner.call<T | null>(hook, cur);
         if (out !== null && out !== undefined) cur = out;
       } catch (err) {
-        e.error = (err as Error).message;
+        const msg = (err as Error).message;
+        e.error = msg;
+        // the caller records it (the gateway: on the request's activity line), so a skip is never silent
+        try { onSkip?.(m.id, /too large/i.test(msg) ? 'too-large' : /time(d)? ?out/i.test(msg) ? 'timeout' : 'error'); } catch { /* the caller's problem */ }
       }
     }
     return cur;
