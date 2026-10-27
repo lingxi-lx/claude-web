@@ -59,6 +59,7 @@ npm run dev          # 开发：server tsx watch + vite :5173（代理 /ws 到 3
 | [phase12-memory](docs/notes/phase12-memory.md) | 跨 agent 共享记忆（阶段 12，2026-09-04） | memory.db、FTS5 与中文、MCP 注入 |
 | [library](docs/notes/library.md) | 统一会话库（2026-09-27） | 对话库来源表、id 规则、索引、Codex/OpenCode 的坑、watchTree |
 | [gateway](docs/notes/gateway.md) | 模型网关（2026-09-28） | 网关分层、透传保字节、故障转移、协议坑 |
+| [gateway-ui](docs/notes/gateway-ui.md) | 上游页：来源卡片 + 筛选（2026-10-26） | 来源卡片 / 筛选、详情模块、旧 tab 去向、添加来源向导、隐私中心挂载点、Esc 由内到外 |
 | [agent-config](docs/notes/agent-config.md) | 其它 agent 的配置中心（2026-09-28） | Codex/Gemini/Qwen/OpenCode 配置编辑、备份、CLI 的坑 |
 | [federation](docs/notes/federation.md) | 跨机器会话 / 联邦（2026-09-28） | peer 连接、id 前缀、路由表、防环、远端文件保护 |
 | [orchestra](docs/notes/orchestra.md) | 多 agent 编排（2026-09-28） | 编排引擎、worktree / 比选、不毁用户的东西、竞态 |
