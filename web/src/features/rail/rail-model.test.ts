@@ -3,9 +3,9 @@ import { CORE_PANELS, PANELS } from '@/model/layout';
 import { MAX_PINS, RAIL_MORE, RAIL_SECTIONS, railPanel, readPins, togglePin } from './rail-model';
 
 describe('the icon rail: the sections, the other panels behind ···', () => {
-  it('the sections are 对话 · 后台 · 自动化 · 网关 · 扩展, in that order', () => {
+  it('the sections are 对话 · 后台 · 自动化 · 上游 · 扩展, in that order (spec 2026-10-26: the gateway section is labelled 上游, its id stays gateway)', () => {
     expect(RAIL_SECTIONS.map((s) => s.id)).toEqual(['chat', 'background', 'automation', 'gateway', 'extensions']);
-    expect(RAIL_SECTIONS.map((s) => s.label)).toEqual(['对话', '后台', '自动化', '网关', '扩展']);
+    expect(RAIL_SECTIONS.map((s) => s.label)).toEqual(['对话', '后台', '自动化', '上游', '扩展']);
   });
   it('··· lists real panels, none of them a fixed tab of the right panel', () => {
     const ids = PANELS.map((p) => p.id);
