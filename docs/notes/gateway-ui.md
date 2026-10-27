@@ -40,3 +40,10 @@
 - 「本机运行内核」「免费」两类要等 channels 的 catalog / drivers 补上真实来源才会有卡片。
 - 登录账号里没有 Codex / Cline（还不能真加）。
 - 对话模型菜单底部的「管理来源」/ 轻量添加面板还没接（`openAddSource()` 已可调）。
+
+## 挂载点和入口（2026-10-26 第二轮）
+
+- `mounts.tsx`：别的分支的组件按文件是否存在自己挂上（`import.meta.glob` + lazy，没有就占位）：`privacy/PrivacyCenter`、`routing/RoutingDetail`（智能路由详情的主体，卡片在有它时总显示）、`share/ShareDrawer`（共享抽屉主体，没有时用 `ShareFallback`）、`sync/SyncPanel` 和 `plugins/PluginList`（页头 ⋯ 菜单 → 备份与同步 / 插件 抽屉）。都是具名导出、无 props。
+- 模型菜单底部加了「管理来源」（`MODEL_MENU_ID.sources`，进了 reach 表）→ `openGateway()`。
+- 首页 composer：`needsModel` 为真时框上方一行「添加来源」→ `openAddSource()`；加完 `welcomeProvider` 自动换到新来源，草稿不动。
+- `use-esc-close.ts`：编辑器（账号 / 任务 / 密钥 / 添加账号）在 window capture 阶段收 Esc，只有自己是最上层 `.modal-bg` 且没有菜单开着时才关——焦点在 body 上也能关。
