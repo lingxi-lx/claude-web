@@ -3,6 +3,7 @@ import { spawn, execFile, type ChildProcess } from 'node:child_process';
 import { appendFile, mkdirSync, renameSync, rmSync, statSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { LOCAL_NO_PROXY, mergeNoProxy, proxy } from '../net/proxy.js';
 
 const LOG_MAX = 5 * 1024 * 1024;
 
@@ -30,10 +31,35 @@ export async function tailLog(root: string, id: string, lines = 200): Promise<st
   }
 }
 
+/**
+ * What an engine may see of our environment (review E1): the system's own variables a program needs to run and find
+ * its config folders, nothing else — no API keys, OAuth tokens, CLAUDE_WEB_* / ANTHROPIC_* / OPENAI_*, nor the
+ * dev shell's variables. Matched case-insensitively (Windows spells PATH as `Path`).
+ */
+const ENV_ALLOW = new Set([
+  'PATH', 'PATHEXT', 'SYSTEMROOT', 'SYSTEMDRIVE', 'WINDIR', 'COMSPEC', 'TEMP', 'TMP', 'TMPDIR',
+  'HOME', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'APPDATA', 'LOCALAPPDATA', 'PROGRAMDATA',
+  'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'XDG_RUNTIME_DIR', 'LANG', 'LC_ALL', 'TZ',
+]);
+
+/**
+ * The engine's environment: the allow-list above, the outbound proxy only when `network.proxy` has one in use
+ * (`proxyUrl`, with loopback / the LAN direct), then the engine's own variables.
+ */
+export function engineEnv(base: NodeJS.ProcessEnv, own: Record<string, string>, proxyUrl: string | null): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [k, v] of Object.entries(base)) if (v !== undefined && ENV_ALLOW.has(k.toUpperCase())) env[k] = v;
+  if (proxyUrl) {
+    env.HTTPS_PROXY = env.HTTP_PROXY = env.https_proxy = env.http_proxy = proxyUrl;
+    env.NO_PROXY = env.no_proxy = mergeNoProxy(base.NO_PROXY ?? base.no_proxy, LOCAL_NO_PROXY);
+  }
+  return { ...env, ...own };
+}
+
 export function startProcess(bin: string, args: string[], opts: { cwd: string; env: Record<string, string>; root: string; id: string }): ChildProcess {
   const child = spawn(bin, args, {
     cwd: opts.cwd,
-    env: { ...process.env, ...opts.env },
+    env: engineEnv(process.env, opts.env, proxy.url),
     windowsHide: true,
     // POSIX: its own process group, so a stop reaches what it started
     detached: process.platform !== 'win32',

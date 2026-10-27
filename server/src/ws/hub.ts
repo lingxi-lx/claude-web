@@ -1317,7 +1317,7 @@ export class Hub {
     if (isPluginRequest(req) && s.plugins) return handlePluginRequest(s.plugins, req);
     if (isSyncRequest(req) && s.sync) return handleSyncRequest(s.sync, req);
     if (isShareRequest(req) && s.share) return handleShareRequest(s.share, req);
-    if (isEngineRequest(req)) return handleEngineRequest(s.engines, req);
+    if (isEngineRequest(req)) return handleEngineRequest(s.engines, req, this.peerConns.has(ws) || this.remoteConns.has(ws));
     if (isUpstreamRequest(req)) return handleUpstreamRequest(s.upstreams, s.tasks, req);
     if (isGatewayRequest(req)) return handleGatewayRequest(s.gateway, req);
     if (isPrivacyRequest(req)) return handlePrivacyRequest(s.privacy, req);

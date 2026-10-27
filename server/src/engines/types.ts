@@ -19,6 +19,14 @@ export interface EngineStatus {
   previousVersion?: string;
   /** how the installed build was checked: the release's own SHA-256, or a hash we recorded at first install */
   verified?: 'release' | 'recorded';
+  /** SHA-256 of the installed build (the release's, or the one recorded when the user confirmed an unverified build) */
+  sha256?: string;
+  /**
+   * Only in an install / upgrade answer: the release publishes no SHA-256, so nothing was installed. The UI shows
+   * the downloaded file's hash and, if the user agrees, sends engines.install again with `allowUnverified` (and
+   * this `sha256`, so a different file is not installed under that consent).
+   */
+  confirm?: { version: string; asset: string; sha256: string };
   port?: number;
   health: 'stopped' | 'starting' | 'ok' | 'error';
   detail?: string;
@@ -36,8 +44,11 @@ export type EngineEvent = { kind: 'engines.changed'; id: EngineId; step?: Engine
 
 export type EngineRequest =
   | { kind: 'engines.status' }
-  /** download + verify (version = a release tag; absent = latest) */
-  | { kind: 'engines.install'; id: EngineId; version?: string }
+  /**
+   * download + verify (version = a release tag; absent = latest). A release without a published SHA-256 installs
+   * only with allowUnverified (the user confirmed; sha256 = the hash they were shown, which must still match).
+   */
+  | { kind: 'engines.install'; id: EngineId; version?: string; allowUnverified?: boolean; sha256?: string }
   /** install the latest release next to the current one and switch; a failed start rolls back */
   | { kind: 'engines.upgrade'; id: EngineId }
   | { kind: 'engines.rollback'; id: EngineId }

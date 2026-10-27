@@ -63,6 +63,22 @@ describe('EngineManager install verification', () => {
     expect(s.state.cliproxyapi?.version).toBeUndefined();
   });
 
+  it('a release with no published SHA-256 installs nothing until the user confirms that file (review E2)', async () => {
+    const s = setup((name, body) => ({ tag_name: 'v9.9.9', assets: [{ name, browser_download_url: `https://dl.example/${name}`, size: body.length }] }));
+    const asked = await s.mgr.install('cliproxyapi');
+    expect(asked.confirm).toEqual({ version: 'v9.9.9', asset: s.name, sha256: sha(s.body) });
+    expect(asked.installed).toBe(false);
+    expect(s.state.cliproxyapi?.version).toBeUndefined();
+    expect(fs.existsSync(path.join(s.root, 'cliproxyapi', 'v9.9.9'))).toBe(false);
+    // consent to another file's hash is not consent to this one
+    const other = await s.mgr.install('cliproxyapi', undefined, { allowUnverified: true, sha256: 'f'.repeat(64) });
+    expect(other.confirm?.sha256).toBe(sha(s.body));
+    expect(s.state.cliproxyapi?.version).toBeUndefined();
+    const done = await s.mgr.install('cliproxyapi', undefined, { allowUnverified: true, sha256: sha(s.body) });
+    expect(done.confirm).toBeUndefined();
+    expect(done).toMatchObject({ installed: true, version: 'v9.9.9', verified: 'recorded', sha256: sha(s.body) });
+  });
+
   it('an incomplete download (size differs) is refused before hashing', async () => {
     const s = setup((name, body) => ({ tag_name: 'v9.9.9', assets: [{ name, browser_download_url: `https://dl.example/${name}`, size: body.length + 1, digest: `sha256:${sha(body)}` }] }));
     await expect(s.mgr.install('cliproxyapi')).rejects.toThrow();

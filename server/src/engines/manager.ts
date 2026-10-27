@@ -16,6 +16,7 @@ import type { ProviderService } from '../providers/service.js';
 import type { SecretService } from '../secrets/service.js';
 import { freePort, unpack } from '../upstreams/sidecar.js';
 import { planModels } from '../channels/plan.js';
+import { proxy } from '../net/proxy.js';
 import { MANIFESTS, type EngineManifest } from './manifests/index.js';
 import { startProcess, stopTree, tailLog } from './process.js';
 import type { EngineId, EngineStatus } from './types.js';
@@ -67,6 +68,20 @@ const NOT_A_BUILD = /(\.(sha256|sha512|sig|asc|txt|json|deb|rpm|dmg|pkg|msi|appi
 const isArchive = (name: string) => /\.zip$/i.test(name) ? 'zip' as const : /\.(tar\.gz|tgz)$/i.test(name) ? 'tar.gz' as const : null;
 
 export const platformKey = () => `${process.platform}-${process.arch}`;
+
+/** No SHA-256 published and the user has not confirmed this file (review E2): nothing is installed. */
+export class UnverifiedBuild extends Error {
+  constructor(readonly info: { version: string; asset: string; sha256: string }, name: string) {
+    super(tr('{name} {version} 的发布没有附带 SHA-256，要你确认后才安装（文件的 SHA-256：{sha256}）', { name, version: info.version, sha256: info.sha256 }));
+  }
+}
+
+export interface InstallOptions {
+  /** the user agreed to install a build whose release publishes no SHA-256 */
+  allowUnverified?: boolean;
+  /** the hash the user was shown; the download must still have it */
+  sha256?: string;
+}
 
 /** The build for this OS / CPU among a release's assets (the manifest's preference first, archives before bare files). */
 export function pickAsset(m: Pick<EngineManifest, 'prefer'>, assets: GhAsset[], platform = process.platform, arch = process.arch): GhAsset | null {
@@ -199,7 +214,7 @@ export class EngineManager extends EventEmitter {
       ...(st.mode ? { mode: st.mode } : {}),
       ...(installed && st.version ? { version: st.version } : {}),
       ...(st.previousVersion ? { previousVersion: st.previousVersion } : {}),
-      ...(b ? { verified: b.verified } : {}),
+      ...(b ? { verified: b.verified, sha256: b.sha256 } : {}),
       ...(port ? { port } : {}),
       health,
       ...(detail ? { detail } : {}),
@@ -248,11 +263,19 @@ export class EngineManager extends EventEmitter {
     }
   }
 
-  install(id: EngineId, tag?: string): Promise<EngineStatus> {
-    return this.serial(id, async () => { await this.installNow(id, tag); return this.status(id); });
+  install(id: EngineId, tag?: string, opts: InstallOptions = {}): Promise<EngineStatus> {
+    return this.serial(id, async () => {
+      try {
+        await this.installNow(id, tag, opts);
+      } catch (e) {
+        if (e instanceof UnverifiedBuild) return { ...(await this.status(id)), confirm: e.info };
+        throw e;
+      }
+      return this.status(id);
+    });
   }
 
-  private async installNow(id: EngineId, tag?: string): Promise<string> {
+  private async installNow(id: EngineId, tag?: string, opts: InstallOptions = {}): Promise<string> {
     const m = this.manifest(id);
     const st = this.state(id);
     this.emit('progress', id, 'release');
@@ -285,6 +308,11 @@ export class EngineManager extends EventEmitter {
       // no published hash: one we recorded earlier for the same file must still match
       const before = st.builds?.[version];
       if (!expected && before && before.asset === asset.name && before.sha256 !== hash) throw new Error(tr('{name} 的文件和上次安装时记下的哈希不一致，已丢弃', { name: m.name }));
+      // no published hash and not the file the user already confirmed: ask first (the same file's hash is shown)
+      const confirmedBefore = !!before && before.asset === asset.name && before.sha256 === hash;
+      if (!expected && !confirmedBefore && (!opts.allowUnverified || (opts.sha256 && opts.sha256.toLowerCase() !== hash))) {
+        throw new UnverifiedBuild({ version, asset: asset.name, sha256: hash }, m.name);
+      }
       const kind = isArchive(asset.name);
       const dl = path.join(tmp, kind === 'zip' ? 'download.zip' : kind ? 'download.tar.gz' : `${m.entry}${exe}`);
       await fs.writeFile(dl, buf);
@@ -326,7 +354,14 @@ export class EngineManager extends EventEmitter {
       const st = this.state(id);
       const was = st.version;
       const running = this.runs.has(id);
-      const now = await this.installNow(id);
+      let now: string;
+      try {
+        now = await this.installNow(id);
+      } catch (e) {
+        // unverified: the UI confirms and installs that version with engines.install (nothing changed here)
+        if (e instanceof UnverifiedBuild) return { ...(await this.status(id)), confirm: e.info };
+        throw e;
+      }
       if (now === was) return this.status(id);
       if (running) {
         await this.stopNow(id, false);
@@ -404,6 +439,8 @@ export class EngineManager extends EventEmitter {
     await fs.mkdir(dir, { recursive: true });
     const ctx = { port, dir, clientKey, managementKey };
     if (m.prepare) await m.prepare(ctx);
+    // the proxy `network.proxy` decides is the only one the engine is handed (engineEnv)
+    await proxy.refresh().catch(() => {});
     const child = startProcess(bin, m.args(ctx), { cwd: dir, env: m.env(ctx), root: this.root, id });
     const run: Runtime = { child, port, health: 'starting', stopping: false, fails: 0 };
     this.runs.set(id, run);

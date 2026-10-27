@@ -1177,6 +1177,8 @@ export const EN_SERVER: Record<string, string> = {
   "这个来源还不能在这里添加": "This source can't be added here yet",
   "这个来源不能在这里移除（账号在来源详情里管理）": "This source can't be removed here (its accounts are managed in the source's details)",
   "没有这个托管程序：{id}": "No such managed program: {id}",
+  "只有本机的桌面窗口才能管理托管程序": "Only a desktop window on this computer can manage managed programs",
+  "{name} {version} 的发布没有附带 SHA-256，要你确认后才安装（文件的 SHA-256：{sha256}）": "{name} {version} publishes no SHA-256, so it installs only once you confirm (the file's SHA-256: {sha256})",
   "Magpie 会在后台自己更新，实际运行的版本可能和这里装的不同": "Magpie updates itself in the background, so the version running may differ from the one installed here",
   "这个版本的发布没有附带 SHA-256：首次安装时记下了文件的哈希，只能保证之后没被换过": "This release publishes no SHA-256: the file's hash was recorded at first install, which only shows it hasn't been swapped since",
   "连不上 127.0.0.1:{port} 上的 {name}": "Can't reach {name} on 127.0.0.1:{port}",

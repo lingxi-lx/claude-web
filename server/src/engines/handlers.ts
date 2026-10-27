@@ -13,10 +13,19 @@ const engineId = (id: unknown): EngineId => {
   return id as EngineId;
 };
 
-export async function handleEngineRequest(svc: EngineManager, req: EngineRequest): Promise<unknown> {
+/**
+ * `remote`: a federation peer, a remote-access browser or a paired phone. They may read the status; everything
+ * else downloads / runs programs on this computer or reads their logs (upstream errors, OAuth messages), so it is
+ * for a window on this computer only (review E4).
+ */
+export async function handleEngineRequest(svc: EngineManager, req: EngineRequest, remote = false): Promise<unknown> {
+  if (remote && req.kind !== 'engines.status') throw new Error(tr('只有本机的桌面窗口才能管理托管程序'));
   switch (req.kind) {
     case 'engines.status': return { engines: await svc.statuses() };
-    case 'engines.install': return svc.install(engineId(req.id), typeof req.version === 'string' && req.version ? req.version : undefined);
+    case 'engines.install': return svc.install(engineId(req.id), typeof req.version === 'string' && req.version ? req.version : undefined, {
+      allowUnverified: req.allowUnverified === true,
+      ...(typeof req.sha256 === 'string' && req.sha256 ? { sha256: req.sha256 } : {}),
+    });
     case 'engines.upgrade': return svc.upgrade(engineId(req.id));
     case 'engines.rollback': return svc.rollback(engineId(req.id));
     case 'engines.start': return svc.start(engineId(req.id));
