@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { readView, VIEW_KEY } from '@/features/sidebar/view';
-import type { AgentInfo, AgentKind, AttachmentRef, EffortLevel, EngineInfo, Limits, MessageFeedback, PermissionMode, Provider, SessionEnv, SessionFeatures, PermissionRequestEvent, RunnerState, Schedule, ServerEvent, SessionInfoSnapshot, SessionMeta, SessionSummary, SourceStatus, Workspace } from '@shared';
+import type { RoutedInfo, AgentInfo, AgentKind, AttachmentRef, EffortLevel, EngineInfo, Limits, MessageFeedback, PermissionMode, Provider, SessionEnv, SessionFeatures, PermissionRequestEvent, RunnerState, Schedule, ServerEvent, SessionInfoSnapshot, SessionMeta, SessionSummary, SourceStatus, Workspace } from '@shared';
 import { withDefaultMode } from './default-mode';
 import { decodeAttachments, findChainUuidBefore } from '@/model/conversation';
 import { activeGroup, chatTile, deriveActive, hasLegacyLayout, initialLayout, layoutReducer, migrateLegacy, migrateWorkbench, needsSimplifiedNotice, panelToggleEffect, sanitizeLayout, SIMPLIFIED_NOTICE_KEY, type LayoutAction, type LayoutState, type Tile } from '@/model/layout';
@@ -115,6 +115,8 @@ interface State {
    * of the record (2026-10-26 QA). Absent = not asked yet, or an older server.
    */
   resumeModes: Record<string, PermissionMode>;
+  /** 智能路由: the model each conversation on a routing group last really got (gateway.routed) — 「自动 → 实际：…」 */
+  routed: Record<string, RoutedInfo>;
   loadResumeMode(sessionId: string): Promise<void>;
   schedules: Schedule[];
   limits: Limits | null;
@@ -466,6 +468,7 @@ export const useStore = create<State>((set, get) => ({
   workspaces: [],
   sessionMeta: {},
   resumeModes: {},
+  routed: {},
   schedules: [],
   limits: null,
   auth: null,
@@ -681,6 +684,13 @@ export const useStore = create<State>((set, get) => ({
         case 'permission.resolved':
           set((s) => { const out = { ...s.open }; for (const [id, o] of Object.entries(out)) if (o.pending.some((p) => p.requestId === e.requestId)) out[id] = { ...o, pending: o.pending.filter((p) => p.requestId !== e.requestId), version: o.version + 1 }; return { open: out }; });
           break;
+        case 'gateway.routed': {
+          const { kind: _k, ...info } = e;
+          const prev = get().routed[e.sessionId];
+          // only a change re-renders (every request of a turn reports)
+          if (!prev || prev.model !== info.model || prev.label !== info.label || prev.switched !== info.switched || prev.policy !== info.policy) set((s) => ({ routed: { ...s.routed, [e.sessionId]: info } }));
+          break;
+        }
         case 'gateway.promptHeavy':
           // Gemini web / WorkBuddy re-send the whole prompt every turn and have a byte ceiling: past it the model
           // gets an attachment (slow) and eventually a truncated tail. Said once per conversation, server-side.

@@ -4,7 +4,7 @@ import { ModeChangedError, useScopedSession, useStore } from '@/store';
 import { ws } from '@/ws/client';
 import { desktop } from '@/desktop';
 import { clsx, shortModel } from '@/util';
-import { parsePeerId, type AgentKind, type AttachmentRef, type EffortLevel, type PeerInfo, type PermissionMode, type PermissionRequestEvent, type SessionFeatures, type WslDistro, wslToWin } from '@shared';
+import { parsePeerId, policyOfModel, type AgentKind, type AttachmentRef, type EffortLevel, type PeerInfo, type PermissionMode, type PermissionRequestEvent, type SessionFeatures, type WslDistro, wslToWin } from '@shared';
 import { MachineChip } from './MachineChip';
 import { machineOf } from './machine';
 import { installClaudeInWsl } from '@/features/remote/wsl-install';
@@ -34,7 +34,7 @@ import { ModelChip } from '@/features/models/ModelMenu';
 import { EffortChip, type EffortChipProps } from '@/features/models/EffortChip';
 import { SubagentChip, subagentLabel } from '@/features/models/SubagentChip';
 import { subagentModelFor } from '../../../../server/src/models/subagent';
-import { OWN_PROVIDER, agentModels, effectiveRuntime, usableProfile, type AgentSource, type ModelMenuItem } from '@/features/models/menu';
+import { OWN_PROVIDER, agentModels, effectiveRuntime, routingPolicyLabel, usableProfile, type AgentSource, type ModelMenuItem } from '@/features/models/menu';
 import { mergeResume, resumeView } from '@/store/reopen';
 import { routePick, switchedNote } from '@/features/models/route';
 import { claudeEffortView, modelChipText } from '@/features/models/intelligence';
@@ -159,6 +159,8 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   // 发送前核对权限: the mode the chip of a conversation that is not running shows (set while rendering it), and the
   // short notice when a send was refused because the conversation would really resume in another one
   const shownMode = useRef<PermissionMode | undefined>(undefined);
+  // 智能路由: the model this conversation really got last (shown after the strategy on the chip)
+  const routed = useStore((s) => (active ? s.routed[active.sessionId] : undefined));
   const [modeNotice, setModeNotice] = useState<{ sid: string; text: string } | null>(null);
   const [palIdx, setPalIdx] = useState(0);
   // Shift+Tab in the empty box: the next permission mode (like the CLI) — set by whichever chip is drawn below
@@ -1107,12 +1109,15 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     const defaultEffort = liveView.defaultLevel;
     const t = modelChipText({ agent: liveAgent, agentName: info.agentName, providers, providerId: remote ? 'claude' : liveProvider, providerName: info.providerName, model: info.model, builtin: liveProvider === 'claude' && info.models?.length ? info.models : undefined, agentDefault: liveAgentDefault, efforts: liveEfforts, effort: info.effort, defaultEffort, ultracode: ultraOk && !!info.ultracode, accountDefault });
     const remoteLabel = `${info.providerName ? `${info.providerName} / ` : ''}${info.models?.find((m) => m.value === info.model)?.displayName ?? (shortModel(info.model) || tr('模型'))}`;
+    // 智能路由: 「自动 → 实际：<model>」 — the real model is never hidden behind the strategy (spec §7.2)
+    const pol = info.model ? policyOfModel(info.model) : undefined;
+    const routedNote = pol && routed ? { label: tr('{policy} → 实际：{model}', { policy: routingPolicyLabel(pol), model: routed.model }), title: tr('智能路由实际用的是 {label}（{reason}）{switched}', { label: routed.label, reason: routed.reason, switched: routed.switched ? tr('，这次换过候选') : '' }) } : undefined;
     model = (
       <ModelChip
         agent={liveAgent}
         current={{ providerId: remote ? 'claude' : liveProvider, model: info.model }}
-        label={remote ? remoteLabel : t.main}
-        title={remote ? tr('模型（其它机器上的对话：换供应商请在那台机器上操作）') : tr("{main}{v}\n同一供应商直接换模型；换供应商会无感重启对话；选其它 Agent 的模型 = 交给它继续", { main: t.main, v: t.isDefault ? tr('（默认）') : '' })}
+        label={routedNote ? routedNote.label : remote ? remoteLabel : t.main}
+        title={(remote ? tr('模型（其它机器上的对话：换供应商请在那台机器上操作）') : tr("{main}{v}\n同一供应商直接换模型；换供应商会无感重启对话；选其它 Agent 的模型 = 交给它继续", { main: t.main, v: t.isDefault ? tr('（默认）') : '' })) + (routedNote ? '\n' + routedNote.title : '')}
         builtin={(remote || liveProvider === 'claude') && info.models?.length ? info.models : undefined}
         builtinTitle={remote ? info.providerName ?? info.agentName ?? tr('模型') : liveAgent === 'claude' ? ownName : tr('{agentName} 账号', { agentName: info.agentName ?? liveAgent })}
         agentDefault={liveAgentDefault}
