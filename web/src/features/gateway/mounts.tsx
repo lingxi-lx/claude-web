@@ -1,26 +1,21 @@
-// Mount points for parts other branches build. Each one is picked up by itself when its file exists (import.meta.glob
-// finds nothing until then) and loads lazily; until it lands the caller shows its own fallback / a placeholder.
+// Mount points for the parts other features own; each loads lazily (only needed once a drawer / detail shows).
 // Contract per file: a named export of the given name, no props.
 //   features/privacy/PrivacyCenter.tsx  → PrivacyCenter  (隐私 drawer, PrivacyDrawer.tsx)
 //   features/routing/RoutingDetail.tsx  → RoutingDetail  (智能路由 source detail)
-//   features/share/ShareDrawer.tsx      → ShareDrawer    (共享 drawer body)
+//   features/share/ShareDrawer.tsx      → ShareDrawer    (共享 drawer, the 远程共享 keys part)
 //   features/sync/SyncPanel.tsx         → SyncPanel      (⋯ → 备份与同步)
 //   features/plugins/PluginList.tsx     → PluginList     (⋯ → 插件)
 import { lazy, Suspense, type ComponentType } from 'react';
 
-type Found = Record<string, () => Promise<any>>;
-
-function optional(found: Found, name: string): ComponentType | null {
-  const load = Object.values(found)[0];
-  if (!load) return null;
-  const C = lazy(() => load().then((m) => ({ default: m[name] as ComponentType })));
+function mounted(load: () => Promise<ComponentType>): ComponentType {
+  const C = lazy(() => load().then((c) => ({ default: c })));
   return function Mounted() {
     return <Suspense fallback={null}><C /></Suspense>;
   };
 }
 
-export const PrivacyCenter = optional(import.meta.glob('../privacy/PrivacyCenter.tsx'), 'PrivacyCenter');
-export const ExternalRoutingDetail = optional(import.meta.glob('../routing/RoutingDetail.tsx'), 'RoutingDetail');
-export const ExternalShareDrawer = optional(import.meta.glob('../share/ShareDrawer.tsx'), 'ShareDrawer');
-export const SyncPanel = optional(import.meta.glob('../sync/SyncPanel.tsx'), 'SyncPanel');
-export const PluginList = optional(import.meta.glob('../plugins/PluginList.tsx'), 'PluginList');
+export const PrivacyCenter = mounted(() => import('../privacy/PrivacyCenter').then((m) => m.PrivacyCenter));
+export const ExternalRoutingDetail = mounted(() => import('../routing/RoutingDetail').then((m) => m.RoutingDetail));
+export const ExternalShareDrawer = mounted(() => import('../share/ShareDrawer').then((m) => m.ShareDrawer));
+export const SyncPanel = mounted(() => import('../sync/SyncPanel').then((m) => m.SyncPanel));
+export const PluginList = mounted(() => import('../plugins/PluginList').then((m) => m.PluginList));

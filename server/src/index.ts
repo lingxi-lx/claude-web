@@ -490,6 +490,8 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   // plugins (declarative sources + isolated executable plugins), sync bundles, 远程共享 keys on the gateway
   const plugins = new PluginService({ meta, secrets });
   await plugins.init().catch((e) => console.error('[plugins]', e?.message ?? e));
+  // request-before / response-after on every gateway attempt, inside 隐私保护's redact → restore (no plugin → no call)
+  gateway.plugins = plugins;
   const sync = new SyncService({ meta, secrets });
   const share = new ShareService(gateway);
   remote = new RemoteService(meta, () => { const s = http.createServer(handler); s.on('upgrade', upgrade); return s; });

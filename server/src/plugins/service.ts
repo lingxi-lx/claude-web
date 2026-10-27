@@ -197,11 +197,16 @@ export class PluginService {
     return this.list();
   }
 
+  /** Whether any enabled, approved plugin declares the hook (the gateway calls nothing when none does). */
+  hasHook(hook: Exclude<PluginHook, 'source-provider'>): boolean {
+    return this.executables.some((e) => !!e.manifest && !!e.runner && this.enabled(e.manifest.id) && this.approved(e.manifest) && e.manifest.hooks.includes(hook));
+  }
+
   /**
    * The gateway's extension points: every enabled, approved plugin declaring the hook, in name order. Each
    * call is isolated (a plugin that throws or times out is skipped, the request goes on unchanged).
-   * Wire-up: gateway/service.ts may call `runHook('request-before', body)` before sending upstream and
-   * `runHook('response-after', …)` on the finished response (not wired yet; see the notes).
+   * gateway/service.ts calls `request-before` on each attempt's body after 隐私保护 redacted it, and
+   * `response-after` on a whole non-streamed answer before it is restored (GatewayHookPayload).
    */
   async runHook<T>(hook: Exclude<PluginHook, 'source-provider'>, payload: T): Promise<T> {
     let cur = payload;

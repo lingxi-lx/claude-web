@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ws } from '@/ws/client';
 import { useStore } from '@/store';
 import { Icon } from '@/ui/icons';
@@ -12,23 +12,22 @@ import { tr } from '@/i18n';
  * was. A group can also be used in this app's conversations as a provider of its own.
  */
 export function RoutingDetail() {
-  // MOUNT POINT: features/routing/RoutingDetail.tsx (mounts.tsx) replaces the body once it exists
-  if (ExternalRoutingDetail) {
-    return (
-      <div className="gw-detail" data-source="routing">
-        <div className="gw-detail-head">
-          <button className="btn sm ghost" onClick={() => showSource(null)} title={tr('返回 (Esc)')}><Icon name="arrowLeft" size={13} /> {tr('全部来源')}</button>
-        </div>
-        <ExternalRoutingDetail />
+  return (
+    <div className="gw-detail" data-source="routing">
+      <div className="gw-detail-head">
+        <button className="btn sm ghost" onClick={() => showSource(null)} title={tr('返回 (Esc)')}><Icon name="arrowLeft" size={13} /> {tr('全部来源')}</button>
       </div>
-    );
-  }
-  return <RouteGroupsDetail />;
+      {/* the smart routing group: strategy, candidates, budget, decisions (features/routing/RoutingDetail.tsx) */}
+      <ExternalRoutingDetail />
+      <RouteGroupsDetail />
+    </div>
+  );
 }
 
-/** The route groups (what 分组与路由 was) — the 智能路由 detail until features/routing lands. */
+/** The ordinary route groups (what 分组与路由 was), under the smart routing detail. */
 function RouteGroupsDetail() {
-  const routeGroups = useGateway((s) => s.routeGroups);
+  const allGroups = useGateway((s) => s.routeGroups);
+  const routeGroups = useMemo(() => allGroups.filter((g) => !g.routing), [allGroups]);
   const status = useGateway((s) => s.status);
   const providers = useStore((s) => s.providers);
   const toast = useStore((s) => s.toast);
@@ -49,13 +48,9 @@ function RouteGroupsDetail() {
     } catch (e: any) { toast(e.message); } finally { setUsing(null); }
   };
   return (
-    <div className="gw-detail" data-source="routing">
-      <div className="gw-detail-head">
-        <button className="btn sm ghost" onClick={() => showSource(null)} title={tr('返回 (Esc)')}><Icon name="arrowLeft" size={13} /> {tr('全部来源')}</button>
-        <span className="grow" />
-      </div>
+    <>
       <div className="gw-detail-title">
-        <h3>{tr('智能路由')}</h3>
+        <h3>{tr('路由组')}</h3>
         <span className="sub">{tr('一个来源失败或没额度时，按顺序换下一个。')}</span>
       </div>
       {!status?.enabled && (
@@ -81,9 +76,9 @@ function RouteGroupsDetail() {
         })}
       </section>
       <section className="gw-module" data-module="groups">
-        <div className="gw-module-head"><b>{tr('路由组')}</b><span className="sub">{tr('成员按顺序尝试；可以固定模型、改模型映射。')}</span></div>
+        <div className="gw-module-head"><span className="sub">{tr('成员按顺序尝试；可以固定模型、改模型映射。')}</span></div>
         <RoutesTab />
       </section>
-    </div>
+    </>
   );
 }

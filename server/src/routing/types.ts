@@ -51,6 +51,11 @@ export interface RoutingCandidate {
   caps?: RoutingCaps;
   /** USD per million tokens, for the paid budget (Claude models without it use the list price) */
   price?: { input: number; output: number };
+  /**
+   * A paid candidate with no known price (no `price`, not a Claude model) cannot be counted against the budget, so it
+   * is never used under one — unless the user ticks this (its spend then counts as $0).
+   */
+  allowUnpriced?: boolean;
 }
 
 /** A structured custom rule: when every given condition holds, the preferred candidates go first (in that order). */
@@ -102,6 +107,8 @@ export interface RoutingCandidateView {
   score?: number;
   /** why it was left out of this request */
   excluded?: string;
+  /** paid with no known price: the budget cannot see what it spends (see RoutingCandidate.allowUnpriced) */
+  unpriced?: boolean;
 }
 
 export interface RoutingAttempt { key: string; label: string; status: number; outcome: 'done' | 'final' | 'switch' | 'broken' | 'aborted' }

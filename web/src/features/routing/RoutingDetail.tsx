@@ -121,6 +121,9 @@ export function RoutingDetail() {
                 <span className="sub"> · {costLabel(v?.cost ?? 'paid')}{v?.caps.context ? ` · ${Math.round(v.caps.context / 1000)}K` : ''}{v && (v.ok + v.fail) > 0 ? ` · ${tr('成功 {ok}/{all}', { ok: v.ok, all: v.ok + v.fail })}` : ''}{v?.latencyMs !== undefined ? ` · ${v.latencyMs}ms` : ''}{v?.health === 'cooling' ? ` · ${tr('冷却中')}` : v?.health === 'disabled' ? ` · ${tr('已停用')}` : ''}</span>
               </span>
               <label title={tr('允许自动路由使用')}><input type="checkbox" checked={c.allowAuto} onChange={(e) => patchCand(i, { allowAuto: e.target.checked })} /> {tr('允许自动路由使用')}</label>
+              {v?.unpriced && (
+                <label title={tr('不知道它的价格，预算算不出它花了多少；默认不用。勾上后它的花费按 0 计。')}><input type="checkbox" checked={!!c.allowUnpriced} onChange={(e) => patchCand(i, { allowUnpriced: e.target.checked || undefined })} /> {tr('价格未知也用')}</label>
+              )}
               <Select value={c.cost ?? ''} onValueChange={(x) => patchCand(i, { cost: (x || undefined) as RoutingCandidate['cost'] })} aria-label={tr('计费')}
                 options={[{ value: '', label: tr('自动判断') }, { value: 'free', label: tr('免费') }, { value: 'subscription', label: tr('订阅') }, { value: 'paid', label: tr('付费') }]} />
               <button className="btn sm ghost" disabled={i === 0} onClick={() => move(i, -1)} aria-label={tr('上移')}>↑</button>

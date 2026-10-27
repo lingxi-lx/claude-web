@@ -944,6 +944,11 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
   const copiedMode = resumeSid ? sessionMeta[resumeSid]?.permissionMode : undefined;
   useEffect(() => { if (resumeSid) void loadResumeMode(resumeSid); }, [resumeSid, active?.state, copiedMode, defaultMode, loadResumeMode]);
   const liveProvider = info?.providerId && info.providerId !== 'claude' ? info.providerId : 'claude';
+  // a conversation already going with nothing to send on (spec 2026-10-26 §2.4): the Claude account logged out, or
+  // its profile deleted since — the 添加来源 line shows over the box (on this machine's Claude conversations only)
+  const convProvider = info?.providerId ?? (active ? sessionMeta[active.sessionId]?.providerId : undefined) ?? 'claude';
+  const liveNoSource = !welcome && !!active && !remote && !disabled && sessionAgent === 'claude'
+    && (convProvider === 'claude' ? needsModel({ provider: 'claude', foreignAgent: false, loggedIn }) : providers.length > 0 && !providers.some((p) => p.id === convProvider)); // (an empty list may just not be loaded yet)
   const liveAgentDefault = liveAgent !== 'claude' ? agents.find((a) => a.kind === liveAgent)?.model || undefined : undefined;
   // the account's default model by name for a chip with no model (final review §9 #2): this conversation's CLI says
   // it (its own login only), else the one remembered from the last conversation that did
@@ -1279,6 +1284,16 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
           <div className="cmp-add-source" role="status">
             <span>{tr('还没有能用的模型来源。')}</span>
             <button type="button" className="link" onClick={() => openAddSource()}>{tr('添加来源')}</button>
+          </div>
+        )}
+        {/* the same for a conversation already going: the wizard opens in place, the draft stays, and an API source added
+            there becomes this conversation's (session.setProvider) */}
+        {liveNoSource && active && (
+          <div className="cmp-add-source" role="status" data-live="1">
+            <span>{tr('这个对话没有能用的模型来源。')}</span>
+            <button type="button" className="link" onClick={() => openAddSource(undefined, (p) => {
+              if (p) void ws.request({ kind: 'session.setProvider', sessionId: active.sessionId, providerId: p.id }).catch((e) => toast(e.message));
+            })}>{tr('添加来源')}</button>
           </div>
         )}
         <div className={clsx('composer-box', under && 'one-line')} data-state={face} onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>

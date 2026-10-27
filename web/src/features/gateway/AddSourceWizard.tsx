@@ -8,6 +8,7 @@ import { PRESETS } from '@/features/providers/quick';
 import { useStore } from '@/store';
 import { AddAccountWizard } from './AddAccountWizard';
 import { useAddSource, closeAddSource, type AddStart } from './add-source';
+import type { Provider } from '@shared';
 import { useGateway } from './state';
 import { tr } from '@/i18n';
 
@@ -55,8 +56,10 @@ function AddSourceWizard() {
     return CATALOG.filter((e) => (!group || e.groups.includes(group)) && (!q || e.name.toLowerCase().includes(q) || e.note.toLowerCase().includes(q)));
   }, [group, query]);
 
-  const finished = (name: string) => {
+  const finished = (name: string, p: Provider | null = null) => {
     setDone(name);
+    // opened from a conversation: it switches to what was just added (its draft stays where it is)
+    try { useAddSource.getState().onAdded?.(p); } catch { /* the caller's problem, not the wizard's */ }
     void useStore.getState().loadProviders().catch(() => {});
     if (useGateway.getState().open) void useGateway.getState().load().catch(() => {});
   };
@@ -99,7 +102,7 @@ function AddSourceWizard() {
           <AddAccountWizard embedded kind={entry.how.kind} onClose={() => setEntry(null)} onAdded={() => finished(entry.name)} />
         )}
         {!done && entry?.how.type === 'api' && (
-          <QuickConnect key={entry.id} preset={entry.how.preset} makeDefault={false} onDone={(p) => finished(p.name)} />
+          <QuickConnect key={entry.id} preset={entry.how.preset} makeDefault={false} onDone={(p) => finished(p.name, p)} />
         )}
 
         {!done && !entry && (

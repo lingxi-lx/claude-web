@@ -46,7 +46,9 @@ export function RoutesTab() {
     ...accounts.map((a) => ({ value: `a:${a.id}`, label: `${a.name}（${tr('账号')}）` })),
     ...pools.map((g) => ({ value: `u:${g.id}`, label: `${g.name}（${tr('账号池')}）` })),
   ];
-  const groups = routeGroups;
+  // the 智能路由 group is edited in its own detail (RoutingDetail): its members are derived from its candidates, so an
+  // edit here would be overwritten
+  const groups = routeGroups.filter((g) => !g.routing);
   return (
     <div className="gateway-tab">
       <div className="gateway-row"><span className="grow">{tr('网关组')}</span><button className="btn sm" onClick={() => void add()}>{tr('新建组')}</button></div>

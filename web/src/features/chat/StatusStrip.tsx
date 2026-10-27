@@ -1,3 +1,4 @@
+import { openAddSource } from '@/features/gateway/add-source';
 import { useEffect, useState } from 'react';
 import { autoContinueAt, disarmAutoContinue, useStore } from '@/store';
 import { deriveStall } from '@/model/health';
@@ -85,8 +86,9 @@ export function StatusStrip({ sessionId }: { sessionId: string }) {
       )}
       {showErr && res && noLogin && (
         <span className="chip err" title={res.text} data-err="no-login">
-          {tr('Claude 账号还没登录 · 接一个模型（API Key）继续这个对话，或者登录 Claude 账号')}
-          <button className="link" data-act="connect" onClick={() => void useModel()}>{tr('接一个模型')}</button>
+          {tr('Claude 账号还没登录 · 添加一个模型来源继续这个对话，或者登录 Claude 账号')}
+          {/* 添加来源 in place (spec 2026-10-26 §2.4): an API source added there becomes this conversation's and the last message goes again */}
+          <button className="link" data-act="connect" onClick={() => openAddSource(undefined, (p) => { if (p) void switchTo(p); })}>{tr('添加来源')}</button>
           <button className="link" data-act="login" onClick={loginInTerminal}>{tr('用 Claude 账号登录')}</button>
         </span>
       )}

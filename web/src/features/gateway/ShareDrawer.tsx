@@ -16,14 +16,15 @@ export function ShareDrawer() {
   const open = useGateway((s) => s.drawer === 'share');
   return (
     <Drawer id="share" title={tr('共享')} open={open} onClose={() => showDrawer(null)}>
-      {/* MOUNT POINT: features/share/ShareDrawer.tsx (mounts.tsx) fills the body once it exists; ours is the fallback */}
-      {ExternalShareDrawer ? <ExternalShareDrawer /> : <ShareFallback />}
+      <ShareLocal />
+      {/* 远程共享: share keys with their own sources / models / quotas, and the LAN listener (features/share) */}
+      <ExternalShareDrawer />
     </Drawer>
   );
 }
 
-/** The 共享 body until features/share lands: the switch, address and key, key groups, port / LAN. */
-function ShareFallback() {
+/** 共享 on this computer: the switch, address and key, key groups, port / LAN. */
+function ShareLocal() {
   const status = useGateway((s) => s.status);
   const toast = useStore((s) => s.toast);
   const reload = () => useGateway.getState().load().catch(() => {});

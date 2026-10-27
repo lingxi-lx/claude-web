@@ -19,7 +19,7 @@
 接入点（**还没接线**，留给对应模块）：
 
 - 渠道目录：`pluginSources()`（`declarative.ts`）返回 `SourceSummary[]`（id `plugin:<插件>/<来源>`，kind 暂用 `provider`），channels 的投影里 append 一下即可；原始定义用 `pluginSourceDefs()`。
-- 网关：`PluginService.runHook('request-before' | 'response-after', payload)`，按名字顺序跑所有启用且批准的插件，出错 / 超时跳过、请求照常。gateway/service.ts 里还没调用（隐私那条线在改它，避免冲突）。
+- 网关：`PluginService.runHook('request-before' | 'response-after', payload)`，按名字顺序跑所有启用且批准的插件，出错 / 超时跳过、请求照常。gateway/service.ts 的 `attempt` 调它（merge-1 接上）：request-before 在隐私脱敏之后（插件只见占位符）、每个重试变体都过一遍；response-after 只给整段非流式回答，在隐私还原之前（passthrough 时请求改 `accept-encoding: identity`，仍是压缩的回答不过插件）。payload 是 `GatewayHookPayload`（source / model / path / body），插件返回 null 或同样的 body 时原字节不变；没有启用的插件声明这个 hook 时什么都不调（`hasHook`）。流式回答不过 response-after。
 - 远程目录：`verifyRemoteCatalog(body, sig)` 用 Ed25519 验签后只解析成来源数据；`mergeRemoteCatalog` 不覆盖用户改过 / 关掉 / 删掉的。`CATALOG_PUBLIC_KEYS` 现在是空的——发版带上公钥前远程层不生效。
 
 WS：`plugins.list / reload / enable / disable / remove`（remove 只删插件目录里的东西）。界面 `web/src/features/plugins/PluginList.tsx`，启用可执行插件前用 `dlg.confirm` 列出权限。

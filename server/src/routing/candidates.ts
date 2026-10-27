@@ -8,6 +8,7 @@ import { modelCaps } from '../models/catalog.js';
 import type { CostClass, RoutingCandidate, RoutingCaps, RoutingConfig, RoutingNeeds, RoutingPolicy } from './types.js';
 import { candidateKey } from './types.js';
 import { tr } from '../i18n/index.js';
+import { isClaudeModel } from '../usage/pricing.js';
 
 /** Past this share of a window the request does not fit (the answer needs room too). */
 const FIT = 0.9;
@@ -68,6 +69,9 @@ export const candidateLabel = (c: RoutingCandidate, look: CandidateLookup): stri
   return `${where} / ${c.model}`;
 };
 
+/** paid with no price the budget can use: none set on the candidate, and not a Claude model (list price) */
+export const unpriced = (c: RoutingCandidate): boolean => !c.price && !isClaudeModel(c.model);
+
 export interface Eligible { c: RoutingCandidate; key: string; label: string; cost: CostClass; caps: RoutingCaps; index: number }
 export interface Filtered { ok: Eligible[]; out: { c: RoutingCandidate; key: string; label: string; cost: CostClass; caps: RoutingCaps; why: string }[] }
 
@@ -103,6 +107,8 @@ export function filterCandidates(o: {
         if (!o.config.allowPaid) return tr('没有允许用付费的');
         if (!o.config.budgetUsd || o.config.budgetUsd <= 0) return tr('没有设付费预算');
         if (o.spentTodayUsd >= o.config.budgetUsd) return tr('今天的付费预算用完了');
+        // what it spends is unknown, so the budget cannot hold it: counted as over budget unless the user allowed it
+        if (unpriced(c) && !c.allowUnpriced) return tr('不知道价格，预算算不出它的花费');
       }
       return null;
     })();

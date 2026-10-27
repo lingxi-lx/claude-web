@@ -37,7 +37,7 @@ import { PrivacyBlocked, type PrivacyGuard, type PrivacyService } from '../priva
 import { PrivacyRelay, RELAY_PREFIX } from '../privacy/relay.js';
 import type { PrivacyRecord } from '../privacy/types.js';
 import { Router, type RoutePlan } from '../routing/router.js';
-import type { CandidateLookup, Eligible } from '../routing/candidates.js';
+import { unpriced, type CandidateLookup, type Eligible } from '../routing/candidates.js';
 import { DEFAULT_ROUTING, ROUTING_MODELS, ROUTING_POLICIES, candidateKey, type RoutingCandidate, type RoutingConfig, type RoutingStatus } from '../routing/types.js';
 
 /** Streaming: time from sending a request to the first body byte before the member counts as failed. */
@@ -56,6 +56,23 @@ const IDLE_MS = 5 * 60_000;
 const BODY_LIMIT = 64 * 1024 * 1024;
 /** the split route's wait for the conversation's own upstream to answer (a non-streamed turn answers when done) */
 const SPLIT_FORWARD_MS = 15 * 60_000;
+
+/** What a plugin's request-before / response-after hook gets (and may return changed; null = unchanged). */
+export interface GatewayHookPayload {
+  /** the source the request goes to (its name) and the model asked of it */
+  source: string;
+  model: string;
+  /** upstream path (e.g. /v1/messages) */
+  path: string;
+  /** the JSON body — already redacted by 隐私保护 (placeholders, never the raw values) */
+  body: unknown;
+}
+
+/** 插件's gateway hooks (plugins/service.ts). Not set, or no enabled plugin declares the hook → nothing is called. */
+export interface GatewayPluginHooks {
+  hasHook(hook: 'request-before' | 'response-after'): boolean;
+  runHook<T>(hook: 'request-before' | 'response-after', payload: T): Promise<T>;
+}
 
 export interface GatewayDeps {
   meta: MetaStore;
@@ -116,6 +133,21 @@ type Attempt =
 
 const isLoopback = (a: string | undefined) => !!a && (a === '::1' || a.startsWith('127.') || a.startsWith('::ffff:127.'));
 const newKey = () => `cwg-${crypto.randomBytes(24).toString('hex')}`;
+/**
+ * One body through the plugins' hook: the same bytes back when it is not JSON or no plugin changed it (so an
+ * untouched passthrough request keeps its exact bytes), re-serialised only when a plugin returned a different body.
+ * A plugin that fails / times out is skipped by PluginService.runHook.
+ */
+async function pluginBody(plugins: GatewayPluginHooks, hook: 'request-before' | 'response-after', meta: Omit<GatewayHookPayload, 'body'>, buf: Buffer | null): Promise<Buffer | null> {
+  if (!buf || !buf.length) return buf;
+  let json: unknown;
+  try { json = JSON.parse(buf.toString('utf8')); } catch { return buf; }
+  const before = JSON.stringify(json);
+  const out = await plugins.runHook<GatewayHookPayload>(hook, { ...meta, body: json });
+  if (!out || out.body === undefined) return buf;
+  const after = JSON.stringify(out.body);
+  return after === before ? buf : Buffer.from(after);
+}
 /** a budget refusal's retry-after: the counters reset at local midnight */
 const secondsToMidnight = () => {
   const d = new Date();
@@ -155,6 +187,8 @@ export class GatewayService extends EventEmitter {
   readonly shim: CacheShim;
   /** 隐私保护's relay for providers not behind the gateway / shim (privacy/relay.ts; `/gateway/~v/…`) */
   readonly relay: PrivacyRelay | null;
+  /** 插件 hooks on each upstream attempt (set by index.ts once plugins are loaded; null → none) */
+  plugins: GatewayPluginHooks | null = null;
   /** key groups and keys: what a request may use, from where, how often */
   readonly keys: GatewayKeyStore;
   /** one whitelisted line per request */
@@ -471,6 +505,7 @@ export class GatewayService extends EventEmitter {
         ...(c.cost === 'free' || c.cost === 'subscription' || c.cost === 'paid' ? { cost: c.cost } : {}),
         ...(c.caps && typeof c.caps === 'object' ? { caps: c.caps } : {}),
         ...(c.price && Number(c.price.input) >= 0 && Number(c.price.output) >= 0 ? { price: { input: Number(c.price.input), output: Number(c.price.output) } } : {}),
+        ...(c.allowUnpriced === true ? { allowUnpriced: true } : {}),
       }))
       .filter((c) => { const k = candidateKey(c); return !seen.has(k) && !!seen.add(k); });
     next.rules = (next.rules ?? []).filter((r) => r && Array.isArray(r.prefer)).map((r, i) => ({ id: String(r.id || `rule-${i + 1}`), when: r.when ?? {}, prefer: r.prefer.map(String) }));
@@ -534,7 +569,7 @@ export class GatewayService extends EventEmitter {
         const v = views.get(key)!;
         const n = this.router.log.numbers(key);
         const st = g ? this.states.peek(g.id, key) : undefined;
-        return { ...v, key, ok: n.ok, fail: n.fail, latencyMs: n.latencyMs, health: st?.disabled ? 'disabled' : st && st.cooldownUntil > now ? 'cooling' : n.ok ? 'ok' : 'unknown', ...(st && st.cooldownUntil > now ? { cooldownUntil: st.cooldownUntil } : {}) };
+        return { ...v, key, ...(v.cost === 'paid' && unpriced(c) ? { unpriced: true } : {}), ok: n.ok, fail: n.fail, latencyMs: n.latencyMs, health: st?.disabled ? 'disabled' : st && st.cooldownUntil > now ? 'cooling' : n.ok ? 'ok' : 'unknown', ...(st && st.cooldownUntil > now ? { cooldownUntil: st.cooldownUntil } : {}) };
       }),
       spentTodayUsd: Math.round(this.router.log.spentToday() * 10000) / 10000,
       switchesToday: this.router.log.switchesToday(),
@@ -1356,6 +1391,20 @@ export class GatewayService extends EventEmitter {
       if (rec) ctx.privacy = rec;
       return { kind: 'final', status: blocked ? 403 : 500, text: JSON.stringify(renderInboundError(route.inbound, blocked ? 403 : 500, e?.message ?? String(e))), headers: {}, passthrough: true, model };
     }
+    // 插件 (plugins/): request-before runs after the redaction above, so a plugin only ever sees placeholders. Nothing
+    // is called (and no byte changes) when no enabled plugin declares the hook.
+    const hookMeta = { source: p.name, model, path };
+    const plugins = route.op === 'generate' ? this.plugins : null;
+    if (plugins?.hasHook('request-before')) {
+      body = (await pluginBody(plugins, 'request-before', hookMeta, body)) ?? body;
+      retryBody = await pluginBody(plugins, 'request-before', hookMeta, retryBody);
+      noThinkingBody = await pluginBody(plugins, 'request-before', hookMeta, noThinkingBody);
+      noEffortBody = await pluginBody(plugins, 'request-before', hookMeta, noEffortBody);
+      bareBody = await pluginBody(plugins, 'request-before', hookMeta, bareBody);
+    }
+    // response-after sees a whole (non-streamed) answer: ask for it uncompressed so it can be read
+    const afterHook = !!plugins?.hasHook('response-after') && !route.stream;
+    if (afterHook && pass) { for (const k of Object.keys(headers)) if (k.toLowerCase() === 'accept-encoding') delete headers[k]; headers['accept-encoding'] = 'identity'; }
     const url = joinUrl(base, path);
     const sent = Date.now();
     // streaming: the first byte must come quickly; non-streaming: nothing arrives until the whole answer is done.
@@ -1427,7 +1476,7 @@ export class GatewayService extends EventEmitter {
 
     // 2xx: hold the client until the first body byte arrives, so a member that stalls can still be skipped
     const src = pass ? up.body : decoded(up.body);
-    const it = src[Symbol.asyncIterator]() as AsyncIterator<Buffer>;
+    let it = src[Symbol.asyncIterator]() as AsyncIterator<Buffer>;
     let first: IteratorResult<Buffer>;
     try {
       first = await withTimeout(it.next(), deadline - Date.now());
@@ -1435,6 +1484,23 @@ export class GatewayService extends EventEmitter {
       up.body.destroy();
       if (ctx.signal.aborted) return aborted();
       return switchOn(504, e?.message === 'timeout' ? tr('{waitMs}s 内没有返回内容', { waitMs: Math.round(waitMs / 1000) }) : e?.message ?? String(e));
+    }
+    // 插件 response-after: the whole answer, before 隐私保护 restores it (the restore wraps ctx.res), so a plugin
+    // sees placeholders, not the values. A compressed passthrough answer is left alone.
+    if (afterHook && !first.done && (!pass || /^(identity)?$/i.test(String(up.headers['content-encoding'] ?? '')))) {
+      try {
+        const bufs: Buffer[] = [first.value];
+        for (let r = await withTimeout(it.next(), IDLE_MS); !r.done; r = await withTimeout(it.next(), IDLE_MS)) bufs.push(r.value);
+        const whole = Buffer.concat(bufs);
+        const changed = await pluginBody(plugins!, 'response-after', hookMeta, whole);
+        first = { done: false, value: changed ?? whole };
+      } catch (e: any) {
+        up.body.destroy();
+        if (ctx.signal.aborted) return aborted();
+        return switchOn(502, e?.message ?? String(e));
+      }
+      const done: IteratorResult<Buffer> = { done: true, value: undefined };
+      it = { next: async () => done } as AsyncIterator<Buffer>;
     }
     const firstByteMs = Date.now() - sent;
     if (track && this.states.ok(group.id, key, Date.now(), sent)) this.emit('changed'); // recovered / first success — not on every request
