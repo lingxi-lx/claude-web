@@ -22,7 +22,7 @@ import { forkParams, mergeResume, resumeParams, resumeView, type ResumeChoice } 
 import { parseLibraryId, parsePeerId } from '@shared';
 import { dlg } from '@/ui/dialog';
 import { DEFAULT_THEME, applyUiSettings, resolveTheme, setSystemThemeHandler } from '@/features/settings/ui-settings';
-import { SIMPLIFIED_NOTICE } from '@/ui/terms';
+import { PERMISSION_MODES, SIMPLIFIED_NOTICE } from '@/ui/terms';
 import { MOBILE_QUERY } from '@/ui/viewport';
 import type { SheetDetent } from '@/ui/sheet-snap';
 import { haptic } from '@/ui/haptics';
@@ -166,7 +166,7 @@ interface State {
   // actions
   init(): void;
   refreshSessions(): Promise<void>;
-  openSession(p: { sessionId?: string; peer?: string; cwd: string; env?: SessionEnv; model?: string; permissionMode?: PermissionMode; effort?: EffortLevel; ultracode?: boolean; subagentModel?: string; fork?: boolean; resumeAt?: string; worktree?: string; providerId?: string; features?: SessionFeatures; agent?: AgentKind }, target?: { paneId: string; tileId: string } | 'none'): Promise<string>;
+  openSession(p: { sessionId?: string; peer?: string; cwd: string; env?: SessionEnv; model?: string; permissionMode?: PermissionMode; expectMode?: PermissionMode; effort?: EffortLevel; ultracode?: boolean; subagentModel?: string; fork?: boolean; resumeAt?: string; worktree?: string; providerId?: string; features?: SessionFeatures; agent?: AgentKind }, target?: { paneId: string; tileId: string } | 'none'): Promise<string>;
   engine: EngineInfo | null;
   providers: Provider[];
   agents: AgentInfo[];
@@ -193,7 +193,11 @@ interface State {
   /** sessions deleted while a tile may still show them (the tile shows a banner and locks its composer) */
   deletedSessions: Record<string, true>;
   markDeleted(ids: string[]): void;
-  send(sessionId: string, text: string, images?: { mediaType: string; data: string }[], steer?: boolean, attachments?: AttachmentRef[]): Promise<void>;
+  /**
+   * `opts.expectMode`: the permission mode the chip of a conversation that is not running shows (发送前核对权限). When
+   * the server would resume it in another one, nothing is sent: the chip is updated and a ModeChangedError is thrown.
+   */
+  send(sessionId: string, text: string, images?: { mediaType: string; data: string }[], steer?: boolean, attachments?: AttachmentRef[], opts?: { expectMode?: PermissionMode }): Promise<void>;
   /** remove a queued message (returns it so the composer can restore the text) */
   recall(sessionId: string, id: string): QueuedMessage | undefined;
   /** interrupt the running turn and send this queued message right away */
@@ -389,6 +393,17 @@ export const hideSheet = (): void => { if (useStore.getState().sheetAt) useStore
 
 /** When each toast goes: a keyed one that is rewritten starts its time again. */
 const toastTimers = new Map<number, ReturnType<typeof setTimeout>>();
+/**
+ * 发送前核对权限: the send was refused because the conversation would resume in `mode`, not the one its chip showed.
+ * The chip has been updated (resumeModes); the composer keeps the draft and says so.
+ */
+export class ModeChangedError extends Error {
+  constructor(readonly mode: PermissionMode) {
+    super(tr('这个对话的权限是「{label}」，已更新显示，请再发一次', { label: (PERMISSION_MODES[mode] ?? PERMISSION_MODES.default).label }));
+    this.name = 'ModeChangedError';
+  }
+}
+
 /** The latest session.resumeMode ask per conversation: an older reply that comes back later is dropped. */
 const resumeModeSeq = new Map<string, number>();
 
@@ -751,7 +766,14 @@ export const useStore = create<State>((set, get) => ({
     // caller chose one — resumes, forks and reopens keep their own (they carry a sessionId)
     const p = withDefaultMode(p0, get().settings);
     const sentAt = Date.now();
-    const r = await ws.request<{ sessionId: string; info: SessionInfoSnapshot; history: any[]; pending: PermissionRequestEvent[]; caughtUp?: number }>({ kind: 'session.open', params: p });
+    const r = await ws.request<{ sessionId: string; info: SessionInfoSnapshot; history: any[]; pending: PermissionRequestEvent[]; caughtUp?: number; modeChanged?: PermissionMode }>({ kind: 'session.open', params: p });
+    // 发送前核对权限: the server would resume it in another mode than the chip showed — nothing started
+    if (r.modeChanged) {
+      const sid = p.sessionId!;
+      resumeModeSeq.set(sid, (resumeModeSeq.get(sid) ?? 0) + 1); // an older resumeMode reply must not put the old one back
+      set((s) => ({ resumeModes: { ...s.resumeModes, [sid]: r.modeChanged! } }));
+      throw new ModeChangedError(r.modeChanged);
+    }
     const existing = p.sessionId && !p.fork && !p.resumeAt ? get().open[p.sessionId] : undefined;
     // it goes on under another id (a DeepSeek Harness conversation → the Claude conversation that replays it): its
     // tabs follow, and it shows that conversation's own transcript — its ids are the rewind / fork anchors now.
@@ -1055,7 +1077,7 @@ export const useStore = create<State>((set, get) => ({
     return ws.request({ ...payload, kind: `library.${op}` } as any);
   },
 
-  async send(sessionId0, text, images, steer = false, attachments) {
+  async send(sessionId0, text, images, steer = false, attachments, opts) {
     let sessionId = sessionId0;
     const o = get().open[sessionId];
     if (!o) return;
@@ -1064,7 +1086,9 @@ export const useStore = create<State>((set, get) => ({
       // there, else what it last had live (model, effort, permission mode, deep orchestration, features — without
       // them the resume silently fell back to the defaults), else its transcript's model and mode.
       // A DeepSeek Harness conversation answers with the Claude conversation it goes on in: the send goes there.
-      sessionId = await get().openSession({ sessionId, cwd: o.cwd, ...resumeParams(o, get().sessionMeta[sessionId]) }, 'none');
+      const rp = resumeParams(o, get().sessionMeta[sessionId]);
+      // the chip's mode goes along only when the resume names none (a named one is what the chip shows anyway)
+      sessionId = await get().openSession({ sessionId, cwd: o.cwd, ...rp, ...(opts?.expectMode && rp.permissionMode === undefined ? { expectMode: opts.expectMode } : {}) }, 'none');
       if (sessionId !== sessionId0) get().saveDraft(sessionId0, '');
     } else if ((o.state === 'idle' || o.state === 'starting') && get().sessionMeta?.[sessionId]?.continuedFrom) {
       // it went on from DeepSeek Harness, whose process is up (or coming up): what was said there since goes in first

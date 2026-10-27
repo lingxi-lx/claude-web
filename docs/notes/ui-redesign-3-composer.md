@@ -39,3 +39,16 @@ spec §5.4、§5.5（定案 1：模型菜单保持平铺）、mock-composer.png�
   （`conversation.ts` 的 `presentUsage`），`conversation.test.ts`「usage on message_delta」。
 - **输入框里的图片**：以前点一下就删掉；现在点击打开全屏查看器（`store.viewer`，滚轮缩放、← →），悬停右上角出 ×（触屏一直显示）才是删除。
 - **模型菜单最后一行「子代理用的模型」**（用户在模型菜单里找子代理的设置）：`ModelMenu` 的 `subagentRow`，Composer 用 `cloneElement` 给模型 chip 加上它、给子代理 chip 加 `openSignal`；点它关掉模型菜单、打开子代理菜单。id 在 `SUBAGENT_MENU_ID.open`（放 `MODEL_MENU_ID` 会被可达性表要求列出来）。
+
+## 2026-10-26 发送前核对权限（compare-and-refuse）
+
+没在跑的对话，权限 chip 显示的是 `resumeView()` 算出来的（用户在 chip 上选的 › 窗口里的 live info › 服务端的 `session.resumeMode` › 记录 › 新对话默认）。
+chip 和服务端真正会用的模式可能对不上（别的窗口改了、记录晚到）。现在发送时：
+
+- Composer 渲染没在跑的 chip 时把模式记进 `shownMode` ref，发送时 `send(…, { expectMode })`；store 只在 `resumeParams()` **没带** `permissionMode`
+  时把它塞进 `session.open` 的 `params.expectMode`（带了就是用户自己选的，chip 显示的就是它）。
+- 服务端 `pool.modeMismatch(params)`：只查「续一个不在跑的对话、没指定模式」；算法就是 `resumeMode()`（无 → `default`）。不一致 → hub 直接回
+  `{ modeChanged: <实际> }`，**不启动、不记录任何东西**、不会改成更宽的模式；一致就把 `expectMode` 去掉照常走。`pool.open` 也会去掉它（IM / 定时任务不带）。
+- 客户端 `openSession` 收到 `modeChanged`：`resumeModes[id]` 写成实际值（顺便把 resumeMode 的序号 +1，晚到的旧回复不会盖回去），抛 `ModeChangedError`；
+  Composer 把草稿、图片、附件放回去，chip 下的状态位换成「这个对话的权限是「X」，已更新显示，请再发一次」（`.cb-status.mode-notice`），选一次权限或再发就消失。
+- 联邦：`session.open` 本来就在 `FORWARD` 表里，`expectMode` 跟着 params 过去，对方机器自己核对；`inbound()` 原样带回 `modeChanged`。没加新请求。

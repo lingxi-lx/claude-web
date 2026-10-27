@@ -482,6 +482,12 @@ export class Hub {
 
       case 'session.open': {
         let params = req.params;
+        // 发送前核对权限: the chip showed another mode than the resume would run in — do not start, say which it is
+        {
+          const changed = s.pool.modeMismatch(params);
+          if (changed) return { modeChanged: changed };
+          if (params.expectMode !== undefined) { params = { ...params }; delete params.expectMode; }
+        }
         // stage E5: a WSL conversation needs Claude Code in that distro (interop off still opens: the runner drops the MCP)
         if (params.env?.kind === 'wsl') {
           if (!s.wsl) throw new Error('no WSL');

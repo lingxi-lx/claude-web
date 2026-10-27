@@ -3980,6 +3980,7 @@ export const EN_WEB: Record<string, string> = {
   "这个对话的 agent 不提供明细": "This conversation's agent doesn't report details",
   "这个对话的 agent 不支持旁聊": "This conversation's agent doesn't support side chat",
   "这个对话的更多操作：导出、步骤视图、改动 / Git / 文件…、重命名、分叉、归档、交给其它 Agent、删除": "More actions for this conversation: export, Steps view, changes / Git / files…, rename, fork, archive, hand off to another agent, delete",
+  "这个对话的权限是「{label}」，已更新显示，请再发一次": "This conversation's permission is \"{label}\". The chip now shows it; please send again.",
   "这个对话的记录里有接口不收的内容（只发一张图片时留下的空文字，或别家模型的思考），已经自动去掉了：点重试或再发一次就行。": "This conversation's history held something the API refuses (an empty text left by sending a picture on its own, or another vendor's model's thinking). It has been taken out: click Retry or send again.",
   "这个对话的进程已经不在运行了（可能已被关闭，或服务重启过），这一轮已结束。直接发送新消息会重新接上。": "This conversation's process is no longer running (it may have been closed, or the service restarted), so this turn has ended. Sending a new message will reconnect it.",
   "这个对话的连接器（MCP）：开关、看状态": "This conversation's connectors (MCP): switch them on and off, see their status",

@@ -123,6 +123,12 @@ export interface OpenSessionParams {
   cwd: string;
   model?: string;
   permissionMode?: PermissionMode;
+  /**
+   * The permission mode the chip of a conversation that is not running showed when the user sent (no permissionMode
+   * named). The server resolves the resume mode as usual; when it differs it does not start and answers
+   * `{ modeChanged: <actual> }` — the client updates the chip and asks for another send. Never recorded, never escalates.
+   */
+  expectMode?: PermissionMode;
   effort?: EffortLevel;
   ultracode?: boolean;
   /** the model subagents run on ('' = the same as the main model); absent = the conversation's own pick for its
