@@ -1,5 +1,6 @@
 // Model gateway (sub-project 4): wire types shared with the web client through protocol.ts (`export *`).
 import type { Provider } from '../protocol.js';
+import type { RoutedInfo, RoutingConfig, RoutingPolicy } from '../routing/types.js';
 
 /** Which API shape a request arrives in / a member speaks. `responses` = OpenAI Responses API (Codex). */
 export type GatewayProtocol = 'anthropic' | 'openai' | 'responses' | 'gemini';
@@ -47,6 +48,11 @@ export interface GatewayGroup {
   modelMap?: Record<string, string>;
   /** 1-hour prompt-cache TTL on requests translated to Anthropic members (2x base write price vs 1.25x for 5 min). */
   cache1h?: boolean;
+  /**
+   * 智能路由 (spec 2026-10-26 §7): a routing group. Its virtual models (`ROUTING_MODELS`) are its strategies; who is
+   * tried comes from `routing.candidates` (members are derived from them, one per source, for status and the engine).
+   */
+  routing?: RoutingConfig;
 }
 
 export type GatewayMemberHealth = 'ok' | 'cooling' | 'disabled' | 'unknown';
@@ -112,6 +118,8 @@ export interface GatewayLedgerInfo {
   switches: number;
   firstByteMs?: number;
   stream: boolean;
+  /** a routing group's decision for this request: strategy, why, and what was tried */
+  route?: { policy: RoutingPolicy; reason: string; chosen?: string; attempts: string[] };
 }
 
 // ---- keys, LAN, audit (embedded gateway phase A) ----
@@ -204,11 +212,19 @@ export type GatewayRequest =
   | { kind: 'gateway.audit.list'; limit?: number; since?: number; keyId?: string }
   | { kind: 'gateway.audit.clear' }
   | { kind: 'gateway.audit.export' }
-  | { kind: 'gateway.settings.set'; patch: { audit?: Partial<GatewayAuditConfig>; allowQueryKey?: boolean } };
+  | { kind: 'gateway.settings.set'; patch: { audit?: Partial<GatewayAuditConfig>; allowQueryKey?: boolean } }
+  // 智能路由: the routing group's settings and record (the gateway page mounts routing/RoutingDetail.tsx)
+  | { kind: 'gateway.routing.status'; limit?: number }
+  /** make the 「智能路由」 group when there is none (it shows in the model menu from then on) */
+  | { kind: 'gateway.routing.ensure' }
+  | { kind: 'gateway.routing.set'; patch: Partial<RoutingConfig> }
+  | { kind: 'gateway.routing.decisions'; limit?: number };
 
 export type GatewayEvent =
   | { kind: 'gateway.changed' }
   | { kind: 'upstreams.changed' }
   | { kind: 'gateway.log'; lines: GatewayAuditLine[] }
   /** a conversation's outbound prompt grew past the sidecar's inline limit (Gemini web: 128 KB) — advise /compact */
-  | { kind: 'gateway.promptHeavy'; sessionId: string; bytes: number; via: string };
+  | { kind: 'gateway.promptHeavy'; sessionId: string; bytes: number; via: string }
+  /** a conversation on a routing group got its answer from this model (「自动 → 实际：…」) */
+  | ({ kind: 'gateway.routed' } & RoutedInfo);

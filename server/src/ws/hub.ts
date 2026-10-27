@@ -248,6 +248,8 @@ export class Hub {
     s.gateway.on('changed', () => this.broadcast({ kind: 'gateway.changed' }));
     s.gateway.on('audit', (lines) => this.broadcast({ kind: 'gateway.log', lines }));
     s.gateway.on('promptHeavy', (e: { sessionId: string; bytes: number; via: string }) => this.broadcast({ kind: 'gateway.promptHeavy', ...e }));
+    // 智能路由: which model a conversation on a routing group really got (the composer's 「自动 → 实际：…」)
+    s.gateway.on('routed', (e: import('../routing/types.js').RoutedInfo) => this.broadcast({ kind: 'gateway.routed', ...e }));
     s.upstreams.on('changed', () => this.broadcast({ kind: 'upstreams.changed' }));
     s.tasks.on('changed', () => this.broadcast({ kind: 'upstreams.changed' }));
     s.tasks.on('notice', (text: string, notify?: boolean) => this.broadcast({ kind: 'notice', text, notify: !!notify }));

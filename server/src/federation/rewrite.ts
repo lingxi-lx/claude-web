@@ -180,6 +180,10 @@ export function rewriteEvent(e: ServerEvent, peer: PeerRef): { event?: ServerEve
     case 'permission.request':
       if (!e.request || isPeerId(e.request.sessionId) || isPeerId(e.request.requestId)) return null;
       return { event: { ...e, request: { ...e.request, sessionId: peerSessionId(peer.id, e.request.sessionId), requestId: peerSessionId(peer.id, e.request.requestId) } } };
+    case 'gateway.routed':
+      // 智能路由 on that machine: its conversation's 「自动 → 实际」 shows here under the prefixed id
+      if (isPeerId(e.sessionId)) return null;
+      return { event: { ...e, sessionId: peerSessionId(peer.id, e.sessionId) } };
     case 'permission.resolved':
       if (isPeerId(e.requestId)) return null;
       return { event: { ...e, requestId: peerSessionId(peer.id, e.requestId) } };

@@ -912,6 +912,7 @@ export type WireUp = { type: 'request'; request: RequestEnvelope };
 
 // ---------- model gateway (sub-project 4) ----------
 export * from './gateway/types.js';
+export * from './routing/types.js';
 import type { GatewayEvent, GatewayLedgerInfo, GatewayRequest } from './gateway/types.js';
 
 // ---- stage F: local versions of claude.ai features (handoff, project page, dispatch, claude.ai import, publish) ----
