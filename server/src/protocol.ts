@@ -805,6 +805,10 @@ export type ClientRequest =
   | PrivacyRequest
   | UpstreamRequest
   | ChannelRequest
+  // ---- plugins / sync / 远程共享 (spec 2026-10-26 §4.3, §8) ----
+  | PluginRequest
+  | SyncRequest
+  | ShareRequest
   // ---- other agents' configuration center (phase 17) ----
   | AgentConfigRequest
   // ---- multi-agent orchestration ----
@@ -928,6 +932,12 @@ export * from './privacy/types.js';
 import type { PrivacyRequest, PrivacyStatus } from './privacy/types.js';
 export * from './routing/types.js';
 import type { GatewayEvent, GatewayLedgerInfo, GatewayRequest } from './gateway/types.js';
+export type * from './plugins/protocol.js';
+export type * from './sync/types.js';
+export type * from './share/types.js';
+import type { PluginRequest } from './plugins/protocol.js';
+import type { SyncRequest } from './sync/types.js';
+import type { ShareRequest } from './share/types.js';
 
 // ---- stage F: local versions of claude.ai features (handoff, project page, dispatch, claude.ai import, publish) ----
 export type DispatchFrom = 'phone' | 'im' | 'app';

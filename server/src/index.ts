@@ -85,6 +85,9 @@ import { UpstreamService } from './upstreams/service.js';
 import { ChannelService } from './channels/service.js';
 import { MaintenanceScheduler } from './upstreams/tasks.js';
 import { setSplitHook } from './gateway/split.js';
+import { PluginService } from './plugins/service.js';
+import { SyncService } from './sync/service.js';
+import { ShareService } from './share/service.js';
 import { ImportService } from './import/service.js';
 import { AgentConfigService } from './agent-config/service.js';
 import { FederationService } from './federation/service.js';
@@ -484,6 +487,11 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   // 隐私保护 on: providers not behind the gateway / shim get the privacy relay as their base URL (privacy/route.ts)
   setPrivacyRoute((target) => gateway.privacyBase(target));
   setSplitHook({ endpoint: (main, sub, model) => gateway.splitEndpoint(main, sub, model), target: (id) => providers.subagentTarget(id) });
+  // plugins (declarative sources + isolated executable plugins), sync bundles, 远程共享 keys on the gateway
+  const plugins = new PluginService({ meta, secrets });
+  await plugins.init().catch((e) => console.error('[plugins]', e?.message ?? e));
+  const sync = new SyncService({ meta, secrets });
+  const share = new ShareService(gateway);
   remote = new RemoteService(meta, () => { const s = http.createServer(handler); s.on('upgrade', upgrade); return s; });
   // 在外面也能用: bridges phones' links to the remote-access listener above (never to this main one)
   const anywhere = new AnywhereService(meta, remote);
@@ -599,7 +607,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     },
   });
   themes.watch();
-  const services = { importer, customCss, orchestra, background, characters, themes, remote, anywhere, tunnels, im, vcs: new VcsService(gitSvc, { gitlabHosts: () => { const v = meta.settings()['vcs.gitlabHosts']; return Array.isArray(v) ? v : []; }, tokens: vcsTokens }), vcsTokens, wsl, goals, android: new AndroidService(), pool, sessions: sessionsSvc, config, usage: new UsageService(async (sid) => providerTimeline(await canonical.providerSwitches(sid), meta.sessionMeta(sid).providerId, (id) => { const p = meta.provider(id); return p ? { type: p.type, name: p.name } : undefined; })), files, terminal, meta, limits: new LimitsService(), schedules: new ScheduleService(meta, pool), providers, git: gitSvc, search: new SearchService(), skills: new SkillsService(), mcp: new McpService(), diag: new DiagService(version), ledger, agents, transcripts, canonical, memory, library, version, federation, agentConfig: new AgentConfigService({ agents, backupDir: path.join(dataDir(), 'config-backups') }), gateway, privacy, upstreams, channels, tasks, web, computer, siteAsk, localEnv: localEnvStore, previews, cloud };
+  const services = { importer, customCss, orchestra, background, characters, themes, remote, anywhere, tunnels, im, vcs: new VcsService(gitSvc, { gitlabHosts: () => { const v = meta.settings()['vcs.gitlabHosts']; return Array.isArray(v) ? v : []; }, tokens: vcsTokens }), vcsTokens, wsl, goals, android: new AndroidService(), pool, sessions: sessionsSvc, config, usage: new UsageService(async (sid) => providerTimeline(await canonical.providerSwitches(sid), meta.sessionMeta(sid).providerId, (id) => { const p = meta.provider(id); return p ? { type: p.type, name: p.name } : undefined; })), files, terminal, meta, limits: new LimitsService(), schedules: new ScheduleService(meta, pool), providers, git: gitSvc, search: new SearchService(), skills: new SkillsService(), mcp: new McpService(), diag: new DiagService(version), ledger, agents, transcripts, canonical, memory, library, version, federation, agentConfig: new AgentConfigService({ agents, backupDir: path.join(dataDir(), 'config-backups') }), gateway, privacy, upstreams, channels, plugins, sync, share, tasks, web, computer, siteAsk, localEnv: localEnvStore, previews, cloud };
   new Hub(wss, services);
   tasks.start();
   // model lists older than a day (or never pulled) are refreshed in the background — list only, no tokens
@@ -672,6 +680,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       await tunnels.closeAll();
       await anywhere.stop(); // the phones' links and the broker connections, before the listener they bridge to
       await tasks.stop(); // before the sidecars it drives
+      plugins.stop(); // the executable plugins' child processes
       await gateway.stop(); // the LAN listener, the audit buffer and the key counters
       await upstreams.stop();
       await remote.stop();
