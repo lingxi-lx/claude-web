@@ -235,6 +235,12 @@ export interface Provider {
   noResponsesApi?: boolean;
   /** learned: the endpoint rejected `prompt_cache_retention` by name — no longer sent on /v1/responses. */
   noCacheRetention?: boolean;
+  /**
+   * How the key is sent (spec 2026-10-26 §5.1): `Authorization: Bearer`, `x-api-key`, or both. Unset = each path's
+   * old behaviour (Anthropic sessions Bearer, Anthropic model list / gateway both, OpenAI-compatible Bearer).
+   * Honoured by the session env (anthropic type), the model-list probe and the gateway's translated requests.
+   */
+  authStyle?: 'bearer' | 'x-api-key' | 'both';
 }
 export const CLAUDE_PROVIDER_ID = 'claude';
 /** One profile's result of `providers.refreshModels` (model list only — no chat request, no tokens). */
@@ -788,6 +794,8 @@ export type ClientRequest =
   /** One search with the configured engine → WebSearchAnswer. */
   | { kind: 'web.search'; query: string; count?: number }
   | GatewayRequest
+  // ---- privacy pipeline (privacy/service.ts) ----
+  | PrivacyRequest
   | UpstreamRequest
   // ---- other agents' configuration center (phase 17) ----
   | AgentConfigRequest
@@ -824,6 +832,8 @@ export type ServerEvent =
   | { kind: 'permission.request'; request: PermissionRequestEvent }
   | { kind: 'permission.resolved'; requestId: string }
   | { kind: 'sessions.changed' }
+  /** 隐私保护's settings or counters changed (at most once a second): the privacy center shows this */
+  | { kind: 'privacy.changed'; status: PrivacyStatus }
   /** conversations whose record changed on disk (a CLI in a terminal, Codex): an open one that is not running here re-reads it */
   | { kind: 'transcripts.changed'; sessionIds: string[] }
   /** what was said in DeepSeek Harness since went into this conversation (in the background): an open view re-reads */
@@ -906,6 +916,8 @@ export type WireUp = { type: 'request'; request: RequestEnvelope };
 
 // ---------- model gateway (sub-project 4) ----------
 export * from './gateway/types.js';
+export * from './privacy/types.js';
+import type { PrivacyRequest, PrivacyStatus } from './privacy/types.js';
 import type { GatewayEvent, GatewayLedgerInfo, GatewayRequest } from './gateway/types.js';
 
 // ---- stage F: local versions of claude.ai features (handoff, project page, dispatch, claude.ai import, publish) ----

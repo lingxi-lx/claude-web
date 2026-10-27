@@ -6,6 +6,7 @@ import type { GatewayAuditConfig, GatewayGroup, GatewayKey, GatewayKeyGroup, Gat
 import type { MaintenanceRun, MaintenanceTask, UpstreamAccount, UpstreamGroup } from '../upstreams/types.js';
 import type { DeviceRecord } from '../remote/service.js';
 import type { PeerRecord } from '../federation/types.js';
+import type { PrivacySettings } from '../privacy/types.js';
 import { randomBytes } from 'node:crypto';
 import { normFolders } from './workspace-folders.js';
 export type { Schedule } from '../protocol.js';
@@ -36,6 +37,7 @@ interface Data {
   gatewayKeys?: GatewayKey[];
   gatewayLan?: GatewayLanConfig;
   gatewayAudit?: GatewayAuditConfig;
+  privacy?: Partial<PrivacySettings> & { secret?: string };
   maintenanceTasks?: MaintenanceTask[];
   maintenanceRuns?: MaintenanceRun[];
 
@@ -225,7 +227,7 @@ export class MetaStore extends EventEmitter {
     }
     const { apiKey, id: _id, createdAt: _c, ...rest } = p;
     Object.assign(cur, rest);
-    for (const k of ['runtime', 'defaultModel', 'modelMap', 'models', 'modelNames', 'modelEfforts', 'modelContext', 'contextWindows', 'compactAt', 'promptEffortModels', 'modelsAt', 'modelsError', 'cacheShim', 'responsesApi', 'cache1h', 'cacheControlFormat', 'noPromptCacheKey', 'noResponsesApi', 'noCacheRetention'] as const) if ((cur as any)[k] == null) delete (cur as any)[k]; // null clears (JSON drops undefined)
+    for (const k of ['runtime', 'defaultModel', 'modelMap', 'models', 'modelNames', 'modelEfforts', 'modelContext', 'contextWindows', 'compactAt', 'promptEffortModels', 'modelsAt', 'modelsError', 'cacheShim', 'responsesApi', 'cache1h', 'cacheControlFormat', 'noPromptCacheKey', 'noResponsesApi', 'noCacheRetention', 'authStyle'] as const) if ((cur as any)[k] == null) delete (cur as any)[k]; // null clears (JSON drops undefined)
     if (apiKey && !/^\S{0,4}…\S{0,4}$/.test(apiKey) && !apiKey.includes('…')) cur.apiKey = this.secretCodec ? await this.secretCodec.protect(apiKey.trim(), cur.id) : apiKey.trim();
     cur.baseUrl = (cur.baseUrl ?? '').trim().replace(/\/+$/, '');
     await this.queueSave();
@@ -306,6 +308,9 @@ export class MetaStore extends EventEmitter {
   gatewayGroups(): GatewayGroup[] { return this.data.gatewayGroups ??= []; }
   gatewayConfig(): { enabled?: boolean; key?: string; localPort?: number; dismissedProfiles?: string[] } { return this.data.gateway ??= {}; }
   async saveGateway() { await this.queueSave(true); }
+  // ---- privacy pipeline (privacy/service.ts): settings + the per-install placeholder secret (never on the wire) ----
+  privacyConfig(): Partial<PrivacySettings> & { secret?: string } { return this.data.privacy ??= {}; }
+  async savePrivacy() { await this.queueSave(true); }
 
   // ---- 账号池 / 密钥 / 局域网 / 审计 (embedded gateway phase A) ----
   upstreamAccounts(): UpstreamAccount[] { return this.data.upstreamAccounts ??= []; }

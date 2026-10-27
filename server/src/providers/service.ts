@@ -11,6 +11,13 @@ import { wantsResponses } from '../gateway/shim.js';
 import { settingsOverride } from '../runtime/user-env.js';
 import { writeFlagSettings, type FlagSettings } from '../runtime/flag-settings.js';
 import { tr } from '../i18n/index.js';
+import { anthropicBase, authHeaders } from './endpoint.js';
+import { privacyRoute, viaPrivacy } from '../privacy/route.js';
+
+/** Vendors' default bases (what the clients use when the profile names none) — the privacy relay needs them spelled out. */
+const GEMINI_DEFAULT_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+const GROK_DEFAULT_BASE = 'https://api.x.ai/v1';
+const ANTHROPIC_DEFAULT_BASE = 'https://api.anthropic.com';
 
 /** Mask an API key for the wire: keep prefix + last 4 chars. */
 export function maskKey(k: string | undefined): string {
@@ -77,8 +84,16 @@ export function providerEnv(p: SessionProvider, agent: 'claude' | 'codex' | 'acp
     // so the same fingerprint env (plain UA, entrypoint cli) matters here too
     case 'gateway':
     case 'anthropic':
-      env.ANTHROPIC_BASE_URL = p.baseUrl;
-      env.ANTHROPIC_AUTH_TOKEN = p.apiKey; // Bearer — what relays like super-nb expect; official API keys work through it too
+      // without a trailing /v1: the CLI appends /v1/messages itself (a pasted `…/v1` became /v1/v1/messages)
+      // 隐私保护 on: through the local privacy relay (privacy/route.ts; a gateway profile is behind the gateway already)
+      env.ANTHROPIC_BASE_URL = p.type === 'anthropic' ? viaPrivacy(anthropicBase(p.baseUrl)) : p.baseUrl;
+      // Bearer by default — what relays like super-nb expect; official API keys work through it too. authStyle
+      // x-api-key → ANTHROPIC_API_KEY only ('' counts as unset for the CLI); both → both variables.
+      if (p.type === 'anthropic' && p.authStyle === 'x-api-key') { env.ANTHROPIC_API_KEY = p.apiKey; env.ANTHROPIC_AUTH_TOKEN = ''; }
+      else {
+        env.ANTHROPIC_AUTH_TOKEN = p.apiKey;
+        if (p.type === 'anthropic' && p.authStyle === 'both') env.ANTHROPIC_API_KEY = p.apiKey;
+      }
       if (p.defaultModel) env.ANTHROPIC_MODEL = p.defaultModel;
       if (m.haiku) { env.ANTHROPIC_DEFAULT_HAIKU_MODEL = m.haiku; env.ANTHROPIC_SMALL_FAST_MODEL = m.haiku; }
       if (m.sonnet) env.ANTHROPIC_DEFAULT_SONNET_MODEL = m.sonnet;
@@ -88,7 +103,7 @@ export function providerEnv(p: SessionProvider, agent: 'claude' | 'codex' | 'acp
       break;
     case 'openai':
       // through the cache shim unless the profile turned it off: the real key never reaches the child
-      env.OPENAI_BASE_URL = p.shim ? shimBaseUrl(p.shim, opts.sessionKey, opts.sessionId) : openaiBase(p.baseUrl);
+      env.OPENAI_BASE_URL = p.shim ? shimBaseUrl(p.shim, opts.sessionKey, opts.sessionId) : viaPrivacy(openaiBase(p.baseUrl));
       env.OPENAI_API_KEY = p.shim ? p.shim.key : p.apiKey;
       env.CLAUDE_CODE_USE_OPENAI = '1';
       // NOT OPENAI_MODEL: ccb's OpenAI client returns it for every request (dist `ge()`), so the session's model
@@ -115,7 +130,12 @@ export function providerEnv(p: SessionProvider, agent: 'claude' | 'codex' | 'acp
     case 'gemini': {
       env.CLAUDE_CODE_USE_GEMINI = '1';
       env.GEMINI_API_KEY = p.apiKey;
-      if (p.baseUrl) env.GEMINI_BASE_URL = geminiBase(p.baseUrl); // requests go to `<base>/models/<id>:streamGenerateContent`
+      // requests go to `<base>/models/<id>:streamGenerateContent`; 隐私保护 on: the vendor default spelled out, through the relay
+      {
+        const gb = p.baseUrl ? geminiBase(p.baseUrl) : undefined;
+        const routed = privacyRoute(gb ?? GEMINI_DEFAULT_BASE);
+        if (routed ?? gb) env.GEMINI_BASE_URL = (routed ?? gb)!;
+      }
       // the Gemini client throws for a family model it cannot map, so all three get a value
       const fallback = p.defaultModel || pickChatModel(p.models ?? []) || p.models?.[0];
       const fam = { HAIKU: m.haiku || fallback, SONNET: m.sonnet || fallback, OPUS: m.opus || fallback };
@@ -129,13 +149,20 @@ export function providerEnv(p: SessionProvider, agent: 'claude' | 'codex' | 'acp
       env.CLAUDE_CODE_OAUTH_TOKEN = p.apiKey;
       env.ANTHROPIC_AUTH_TOKEN = '';
       env.ANTHROPIC_API_KEY = '';
-      env.ANTHROPIC_BASE_URL = '';
+      // 隐私保护 on: the CLI sends its OAuth token to whatever base it is given (the subagent split route relies on the
+      // same), so the account's traffic goes through the relay to api.anthropic.com
+      env.ANTHROPIC_BASE_URL = privacyRoute(ANTHROPIC_DEFAULT_BASE) ?? '';
       break;
     case 'grok': {
       env.CLAUDE_CODE_USE_GROK = '1';
       env.GROK_API_KEY = p.shim ? p.shim.key : p.apiKey; // ccb: GROK_API_KEY || XAI_API_KEY
       if (p.shim) env.GROK_BASE_URL = shimBaseUrl(p.shim, opts.sessionKey, opts.sessionId);
-      else if (p.baseUrl) env.GROK_BASE_URL = openaiBase(p.baseUrl); // an OpenAI SDK client: the base ends in /v1
+      else {
+        // an OpenAI SDK client: the base ends in /v1; 隐私保护 on: the vendor default spelled out, through the relay
+        const gb = p.baseUrl ? openaiBase(p.baseUrl) : undefined;
+        const routed = privacyRoute(gb ?? GROK_DEFAULT_BASE);
+        if (routed ?? gb) env.GROK_BASE_URL = (routed ?? gb)!;
+      }
       // unmapped families fall back to ccb's own grok defaults, so only what the profile says is set
       const fam = { HAIKU: m.haiku || p.defaultModel, SONNET: m.sonnet || p.defaultModel, OPUS: m.opus || p.defaultModel };
       for (const [k, v] of Object.entries(fam)) if (v) env[`GROK_DEFAULT_${k}_MODEL`] = v;
@@ -180,7 +207,7 @@ function modelsUrl(type: ProviderType, baseUrl: string): string {
   if (type === 'gemini') return `${geminiBase(b || 'https://generativelanguage.googleapis.com')}/models`;
   if (type === 'grok') return `${openaiBase(b || 'https://api.x.ai')}/models`;
   if (type === 'openai') return /\/v\d+$/.test(b) ? `${b}/models` : `${b}/v1/models`;
-  return /\/v\d+$/.test(b) ? `${b}/models` : `${b}/v1/models`;
+  return `${anthropicBase(b)}/v1/models`;
 }
 
 export interface ChatProbe { ok: boolean; runtime: RuntimeKind | 'api'; model: string; error?: string; ms: number; switched?: boolean; status?: number }
@@ -270,6 +297,8 @@ export async function chatProbe(p: Provider, runtime: RuntimeKind | undefined, m
   const kind = resolveEngine(runtime).kind;
   // one retry, not the CLI's ten: a relay answering 5xx kept 测试连接 spinning for 4 minutes, then said "exit 1"
   const env: Record<string, string> = { ...providerEnv(p), CLAUDE_CODE_MAX_RETRIES: '1' };
+  // the privacy relay is on 127.0.0.1: a system proxy must not get that request
+  Object.assign(env, loopbackNoProxy({ ...env, NO_PROXY: process.env.NO_PROXY, no_proxy: process.env.no_proxy }));
   delete env.CLAUDE_WEB_PLAIN_UA; // not spawned through the SDK: the CLI already sends its plain User-Agent
   // a token / base URL in the user's settings.json would otherwise be tested instead of this provider's (user-env)
   const override = settingsOverride(env, os.tmpdir());
@@ -288,12 +317,12 @@ export async function chatProbe(p: Provider, runtime: RuntimeKind | undefined, m
 }
 
 /** One minimal `/chat/completions` request (a few tokens) — the chat check for OpenAI-compatible profiles. */
-export async function openaiChatProbe(p: Pick<Provider, 'baseUrl' | 'apiKey'>, model: string): Promise<ChatProbe> {
+export async function openaiChatProbe(p: Pick<Provider, 'baseUrl' | 'apiKey' | 'authStyle'>, model: string): Promise<ChatProbe> {
   const t0 = Date.now();
   try {
-    const r = await fetch(`${openaiBase(p.baseUrl)}/chat/completions`, {
+    const r = await fetch(`${viaPrivacy(openaiBase(p.baseUrl))}/chat/completions`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${p.apiKey}` },
+      headers: { 'content-type': 'application/json', ...authHeaders(p.authStyle, p.apiKey, 'bearer') },
       body: JSON.stringify({ model, messages: [{ role: 'user', content: 'Reply with exactly: ok' }], max_tokens: 16 }),
       signal: AbortSignal.timeout(60_000),
     });
@@ -312,12 +341,12 @@ export async function openaiChatProbe(p: Pick<Provider, 'baseUrl' | 'apiKey'>, m
  * One minimal `/v1/responses` request (a few tokens): whether the endpoint has the Responses API the cache shim
  * sends gpt-* to. `status` lets the caller tell "no such endpoint" (404 / 405 / 501) from a model error or an outage.
  */
-export async function openaiResponsesProbe(p: Pick<Provider, 'baseUrl' | 'apiKey'>, model: string): Promise<ChatProbe> {
+export async function openaiResponsesProbe(p: Pick<Provider, 'baseUrl' | 'apiKey' | 'authStyle'>, model: string): Promise<ChatProbe> {
   const t0 = Date.now();
   try {
-    const r = await fetch(`${openaiBase(p.baseUrl)}/responses`, {
+    const r = await fetch(`${viaPrivacy(openaiBase(p.baseUrl))}/responses`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${p.apiKey}` },
+      headers: { 'content-type': 'application/json', ...authHeaders(p.authStyle, p.apiKey, 'bearer') },
       body: JSON.stringify({ model, input: 'Reply with exactly: ok', max_output_tokens: 16, store: false }),
       signal: AbortSignal.timeout(60_000),
     });
@@ -336,7 +365,7 @@ export async function openaiResponsesProbe(p: Pick<Provider, 'baseUrl' | 'apiKey
  * Connectivity + auth check via the model list endpoint. We deliberately do not send a /messages request:
  * relays that only accept Claude Code clients reject anything else, and the list is enough to verify the key.
  */
-export async function probeProvider(p: Pick<Provider, 'type' | 'baseUrl' | 'apiKey'>, retryMs = 1000): Promise<ProbeResult> {
+export async function probeProvider(p: Pick<Provider, 'type' | 'baseUrl' | 'apiKey' | 'authStyle'>, retryMs = 1000): Promise<ProbeResult> {
   const r = await listModels(p);
   // the request never got an answer (connection reset, connect timeout on a flaky route — seen on real relays): once
   // more before telling the user the address is wrong. An HTTP answer, or our own 20 s timeout, is final.
@@ -348,19 +377,21 @@ export async function probeProvider(p: Pick<Provider, 'type' | 'baseUrl' | 'apiK
 
 const LIST_TIMEOUT = tr('连接超时（20s）');
 
-async function listModels(p: Pick<Provider, 'type' | 'baseUrl' | 'apiKey'>): Promise<ProbeResult> {
+async function listModels(p: Pick<Provider, 'type' | 'baseUrl' | 'apiKey' | 'authStyle'>): Promise<ProbeResult> {
   const t0 = Date.now();
   const url = modelsUrl(p.type, p.baseUrl);
   const headers: Record<string, string> = { accept: 'application/json' };
   if (p.type === 'gemini') headers['x-goog-api-key'] = p.apiKey;
   else {
-    headers.authorization = `Bearer ${p.apiKey}`;
-    if (p.type === 'anthropic') { headers['x-api-key'] = p.apiKey; headers['anthropic-version'] = '2023-06-01'; }
+    // the profile's style; unset = what this probe always sent (Anthropic both headers, the rest Bearer)
+    Object.assign(headers, authHeaders(p.authStyle, p.apiKey, p.type === 'anthropic' ? 'both' : 'bearer'));
+    if (p.type === 'anthropic') headers['anthropic-version'] = '2023-06-01';
   }
   try {
     const ac = new AbortController();
     const to = setTimeout(() => ac.abort(), 20_000);
-    const r = await fetch(url, { headers, signal: ac.signal });
+    // 隐私保护 on: the list request takes the same relay as the conversation (nothing to redact in a GET, same path)
+    const r = await fetch(viaPrivacy(url), { headers, signal: ac.signal });
     const text = await r.text(); // still under the timeout: a relay that sends headers then stalls the body would hang the probe
     clearTimeout(to);
     let j: any = null;
@@ -477,13 +508,13 @@ export class ProviderService {
       if (agent === 'codex') {
         // Codex only speaks /v1/responses: through the cache shim (when on), which forwards that as it is and turns
         // it into chat/completions for relays without the Responses API (most of them) — direct, those 404
-        const base = p.shim ? shimBaseUrl(p.shim, sessionId) : openaiBase(p.baseUrl);
+        const base = p.shim ? shimBaseUrl(p.shim, sessionId) : viaPrivacy(openaiBase(p.baseUrl));
         const key = p.shim ? p.shim.key : p.apiKey;
         // the default model's context window (Codex assumes its own for a model it does not know)
         const window = p.defaultModel ? contextWindowFor(p, p.defaultModel) : undefined;
         return { env: { OPENAI_BASE_URL: base, OPENAI_API_KEY: key, [CODEX_KEY_ENV]: key }, args: [...codexProviderArgs(base, p.name, p.defaultModel), ...(window ? ['-c', `model_context_window=${window}`] : [])] };
       }
-      const env: Record<string, string> = { OPENAI_BASE_URL: openaiBase(p.baseUrl), OPENAI_API_KEY: p.apiKey };
+      const env: Record<string, string> = { OPENAI_BASE_URL: viaPrivacy(openaiBase(p.baseUrl)), OPENAI_API_KEY: p.apiKey };
       if (p.defaultModel) env.OPENAI_MODEL = p.defaultModel;
       return { env, args: [] };
     }
@@ -491,7 +522,9 @@ export class ProviderService {
     if (type === 'gemini' && kind === 'gemini') {
       const p = this.forSession(id)!;
       const env: Record<string, string> = { GEMINI_API_KEY: p.apiKey, ...geminiApiKeyEnv() };
-      if (p.baseUrl) env.GOOGLE_GEMINI_BASE_URL = p.baseUrl;
+      // Gemini CLI's SDK appends `/v1beta/models/…` to this host; 隐私保护 on → through the relay
+      const routed = privacyRoute(p.baseUrl || 'https://generativelanguage.googleapis.com');
+      if (routed ?? p.baseUrl) env.GOOGLE_GEMINI_BASE_URL = (routed ?? p.baseUrl)!;
       if (p.defaultModel) env.GEMINI_MODEL = p.defaultModel;
       return { env, args: [] };
     }
@@ -526,7 +559,7 @@ export class ProviderService {
       let key = '';
       try { key = this.plainKey(t); } catch (e) { return { ...base, ok: false, count: 0, error: (e as Error).message, ms: 0 }; }
       if (!key) return { ...base, ok: false, count: 0, error: tr('没有 API Key'), ms: 0 };
-      const r = await probeProvider({ type: t.type, baseUrl: t.baseUrl, apiKey: key });
+      const r = await probeProvider({ type: t.type, baseUrl: t.baseUrl, apiKey: key, authStyle: t.authStyle });
       // the profile may have been deleted while the request was out: write back only onto one that still exists
       const gone = { ...base, ok: false, count: 0, error: tr('供应商已删除'), ms: r.ms };
       if (!r.ok) {
@@ -580,6 +613,8 @@ export class ProviderService {
     const type = p.type ?? (p.id ? this.meta.provider(p.id)?.type : undefined);
     // another Claude account: no endpoint of its own, the account's models
     if (type === 'claude-account') p = { ...p, baseUrl: '', ...accountModels(), modelsAt: Date.now() };
+    // one base rule for every path: an Anthropic base is stored without its /v1 (the CLI appends /v1/messages)
+    if (type === 'anthropic' && typeof p.baseUrl === 'string') p = { ...p, baseUrl: anthropicBase(p.baseUrl) };
     // the user added a group's profile by hand: the auto-creation is welcome again if they delete this one
     if (type === 'gateway' && p.gatewayGroupId) {
       const cfg = this.meta.gatewayConfig();
@@ -612,7 +647,7 @@ export class ProviderService {
     if ((draft?.type ?? saved?.type) === 'claude-account') return this.probeAccount(saved, draft, opts);
     if ((draft?.type ?? saved?.type) === 'gateway') return { ok: false, models: [], error: tr('走模型网关的供应商请在「设置 → 模型网关」里用组的「测试」按钮'), ms: 0 };
     const key = draft?.apiKey && !draft.apiKey.includes('…') ? draft.apiKey : saved ? this.plainKey(saved) : '';
-    const p = { type: draft?.type ?? saved?.type ?? 'anthropic', baseUrl: (draft?.baseUrl ?? saved?.baseUrl ?? '').trim(), apiKey: key.trim() } as Pick<Provider, 'type' | 'baseUrl' | 'apiKey'>;
+    const p = { type: draft?.type ?? saved?.type ?? 'anthropic', baseUrl: (draft?.baseUrl ?? saved?.baseUrl ?? '').trim(), apiKey: key.trim(), authStyle: draft?.authStyle ?? saved?.authStyle } as Pick<Provider, 'type' | 'baseUrl' | 'apiKey' | 'authStyle'>;
     if (!p.apiKey) return { ok: false, models: [], error: tr('没有 API Key'), ms: 0 };
     const r = await probeProvider(p);
     if (r.ok && saved && r.models.length) await this.meta.upsertProvider({ id: saved.id, models: r.models, modelNames: (r.modelNames ?? null) as unknown as undefined, modelEfforts: (r.modelEfforts ?? null) as unknown as undefined, modelContext: (r.modelContext ?? null) as unknown as undefined, modelsAt: Date.now(), modelsError: null as unknown as undefined }, { mustExist: true });

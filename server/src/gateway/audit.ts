@@ -13,6 +13,9 @@ const FIELDS = ['ts', 'keyId', 'ip', 'protocol', 'model', 'routeGroupId', 'membe
 const clean = (l: GatewayAuditLine): GatewayAuditLine => {
   const out: any = {};
   for (const k of FIELDS) out[k] = (l as any)[k] ?? (NUM.has(k) ? 0 : '');
+  // the privacy summary only when there is one, and only its whitelisted parts (no source name, no value)
+  const p = l.privacy;
+  if (p && p.count) out.privacy = { count: p.count, categories: p.categories, placeholders: p.placeholders.slice(0, 20), ...(p.blocked ? { blocked: true } : {}), ...(p.warned ? { warned: p.warned } : {}) };
   return out as GatewayAuditLine;
 };
 

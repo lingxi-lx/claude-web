@@ -17,6 +17,7 @@ import { desktopSkillsPlugin } from './desktop-skills.js';
 import { writeFlagSettings, type FlagSettings } from './flag-settings.js';
 import { resolveEngine, spawnClaude } from '../claude-exe.js';
 import { loopbackNoProxy, providerEnv, type SessionProvider } from '../providers/service.js';
+import { privacyRoute } from '../privacy/route.js';
 import { ENGINE_DEFAULT_WINDOW, ONE_M, contextWindowFor, contextWindowsEnv, isClaudeModel, officialWindow } from '../models/context-window.js';
 import { ccbAccountEnv, ccbMisthinks, ccbModel, isChatModel, modelCaps, modelLabel, modelsFor, preferredRuntime, providerModelId, supportsUltracode, webCapsEnv } from '../models/catalog.js';
 import { turnShare, type RunningTotals } from '../usage/turn-cost.js';
@@ -460,6 +461,10 @@ export class SessionRunner extends EventEmitter {
     const sameSub = target?.kind === 'same' ? target.model : undefined;
     const splitAlias = target?.kind === 'cross' ? this.subagentSplit(target.pick, fenv) : null;
     if (target?.kind === 'cross' && !splitAlias) console.warn(`[session ${this.sessionId.slice(0, 8)}] subagents stay on the main model: ${target.pick.providerId} / ${target.pick.model} cannot be reached from this conversation`);
+    // 隐私保护 on, this machine's own login (claude.ai, or the relay in the user's settings files): through the privacy
+    // relay to where it was going — unless the split route already took the base (it redacts on its own)
+    const privacyOwn = !this.provider && !this.account && !splitAlias ? privacyRoute(ownAnthropicBase(this.cwd) || 'https://api.anthropic.com') : null;
+    if (privacyOwn) fenv.ANTHROPIC_BASE_URL = privacyOwn;
     if (noThinking && !('CLAUDE_CODE_DISABLE_THINKING' in fenv)) fenv.CLAUDE_CODE_DISABLE_THINKING = '1';
     if (engine.kind === 'ccb' && !('CLAUDE_WEB_THINKING_DISPLAY' in fenv) && !process.env.CLAUDE_WEB_THINKING_DISPLAY) fenv.CLAUDE_WEB_THINKING_DISPLAY = 'summarized';
     // what each of the provider's models can do with thinking strength (claude-web-engine reads it: levels, whether it
@@ -553,7 +558,7 @@ export class SessionRunner extends EventEmitter {
     // The account: only what we set goes over the same keys there — the subagents' model, and the split route's base
     // URL over the user's own relay (both engines lay the settings files' env over the one they start with), and the
     // 自动压缩 point the user set for the account over a CLAUDE_CODE_AUTO_COMPACT_WINDOW in their settings.json (A7)
-    const ours: Record<string, string> = { ...(sub ? { CLAUDE_CODE_SUBAGENT_MODEL: sub, CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '1' } : {}), ...(splitAlias && fenv.ANTHROPIC_BASE_URL ? { ANTHROPIC_BASE_URL: fenv.ANTHROPIC_BASE_URL } : {}), ...(userCompact && fenv.CLAUDE_CODE_AUTO_COMPACT_WINDOW ? { CLAUDE_CODE_AUTO_COMPACT_WINDOW: fenv.CLAUDE_CODE_AUTO_COMPACT_WINDOW } : {}) };
+    const ours: Record<string, string> = { ...(sub ? { CLAUDE_CODE_SUBAGENT_MODEL: sub, CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '1' } : {}), ...((splitAlias || privacyOwn) && fenv.ANTHROPIC_BASE_URL ? { ANTHROPIC_BASE_URL: fenv.ANTHROPIC_BASE_URL } : {}), ...(userCompact && fenv.CLAUDE_CODE_AUTO_COMPACT_WINDOW ? { CLAUDE_CODE_AUTO_COMPACT_WINDOW: fenv.CLAUDE_CODE_AUTO_COMPACT_WINDOW } : {}) };
     const override = this.provider || this.account ? settingsOverride(fenv, this.cwd) : ownOverride(ours, this.cwd);
     if (override) {
       try {

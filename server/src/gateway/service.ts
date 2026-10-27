@@ -33,6 +33,9 @@ import { modelCaps, nearestLevel } from '../models/catalog.js';
 import type { SplitMain, SplitSub } from './split.js';
 import { UpstreamError, decoded, decoder, errorHeaders, forwardHeaders, passthroughHeaders, readText, replaceTopLevelString, responseHeaders, sendUpstream, translatedHeaders, waitDrain, withTimeout, type UpstreamResponse } from './upstream.js';
 import { tr } from '../i18n/index.js';
+import { PrivacyBlocked, type PrivacyGuard, type PrivacyService } from '../privacy/service.js';
+import { PrivacyRelay, RELAY_PREFIX } from '../privacy/relay.js';
+import type { PrivacyRecord } from '../privacy/types.js';
 
 /** Streaming: time from sending a request to the first body byte before the member counts as failed. */
 export const FIRST_BYTE_MS = 60_000;
@@ -65,6 +68,8 @@ export interface GatewayDeps {
   /** audit file; made here (a temp dir) when not passed (tests) */
   audit?: AuditLog;
   ledger?: { record(e: LedgerEntry): void };
+  /** 隐私保护: request bodies redacted before they leave, answers restored (privacy/) */
+  privacy?: PrivacyService;
   firstByteMs?: number; // tests
   nonStreamMs?: number; // tests
 }
@@ -90,6 +95,8 @@ interface Ctx {
   keyId?: string;
   ip?: string;
   surface?: 'loopback' | 'lan';
+  /** what the privacy pipeline did to this request (types / counts / placeholders, for the audit line) */
+  privacy?: PrivacyRecord;
 }
 
 /** A group member expanded into one concrete upstream: the state-table key is the ref or the account. */
@@ -139,6 +146,8 @@ export class GatewayService extends EventEmitter {
   readonly states = new MemberStates();
   /** openai / grok profiles' prompt-cache shim (/gateway/~p/…): works whether or not the gateway is enabled */
   readonly shim: CacheShim;
+  /** 隐私保护's relay for providers not behind the gateway / shim (privacy/relay.ts; `/gateway/~v/…`) */
+  readonly relay: PrivacyRelay | null;
   /** key groups and keys: what a request may use, from where, how often */
   readonly keys: GatewayKeyStore;
   /** one whitelisted line per request */
@@ -170,7 +179,8 @@ export class GatewayService extends EventEmitter {
     this.firstByteMs = deps.firstByteMs ?? FIRST_BYTE_MS;
     this.nonStreamMs = deps.nonStreamMs ?? NONSTREAM_MS;
     this.localPortWanted = deps.meta.gatewayConfig().localPort ?? 61697;
-    this.shim = new CacheShim({ meta: deps.meta, member: deps.member, ledger: deps.ledger });
+    this.shim = new CacheShim({ meta: deps.meta, member: deps.member, ledger: deps.ledger, privacy: deps.privacy });
+    this.relay = deps.privacy ? new PrivacyRelay(deps.privacy, () => (this.port ? this.baseUrl() : null)) : null;
     this.keys = deps.keys ?? new GatewayKeyStore(deps.meta, deps.secrets);
     this.audit = deps.audit ?? new AuditLog(path.join(os.tmpdir(), 'cw-gateway-audit'), () => deps.meta.gatewayAudit());
     this.audit.on('lines', (lines) => this.emit('audit', lines));
@@ -280,6 +290,10 @@ export class GatewayService extends EventEmitter {
   }
 
   /** The cache shim's base for a profile (the session appends `/k/<key>[/s/<id>]/v1`) + its per-profile key; null before listening. */
+  /** The privacy relay's base for an upstream base URL, or null (privacy off, a skipped local upstream, not listening). */
+  privacyBase(target: string): string | null {
+    return this.relay && this.deps.privacy?.wants(target) ? this.relay.base(target) : null;
+  }
   shimEndpoint(providerId: string): { base: string; key: string } | null {
     return this.port ? { base: `${this.baseUrl()}/~p/${encodeURIComponent(providerId)}`, key: this.shim.keyFor(providerId) } : null;
   }
@@ -618,6 +632,14 @@ export class GatewayService extends EventEmitter {
       });
       return true;
     }
+    if (legacy && p.startsWith(RELAY_PREFIX) && this.relay) {
+      void this.relay.serve(req, res, url).catch((e) => {
+        console.error('[privacy relay]', e);
+        if (!res.headersSent) res.writeHead(500, { 'content-type': 'application/json' }).end(JSON.stringify({ error: { message: String(e?.message ?? e) } }));
+        else res.destroy();
+      });
+      return true;
+    }
     if (legacy && p.startsWith(SHIM_PREFIX)) {
       void this.shim.serve(req, res, url).catch((e) => {
         console.error('[gateway shim]', e);
@@ -861,6 +883,19 @@ export class GatewayService extends EventEmitter {
   /** The split route's plain forwarding: the engine's request to `target`, the answer back as it comes (status, headers, bytes). */
   private async forward(req: http.IncomingMessage, res: http.ServerResponse, target: string, body: Buffer, auth: { bearer?: string; oauthBeta?: 'drop' | 'ensure' }, signal: AbortSignal) {
     let up: UpstreamResponse;
+    // 隐私保护 on this route too (it goes straight to the main conversation's / the account's endpoint)
+    if (this.deps.privacy && body.length) {
+      try {
+        const guard = this.deps.privacy.forRequest({ url: target, source: tr('子代理分流') });
+        if (guard) {
+          body = guard.body(body);
+          guard.restore(res, false);
+          guard.done();
+        }
+      } catch (e: any) {
+        return this.sendError(res, 'anthropic', e instanceof PrivacyBlocked ? 403 : 500, e?.message ?? String(e));
+      }
+    }
     try {
       // a non-streamed answer only sends its headers when it is done: as long as a long turn may take
       up = await sendUpstream(target, { method: req.method ?? 'GET', headers: forwardHeaders(req.rawHeaders, auth), body: body.length ? body : undefined, signal, headerTimeoutMs: SPLIT_FORWARD_MS });
@@ -948,7 +983,7 @@ export class GatewayService extends EventEmitter {
       this.audit.write({
         ts: Date.now(), keyId: ctx.keyId ?? '', ip: ctx.ip ?? '', protocol: inbound,
         model: ctx.model, routeGroupId: group.id, member: '', status, ms: Date.now() - ctx.t0,
-        tokensIn: 0, tokensOut: 0, errorCode: String(status),
+        tokensIn: 0, tokensOut: 0, errorCode: String(status), privacy: ctx.privacy,
       });
       return this.sendError(res, inbound, status, message, extra);
     };
@@ -1053,6 +1088,7 @@ export class GatewayService extends EventEmitter {
       tokensIn,
       tokensOut,
       errorCode: a.kind === 'done' ? '' : String(a.status),
+      privacy: ctx.privacy,
     });
     if (p.auth) this.deps.upstreams?.noteUse(p.id, { input: tokensIn, output: tokensOut });
   }
@@ -1107,7 +1143,7 @@ export class GatewayService extends EventEmitter {
         const out = buildOutbound(outbound, ir, opts);
         path = out.path;
         body = Buffer.from(JSON.stringify(out.body));
-        headers = translatedHeaders(outbound, p.apiKey, route.stream, String(ctx.req.headers['user-agent'] ?? ''));
+        headers = translatedHeaders(outbound, p.apiKey, route.stream, String(ctx.req.headers['user-agent'] ?? ''), p.authStyle);
         if (p.auth === 'oauth') {
           // a subscription login: Bearer + oauth beta, never x-api-key
           delete headers['x-api-key'];
@@ -1137,6 +1173,31 @@ export class GatewayService extends EventEmitter {
       }
     } catch (e: any) {
       return { kind: 'final', status: 400, text: JSON.stringify(renderInboundError(route.inbound, 400, tr('请求转换失败：{message}', { message: e?.message ?? e }))), headers: {}, passthrough: true, model };
+    }
+    // 隐私保护 (privacy/): every body this attempt may send leaves redacted (the same placeholders in each variant), the
+    // answer comes back restored. A block rule, or the pipeline failing while it is on, refuses the request — never sent raw.
+    let guard: PrivacyGuard | null = null;
+    try {
+      guard = this.deps.privacy?.forRequest({ url: base, source: p.name, cloud: p.id.startsWith('sidecar:') }) ?? null;
+      if (guard) {
+        body = guard.body(body);
+        retryBody = guard.variant(retryBody);
+        noThinkingBody = guard.variant(noThinkingBody);
+        noEffortBody = guard.variant(noEffortBody);
+        bareBody = guard.variant(bareBody);
+        if (guard.redacted) {
+          // a compressed answer could not be restored on the fly: ask for it plain (decoded anyway if it still comes compressed)
+          if (pass) { for (const k of Object.keys(headers)) if (k.toLowerCase() === 'accept-encoding') delete headers[k]; headers['accept-encoding'] = 'identity'; }
+          guard.restore(ctx.res, route.stream);
+        }
+        const rec = guard.done();
+        if (rec) ctx.privacy = rec;
+      }
+    } catch (e: any) {
+      const blocked = e instanceof PrivacyBlocked;
+      const rec = guard?.done(blocked);
+      if (rec) ctx.privacy = rec;
+      return { kind: 'final', status: blocked ? 403 : 500, text: JSON.stringify(renderInboundError(route.inbound, blocked ? 403 : 500, e?.message ?? String(e))), headers: {}, passthrough: true, model };
     }
     const url = joinUrl(base, path);
     const sent = Date.now();
@@ -1184,6 +1245,8 @@ export class GatewayService extends EventEmitter {
     if (up.status < 200 || up.status >= 300) {
       let text = errText ?? '';
       if (errText === undefined) { try { text = await readText(up.body, 4 * 1024 * 1024); } catch { /* keep empty */ } }
+      // an upstream error may quote the request: secrets masked before it reaches a log, the ledger or the client
+      if (this.deps.privacy) text = this.deps.privacy.scrub(text);
       if (ctx.signal.aborted) return aborted();
       const st = this.states.get(group.id, key);
       const v = classify(up.status, up.headers, text, st.strikes);

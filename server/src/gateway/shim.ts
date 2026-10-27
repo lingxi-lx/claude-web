@@ -40,6 +40,7 @@ import { SseParser } from './sse.js';
 import type { IrEvent, IrUsage } from './ir.js';
 import { CACHE_KEY_MAX, SseLines, addMissing, affinityHeaders, dropEmptyReasoning, fixChatUsage, forcesTool, insertTopLevelField, isParamRejection, mentionsCacheKey, mentionsEffort, refusesForcedTool, thinkingOff } from './cache.js';
 import { UpstreamError, decoded, errorHeaders, passthroughHeaders, readText, responseHeaders, sendUpstream, waitDrain, withTimeout, type UpstreamResponse } from './upstream.js';
+import { PrivacyBlocked, type PrivacyService } from '../privacy/service.js';
 import { tr } from '../i18n/index.js';
 
 export const SHIM_PREFIX = '/gateway/~p/';
@@ -73,6 +74,8 @@ export function clientErrorBody(text: string): string | null {
 
 function sendError(ctx: Ctx, status: number, headers: UpstreamResponse['headers'], text: string) {
   if (ctx.res.headersSent) return;
+  // an upstream error may quote the request: secrets masked (隐私保护) before the client / a log sees it
+  if (ctx.scrub) text = ctx.scrub(text);
   const wrapped = clientErrorBody(text);
   ctx.res.writeHead(status, { ...errorHeaders(headers), 'content-type': wrapped !== null ? 'application/json' : String(headers['content-type'] ?? 'application/json') }).end(wrapped ?? text);
 }
@@ -82,6 +85,8 @@ export interface ShimDeps {
   /** Provider profile with its plaintext key (null when missing / undecryptable). */
   member(providerId: string): Provider | null;
   ledger?: { record(e: LedgerEntry): void };
+  /** 隐私保护: bodies redacted before they leave, answers restored (privacy/) */
+  privacy?: PrivacyService;
 }
 
 interface Ctx {
@@ -100,6 +105,8 @@ interface Ctx {
   t0: number;
   /** prompt_cache_key we put in (for the CW_SHIM_DEBUG line) */
   keyed?: boolean;
+  /** masks secrets in an upstream error (privacy/service.ts scrub) */
+  scrub?: (text: string) => string;
 }
 
 interface Outcome { ok: boolean; status: number; model: string; usage?: Partial<IrUsage> | null; error?: string; outbound: 'openai' | 'responses'; stream: boolean; firstByteMs?: number }
@@ -152,9 +159,27 @@ export class CacheShim {
       chunks.push(c as Buffer);
     }
     const key = cacheKey ? `cw:${cacheKey}`.slice(0, CACHE_KEY_MAX) : undefined;
-    const raw = Buffer.concat(chunks);
+    let raw: Buffer = Buffer.concat(chunks);
     let json: any;
     if (isChat || isResponses) { try { json = JSON.parse(raw.toString('utf8')); } catch { /* not ours to fix */ } }
+    // 隐私保护 (privacy/): the conversation leaves redacted and every path below (chat, Responses, the translations
+    // between them, the retries) is built from the redacted body; what goes back to the client is restored. On and
+    // failing → refused, never sent raw.
+    if (this.deps.privacy && (isChat || isResponses) && raw.length) {
+      try {
+        const guard = this.deps.privacy.forRequest({ url: p.baseUrl || DEFAULT_BASE[p.type], source: p.name });
+        if (guard) {
+          raw = guard.body(raw);
+          if (guard.redacted) {
+            try { json = JSON.parse(raw.toString('utf8')); } catch { /* not ours to fix */ }
+            guard.restore(res, !!json?.stream);
+          }
+          guard.done();
+        }
+      } catch (e: any) {
+        return this.fail(res, e instanceof PrivacyBlocked ? 403 : 500, e?.message ?? String(e));
+      }
+    }
     // the affinity headers name the conversation the way its body does: Codex sends its own prompt_cache_key (the
     // thread id), and a relay should not get two ids for one conversation
     const own = typeof json?.prompt_cache_key === 'string' && json.prompt_cache_key ? json.prompt_cache_key.slice(0, CACHE_KEY_MAX) : undefined;
@@ -162,7 +187,7 @@ export class CacheShim {
     if (own ?? key) addMissing(headers, affinityHeaders((own ?? key)!, p.type === 'grok'));
     const ac = new AbortController();
     res.on('close', () => { if (!res.writableFinished) ac.abort(); });
-    const ctx: Ctx = { req, res, p, base: openaiBase(p.baseUrl || DEFAULT_BASE[p.type]), rest, search: url.search, raw, headers, sessionId, cacheKey: key, signal: ac.signal, t0: Date.now() };
+    const ctx: Ctx = { req, res, p, base: openaiBase(p.baseUrl || DEFAULT_BASE[p.type]), rest, search: url.search, raw, headers, sessionId, cacheKey: key, signal: ac.signal, t0: Date.now(), scrub: this.deps.privacy ? (t) => this.deps.privacy!.scrub(t) : undefined };
     if (!json || typeof json !== 'object' || Array.isArray(json)) return this.forward(ctx);
     if (isResponses) return p.noResponsesApi ? this.responsesViaChat(ctx, json) : this.responses(ctx, json);
     if (p.type === 'openai' && p.responsesApi !== false && !p.noResponsesApi && wantsResponses(String(json.model ?? ''))) return this.viaResponses(ctx, json);
@@ -220,6 +245,7 @@ export class CacheShim {
   private async passError(ctx: Ctx, up: UpstreamResponse, model: string, outbound: Outcome['outbound'], stream: boolean, read?: string) {
     let text = read ?? '';
     if (read === undefined) { try { text = await readText(up.body, 4 * 1024 * 1024); } catch { /* keep empty */ } }
+    if (ctx.scrub) text = ctx.scrub(text);
     sendError(ctx, up.status, up.headers, text);
     this.record(ctx, { ok: false, status: up.status, model, error: `HTTP ${up.status} ${upstreamErrorMessage(text)}`.slice(0, 200), outbound, stream });
   }

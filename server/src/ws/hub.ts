@@ -68,6 +68,7 @@ import type { LibraryService } from '../library/service.js';
 import { scanLocalHistory } from '../library/local-scan.js';
 import type { GatewayService } from '../gateway/service.js';
 import { handleGatewayRequest, isGatewayRequest } from '../gateway/handlers.js';
+import { handlePrivacyRequest, isPrivacyRequest, type PrivacyService } from '../privacy/service.js';
 import type { UpstreamService } from '../upstreams/service.js';
 import type { MaintenanceScheduler } from '../upstreams/tasks.js';
 import { handleUpstreamRequest, isUpstreamRequest } from '../upstreams/handlers.js';
@@ -153,6 +154,8 @@ export interface Services {
   version: string;
   /** Local model gateway (/gateway/<group>/…, /<group>/v1/… and the /v1 root). */
   gateway: GatewayService;
+  /** 隐私保护: settings, preview and hit counts (privacy.*) */
+  privacy: PrivacyService;
   /** 账号池: Claude subscription accounts and the pools they are grouped into (upstreams.*). */
   upstreams: UpstreamService;
   channels: ChannelService;
@@ -192,6 +195,15 @@ export class Hub {
     s.pool.on('sent', (sessionId, message) => this.broadcast({ kind: 'session.event', sessionId, message: { ...message, cw_echo: true } }));
     s.pool.on('state', (sessionId, state, error) => this.broadcast({ kind: 'session.state', sessionId, state, error }));
     s.pool.on('info', (info) => this.broadcast({ kind: 'session.info', info }));
+    // 隐私保护: settings / hit counters pushed to the privacy center, at most once a second (counters move per request)
+    if (s.privacy) {
+      let timer: NodeJS.Timeout | null = null;
+      s.privacy.listen(() => {
+        if (timer) return;
+        timer = setTimeout(() => { timer = null; this.broadcast({ kind: 'privacy.changed', status: s.privacy!.status() }); }, 1000);
+        timer.unref?.();
+      });
+    }
     s.pool.on('permission', (request) => this.broadcast({ kind: 'permission.request', request }));
     // 派活 (stage F3): a dispatched conversation says when it is done or needs an answer — a notice every window and the
     // phone get (notify: a system notification when the window is not in front); IM chats are told by the IM router
@@ -1280,6 +1292,7 @@ export class Hub {
     if (isChannelRequest(req)) return handleChannelRequest(s.channels, req);
     if (isUpstreamRequest(req)) return handleUpstreamRequest(s.upstreams, s.tasks, req);
     if (isGatewayRequest(req)) return handleGatewayRequest(s.gateway, req);
+    if (isPrivacyRequest(req)) return handlePrivacyRequest(s.privacy, req);
     throw new Error(`unknown request ${(req as any).kind}`);
   }
 }

@@ -565,6 +565,12 @@ function CacheOptions({ editing, set }: { editing: Draft; set: (d: Draft) => voi
           {tr('1 小时提示缓存（官方二进制 / 经模型网关；写入 2× 基础价）')}
         </label>
       )}
+      {(editing.type === 'anthropic' || editing.type === 'openai') && (
+        <label style={row} title={tr('Key 放在哪个请求头里：Authorization: Bearer、x-api-key，或两个都带。默认：Claude 格式对话用 Bearer，测试和模型网关两个都带；OpenAI 格式用 Bearer')}>
+          {tr('鉴权方式')}
+          <Select value={editing.authStyle ?? ''} onValueChange={(v) => set({ ...editing, authStyle: (String(v) || null) as any })} aria-label={tr('鉴权方式')} options={[{ value: '', label: tr('默认') }, { value: 'bearer', label: 'Authorization: Bearer' }, { value: 'x-api-key', label: 'x-api-key' }, { value: 'both', label: tr('两个都带') }]} />
+        </label>
+      )}
       {learned.length > 0 && (
         <div className="sub" style={{ margin: '2px 0 6px' }}>
           {tr('自动记下：{learned}', { learned: learned.join('；') })}

@@ -60,7 +60,8 @@ export interface QuickPlan { type: ProviderType; baseUrl: string; defaultModel?:
  */
 export function quickPlan(p: QuickPreset, fmt: QuickFormat, base: string, models: string[]): QuickPlan {
   if (p.type === 'gemini') return { type: 'gemini', baseUrl: '', defaultModel: pickChatModel(models, [/gemini-[\d.]+-pro/i, /gemini-[\d.]+-flash(?!.*lite)/i, /gemini/i]) };
-  if (p.type !== 'auto') return { type: p.type, baseUrl: p.baseUrl ?? cleanBase(base), defaultModel: pickChatModel(models) };
+  // an Anthropic base never keeps its /v1 (the CLI appends /v1/messages — `…/v1` became /v1/v1/messages)
+  if (p.type !== 'auto') return { type: p.type, baseUrl: p.type === 'anthropic' ? anthropicBase(p.baseUrl ?? base) : p.baseUrl ?? cleanBase(base), defaultModel: pickChatModel(models) };
   const type: 'anthropic' | 'openai' = fmt === 'auto' ? (hasClaude(models) ? 'anthropic' : 'openai') : fmt;
   if (type === 'openai') return { type, baseUrl: cleanBase(base), defaultModel: pickChatModel(models) };
   const fam = claudeFamilyMap(models);

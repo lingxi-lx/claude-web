@@ -77,6 +77,8 @@ import { OpenCodeSource } from './library/opencode-source.js';
 import { CursorSource } from './library/cursor-source.js';
 import { DshSource } from './library/dsh-source.js';
 import { AcpListSource } from './library/acp-source.js';
+import { PrivacyService } from './privacy/service.js';
+import { setPrivacyRoute } from './privacy/route.js';
 import { GatewayService } from './gateway/service.js';
 import { AuditLog } from './gateway/audit.js';
 import { UpstreamService } from './upstreams/service.js';
@@ -455,8 +457,11 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   // 任务中心: our scheduler, so the sidecars' own timers stay off
   const tasks = new MaintenanceScheduler({ meta, upstreams, notify: (line) => console.log(`[tasks] ${line}`) });
   const gatewayAudit = new AuditLog(path.join(dataDir(), 'logs'), () => meta.gatewayAudit());
+  // 隐私保护: redacts what leaves through the gateway / cache shim (privacy/service.ts)
+  const privacy = new PrivacyService(meta);
   gateway = new GatewayService({
     meta,
+    privacy,
     secrets,
     ledger,
     audit: gatewayAudit,
@@ -476,6 +481,8 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   upstreams.onGatewayGroups = () => { void gateway.syncProfiles().catch(() => {}); };
   providers.gatewayEndpoint = (groupId) => gateway.endpoint(groupId);
   providers.shimEndpoint = (providerId) => gateway.shimEndpoint(providerId);
+  // 隐私保护 on: providers not behind the gateway / shim get the privacy relay as their base URL (privacy/route.ts)
+  setPrivacyRoute((target) => gateway.privacyBase(target));
   setSplitHook({ endpoint: (main, sub, model) => gateway.splitEndpoint(main, sub, model), target: (id) => providers.subagentTarget(id) });
   remote = new RemoteService(meta, () => { const s = http.createServer(handler); s.on('upgrade', upgrade); return s; });
   // 在外面也能用: bridges phones' links to the remote-access listener above (never to this main one)
@@ -592,7 +599,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     },
   });
   themes.watch();
-  const services = { importer, customCss, orchestra, background, characters, themes, remote, anywhere, tunnels, im, vcs: new VcsService(gitSvc, { gitlabHosts: () => { const v = meta.settings()['vcs.gitlabHosts']; return Array.isArray(v) ? v : []; }, tokens: vcsTokens }), vcsTokens, wsl, goals, android: new AndroidService(), pool, sessions: sessionsSvc, config, usage: new UsageService(async (sid) => providerTimeline(await canonical.providerSwitches(sid), meta.sessionMeta(sid).providerId, (id) => { const p = meta.provider(id); return p ? { type: p.type, name: p.name } : undefined; })), files, terminal, meta, limits: new LimitsService(), schedules: new ScheduleService(meta, pool), providers, git: gitSvc, search: new SearchService(), skills: new SkillsService(), mcp: new McpService(), diag: new DiagService(version), ledger, agents, transcripts, canonical, memory, library, version, federation, agentConfig: new AgentConfigService({ agents, backupDir: path.join(dataDir(), 'config-backups') }), gateway, upstreams, channels, tasks, web, computer, siteAsk, localEnv: localEnvStore, previews, cloud };
+  const services = { importer, customCss, orchestra, background, characters, themes, remote, anywhere, tunnels, im, vcs: new VcsService(gitSvc, { gitlabHosts: () => { const v = meta.settings()['vcs.gitlabHosts']; return Array.isArray(v) ? v : []; }, tokens: vcsTokens }), vcsTokens, wsl, goals, android: new AndroidService(), pool, sessions: sessionsSvc, config, usage: new UsageService(async (sid) => providerTimeline(await canonical.providerSwitches(sid), meta.sessionMeta(sid).providerId, (id) => { const p = meta.provider(id); return p ? { type: p.type, name: p.name } : undefined; })), files, terminal, meta, limits: new LimitsService(), schedules: new ScheduleService(meta, pool), providers, git: gitSvc, search: new SearchService(), skills: new SkillsService(), mcp: new McpService(), diag: new DiagService(version), ledger, agents, transcripts, canonical, memory, library, version, federation, agentConfig: new AgentConfigService({ agents, backupDir: path.join(dataDir(), 'config-backups') }), gateway, privacy, upstreams, channels, tasks, web, computer, siteAsk, localEnv: localEnvStore, previews, cloud };
   new Hub(wss, services);
   tasks.start();
   // model lists older than a day (or never pulled) are refreshed in the background — list only, no tokens
