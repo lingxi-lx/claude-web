@@ -45,7 +45,7 @@ fs.mkdirSync(proj, { recursive: true });
 // 允许的网站 (stage B task 7): the page the window part below works on (app.example) was allowed before — the
 // conversation 'phase23-conv' is not an open one, so nobody could be asked on a card (an open one is, below)
 fs.mkdirSync(dataDir, { recursive: true });
-fs.writeFileSync(path.join(dataDir, 'meta.json'), JSON.stringify({ settings: { 'web.browser.allowedSites': ['app.example'] } }));
+fs.writeFileSync(path.join(dataDir, 'meta.json'), JSON.stringify({ settings: { 'web.browser.allowedSites': ['app.example', '127.0.0.1'] } }));
 
 const results = [];
 const check = (name, ok, detail = '') => { results.push([name, !!ok]); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ` — ${detail}` : ''}`); };
@@ -375,15 +375,17 @@ async function main() {
     const mine = () => a.commands().filter((c) => c.sessionId === GS);
     const answer = (c, ans) => a.req({ kind: 'browser.result', id: c.id, ok: true, answer: ans });
     const shop = { page: { url: 'https://shop.example/cart', title: 'Cart', text: 'Your cart', elements: [{ ref: 'e1', role: 'button', name: 'Checkout' }] } };
-    // the page is opened (reading: never asked)
+    // opening a site not on the list asks once, then the window loads it
     const pOpen = tool('browser_open', { url: 'https://shop.example/cart' });
+    const openCard = await until(() => cards()[0], 10_000);
+    if (openCard) await a.req({ kind: 'permission.respond', requestId: openCard.requestId, response: { behavior: 'allow' } });
     const cOpen = await until(() => mine()[0], 10_000);
-    await answer(cOpen, shop);
+    if (cOpen) await answer(cOpen, shop);
     const opened = await pOpen;
-    check('allowed sites: opening a page is not asked about', opened.status === 200 && !opened.json?.isError && cards().length === 0, `${opened.status} ${textOf(opened.json).slice(0, 120)}`);
+    check('allowed sites: opening a new site raises the site card, then reaches the window', opened.status === 200 && !opened.json?.isError && openCard?.input?.host === 'shop.example' && openCard?.input?.op === 'open' && cards().length === 1, `${opened.status} ${textOf(opened.json).slice(0, 120)}`);
     // a click on a site nobody allowed: a card, and nothing at the window until it is answered
     const pClick = tool('browser_click', { ref: 'e1' });
-    const card1 = await until(() => cards()[0], 10_000);
+    const card1 = await until(() => cards()[1], 10_000);
     check('allowed sites: a click on a new site raises a card for that site — before the window is asked anything', card1?.input?.host === 'shop.example' && card1?.input?.op === 'click' && card1?.input?.tool === 'browser_click' && mine().length === 1, JSON.stringify(card1));
     await a.req({ kind: 'permission.respond', requestId: card1.requestId, response: { behavior: 'allow', updatedInput: { allow: 'always' } } });
     const cClick = await until(() => mine()[1], 10_000);
@@ -394,16 +396,16 @@ async function main() {
     const clicked = await pClick;
     check('… the tool result is the window\'s answer', clicked.status === 200 && !clicked.json?.isError, textOf(clicked.json).slice(0, 160));
     const listed = await until(async () => { const st = await a.req({ kind: 'settings.get' }); const v = (st.settings ?? st)['web.browser.allowedSites']; return Array.isArray(v) && v.includes('shop.example') ? v : null; }, 5000);
-    check('… 总是允许 wrote the host into web.browser.allowedSites (next to what was there)', JSON.stringify(listed) === JSON.stringify(['app.example', 'shop.example']), JSON.stringify(listed));
+    check('… 总是允许 wrote the host into web.browser.allowedSites (next to what was there)', JSON.stringify(listed) === JSON.stringify(['app.example', '127.0.0.1', 'shop.example']), JSON.stringify(listed));
     const pType = tool('browser_type', { ref: 'e1', text: 'x' });
     const cType = await until(() => mine()[2], 10_000);
-    check('… the next change on that site is not asked about', cType?.op === 'type' && cards().length === 1, `${JSON.stringify(cType)} cards=${cards().length}`);
+    check('… the next change on that site is not asked about', cType?.op === 'type' && cards().length === 2, `${JSON.stringify(cType)} cards=${cards().length}`);
     await answer(cType, shop);
     await pType;
     // a script: asked every time, on an allowed site too
     const script = "return document.querySelectorAll('li').length";
     const pEval = tool('browser_eval', { script });
-    const card2 = await until(() => cards()[1], 10_000);
+    const card2 = await until(() => cards()[2], 10_000);
     check('a script on an allowed site is still asked about, with the script on the card', card2?.input?.eval === true && card2?.input?.host === 'shop.example' && card2?.input?.script === script && mine().length === 3, JSON.stringify(card2));
     await a.req({ kind: 'permission.respond', requestId: card2.requestId, response: { behavior: 'allow', updatedInput: { allow: 'always' } } });
     const cEval = await until(() => mine()[3], 10_000);
@@ -412,13 +414,13 @@ async function main() {
     const ran = await pEval;
     check('… and its result comes back as page data', !ran.json?.isError && textOf(ran.json).includes('7') && textOf(ran.json).includes('WEB_CONTENT'), textOf(ran.json).slice(0, 200));
     const pEval2 = tool('browser_eval', { script: 'document.title' });
-    const card3 = await until(() => cards()[2], 10_000);
+    const card3 = await until(() => cards()[3], 10_000);
     check('… the same script again is asked about again (no 总是允许 for scripts)', card3?.input?.eval === true && card3?.input?.script === 'document.title', JSON.stringify(card3));
     await a.req({ kind: 'permission.respond', requestId: card3.requestId, response: { behavior: 'deny', message: '' } });
     const refused = await pEval2;
     check('… 拒绝: the model is told so and the window is never asked', refused.json?.isError === true && textOf(refused.json).includes('没有允许') && mine().length === 4, textOf(refused.json).slice(0, 200));
     const st3 = await a.req({ kind: 'settings.get' });
-    check('… and a script never wrote anything into the list', JSON.stringify((st3.settings ?? st3)['web.browser.allowedSites']) === JSON.stringify(['app.example', 'shop.example']));
+    check('… and a script never wrote anything into the list', JSON.stringify((st3.settings ?? st3)['web.browser.allowedSites']) === JSON.stringify(['app.example', '127.0.0.1', 'shop.example']));
     await a.req({ kind: 'session.close', sessionId: GS }).catch(() => {});
     await a.req({ kind: 'session.delete', sessionId: GS }).catch(() => {});
   }

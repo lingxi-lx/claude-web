@@ -56,5 +56,9 @@ export default defineConfig({
   build: { outDir: 'dist', sourcemap: false },
   // the source-scanning tests (i18n coverage, wording) read every file: seconds each, more next to a full parallel run;
   // the store tests import the whole store in beforeAll — same budget for the hooks
-  test: { environment: 'node', testTimeout: 30_000, hookTimeout: 30_000 },
+  test: {
+    environment: 'node', testTimeout: 30_000, hookTimeout: 30_000,
+    // temp agent worktrees / generated artifacts must not be picked up as a second copy of the suite
+    exclude: ['**/node_modules/**', '**/dist/**', '**/dist-shell/**', '**/.claude/**', '**/.superpowers/**'],
+  },
 } as any);

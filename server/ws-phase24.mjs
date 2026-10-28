@@ -12,7 +12,7 @@
 //     conversation and is in what a window gets when it opens the conversation; 允许 → granted, 不允许 with words →
 //     refused with the words, the caller going away withdraws the card, the conversation closing answers it;
 //   · the endpoint does not exist on the remote-access listener;
-//   · (Windows) the MCP server handshakes and lists its 23 tools; request_access raises the card with the applications
+//   · (Windows) the MCP server handshakes and lists its 29 tools; request_access raises the card with the applications
 //     and the reason, and grants only after the yes; a no grants nothing; Claude Web itself is refused without a card;
 //     with a grant that nothing in front matches, a screenshot comes back and input is refused (the wheel is asked
 //     to turn by no notches, so a broken gate would do nothing either).
@@ -162,7 +162,7 @@ async function main() {
     check('one opened with it is handed `computer` next to the web and the shared memory', !!computer && withIt.servers.some((m) => m.name === 'web') && withIt.servers.some((m) => m.name === 'claude-web-memory'), withIt.servers ? names(withIt.servers) : withIt.error);
     // the engine reports its servers as soon as it is up: a server still connecting is "pending" there
     const settled = computer?.status === 'connected';
-    check('… the engine started it (connected: its 23 tools; or still connecting)', !!computer && (settled ? computer.tools?.length === 23 : computer.status === 'pending'), JSON.stringify({ status: computer?.status, tools: computer?.tools?.length, error: computer?.error }));
+    check('… the engine started it (connected: its 29 tools; or still connecting)', !!computer && (settled ? computer.tools?.length === 29 : computer.status === 'pending'), JSON.stringify({ status: computer?.status, tools: computer?.tools?.length, error: computer?.error }));
   } else {
     check('off Windows the capability starts nothing: no computer server even when asked for', !!withIt.servers && !computer, withIt.servers ? names(withIt.servers) : withIt.error);
   }
@@ -213,7 +213,7 @@ async function main() {
     const init = await mcp.rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'phase24', version: '0' } });
     check('mcp initialize handshakes', init.result?.serverInfo?.name === 'claude-web-computer' && !!init.result?.capabilities?.tools, JSON.stringify(init.result?.serverInfo ?? init.error));
     const tools = (await mcp.rpc('tools/list')).result?.tools ?? [];
-    check('mcp lists its 23 tools, request_access among them', tools.length === 23 && tools.some((t) => t.name === 'request_access') && tools.some((t) => t.name === 'computer_batch'), tools.map((t) => t.name).join(','));
+    check('mcp lists its 29 tools, request_access among them', tools.length === 29 && tools.some((t) => t.name === 'request_access') && tools.some((t) => t.name === 'computer_batch'), tools.map((t) => t.name).join(','));
     const before = jsonOf(await mcp.call('list_granted_applications'));
     check('nothing is granted to begin with', Array.isArray(before?.granted) && before.granted.length === 0, textOf(await mcp.call('list_granted_applications')).slice(0, 200));
     const early = await mcp.call('screenshot');

@@ -24,7 +24,7 @@ export default defineConfig({
     projects: [
       {
         extends: true,
-        test: { name: 'server', include: ['src/**/*.test.ts'], exclude: REAL_TIME, sequence: { groupOrder: 0 } },
+        test: { name: 'server', include: ['src/**/*.test.ts'], exclude: ['**/node_modules/**', '**/.claude/**', '**/.superpowers/**', ...REAL_TIME], sequence: { groupOrder: 0 } },
       },
       {
         extends: true,
