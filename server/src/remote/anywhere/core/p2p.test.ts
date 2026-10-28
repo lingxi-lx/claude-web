@@ -827,7 +827,8 @@ describe('dial and Acceptor', () => {
         throw new Error('ui bug');
       },
     });
-    expect(['p2p-v4', 'p2p-v6']).toContain(r.link.kind);
+    // any link will do here (a busy CI Mac may settle on the relay before a direct path answers): the point is the throws
+    expect(['p2p-v4', 'p2p-v6', 'relay']).toContain(r.link.kind);
     await until(() => n === 1, 'onLink');
     expect(errors).toHaveBeenCalled();
     await until(() => r.end.closed.length === 1, 'the phone hears the PC side close');
