@@ -4,6 +4,66 @@
 
 Every version's changes are recorded here; installers are on the [Releases](https://github.com/ypyik0669/claude-web/releases) page. Versions follow [semantic versioning](https://semver.org/).
 
+## [0.4.2] — 2026-10-28
+
+This release turns the 上游 (upstream) page into a full model hub: one place for every model source — free ones, subscriptions, relays — with smart routing across them, privacy masking on the way out, plugins, sync and sharing. The techniques that CLIProxyAPI and Magpie use are now built into Claude Web itself, and both programs ship inside the installer for the logins only they can do.
+
+### Added
+
+**Model hub**
+
+- **One page for every model source:** overview, sources, routing, computer control, usage, privacy, plugins, connected agents and settings. The sources page lists 44 ready-made sources (free and paid) as cards with a filter; adding one is one step.
+- **Import from other tools:** CLIProxyAPI's `config.yaml` and Magpie's `providers.json`.
+- **Sign in with subscriptions:** Codex (OAuth), GitHub Copilot (device code), your local OpenCode and Claude logins, and — through the bundled CLIProxyAPI / Magpie — Gemini, Antigravity, Kimi, Grok, Qoder, Trae CN, WorkBuddy, ZCode, Kiro, Devin, Factory, MiMo and Cline. Account files exported by Sub2API-style tools can be imported.
+- **CLIProxyAPI and Magpie are in the installer** (no download needed), with SHA-256 checks and rollback.
+- **Claude subscription as a source:** answers plain-text requests with your own `claude` command and subscription. Off by default; guarded against looping back into Claude Web.
+
+**Smart routing**
+
+- **Pick a strategy instead of a model:** Auto, Free first, Performance first, Capability first, or Custom. Candidates are filtered by what the request needs (tools, images, context) and what you allowed (paid, budget).
+- **Seven ways to order candidates** (smart score, in order, round-robin, least used, use up before reset, weighted, fastest first), plus optional intent rules judged by a model you choose ("code" → this model).
+- **See every decision:** which candidates were considered, why each was excluded, scores, the pick and each attempt.
+- **Quota-aware:** remaining quota is read from upstream rate-limit headers; a 429 puts a source on cooldown until it resets.
+- **Source health:** a check button reads the model list and, for free sources, makes one real 1-token call.
+
+**Gateway**
+
+- **Thinking signatures are cleaned per target** (Claude, Gemini, GPT, Grok, Kimi), so switching providers mid-conversation no longer causes 400s; signed reasoning a client drops is put back from a cache.
+- **WebSocket for Codex:** `/v1/responses` and `/v1/ws` work over WebSocket, with the same auth, routing and failover as HTTP.
+- **Client fingerprint (opt-in, per source):** requests can look like Claude Code, Codex CLI or Gemini CLI — user agent, header and field order, TLS handshake. Settings → Client fingerprint.
+- **OpenTelemetry export (opt-in):** request spans with model, source, latency, tokens and status — never prompts or keys.
+
+**Privacy**
+
+- **Masking before anything leaves your computer:** keys, private keys, JWTs, config secrets, email, phone, CN ID / bank card, Chinese names, addresses, your own words and regexes. Mask, warn or block per type; answers get the real values back.
+- **Changes apply immediately**, no restart.
+- **Covers Codex with a ChatGPT login and Gemini CLI with a Google login** too; agents that cannot be covered are marked on the page.
+- **Logs and diagnostic bundles are masked as well.**
+- **Optional local model** (AstrLink Guard) finds personal data the rules miss; downloaded on demand and checked by SHA-256.
+
+**Plugins, sync and sharing**
+
+- **Plugins:** declarative sources, and executable plugins that run in their own process with Node's permission model — reads limited to their folder, writes to their data folder, no child processes unless you allow it, a memory cap. Approval covers the code: a plugin whose code changes asks again. A signed plugin market installs in one click.
+- **Sync:** encrypted bundles merged item by item (both credentials kept on a conflict), to a file or to WebDAV / S3 / GitHub.
+- **Share keys:** give someone a key to your gateway with its own sources, models, concurrency and daily / weekly / monthly quotas. A share key reaches nothing until you tick what it may use; subscriptions only if you allow; paid sources only within its own daily budget.
+- **Signed remote model catalog:** add your own https list and Ed25519 key.
+
+**Agents and computer control**
+
+- **Connected agents page:** every agent's model and reasoning settings, and a warning when its config file was changed outside Claude Web, with re-apply, keep or restore.
+- **Computer control on Windows uses UI Automation:** Claude finds buttons and fields by name instead of guessing pixels (29 tools). A window you allowed can no longer be used to act on one you did not.
+- **Full access really asks nothing**, browser scripts and computer control included; otherwise "Allowed sites" is the only list that decides.
+- **ego lite is the browser agents act in first** when it is installed (checked with ego-browser 2.1.0).
+
+### Fixed
+
+- **Outbound requests to addresses you entered (sync, plugin market, catalog, telemetry) are guarded:** cloud metadata and link-local addresses are always refused, every DNS answer and redirect is checked, and credentials never follow a redirect to another host.
+- **Share key "retry after" is right:** weekly and monthly limits pointed to the next midnight; daily limits were off by the time zone.
+- **Managed programs get a minimal environment** (no keys or tokens), and a release without a published SHA-256 installs only after you confirm its hash.
+- **A crafted sync file cannot change your settings** beyond routing, models and privacy, and cannot point a saved key at another host.
+- **A reply only gets back the secrets its own request masked.**
+- **Empty arguments survive Windows `.cmd` launchers** (they used to vanish, shifting the next flag).
+
 ## [0.4.1] — 2026-10-26
 
 ### Fixed
