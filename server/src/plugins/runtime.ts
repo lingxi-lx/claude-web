@@ -15,7 +15,7 @@
 // Extension points: `requestBefore` / `responseAfter` (gateway, see gatewayPluginHooks) and `sources` (data only).
 import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs/promises';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import type { ChildToHost, HostToChild, PluginHook, PluginManifest } from './protocol.js';
 import { parseManifest } from './manifest.js';
@@ -166,15 +166,45 @@ export function setPluginHostFetch(f: FetchFn | null): void { hostFetch = f ?? g
  * With --permission and no --allow-net / --allow-child-process / --allow-worker: Node refuses those itself (the
  * network only on Nodes that have --allow-net, see networkPermission).
  */
+/**
+ * `p` and, when it differs, `p` with symlinks resolved: Node's permission model compares resolved paths, so an
+ * allow-path under a symlink (macOS `/var/folders` → `/private/var/folders`) alone never matches. A path that does not
+ * exist yet (a data folder made on first write) is resolved through its nearest existing parent.
+ */
+export function withResolved(p: string): string[] {
+  const glob = p.endsWith(`${path.sep}*`) || p.endsWith('/*');
+  const base = glob ? p.slice(0, -2) : p;
+  let head = base;
+  const tail: string[] = [];
+  const same = (a: string, b: string) => (process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b);
+  for (;;) {
+    try {
+      const realHead = realpathSync.native(head);
+      if (same(realHead, path.resolve(head))) return [p];
+      const real = path.join(realHead, ...tail);
+      return [p, glob ? path.join(real, '*') : real];
+    } catch {
+      const up = path.dirname(head);
+      if (up === head) return [p];
+      tail.unshift(path.basename(head));
+      head = up;
+    }
+  }
+}
+
 export function childArgs(o: { flag: string | null; read: string[]; write: string[]; manifest: PluginManifest; entry: string }): string[] {
   const args: string[] = [];
   if (o.flag) {
-    args.push(o.flag, ...o.read.map((p) => `--allow-fs-read=${p}`), ...o.write.map((p) => `--allow-fs-write=${p}`));
+    const all = (l: string[]) => [...new Set(l.flatMap(withResolved))];
+    args.push(o.flag, ...all(o.read).map((p) => `--allow-fs-read=${p}`), ...all(o.write).map((p) => `--allow-fs-write=${p}`));
     if (o.manifest.permissions.childProcess) args.push('--allow-child-process');
     if (o.manifest.permissions.workers) args.push('--allow-worker');
   }
   args.push(`--max-old-space-size=${clampMemory(o.manifest)}`);
-  return [...args, '-e', BOOTSTRAP, '--', o.entry];
+  // the module loader resolves the entry component by component (lstat on each link): give it the resolved path so it
+  // never has to touch a link outside the allow-list
+  const entry = o.flag ? withResolved(o.entry).at(-1)! : o.entry;
+  return [...args, '-e', BOOTSTRAP, '--', entry];
 }
 
 /** The child's environment: nothing of ours (keys, proxies, tokens, CLAUDE_* / ANTHROPIC_* …). Pure, for tests. */

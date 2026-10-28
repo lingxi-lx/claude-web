@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { parseManifest } from './manifest';
-import { BOOTSTRAP, childArgs, childEnv, permissionFlag, PluginRunner } from './runtime';
+import { BOOTSTRAP, childArgs, childEnv, permissionFlag, PluginRunner, withResolved } from './runtime';
 
 const manifest = (extra: Record<string, unknown> = {}) => parseManifest({ id: 'probe', main: 'index.js', hooks: ['source-provider'], ...extra });
 
@@ -91,4 +91,42 @@ describe.runIf(!!permissionFlag() && !process.versions.electron)('a real child u
       await gone;
     }
   }, 20_000);
+
+  // macOS: os.tmpdir() is /var/folders/…, a symlink to /private/var/folders/…; Node's permission model compares
+  // resolved paths, so allow-paths given only through the link denied the plugin its own entry file (it exited 1)
+  it('the same, with its folders reached through a symlink / junction', async () => {
+    const link = `${root}-link`;
+    fs.symlinkSync(root, link, process.platform === 'win32' ? 'junction' : 'dir');
+    const runner = new PluginRunner(path.join(link, 'plugins', 'probe'), manifest({ permissions: { network: ['*'] } }), { dataDir: path.join(link, 'plugins', '.data', 'probe-link'), secret: async () => undefined });
+    try {
+      const r = await runner.call<Record<string, string>>('source-provider', { outside: path.join(link, 'outside.txt') });
+      expect(r.writeData).toBe('ok');
+      expect(r.writeOwn).toMatch(/^denied:/);
+      expect(r.readOutside).toMatch(/^denied:/);
+      expect(r.writeOutside).toMatch(/^denied:/);
+    } finally {
+      const child = (runner as unknown as { child: import('node:child_process').ChildProcess | null }).child;
+      const gone = child && child.exitCode === null ? new Promise((r) => child.once('exit', r)) : null;
+      runner.stop();
+      await gone;
+      fs.rmSync(link, { recursive: false, force: true });
+    }
+  }, 20_000);
+});
+
+describe('withResolved', () => {
+  it('adds the resolved form of a path under a link, also for a path that does not exist yet', () => {
+    const real = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-resolve-'));
+    const link = `${real}-link`;
+    fs.symlinkSync(real, link, process.platform === 'win32' ? 'junction' : 'dir');
+    try {
+      const realReal = fs.realpathSync.native(real);
+      expect(withResolved(path.join(link, 'a'))).toEqual([path.join(link, 'a'), path.join(realReal, 'a')]);
+      expect(withResolved(path.join(link, 'not', 'yet', '*'))).toEqual([path.join(link, 'not', 'yet', '*'), path.join(realReal, 'not', 'yet', '*')]);
+      expect(withResolved(realReal)).toEqual([realReal]);
+    } finally {
+      fs.rmSync(link, { force: true });
+      fs.rmSync(real, { recursive: true, force: true });
+    }
+  });
 });
