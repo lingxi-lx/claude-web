@@ -132,9 +132,13 @@ export class PluginService {
         // the hash is checked before each start; a change while the process runs (a file it would load lazily) stops
         // it, so the next call starts again through that check
         try {
+          // only a real change counts: macOS FSEvents also reports writes from just before the watch started
           e.watcher = watch(dir, { recursive: true }, () => {
-            e.runner?.stop();
-            void codeHash(dir).then((h) => { e.code = h; }, () => { e.code = undefined; });
+            void codeHash(dir).then((h) => h, () => undefined).then((h) => {
+              if (h === e.code) return;
+              e.code = h;
+              e.runner?.stop();
+            });
           });
           e.watcher.on('error', () => { e.watcher?.close(); });
         } catch { /* no watching on this file system: the check before each start still holds */ }
