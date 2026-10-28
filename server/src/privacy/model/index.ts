@@ -4,10 +4,11 @@
 //
 // Off by default. Nothing ships with the app: the files are downloaded on demand into `<data dir>/privacy-model/<rev>`
 // from Hugging Face at the revision their SHA-256 were pinned at (a file that does not match is deleted, never used),
-// and the model runs through `onnxruntime-node`, which is NOT a dependency — it is loaded lazily with a dynamic import
-// and only if the user installed it (`npm i onnxruntime-node` next to the app, or globally on NODE_PATH). Without it the
-// page says 「运行库未安装」 and the switch stays off. Loaded on the first request that needs it, let go after 10 idle
-// minutes; results are cached by text (a conversation's history is re-sent every turn).
+// and the model runs through `onnxruntime-node`, which is NOT a dependency of the app — the same download fetches it
+// from the npm registry at pinned versions into `<data dir>/privacy-model/runtime` (runtime.ts), and it is loaded lazily
+// with a dynamic import from there (or from next to the app / NODE_PATH if the user installed one). Without it the
+// switch stays off. Loaded on the first request that needs it, let go after 10 idle minutes; results are cached by
+// text (a conversation's history is re-sent every turn).
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,6 +18,8 @@ import { tr } from '../../i18n/index.js';
 import type { PrivacyCategory, PrivacyModelStatus } from '../types.js';
 import { zhTrim } from '../zhname.js';
 import { Tokenizer, type Token } from './tokenizer.js';
+import { fetchVerified } from './download.js';
+import { OrtRuntime, type RuntimeOptions } from './runtime.js';
 
 export interface PinnedFile { path: string; size: number; sha256: string }
 
@@ -100,40 +103,16 @@ export async function findIn(tok: Tokenizer, logits: Logits, text: string): Prom
 }
 
 /** Download one pinned file to `dest`: streamed to `.part`, size and SHA-256 checked, then renamed; a mismatch is deleted. */
-export async function fetchPinned(url: string, dest: string, f: PinnedFile, o: { signal?: AbortSignal; onBytes?: (n: number) => void; fetchImpl?: typeof fetch } = {}): Promise<void> {
-  const part = `${dest}.part`;
-  await fs.promises.mkdir(path.dirname(dest), { recursive: true });
-  const res = await (o.fetchImpl ?? fetch)(url, { signal: o.signal, redirect: 'follow' });
-  if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
-  const hash = crypto.createHash('sha256');
-  const out = fs.createWriteStream(part, { mode: 0o600 });
-  let n = 0;
-  try {
-    for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
-      n += chunk.length;
-      if (n > f.size) throw new Error(tr('文件比预期的大'));
-      hash.update(chunk);
-      if (!out.write(chunk)) await new Promise<void>((r) => out.once('drain', () => r()));
-      o.onBytes?.(n);
-    }
-    await new Promise<void>((resolve, reject) => out.end((e?: Error | null) => (e ? reject(e) : resolve())));
-    const sha = hash.digest('hex');
-    if (n !== f.size || sha !== f.sha256) throw new Error(tr('校验不通过（SHA-256 不符），文件已删除'));
-    await fs.promises.rename(part, dest);
-  } catch (e) {
-    // the stream opens its file asynchronously: a failure on the first chunk can come before the open, and an rm
-    // then would run before the file exists — wait until it is closed, then remove it
-    const closed = out.closed ? Promise.resolve() : new Promise<void>((r) => out.once('close', () => r()));
-    out.destroy();
-    await closed;
-    await fs.promises.rm(part, { force: true }).catch(() => {});
-    throw e;
-  }
+export function fetchPinned(url: string, dest: string, f: PinnedFile, o: { signal?: AbortSignal; onBytes?: (n: number) => void; fetchImpl?: typeof fetch } = {}): Promise<void> {
+  return fetchVerified(url, dest, { size: f.size, sha256: f.sha256 }, o);
 }
 
-/** onnxruntime-node, if the user installed it (never a dependency of the app): resolved from the app's folders / NODE_PATH. */
-export async function loadOrt(): Promise<any> {
-  return import(pathToFileURL(createRequire(import.meta.url).resolve('onnxruntime-node')).href);
+/**
+ * onnxruntime-node: the one downloaded into the data dir (`own`, the entry file) first, else one the user installed
+ * next to the app / on NODE_PATH. Imported fresh each time it is asked for (Node caches the module itself).
+ */
+export async function loadOrt(own?: string | null): Promise<any> {
+  return import(pathToFileURL(own ?? createRequire(import.meta.url).resolve('onnxruntime-node')).href);
 }
 
 function ortResolvable(): boolean {
@@ -151,6 +130,25 @@ export interface ModelOptions {
   runtimeAvailable?: () => boolean;
   /** the network itself (tests): skips onnxruntime entirely */
   logits?: (dir: string) => Promise<Logits>;
+  /** the downloadable onnxruntime (registry, pinned packages, fetch — tests give a fake registry) */
+  ort?: RuntimeOptions;
+  /** is onnxruntime-node resolvable from the app's own folders (tests: false) */
+  appRuntime?: () => boolean;
+}
+
+/** A download failure in words a user can act on (network / server / disk); our own messages pass through. */
+export function downloadError(e: any): string {
+  const msg = String(e?.message ?? e);
+  const code = String(e?.code ?? e?.cause?.code ?? '');
+  const http = /^HTTP (\d+)/.exec(msg);
+  if (http) return tr('下载服务器返回了错误（HTTP {status}），稍后再试', { status: http[1] });
+  if (code === 'ENOSPC') return tr('磁盘空间不够，空出一些再下载');
+  if (code === 'EPERM' || code === 'EACCES' || code === 'EBUSY') return tr('数据目录里的文件写不进去（{code}），可能被别的程序占着', { code });
+  if (e?.code === 'EGRESS_DENIED') return msg;
+  if (msg === 'fetch failed' || /^(ECONN|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|UND_ERR)/.test(code) || /terminated|other side closed/i.test(msg)) {
+    return tr('连不上下载服务器，检查网络，或在设置里配好网络代理后再试');
+  }
+  return msg;
 }
 
 /** The local model: its files, the download, and running it. `dir` null: unavailable (no data dir). */
@@ -166,8 +164,12 @@ export class PrivacyModel {
   private cache = new Map<string, ModelSpan[]>();
   private onChange: (() => void) | null = null;
   private runtimeKnown: boolean | null = null;
+  readonly ort: OrtRuntime;
 
-  constructor(private root: string | null, private o: ModelOptions = {}) { this.files = o.files ?? GUARD_FILES; }
+  constructor(private root: string | null, private o: ModelOptions = {}) {
+    this.files = o.files ?? GUARD_FILES;
+    this.ort = new OrtRuntime(root, o.ort);
+  }
 
   listen(fn: () => void) { this.onChange = fn; }
   private changed() { try { this.onChange?.(); } catch { /* the page catches up on the next push */ } }
@@ -179,8 +181,11 @@ export class PrivacyModel {
   runtime(): boolean {
     if (this.o.logits) return true;
     if (this.o.runtimeAvailable) return this.o.runtimeAvailable();
-    return (this.runtimeKnown ??= ortResolvable());
+    return this.ort.installed() || (this.runtimeKnown ??= (this.o.appRuntime ?? ortResolvable)());
   }
+
+  /** The runtime has to be fetched along with the model (none usable here, and one is pinned for this platform). */
+  private needsRuntime(): boolean { return !this.runtime() && this.ort.supported(); }
 
   /** Every file on disk at its size, and checked when it was downloaded (`.ok` beside it holds its hash). */
   installed(): boolean {
@@ -193,25 +198,39 @@ export class PrivacyModel {
   status(): PrivacyModelStatus {
     return {
       id: this.id, name: this.name, size: this.size(), runtime: this.runtime(), installed: this.installed(),
+      ...(this.ort.supported() ? { runtimeSize: this.ort.size() } : {}),
+      ...(this.ort.installed() ? { runtimeOwn: true } : {}),
       ...(this.dl ? { downloading: { done: this.dl.done, total: this.dl.total } } : {}),
       ...(this.error ? { error: this.error } : {}),
       ...(this.loaded ? { loaded: true } : {}),
     };
   }
 
-  /** Start the download in the background (no-op while one runs). Resolves when it is done or failed. */
+  /**
+   * Start the download in the background (no-op while one runs): onnxruntime first when this machine has none usable,
+   * then the model's files. Resolves when it is done or failed. Picked up without a restart: the runtime is imported
+   * lazily from its folder on the first request that needs the model.
+   */
   download(): Promise<void> {
     const dir = this.dir();
     if (!dir) return Promise.reject(new Error(tr('没有数据目录，下载不了')));
     if (this.dl) return Promise.resolve();
     const ac = new AbortController();
-    const total = this.size();
+    const withRuntime = this.needsRuntime();
+    const total = this.size() + (withRuntime ? this.ort.size() : 0);
     this.dl = { ac, done: 0, total };
     this.error = '';
     this.changed();
     let last = 0;
+    const progress = (done: number) => { if (this.dl) this.dl.done = done; if (Date.now() - last > 500) { last = Date.now(); this.changed(); } };
     const run = async () => {
       let base = 0;
+      if (withRuntime) {
+        await this.ort.install({ signal: ac.signal, onBytes: progress });
+        this.runtimeKnown = null;
+        base = this.ort.size();
+        this.changed();
+      }
       for (const f of this.files) {
         const dest = this.fileOf(f);
         const ok = (() => { try { return fs.statSync(dest).size === f.size && fs.readFileSync(`${dest}.ok`, 'utf8').trim() === f.sha256; } catch { return false; } })();
@@ -219,7 +238,7 @@ export class PrivacyModel {
           await fs.promises.rm(`${dest}.ok`, { force: true }).catch(() => {});
           await fetchPinned(`${this.o.base ?? GUARD_BASE}${this.o.rev ?? GUARD_REV}/${f.path}`, dest, f, {
             signal: ac.signal, fetchImpl: this.o.fetchImpl,
-            onBytes: (n) => { if (this.dl) this.dl.done = base + n; if (Date.now() - last > 500) { last = Date.now(); this.changed(); } },
+            onBytes: (n) => progress(base + n),
           });
           await fs.promises.writeFile(`${dest}.ok`, f.sha256, 'utf8');
         }
@@ -227,17 +246,22 @@ export class PrivacyModel {
         if (this.dl) this.dl.done = base;
       }
     };
-    return run().catch((e: any) => { this.error = ac.signal.aborted ? tr('已取消') : String(e?.message ?? e); }).finally(() => { this.dl = null; this.changed(); });
+    return run().catch((e: any) => { this.error = ac.signal.aborted ? tr('已取消') : downloadError(e); }).finally(() => { this.dl = null; this.changed(); });
   }
 
   cancel() { this.dl?.ac.abort(); }
 
+  /** Delete the model's files and the downloaded runtime (one installed by hand next to the app is not touched). */
   async remove() {
     this.cancel();
+    // a running download's last write must land before the folders go
+    while (this.dl) await new Promise((r) => setTimeout(r, 20));
     this.unload();
     this.error = '';
     const dir = this.dir();
     if (dir) await fs.promises.rm(dir, { recursive: true, force: true });
+    await this.ort.remove();
+    this.runtimeKnown = null;
     this.changed();
   }
 
@@ -251,6 +275,9 @@ export class PrivacyModel {
   private async load(): Promise<NonNullable<PrivacyModel['loaded']>> {
     if (this.loaded) return this.loaded;
     return (this.loading ??= (async () => {
+      // yield first: a failure before any await would otherwise run `finally` (loading = null) before `??=` stores
+      // this rejected promise — and every later load would get that old failure until a restart
+      await null;
       try {
         if (!this.installed()) throw new Error(tr('本地模型还没下载'));
         const dir = this.dir()!;
@@ -260,7 +287,10 @@ export class PrivacyModel {
         if (this.o.logits) logits = await this.o.logits(dir);
         else {
           let ort: any;
-          try { ort = await (this.o.runtime ?? loadOrt)(); } catch { throw new Error(tr('没装 onnxruntime-node，本地模型跑不了')); }
+          if (!this.runtime()) throw new Error(tr('运行库还没下载，本地模型跑不了'));
+          try { ort = await (this.o.runtime ? this.o.runtime() : loadOrt(this.ort.resolve())); } catch (e: any) {
+            throw new Error(tr('运行库加载失败：{why}', { why: String(e?.message ?? e).split(/\r?\n/)[0].slice(0, 300) }));
+          }
           const O = ort.default?.InferenceSession ? ort.default : ort;
           const session = await O.InferenceSession.create(path.join(dir, 'model_int8.onnx'), { executionProviders: ['cpu'], graphOptimizationLevel: 'all' });
           release = () => { void session.release?.(); };

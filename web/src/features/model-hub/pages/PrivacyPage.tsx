@@ -144,7 +144,11 @@ export function PrivacyPage() {
     await save({ enabled: on });
   };
   const removeModel = async () => {
-    const ok = await dlg.confirm(tr('删除本地模型？'), { message: tr('模型文件会从本机删掉，本地模型随之关闭；以后可以再下载。'), okLabel: tr('删除'), danger: true });
+    const ok = await dlg.confirm(tr('删除本地模型？'), {
+      message: model?.runtimeOwn ? tr('模型和运行库会从本机删掉，本地模型随之关闭；以后可以再下载。') : tr('模型文件会从本机删掉，本地模型随之关闭；以后可以再下载。'),
+      okLabel: tr('删除'),
+      danger: true,
+    });
     if (ok) await ask('privacy.model.remove');
   };
   const test = async () => {
@@ -231,28 +235,42 @@ export function PrivacyPage() {
             <div className="hd">
               <h3>{tr('本地模型')}</h3>
               <span className="hub-grow" />
-              <span className={`hub-chip ${model?.installed && s.model.enabled ? 'green' : ''}`}>
-                {!model?.runtime ? tr('运行库未安装') : !model.installed ? tr('未下载') : s.model.enabled ? tr('开启') : tr('关闭')}
+              <span className={`hub-chip ${model?.installed && model.runtime && s.model.enabled ? 'green' : ''}`}>
+                {dl ? tr('下载中') : !model?.installed ? tr('未下载') : !model.runtime ? tr('运行库未安装') : s.model.enabled ? tr('开启') : tr('关闭')}
               </span>
             </div>
             <div className="bd">
               <div className="hub-muted hub-sml" style={{ marginBottom: 8 }}>
                 {tr('{name}：在本机找出规则找不到的人名、地址、密码，不联网。约 {mb} MB，默认关闭。', { name: model?.name ?? 'AstrLink Guard', mb: Math.round((model?.size ?? 0) / MB) })}
               </div>
-              {model && !model.runtime && (
+              {model && !model.runtime && model.runtimeSize === undefined && (
                 <div className="hub-row hub-sml" style={{ color: 'var(--warn)', marginBottom: 8 }}>
                   <Icon name="alert" size={13} />
-                  {tr('需要 onnxruntime-node（不随应用附带）：在应用目录运行 npm i onnxruntime-node 后重启。')}
+                  {tr('这台电脑的系统没有可下载的运行库，本地模型用不了。')}
                 </div>
               )}
-              {model && !model.installed && !dl && (
-                <button className="btn sm" onClick={() => void ask('privacy.model.download')}>{tr('下载模型')}</button>
-              )}
+              {model && !dl && (!model.installed || (!model.runtime && model.runtimeSize !== undefined)) && (() => {
+                const needRuntime = !model.runtime && model.runtimeSize !== undefined;
+                const bytes = (model.installed ? 0 : model.size) + (needRuntime ? model.runtimeSize ?? 0 : 0);
+                return (
+                  <div className="hub-row hub-sml" data-privacy-model-download>
+                    <button className="btn sm primary" onClick={() => void ask('privacy.model.download')}>
+                      {needRuntime && !model.installed ? tr('下载运行库和模型') : needRuntime ? tr('下载运行库') : tr('下载模型')}
+                    </button>
+                    <span className="hub-muted">{tr('共约 {mb} MB，下载完就能用，不用重启', { mb: Math.round(bytes / MB) })}</span>
+                  </div>
+                );
+              })()}
               {dl && (
-                <div className="hub-row hub-sml">
-                  <span>{tr('下载中 {done} / {total} MB', { done: (dl.done / MB).toFixed(1), total: (dl.total / MB).toFixed(1) })}</span>
-                  <span className="hub-grow" />
-                  <button className="btn sm ghost" onClick={() => void ask('privacy.model.cancel')}>{tr('取消')}</button>
+                <div data-privacy-model-progress>
+                  <div className="hub-bar" role="progressbar" aria-valuemin={0} aria-valuemax={dl.total} aria-valuenow={dl.done} aria-label={tr('下载进度')}>
+                    <i style={{ width: `${dl.total ? Math.min(100, (dl.done / dl.total) * 100) : 0}%` }} />
+                  </div>
+                  <div className="hub-row hub-sml" style={{ marginTop: 6 }}>
+                    <span>{tr('下载中 {done} / {total} MB', { done: (dl.done / MB).toFixed(1), total: (dl.total / MB).toFixed(1) })}</span>
+                    <span className="hub-grow" />
+                    <button className="btn sm ghost" onClick={() => void ask('privacy.model.cancel')}>{tr('取消')}</button>
+                  </div>
                 </div>
               )}
               {model?.installed && (
@@ -277,10 +295,12 @@ export function PrivacyPage() {
                       options={['0.6', '0.7', '0.8', '0.9'].map((v) => ({ value: v, label: `${Math.round(Number(v) * 100)}%` }))}
                     />
                   </div>
-                  <button className="btn sm ghost" onClick={() => void removeModel()}>{tr('删除模型')}</button>
                 </>
               )}
-              {model?.error && <div className="hub-sml" style={{ color: 'var(--err)', marginTop: 6 }}>{model.error}</div>}
+              {model && !dl && (model.installed || model.runtimeOwn) && (
+                <button className="btn sm ghost" onClick={() => void removeModel()}>{model.runtimeOwn ? tr('删除模型和运行库') : tr('删除模型')}</button>
+              )}
+              {model?.error && <div className="hub-row hub-sml" role="alert" style={{ color: 'var(--err)', marginTop: 6 }}><Icon name="alert" size={13} />{model.error}</div>}
             </div>
           </section>
 

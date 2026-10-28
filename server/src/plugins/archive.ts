@@ -1,6 +1,7 @@
 // A plugin package is untrusted input. This module turns .zip / .tar.gz bytes into a flat set of relative paths and
 // writes them below one staging folder: no absolute paths, no `..`, no drive letters, no device names, no links,
 // bounded entry count and bounded inflated size. Nothing here imports / executes what it extracts.
+import { createReadStream } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import zlib from 'node:zlib';
@@ -79,6 +80,20 @@ const cstr = (b: Buffer, start: number, len: number): string => {
   return (z >= 0 ? s.subarray(0, z) : s).toString('utf8');
 };
 
+/** One ustar header: null at the end-of-archive block; throws 'tar checksum' / 'tar size' (the caller words it). */
+function tarHeader(h: Buffer): { name: string; size: number; type: string } | null {
+  if (h.every((b) => b === 0)) return null;
+  const stored = parseInt(cstr(h, 148, 8).trim() || '0', 8);
+  let sum = 0;
+  for (let i = 0; i < 512; i++) sum += i >= 148 && i < 156 ? 32 : h[i];
+  if (!Number.isFinite(stored) || stored !== sum) throw new Error('tar checksum');
+  const prefix = cstr(h, 345, 155);
+  const name = (prefix ? `${prefix}/` : '') + cstr(h, 0, 100);
+  const size = parseInt(cstr(h, 124, 12).trim() || '0', 8);
+  if (!Number.isFinite(size) || size < 0) throw new Error('tar size');
+  return { name, size, type: h[156] === 0 ? '\0' : String.fromCharCode(h[156]) };
+}
+
 function readTarGzEntries(buf: Buffer, o: Required<PluginArchiveLimits>): Map<string, Buffer> {
   let tar: Buffer;
   try {
@@ -91,17 +106,11 @@ function readTarGzEntries(buf: Buffer, o: Required<PluginArchiveLimits>): Map<st
   let off = 0;
   let total = 0;
   while (off + 512 <= tar.length) {
-    const h = tar.subarray(off, off + 512);
-    if (h.every((b) => b === 0)) break;
-    const stored = parseInt(cstr(h, 148, 8).trim() || '0', 8);
-    let sum = 0;
-    for (let i = 0; i < 512; i++) sum += i >= 148 && i < 156 ? 32 : h[i];
-    if (!Number.isFinite(stored) || stored !== sum) throw new Error(tr('插件包已损坏：{why}', { why: 'tar checksum' }));
-    const prefix = cstr(h, 345, 155);
-    const name = (prefix ? `${prefix}/` : '') + cstr(h, 0, 100);
-    const size = parseInt(cstr(h, 124, 12).trim() || '0', 8);
-    if (!Number.isFinite(size) || size < 0 || off + 512 + size > tar.length) throw new Error(tr('插件包已损坏：{why}', { why: 'tar size' }));
-    const type = h[156] === 0 ? '\0' : String.fromCharCode(h[156]);
+    let hd: ReturnType<typeof tarHeader>;
+    try { hd = tarHeader(tar.subarray(off, off + 512)); } catch (e) { throw new Error(tr('插件包已损坏：{why}', { why: (e as Error).message })); }
+    if (!hd) break;
+    const { name, size, type } = hd;
+    if (off + 512 + size > tar.length) throw new Error(tr('插件包已损坏：{why}', { why: 'tar size' }));
     off += 512;
     if (type === '5') {
       off += Math.ceil(size / 512) * 512;
@@ -156,6 +165,109 @@ export function extractPluginArchive(buf: Buffer, limits: PluginArchiveLimits = 
   if (isZipBytes(buf)) return rootFromManifest(stripCommonRoot(readZipEntries(buf, o)));
   if (isGzipBytes(buf)) return rootFromManifest(stripCommonRoot(readTarGzEntries(buf, o)));
   throw new Error(tr('插件包不是 zip 或 tar.gz'));
+}
+
+export interface TarStreamOptions {
+  /** keep this entry (a validated relative path)? Entries not wanted are still checked, then skipped */
+  want?: (rel: string) => boolean;
+  /** largest single kept file */
+  maxEntry?: number;
+  /** all bytes after gunzip, kept or not */
+  maxInflated?: number;
+  maxFiles?: number;
+}
+
+/**
+ * A large .tar.gz on disk (an npm package of native binaries: hundreds of MB inflated) extracted below `dir` as it is
+ * read, never all in memory. The same rules as the plugin reader: every name — kept or not — must be a safe relative
+ * path, links / devices refuse the whole archive, a file is written with `wx`. Returns the relative paths written.
+ * Errors are worded for any archive (压缩包), not a plugin.
+ */
+export async function extractTarGzFile(file: string, dir: string, o: TarStreamOptions = {}): Promise<string[]> {
+  const maxEntry = o.maxEntry ?? 128 * 1024 * 1024;
+  const maxInflated = o.maxInflated ?? 1024 * 1024 * 1024;
+  const maxFiles = o.maxFiles ?? 5000;
+  const broken = (why: string) => new Error(tr('压缩包已损坏：{why}', { why }));
+  const written: string[] = [];
+  const seen = new Set<string>();
+  let head: Buffer[] = [];
+  let headLen = 0;
+  // the entry being read: bytes left of its body, of its padding, and its chunks when kept
+  let left = 0;
+  let pad = 0;
+  let keep: { rel: string; chunks: Buffer[] } | null = null;
+  let inflated = 0;
+  let ended = false;
+  const finish = async () => {
+    if (!keep) return;
+    const { rel, chunks } = keep;
+    keep = null;
+    const target = resolvePluginPath(dir, rel);
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    try {
+      await fs.writeFile(target, Buffer.concat(chunks), { flag: 'wx', mode: 0o644 });
+    } catch {
+      throw new Error(tr('压缩包里的文件冲突：{path}', { path: rel.slice(0, 200) }));
+    }
+    written.push(rel);
+  };
+  const gz = createReadStream(file).pipe(zlib.createGunzip());
+  try {
+    for await (const raw of gz as AsyncIterable<Buffer>) {
+      inflated += raw.length;
+      if (inflated > maxInflated) throw new Error(tr('压缩包里的文件太大'));
+      let chunk = raw;
+      while (chunk.length && !ended) {
+        if (left > 0) {
+          const n = Math.min(left, chunk.length);
+          keep?.chunks.push(chunk.subarray(0, n));
+          left -= n;
+          chunk = chunk.subarray(n);
+          if (left === 0) await finish();
+          continue;
+        }
+        if (pad > 0) {
+          const n = Math.min(pad, chunk.length);
+          pad -= n;
+          chunk = chunk.subarray(n);
+          continue;
+        }
+        const n = Math.min(512 - headLen, chunk.length);
+        head.push(chunk.subarray(0, n));
+        headLen += n;
+        chunk = chunk.subarray(n);
+        if (headLen < 512) continue;
+        const h = Buffer.concat(head);
+        head = [];
+        headLen = 0;
+        let hd: ReturnType<typeof tarHeader>;
+        try { hd = tarHeader(h); } catch (e) { throw broken((e as Error).message); }
+        if (!hd) { ended = true; break; }
+        const { name, size, type } = hd;
+        left = size;
+        pad = (512 - (size % 512)) % 512;
+        if (type === '5' || type === 'x' || type === 'g' || type === 'L' || type === 'K') continue;
+        if (type !== '0' && type !== '\0' && type !== '7') throw new Error(tr('压缩包里有不支持的条目'));
+        const rel = normalizeArchiveName(name).replace(/\/+$/, '');
+        if (!rel || rel === '.') throw broken('tar name');
+        if (!isSafeArchivePath(rel)) throw new Error(tr('压缩包里有不安全的路径：{path}', { path: rel.slice(0, 200) }));
+        if (seen.has(rel)) throw new Error(tr('压缩包里有重复的文件：{path}', { path: rel.slice(0, 200) }));
+        seen.add(rel);
+        if (seen.size > maxFiles) throw new Error(tr('压缩包里的文件太多'));
+        if (o.want && !o.want(rel)) continue;
+        if (size > maxEntry) throw new Error(tr('压缩包里的文件太大'));
+        keep = { rel, chunks: [] };
+        if (size === 0) await finish();
+      }
+    }
+  } catch (e) {
+    gz.destroy();
+    const code = (e as NodeJS.ErrnoException).code;
+    if (typeof code === 'string' && code.startsWith('Z_')) throw broken((e as Error).message);
+    throw e;
+  }
+  if (left > 0 || keep) throw broken('tar truncated');
+  return written;
 }
 
 /** Write the extracted tree below `dir` (paths were validated above; `wx` refuses any overwrite). */

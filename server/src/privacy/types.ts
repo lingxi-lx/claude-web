@@ -74,8 +74,12 @@ export interface PrivacyModelStatus {
   name: string;
   /** bytes the download takes */
   size: number;
-  /** onnxruntime-node can be loaded (it is not bundled: an optional install) */
+  /** onnxruntime-node can be loaded (not bundled: downloaded with the model, or installed by hand) */
   runtime: boolean;
+  /** bytes the runtime download takes (absent: none pinned for this platform) */
+  runtimeSize?: number;
+  /** the runtime is the downloaded one (删除 removes it too) */
+  runtimeOwn?: boolean;
   /** every file on disk, checked against its SHA-256 */
   installed: boolean;
   downloading?: { done: number; total: number };
@@ -104,7 +108,7 @@ export type PrivacyRequest =
   | { kind: 'privacy.set'; patch: Partial<Omit<PrivacySettings, 'actions'>> & { actions?: Partial<Record<PrivacyCategory, PrivacyAction>> } }
   /** what an upstream would get for this text with the current (or given) settings; nothing is stored */
   | { kind: 'privacy.preview'; text: string; settings?: PrivacySettings }
-  /** the local model: fetch (SHA-256 checked) / stop fetching / delete */
+  /** the local model: fetch it and, when missing, onnxruntime (each checked against its pinned hash) / stop / delete both */
   | { kind: 'privacy.model.download' }
   | { kind: 'privacy.model.cancel' }
   | { kind: 'privacy.model.remove' }

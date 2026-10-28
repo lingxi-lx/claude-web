@@ -114,7 +114,8 @@ describe('the local PII model', () => {
 
   it('a download that fails says why and installs nothing', async () => {
     const base = await serve({});
-    const m = new PrivacyModel(mkdir(), { files: [{ path: 'x', size: 1, sha256: '0'.repeat(64) }], base: `${base}/`, rev: 'r' });
+    // the runtime counts as present: without that the download would fetch the real onnxruntime from npm first
+    const m = new PrivacyModel(mkdir(), { files: [{ path: 'x', size: 1, sha256: '0'.repeat(64) }], base: `${base}/`, rev: 'r', runtimeAvailable: () => true });
     await m.download();
     expect(m.status().installed).toBe(false);
     expect(m.status().error).toMatch(/404/);
