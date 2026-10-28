@@ -1,5 +1,6 @@
-// Privacy pipeline (spec 2026-10-26 §4): detectors (true and false positives), redact → restore round trips through
-// JSON and SSE (a placeholder cut across two deltas, one inside streamed tool-argument JSON), and fail closed.
+// Privacy pipeline (spec 2026-10-27 §7.6): detectors (true and false positives, including Chinese prose and
+// .env / URL credentials), redact → restore round trips through JSON and SSE (placeholders cut across deltas, one
+// inside streamed tool-argument JSON), records that keep only type/length/prefix, and 503 fail-closed.
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -26,18 +27,41 @@ describe('detectors: true positives', () => {
     ['an Anthropic key', `key is ${ANT_KEY} ok`, 'api_key'],
     ['an OpenAI project key', 'OPENAI sk-proj-abcdefghijklmnopqrstuvwxyz012345', 'api_key'],
     ['an AWS access key id', 'AKIAIOSFODNN7EXAMPLE', 'api_key'],
+    ['an AWS temporary access key id', `ASIA${'B'.repeat(16)}`, 'api_key'],
     ['a GitHub token', 'ghp_abcdefghijklmnopqrstuvwxyz0123456789', 'api_key'],
+    ['a GitLab token', 'glpat-abcdefghijklmnopqrst', 'api_key'],
+    ['a Slack token', 'xoxb-123456789012-123456789012-abcdefghijkl', 'api_key'],
+    ['a Google API key', `AIza${'A'.repeat(35)}`, 'api_key'],
+    ['a Hugging Face token', `hf_${'D'.repeat(34)}`, 'api_key'],
+    ['an npm token', `npm_${'G'.repeat(36)}`, 'api_key'],
+    ['a PyPI token', `pypi-${'H'.repeat(48)}`, 'api_key'],
+    ['a Groq key', `gsk_${'E'.repeat(48)}`, 'api_key'],
+    ['an xAI key', `xai-${'F'.repeat(60)}`, 'api_key'],
+    ['a DigitalOcean token', `dop_v1_${'a'.repeat(64)}`, 'api_key'],
+    ['a SendGrid key', `SG.${'A'.repeat(22)}.${'B'.repeat(43)}`, 'api_key'],
+    ['an OpenCode key', `oc_sk_${'C'.repeat(32)}`, 'api_key'],
     ['a PEM private key', `x\n${PRIV}\ny`, 'private_key'],
     ['a JWT', 'Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c', 'jwt'],
     ['a config password value', 'db_password = hunter2hunter', 'password'],
     ['a Chinese password key', '数据库密码: abc12345', 'password'],
     ['a Chinese password key with a full-width colon', '口令：abc12345', 'password'],
+    ['a URL with a password', 'postgres://alice:s3cr3t-pass@db.example.com:5432/app', 'password'],
+    ['a URL with a single-label host', 'postgres://app:pw12345@db:5432/x', 'password'],
+    ['a URL with an empty user', 'redis://:s3cr3t@cache:6379/0', 'password'],
+    ['a bare user:pass@host', 'connect alice:s3cr3t-pass@db.example.com now', 'password'],
+    ['a bare user:pass@single-label-host', 'connect alice:s3cr3t@db now', 'password'],
+    ['a percent-encoded URL password', 'https://alice:p%40ss%3Aword@example.com/path', 'password'],
+    ['an .env secret', 'DB_PASSWORD=hunter2hunter', 'password'],
+    ['an .env secret with quotes', 'export API_TOKEN="hunter2hunter"', 'password'],
+    ['an .env API key (typed as the key, not a generic secret)', 'OPENAI_API_KEY=sk-proj-abcdefghijklmnopqrstuvwxyz012345', 'api_key'],
     ['an email', '写信给 zhang.san@example.com 吧', 'email'],
+    ['a mailto address', 'contact mailto:zhang.san@example.com now', 'email'],
     ['a Chinese mobile', '电话13812345678，谢谢', 'phone'],
     ['a Chinese mobile with +86 and spaces', '+86 138 1234 5678', 'phone'],
     ['an international number with its + code', 'call +1 415 555 2671', 'phone'],
     ['a Chinese ID (valid check digit, X)', '身份证 11010519491231002X 号', 'id_card'],
     ['a bank card (Luhn)', '卡号 4111 1111 1111 1111', 'bank_card'],
+    ['an Amex card (4-6-5 grouping, Luhn)', 'amex 3782 822463 10005', 'bank_card'],
   ])('%s', (_, text, cat) => {
     expect(cats(text)).toEqual([cat]);
   });
@@ -50,25 +74,40 @@ describe('detectors: false positives stay out', () => {
     ['an 11-digit number that is no mobile (12…)', 'id 12345678901'],
     ['a mobile-looking run inside a longer number', '订单号 2138123456789000'],
     ['a Chinese ID with a wrong check digit', '身份证 110105194912310021 号'],
+    ['a Chinese ID with an impossible date', '身份证 110105194902310021 号'],
     ['a 16-digit number failing Luhn', 'ref 4111111111111112'],
     ['a version / date', 'v2026.10.26 build 20261026'],
     ['password placeholders and references', 'password = ******** ; token: ${TOKEN} ; secret=true ; api_key=process.env.KEY'],
     ['a placeholder already in the text', 'see {{API_KEY_0123abcd}} above'],
+    // Chinese false positives: prose, not secrets
+    ['a Chinese sentence saying the password is not set', '登录密码：未设置'],
+    ['a Chinese warning after a password label', '密码：请勿外传，谢谢配合'],
+    ['a Chinese address', '地址：北京市朝阳区建国路88号院3号楼'],
+    ['an order number that is not a bank card', '订单号 2026102612345678901'],
+    ['a ten-digit phone-like run', '手机号 1381234567'],
+    ['a price with thousands separators', '总计 1,234,567.89 元'],
+    ['a Chinese version / date line', '版本 2026.10.26，发布于 20261027'],
+    ['a key name mentioned without a value', '把 API_KEY 填到配置里就好'],
+    ['an at sign without a mail domain', 'user@localhost 上跑'],
+    ['non-secret .env values', 'NODE_ENV=production\nPORT=3090\nAPI_KEY=your-key-here\nPASSWORD=${DB_PASSWORD}'],
+    ['a time followed by an at sign', '时间 12:34@example.com'],
   ])('%s', (_, text) => {
     expect(cats(text)).toEqual([]);
   });
 
   it('allow-listed values go out as they are; off categories are not looked for', () => {
-    const allow = compile({ ...ALL_REDACT, allow: ['13812345678'] });
+    const allow = compile({ ...ALL_REDACT, allow: ['13812345678', ANT_KEY] });
     expect(cats('13812345678', allow)).toEqual([]);
+    expect(cats(`key ${ANT_KEY}`, allow)).toEqual([]);
     const off = compile({ ...ALL_REDACT, actions: { ...ALL_REDACT.actions, phone: 'off' } });
     expect(cats('13812345678', off)).toEqual([]);
   });
 
   it('custom words are matched case-insensitively; a pattern matching the empty string is reported, not used', () => {
-    const s = compile({ ...ALL_REDACT, words: ['Project Falcon'], patterns: ['x*', 'INT-\\d{4}'] });
+    const s = compile({ ...ALL_REDACT, words: ['Project Falcon', '夜莺'], patterns: ['x*', 'INT-\\d{4}'] });
     expect(s.bad).toEqual(['x*']);
     expect(cats('about project falcon and INT-1234', s)).toEqual(['custom', 'custom']);
+    expect(cats('部署 夜莺 到测试环境', s)).toEqual(['custom']);
   });
 });
 
@@ -89,9 +128,47 @@ describe('placeholders', () => {
   it('partialTail finds a cut placeholder and leaves a complete one alone', () => {
     expect(partialTail('hello {{API_K')).toBe(6);
     expect(partialTail('hello {{API_KEY_ab')).toBe(6);
+    expect(partialTail('hello {{PRIVATE_KEY_a1b2c3')).toBe(6);
     expect(partialTail('hello {')).toBe(6);
     expect(partialTail('hello {{API_KEY_0123abcd}}')).toBe(-1);
     expect(partialTail('hello world')).toBe(-1);
+  });
+
+  it('a record keeps only type, length and a short prefix — never the value', () => {
+    const hits = redactText(`key ${ANT_KEY}`, c, SECRET, new Map()).hits;
+    expect(hits[0]).toMatchObject({ category: 'api_key', length: ANT_KEY.length, prefix: 'sk-ant' });
+    expect(JSON.stringify(hits)).not.toContain(ANT_KEY);
+    const meta: any = { privacyConfig: () => ({}), savePrivacy: async () => {} };
+    const svc = new PrivacyService(meta);
+    const rec = svc.note('test', hits, false)!;
+    expect(rec.entries).toEqual([{ category: 'api_key', length: ANT_KEY.length, prefix: 'sk-ant' }]);
+    expect(JSON.stringify(rec)).not.toContain(ANT_KEY);
+    // passwords and custom words keep no prefix at all
+    const secret = redactText('DB_PASSWORD=hunter2hunter', c, SECRET, new Map()).hits[0];
+    expect(secret.prefix).toBeUndefined();
+  });
+
+  it('the same value always gets the same placeholder; different values differ', () => {
+    const map = new Map<string, string>();
+    const r = redactText(`a ${ANT_KEY} b ${ANT_KEY} c ${'sk-ant-api03-ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ'}`, c, SECRET, map);
+    const phs = [...r.text.matchAll(/\{\{API_KEY_[a-f0-9]{8}\}\}/g)].map((m) => m[0]);
+    expect(phs[0]).toBe(phs[1]);
+    expect(phs[2]).not.toBe(phs[0]);
+    expect([...map.keys()].sort()).toEqual([...new Set(phs)].sort());
+  });
+
+  it('the HMAC key is one random per-process key, shared by every service and never stored', () => {
+    const cfg: any = {};
+    const mk = () => new PrivacyService({ privacyConfig: () => cfg, savePrivacy: async () => {} } as any);
+    const a = mk();
+    const b = mk();
+    expect(a.secret()).toHaveLength(32);
+    expect(a.secret().equals(b.secret())).toBe(true);
+    expect(cfg.secret).toBeUndefined();
+    // an old meta.json secret must not ride out in privacy.get / privacy.changed
+    const legacy: any = { secret: 'ab'.repeat(32), enabled: true };
+    const old = new PrivacyService({ privacyConfig: () => legacy, savePrivacy: async () => {} } as any);
+    expect((old.settings() as any).secret).toBeUndefined();
   });
 });
 
@@ -132,6 +209,17 @@ describe('redact → restore round trip', () => {
     const back = JSON.parse(restoreBody(echoed, map));
     expect(back.content[0].text).toBe(`my key ${ANT_KEY}, phone 13812345678`);
     expect(back.content[1].input.content).toBe(PRIV);
+  });
+
+  it('.env values and URL passwords are replaced alone and restored exactly', () => {
+    const map = new Map<string, string>();
+    const text = 'DB_PASSWORD=hunter2hunter\nDATABASE_URL=postgres://alice:s3cr3t-pass@db.example.com:5432/app\nOPENAI_API_KEY=sk-proj-abcdefghijklmnopqrstuvwxyz012345';
+    const r = redactText(text, c, SECRET, map);
+    expect(r.text).toContain('DB_PASSWORD={{SECRET_');
+    expect(r.text).toContain('DATABASE_URL=postgres://alice:{{SECRET_');
+    expect(r.text).toContain('@db.example.com:5432/app');
+    expect(r.text).toContain('OPENAI_API_KEY={{API_KEY_');
+    expect(restoreText(r.text, map)).toBe(text);
   });
 
   it('a body with nothing to replace goes out as the very same bytes', () => {
@@ -199,6 +287,30 @@ describe('redact → restore round trip', () => {
     const r = new SseRestorer(map);
     const evs = parseSse(r.feed(stream) + r.end());
     expect(evs.map((e) => e.delta.text)).toEqual([`a ${ph.slice(0, 6)}`, 'other block']);
+  });
+
+  it('SSE: a placeholder split across three deltas (and cut inside UTF-8/network chunks) comes back whole', () => {
+    const map = new Map<string, string>();
+    const ph = redactText(`电话 13812345678`, c, SECRET, map).text.match(/\{\{PHONE_[a-f0-9]{8}\}\}/)![0];
+    const parts = [`前缀 ${ph.slice(0, 2)}`, ph.slice(2, 8), `${ph.slice(8)} 后缀`];
+    const stream = sse(parts.map((text) => ({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } })));
+    const r = new SseRestorer(map);
+    let out = '';
+    for (let i = 0; i < stream.length; i += 13) out += r.feed(stream.slice(i, i + 13));
+    out += r.end();
+    expect(parseSse(out).filter((e) => e.type === 'content_block_delta').map((e) => e.delta.text).join('')).toBe('前缀 13812345678 后缀');
+    expect(out).not.toContain('{{');
+  });
+
+  it('SSE: OpenAI-style delta.content placeholders split across events are restored', () => {
+    const map = new Map<string, string>();
+    const ph = redactText(ANT_KEY, c, SECRET, map).text;
+    const ev = (content: string) => ({ choices: [{ index: 0, delta: { content } }] });
+    const stream = sse([ev(`key ${ph.slice(0, 4)}`), ev(ph.slice(4, 14)), ev(`${ph.slice(14)}!`)]);
+    const r = new SseRestorer(map);
+    const evs = parseSse(r.feed(stream) + r.end());
+    expect(evs.map((e) => e.choices[0].delta.content).join('')).toBe(`key ${ANT_KEY}!`);
+    expect(evs.every((e) => Object.keys(e.choices[0].delta)[0] === 'content')).toBe(true);
   });
 });
 
@@ -282,11 +394,11 @@ describe('relay: fail closed', () => {
     expect(texts.join('')).toBe(`a ${ANT_KEY} b`);
   });
 
-  it('a pipeline failure refuses the request (500) and nothing reaches the upstream', async () => {
+  it('a pipeline failure refuses the request (503, fail closed) and nothing reaches the upstream', async () => {
     const { privacy, seen, post } = await setup({});
     privacy.secret = () => { throw new Error('boom'); };
     const r = await post(`key ${ANT_KEY}`);
-    expect(r.status).toBe(500);
+    expect(r.status).toBe(503);
     expect(seen).toEqual([]);
     expect(r.text).not.toContain(ANT_KEY);
   });

@@ -9,7 +9,7 @@ import { useStore } from '@/store';
 import { tr } from '@/i18n';
 import { Select } from '@/ui/Select';
 
-const CATEGORIES: PrivacyCategory[] = ['api_key', 'private_key', 'jwt', 'password', 'email', 'phone', 'id_card', 'bank_card', 'custom'];
+export const CATEGORIES: PrivacyCategory[] = ['api_key', 'private_key', 'jwt', 'password', 'email', 'phone', 'id_card', 'bank_card', 'name', 'address', 'custom'];
 
 export function categoryName(c: PrivacyCategory): string {
   switch (c) {
@@ -21,11 +21,13 @@ export function categoryName(c: PrivacyCategory): string {
     case 'phone': return tr('手机号');
     case 'id_card': return tr('身份证号');
     case 'bank_card': return tr('银行卡号');
+    case 'name': return tr('人名');
+    case 'address': return tr('地址');
     case 'custom': return tr('自定义内容');
   }
 }
 
-const actionName = (a: PrivacyAction) => (a === 'off' ? tr('不检查') : a === 'redact' ? tr('脱敏') : a === 'warn' ? tr('只提醒') : tr('拦截'));
+export const actionName = (a: PrivacyAction) => (a === 'off' ? tr('不检查') : a === 'redact' ? tr('脱敏') : a === 'warn' ? tr('只提醒') : tr('拦截'));
 const lines = (s: string) => s.split('\n').map((x) => x.trim()).filter(Boolean);
 
 function ListBox({ label, hint, value, onSave }: { label: string; hint: string; value: string[]; onSave: (v: string[]) => void }) {

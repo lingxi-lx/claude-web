@@ -8,9 +8,10 @@
 // asked for uncompressed and restored on the way back (JSON and SSE). Pipeline on and failing → refused, never raw.
 import crypto from 'node:crypto';
 import type http from 'node:http';
+import zlib from 'node:zlib';
 import { UpstreamError, forwardHeaders, readText, sendUpstream } from '../gateway/upstream.js';
 import { tr } from '../i18n/index.js';
-import { PrivacyBlocked, type PrivacyService } from './service.js';
+import { PrivacyBlocked, PrivacyFailed, privacyErrorStatus, type PrivacyService } from './service.js';
 
 export const RELAY_PREFIX = '/gateway/~v/';
 const BODY_LIMIT = 64 * 1024 * 1024;
@@ -65,13 +66,23 @@ export class PrivacyRelay {
       try {
         guard = this.privacy.forRequest({ url: target, source: hostOf(target) });
         if (guard) {
+          // a compressed request body (Codex on a ChatGPT login may zstd its requests) is read plain, and goes on plain
+          const encKey = Object.keys(headers).find((k) => k.toLowerCase() === 'content-encoding');
+          if (encKey) {
+            const plain = decodeBody(body, headers[encKey]);
+            if (!plain) throw new PrivacyFailed(tr('请求体的压缩格式（{enc}）读不了', { enc: headers[encKey] }));
+            body = plain;
+            delete headers[encKey];
+          }
+          await guard.prepare(body);
           body = guard.body(body);
           redacted = guard.redacted;
           guard.done();
         }
       } catch (e: any) {
         if (e instanceof PrivacyBlocked) guard?.done(true);
-        return this.fail(res, e instanceof PrivacyBlocked ? 403 : 500, e?.message ?? String(e));
+        // fail closed: a privacy pipeline that cannot run means the request is not sent at all — 503, never plaintext
+        return this.fail(res, privacyErrorStatus(e), this.privacy.scrub(e?.message ?? String(e)));
       }
     }
     if (redacted) {
@@ -107,4 +118,19 @@ export class PrivacyRelay {
 
 function hostOf(u: string): string {
   try { return new URL(u).host; } catch { return u; }
+}
+
+/** A request body in plain bytes (null: an encoding this Node cannot read). */
+export function decodeBody(b: Buffer, encoding: string): Buffer | null {
+  const encs = encoding.toLowerCase().split(',').map((x) => x.trim()).filter((x) => x && x !== 'identity').reverse();
+  try {
+    for (const e of encs) {
+      if (e === 'gzip' || e === 'x-gzip') b = zlib.gunzipSync(b);
+      else if (e === 'deflate') b = zlib.inflateSync(b);
+      else if (e === 'br') b = zlib.brotliDecompressSync(b);
+      else if (e === 'zstd' && typeof (zlib as any).zstdDecompressSync === 'function') b = (zlib as any).zstdDecompressSync(b);
+      else return null;
+    }
+    return b;
+  } catch { return null; }
 }

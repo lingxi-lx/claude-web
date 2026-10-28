@@ -1,12 +1,17 @@
-// Detectors and text redaction for the privacy pipeline (spec 2026-10-26 §4.1). Pure: no I/O, no state but what is
-// passed in. Placeholders are `{{CATEGORY_xxxxxxxx}}` — an HMAC of the value with a per-install secret, so the same
-// value always gets the same placeholder (the prompt prefix stays byte-identical and prompt caching survives).
+// Detectors and text redaction for the privacy pipeline (spec 2026-10-27 §7.6). Pure apart from the process-wide
+// HMAC key: no I/O and no per-call state. Placeholders are `{{CATEGORY_xxxxxxxx}}` — an HMAC of the value with the
+// process's random key, so the same value always gets the same placeholder (the prompt prefix stays byte-identical
+// and prompt caching survives).
 import crypto from 'node:crypto';
 import type { PrivacyAction, PrivacyCategory, PrivacyHit, PrivacySettings } from './types.js';
+import { zhNameSpans } from './zhname.js';
 
 export const TAG: Record<PrivacyCategory, string> = {
-  api_key: 'API_KEY', private_key: 'PRIVATE_KEY', jwt: 'JWT', password: 'SECRET', email: 'EMAIL', phone: 'PHONE', id_card: 'ID_CARD', bank_card: 'BANK_CARD', custom: 'CUSTOM',
+  api_key: 'API_KEY', private_key: 'PRIVATE_KEY', jwt: 'JWT', password: 'SECRET', email: 'EMAIL', phone: 'PHONE', id_card: 'ID_CARD', bank_card: 'BANK_CARD', name: 'NAME', address: 'ADDRESS', custom: 'CUSTOM',
 };
+
+/** The HMAC key for placeholders: random per process, never written to disk and never on the wire. */
+export const PROCESS_SECRET = crypto.randomBytes(32);
 
 /** A complete placeholder anywhere in a text. */
 export const PLACEHOLDER = /\{\{([A-Z][A-Z_]*?)_([a-f0-9]{8})\}\}/g;
@@ -20,11 +25,21 @@ export function partialTail(s: string): number {
   return -1;
 }
 
-interface Match { start: number; end: number; category: PrivacyCategory }
-interface Detector { category: PrivacyCategory; re: RegExp; group?: number; check?: (v: string) => boolean }
+export interface Match { start: number; end: number; category: PrivacyCategory }
+interface Picked { value: string; start: number }
+interface Detector {
+  category: PrivacyCategory;
+  re: RegExp;
+  /** capture group holding the value (when it is not the whole match) */
+  group?: number;
+  /** or: exact value and its offset inside the match (for `.env` lines, URLs, …) */
+  pick?: (m: RegExpExecArray) => Picked | null;
+  check?: (v: string, m: RegExpExecArray) => boolean;
+}
 
-// common key shapes: Anthropic / OpenAI / AWS / GitHub / GitLab / Slack / Google / Stripe / Hugging Face / npm / xAI / Groq …
-const API_KEY = new RegExp([
+// common key shapes: Anthropic / OpenAI / AWS / GitHub / GitLab / Slack / Google / Stripe / Hugging Face / npm / PyPI /
+// xAI / Groq / DigitalOcean / SendGrid / OpenCode …
+const API_KEY_PARTS = [
   String.raw`sk-ant-(?:api|oat|admin)\d{2}-[A-Za-z0-9_-]{20,}`,
   String.raw`sk-(?:proj-|svcacct-|or-v1-)?[A-Za-z0-9_-]{20,}`,
   String.raw`(?:AKIA|ASIA)[0-9A-Z]{16}`,
@@ -37,11 +52,21 @@ const API_KEY = new RegExp([
   String.raw`(?:sk|rk|pk)_(?:live|test)_[0-9A-Za-z]{16,}`,
   String.raw`hf_[A-Za-z0-9]{30,}`,
   String.raw`npm_[A-Za-z0-9]{36}`,
+  String.raw`pypi-[A-Za-z0-9_-]{40,}`,
   String.raw`xai-[A-Za-z0-9]{40,}`,
   String.raw`gsk_[A-Za-z0-9]{40,}`,
   String.raw`r8_[A-Za-z0-9]{30,}`,
+  String.raw`dop_v1_[a-f0-9]{64}`,
+  String.raw`SG\.[A-Za-z0-9_-]{16,32}\.[A-Za-z0-9_-]{30,64}`,
+  String.raw`oc_sk_[A-Za-z0-9_-]{16,}`,
   String.raw`cws-[a-f0-9]{64}`,
-].map((s) => `(?<![A-Za-z0-9_-])${s}`).join('|'), 'g');
+];
+const API_KEY = new RegExp(API_KEY_PARTS.map((s) => `(?<![A-Za-z0-9_-])${s}`).join('|'), 'g');
+const API_KEY_ONE = new RegExp(`^(?:${API_KEY_PARTS.join('|')})$`);
+const JWT_ONE = /^eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}$/;
+
+/** Placeholder-looking / template values that must not be treated as a secret. */
+const PLACEHOLDER_VALUE = /^(?:true|false|null|none|undefined|\*+|x+|changeme|change[-_]me|example|placeholder|redacted|secret|your[-_].*|\.\.\.|\$\{.*\}|\$[A-Za-z_].*|<[^>]*>|process\.env.*|os\.environ.*)$/i;
 
 const luhn = (digits: string) => {
   let sum = 0;
@@ -53,24 +78,75 @@ const luhn = (digits: string) => {
   return sum % 10 === 0;
 };
 const cnId = (v: string) => {
+  const y = Number(v.slice(6, 10));
+  const mo = Number(v.slice(10, 12));
+  const d = Number(v.slice(12, 14));
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return false;
   const w = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2];
   let s = 0;
   for (let i = 0; i < 17; i++) s += Number(v[i]) * w[i];
   return '10X98765432'[s % 11] === v[17].toUpperCase();
 };
 
+// `.env` / shell assignment lines: `KEY=value`, `export KEY="value with spaces"`.
+const ENV_LINE = /(?:^|[\r\n])[ \t]*(?:export[ \t]+)?([A-Za-z_][A-Za-z0-9_]{2,})[ \t]*=[ \t]*(?:"([^"\r\n]{4,})"|'([^'\r\n]{4,})'|([^\s"'`;]{4,}))/gm;
+const ENV_SECRET_KEY = /(?:^|_)(?:API_?KEY|KEY|KEYS|TOKEN|TOKENS|SECRET|SECRETS|PASS|PASSWD|PASSWORD|PWD|CRED|CREDS|CREDENTIAL|CREDENTIALS|AUTH|PRIVATE|CERT|SALT|SIGNATURE|SIGNING|SESSION|COOKIE|WEBHOOK|DATABASE_URL|DB_URL|MONGO_URI|MYSQL_URL|POSTGRES_URL|REDIS_URL)(?:_|$)/i;
+// `user:pass@host` and `scheme://user:pass@host` (the password is the secret; user and host stay readable).
+const URL_CREDS = new RegExp(String.raw`(?<![A-Za-z0-9+.-])(?:[a-z][a-z0-9+.-]{0,15}:\/\/)?([A-Za-z0-9._%+-]{0,64}):([^\s/@]{4,128})@(?:localhost|(?:\d{1,3}\.){3}\d{1,3}|[A-Za-z0-9][A-Za-z0-9._-]*(?:\.[A-Za-z0-9._-]+)*|\[[0-9A-Fa-f:]+\])(?::\d{1,5})?`, 'gi');
+const ASCII = /[A-Za-z0-9!@#$%^&*()_+\-=[\]{}|\\:;"'<>,.?/~`]/;
+
 const DETECTORS: Detector[] = [
   { category: 'private_key', re: /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----[\s\S]*?-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----/g },
   { category: 'jwt', re: /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g },
   { category: 'api_key', re: API_KEY },
+  {
+    category: 'password', re: URL_CREDS, group: 2,
+    check: (v, m) => {
+      if (PLACEHOLDER_VALUE.test(v)) return false;
+      const url = m[0].includes('://');
+      if (url) return true;
+      // without a scheme, a `12:34@host` run is not a credential (the user part must have a letter), and
+      // `mailto:user@host` is a mail address, not a password
+      return /[A-Za-z]/.test(m[1]) && !/^(?:mailto|e-?mail)$/i.test(m[1]);
+    },
+  },
+  // `.env` secrets: only the value, and only for key names that mean a credential (NODE_ENV / PORT stay readable).
+  // A whole URL / DSN is left to the `user:pass@host` detector above, which hides only the password.
+  {
+    category: 'password', re: ENV_LINE,
+    pick: (m) => {
+      for (const g of [2, 3, 4]) {
+        if (m[g] === undefined) continue;
+        const keyAt = m[0].indexOf(m[1]);
+        let at = m[0].indexOf('=', keyAt + m[1].length) + 1;
+        while (m[0][at] === ' ' || m[0][at] === '\t') at++;
+        if (m[0][at] === '"' || m[0][at] === "'") at++;
+        return { value: m[g], start: at };
+      }
+      return null;
+    },
+    check: (v, m) => ENV_SECRET_KEY.test(m[1]) && !PLACEHOLDER_VALUE.test(v) && !v.includes('://') && !/^[^\s:@]+:[^\s/@]+@/.test(v) && !API_KEY_ONE.test(v) && !JWT_ONE.test(v),
+  },
   // config-like `password = …`, `"api_key": "…"`, `TOKEN=…`: only the value
   // (ASCII lookarounds, not \b: \b never matches next to 密码 / 口令, so those keys were never found; ： is accepted too)
-  { category: 'password', re: /(?<![A-Za-z0-9_])(?:[A-Za-z0-9]+[_-])*(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret|auth[_-]?token|密码|口令)(?![A-Za-z0-9_])["']?\s*[:=：]\s*["']?([^\s"'`,;\\<>{}]{4,})/gi, group: 1, check: (v) => !/^(?:true|false|null|none|undefined|\*+|x+|\$\{?\w+\}?|<[^>]*>|process\.env.*|os\.environ.*)$/i.test(v) },
-  { category: 'email', re: /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g },
+  {
+    category: 'password',
+    re: /(?<![A-Za-z0-9_])(?:[A-Za-z0-9]+[_-])*(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret|auth[_-]?token|密码|口令)(?![A-Za-z0-9_])["']?\s*[:=：]\s*["']?([^\s"'`,;\\<>{}]{4,})/gi,
+    group: 1,
+    // A key / JWT value is left to its own detector (so the placeholder says API_KEY / JWT). All-CJK prose after
+    // 密码： is text, not a password ("密码：请勿外传" must stay readable).
+    check: (v) => !PLACEHOLDER_VALUE.test(v) && !API_KEY_ONE.test(v) && !JWT_ONE.test(v) && ASCII.test(v),
+  },
+  // `mailto:` addresses (the regular email detector below skips anything right after a colon)
+  { category: 'email', re: /(?<![A-Za-z0-9._%+-])mailto:([A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,})/gi, group: 1 },
+  // `(?<!:)`: the `pass@host` tail of `user:pass@host` is a password, not an email (the URL detector owns it)
+  { category: 'email', re: /(?<![A-Za-z0-9._%+:-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g },
   // Chinese mobile (optionally +86), and international numbers written with their + country code
   { category: 'phone', re: /(?<![\d+])(?:(?:\+|00)86[- ]?)?1[3-9]\d[- ]?\d{4}[- ]?\d{4}(?!\d)|(?<![\w+])\+[1-9]\d{0,2}[- ]?(?:\(\d{1,4}\)[- ]?)?\d{2,4}[- ]?\d{3,4}[- ]?\d{3,4}(?!\d)/g },
   { category: 'id_card', re: /(?<!\d)[1-9]\d{5}(?:18|19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx](?![\dA-Za-z])/g, check: cnId },
-  { category: 'bank_card', re: /(?<![\d-])(?:\d{4}[ -]?){3}\d{1,7}(?![\d-])/g, check: (v) => { const d = v.replace(/\D/g, ''); return d.length >= 15 && d.length <= 19 && luhn(d); } },
+  // 13–19 digits with optional spaces / hyphens (Amex's 4-6-5 grouping included), Luhn-checked
+  { category: 'bank_card', re: /(?<![\d-])\d(?:[ -]?\d){12,18}(?![\d-])/g, check: (v) => { const d = v.replace(/\D/g, ''); return d.length >= 13 && d.length <= 19 && luhn(d); } },
 ];
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -92,15 +168,22 @@ export function customDetectors(s: Pick<PrivacySettings, 'words' | 'patterns'>):
   return { list, bad };
 }
 
-export interface Compiled { detectors: Detector[]; actions: PrivacySettings['actions']; allow: Set<string>; bad: string[] }
+/** A finder that is not a regular expression (Chinese names by rule, the local model's spans): ranges in the text. */
+export interface Finder { category: PrivacyCategory; find: (text: string) => { start: number; end: number; category?: PrivacyCategory }[] }
+
+export interface Compiled { detectors: Detector[]; actions: PrivacySettings['actions']; allow: Set<string>; bad: string[]; finders?: Finder[] }
+
+/** Chinese names by rule (privacy/zhname.ts). */
+export const ZH_NAME_FINDER: Finder = { category: 'name', find: (t) => zhNameSpans(t) };
 
 export function compile(s: PrivacySettings): Compiled {
   const custom = customDetectors(s);
   const detectors = [...DETECTORS, ...custom.list].filter((d) => (s.actions[d.category] ?? 'off') !== 'off');
-  return { detectors, actions: s.actions, allow: new Set(s.allow.map((a) => a.trim()).filter(Boolean)), bad: custom.bad };
+  const finders: Finder[] = (s.actions.name ?? 'off') !== 'off' ? [ZH_NAME_FINDER] : [];
+  return { detectors, actions: s.actions, allow: new Set(s.allow.map((a) => a.trim()).filter(Boolean)), bad: custom.bad, finders };
 }
 
-function find(text: string, c: Compiled): Match[] {
+export function find(text: string, c: Compiled): Match[] {
   const all: Match[] = [];
   // placeholders already in the text (an earlier hop redacted it; the model echoed one): nothing inside them is matched
   const held: [number, number][] = [];
@@ -110,15 +193,38 @@ function find(text: string, c: Compiled): Match[] {
     d.re.lastIndex = 0;
     for (let m = d.re.exec(text); m; m = d.re.exec(text)) {
       if (m[0] === '') { d.re.lastIndex++; continue; }
-      const v = d.group ? m[d.group] : m[0];
-      if (!v) continue;
-      const start = d.group ? m.index + m[0].lastIndexOf(v) : m.index;
+      let v = '';
+      let start = 0;
+      if (d.pick) {
+        const p = d.pick(m);
+        if (!p || !p.value) continue;
+        v = p.value;
+        start = m.index + p.start;
+      } else if (d.group) {
+        v = m[d.group];
+        if (!v) continue;
+        start = m.index + m[0].lastIndexOf(v);
+      } else {
+        v = m[0];
+        start = m.index;
+      }
       if (c.allow.has(v.trim())) continue;
       if (held.length && inHeld(start, start + v.length)) continue;
-      if (d.check && !d.check(v)) continue;
+      if (d.check && !d.check(v, m)) continue;
       // already a placeholder (an earlier pass, or the model echoing one)
       if (/^\{\{[A-Z][A-Z_]*_[a-f0-9]{8}\}\}$/.test(v)) continue;
       all.push({ start, end: start + v.length, category: d.category });
+    }
+  }
+  for (const f of c.finders ?? []) {
+    for (const r of f.find(text)) {
+      const category = r.category ?? f.category;
+      if ((c.actions[category] ?? 'off') === 'off') continue;
+      if (r.end <= r.start || r.start < 0 || r.end > text.length) continue;
+      const v = text.slice(r.start, r.end);
+      if (c.allow.has(v.trim())) continue;
+      if (held.length && inHeld(r.start, r.end)) continue;
+      all.push({ start: r.start, end: r.end, category });
     }
   }
   // earlier first, then longer; overlaps go to the first (detector order puts private keys and JWTs ahead of the rest)
@@ -132,6 +238,23 @@ function find(text: string, c: Compiled): Match[] {
 export const placeholderFor = (secret: Buffer, category: PrivacyCategory, value: string) =>
   `{{${TAG[category]}_${crypto.createHmac('sha256', secret).update(value).digest('hex').slice(0, 8)}}}`;
 
+/**
+ * The only parts of a value a record may keep: type, length and a short prefix. Structural prefixes (key markers,
+ * PEM header, JWT header) help a person tell which key was hit; PII keeps only its public leading digits; passwords
+ * and custom words keep none.
+ */
+export function recordPrefix(category: PrivacyCategory, value: string): string {
+  switch (category) {
+    case 'api_key': return value.slice(0, Math.min(6, value.length));
+    case 'private_key': return '-----';
+    case 'jwt': return 'eyJ';
+    case 'id_card': return value.slice(0, 6);
+    case 'bank_card': return value.slice(0, Math.min(4, value.replace(/\D/g, '').length));
+    case 'phone': return value.slice(0, Math.min(3, value.length));
+    default: return '';
+  }
+}
+
 export interface TextResult { text: string; hits: PrivacyHit[] }
 
 /**
@@ -139,7 +262,7 @@ export interface TextResult { text: string; hits: PrivacyHit[] }
  * hits are only reported — the caller refuses the request.
  */
 export function redactText(text: string, c: Compiled, secret: Buffer, map: Map<string, string>): TextResult {
-  if (!text || !c.detectors.length) return { text, hits: [] };
+  if (!text || (!c.detectors.length && !c.finders?.length)) return { text, hits: [] };
   const ms = find(text, c);
   if (!ms.length) return { text, hits: [] };
   const hits: PrivacyHit[] = [];
@@ -148,13 +271,15 @@ export function redactText(text: string, c: Compiled, secret: Buffer, map: Map<s
   for (const m of ms) {
     const action = c.actions[m.category] as Exclude<PrivacyAction, 'off'>;
     const value = text.slice(m.start, m.end);
+    const prefix = recordPrefix(m.category, value);
+    const base: PrivacyHit = { category: m.category, action, length: value.length, ...(prefix ? { prefix } : {}) };
     if (action === 'redact') {
       const ph = placeholderFor(secret, m.category, value);
       map.set(ph, value);
       out += text.slice(at, m.start) + ph;
       at = m.end;
-      hits.push({ category: m.category, action, placeholder: ph, length: value.length });
-    } else hits.push({ category: m.category, action, length: value.length });
+      hits.push({ ...base, placeholder: ph });
+    } else hits.push(base);
   }
   return { text: out + text.slice(at), hits };
 }
@@ -174,7 +299,7 @@ const LOG_CATS = new Set<PrivacyCategory>(['api_key', 'private_key', 'jwt', 'pas
 const LOG_DETECTORS = DETECTORS.filter((d) => LOG_CATS.has(d.category));
 export function scrubForLog(text: string, extra: Detector[] = []): string {
   if (!text) return text;
-  const c: Compiled = { detectors: [...LOG_DETECTORS, ...extra], actions: { api_key: 'redact', private_key: 'redact', jwt: 'redact', password: 'redact', email: 'off', phone: 'off', id_card: 'off', bank_card: 'off', custom: 'redact' }, allow: new Set(), bad: [] };
+  const c: Compiled = { detectors: [...LOG_DETECTORS, ...extra], actions: { api_key: 'redact', private_key: 'redact', jwt: 'redact', password: 'redact', email: 'off', phone: 'off', id_card: 'off', bank_card: 'off', name: 'off', address: 'off', custom: 'redact' }, allow: new Set(), bad: [] };
   const ms = find(text, c);
   if (!ms.length) return text;
   let out = '';

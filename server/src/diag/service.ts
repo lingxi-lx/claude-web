@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import { dataDir } from '../files/service.js';
 import { engineInfo } from '../claude-exe.js';
 import { claudeDir } from '../sessions/service.js';
+import { maskForOutput } from '../privacy/output.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -18,6 +19,9 @@ export function maskSecrets(text: string): string {
     .replace(/("(?:apiKey|api_key|key|token|authToken|password|secret)"\s*:\s*")([^"]{4})[^"]*(")/gi, '$1$2…$3')
     .replace(/(enc:(?:dpapi|keychain|plain):)[^"\s]+/g, '$1…');
 }
+
+/** A bundle file's text: the secrets above, then what the privacy settings mask in outputs (privacy/output.ts). */
+const outMask = (text: string) => maskForOutput(maskSecrets(text));
 
 export class DiagService {
   constructor(private version: string) {}
@@ -43,7 +47,7 @@ export class DiagService {
       providers: extra.providers ?? [],
       sessionsCount: extra.sessionsCount ?? null,
     };
-    await fs.writeFile(path.join(dir, 'info.json'), maskSecrets(JSON.stringify(info, null, 2)), 'utf8');
+    await fs.writeFile(path.join(dir, 'info.json'), outMask(JSON.stringify(info, null, 2)), 'utf8');
     // logs written by the desktop shell (browser mode logs to stdout)
     // Electron's userData: %APPDATA%\<name> on Windows, ~/Library/Application Support/<name> on macOS, ~/.config/<name> on Linux
     const appData = process.platform === 'win32' ? path.join(process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming'), 'claude-web')
@@ -52,12 +56,12 @@ export class DiagService {
     for (const f of ['server.log', 'main.log']) {
       const src = path.join(appData, f);
       const text = await fs.readFile(src, 'utf8').catch(() => '');
-      if (text) await fs.writeFile(path.join(dir, f), maskSecrets(text.slice(-400_000)), 'utf8');
+      if (text) await fs.writeFile(path.join(dir, f), outMask(text.slice(-400_000)), 'utf8');
     }
     const meta = await fs.readFile(path.join(dataDir(), 'meta.json'), 'utf8').catch(() => '');
-    if (meta) await fs.writeFile(path.join(dir, 'meta.json'), maskSecrets(meta), 'utf8');
+    if (meta) await fs.writeFile(path.join(dir, 'meta.json'), outMask(meta), 'utf8');
     const settings = await fs.readFile(path.join(claudeDir, 'settings.json'), 'utf8').catch(() => '');
-    if (settings) await fs.writeFile(path.join(dir, 'claude-settings.json'), maskSecrets(settings), 'utf8');
+    if (settings) await fs.writeFile(path.join(dir, 'claude-settings.json'), outMask(settings), 'utf8');
     try {
       const { stdout } = await execFileAsync('git', ['--version'], { windowsHide: true, timeout: 5000 });
       await fs.writeFile(path.join(dir, 'tools.txt'), stdout, 'utf8');
