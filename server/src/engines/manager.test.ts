@@ -37,7 +37,8 @@ function setup(release: (name: string, body: Buffer) => object, extra: Record<st
   let saves = 0;
   const meta: any = { engineState: () => state, saveChannels: async () => { saves++; } };
   const providers: any = { upsert: async () => ({}), remove: async () => {}, refreshModels: async () => {}, list: () => [] };
-  const mgr = new EngineManager({ meta, providers, root });
+  // no bundled engines: a shell started from the installed app inherits CLAUDE_WEB_ENGINES, whose CLIProxyAPI would count as installed
+  const mgr = new EngineManager({ meta, providers, root, bundledDir: '' });
   return { mgr, root, state, urls, body, name, saves: () => saves };
 }
 

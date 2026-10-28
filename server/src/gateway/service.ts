@@ -965,6 +965,11 @@ export class GatewayService extends EventEmitter {
     res.on('close', take.release);
     const spend = this.keys.canSpend(auth.key, auth.group);
     if (!spend.ok) return deny(429, spend.message, { 'retry-after': String(quotaRetryAfter(auth.key, auth.group)) }, { keyId: auth.key.id });
+    // a share key with nothing ticked ('~none~' is effectiveGroup's "nothing"): say so, not "name a group: (empty)"
+    const reachable = auth.group.routeGroupIds;
+    if (reachable.length && reachable.every((id) => !this.groups().some((g) => g.id === id))) {
+      return deny(403, tr('这个密钥还没有可用的网关组：在分享设置里给它勾选'), {}, { keyId: auth.key.id });
+    }
 
     if (route?.op === 'models') {
       const picked = pickRouteGroup({ pathGroupId: o.groupId, model: '', groups: this.groups(), allowed: auth.group.routeGroupIds });
