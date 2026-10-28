@@ -26,7 +26,7 @@ function RulesEditor({ rules, groups, onSave, onCancel }: { rules: ShareRules; g
   const picked = new Set(r.routeGroupIds ?? []);
   return (
     <div className="gateway-card" style={{ marginTop: 6 }}>
-      <div className="sub">{tr('能用的来源（都不选 = 全部）')}</div>
+      <div className="sub">{tr('能用的网关组（一个都不选 = 都不能用）')}</div>
       <div className="gateway-row" style={{ flexWrap: 'wrap' }}>
         {groups.map((g) => (
           <label key={g.id} className="sub">
@@ -44,6 +44,13 @@ function RulesEditor({ rules, groups, onSave, onCancel }: { rules: ShareRules; g
       <div className="gateway-row">
         <span className="sub">{tr('同时进行的请求')}</span>
         <input className="input" type="number" min={0} style={{ width: 90 }} value={r.concurrent ?? ''} onChange={(e) => setR((x) => ({ ...x, concurrent: numOr(e.target.value) }))} />
+      </div>
+      <label className="sub">
+        <input type="checkbox" checked={!!r.subscription} onChange={(e) => setR((x) => ({ ...x, subscription: e.target.checked }))} /> {tr('智能路由可以用我的订阅账号')}
+      </label>
+      <div className="gateway-row">
+        <span className="sub">{tr('每天付费额度（美元，留空 = 不用付费的）')}</span>
+        <input className="input" type="number" min={0} step="0.5" style={{ width: 90 }} value={r.paidBudgetUsd ?? ''} onChange={(e) => { const n = Number(e.target.value); setR((x) => ({ ...x, paidBudgetUsd: Number.isFinite(n) && n > 0 ? n : undefined })); }} />
       </div>
       {PERIODS.map(({ k, label }) => (
         <div className="gateway-row" key={k}>
@@ -128,7 +135,7 @@ export function ShareDrawer({ lanAdvanced }: { lanAdvanced?: ReactNode } = {}) {
           }}>{tr('删除')}</button>
         </div>
         <div className="sub">
-          {s.routeGroupIds?.length ? tr('来源：{v}', { v: s.routeGroupIds.map((id) => st?.routeGroups.find((g) => g.id === id)?.name ?? id).join('、') }) : tr('来源：全部')}
+          {s.routeGroupIds?.length ? tr('来源：{v}', { v: s.routeGroupIds.map((id) => st?.routeGroups.find((g) => g.id === id)?.name ?? id).join('、') }) : tr('来源：没选，用不了')}
           {' · '}{s.models?.length ? tr('模型：{v}', { v: s.models.join(', ') }) : tr('模型：全部')}
           {s.concurrent ? ` · ${tr('同时 {n} 个', { n: s.concurrent })}` : ''}
           {limits ? ` · ${limits}` : ''}

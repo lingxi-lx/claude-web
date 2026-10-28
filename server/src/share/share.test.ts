@@ -1,6 +1,6 @@
 // 远程共享 (spec §8): a share key's rules only ever narrow its group's; its daily / weekly / monthly quotas stop it.
 import { describe, expect, it } from 'vitest';
-import { GatewayKeyStore, effectiveGroup } from '../upstreams/keys.js';
+import { GatewayKeyStore, effectiveGroup, routeAccess } from '../upstreams/keys.js';
 import type { GatewayKeyGroup } from '../gateway/types.js';
 import { cleanRules } from './service.js';
 
@@ -52,5 +52,29 @@ describe('share rules', () => {
     await s.update(key.id, { enabled: true, expiresAt: Date.now() - 1 });
     expect(s.verify(plaintext)).toBeNull();
     expect(s.verify('cwg-wrong')).toBeNull();
+  });
+});
+
+describe('share keys and routing (S1)', () => {
+  it('a share key with nothing ticked reaches no route group; ticked ones only', async () => {
+    const s = store();
+    const none = await s.create('share', 'a', { share: {} });
+    expect(s.verify(none.plaintext)!.group.routeGroupIds).toEqual(['~none~']);
+    const some = await s.create('share', 'b', { share: { routeGroupIds: ['routing'] } });
+    expect(s.verify(some.plaintext)!.group.routeGroupIds).toEqual(['routing']);
+    // other key groups keep "empty = all"
+    expect(effectiveGroup(group({ id: 'default' }), {}).routeGroupIds).toEqual([]);
+  });
+
+  it('routeAccess: share keys get no subscription and no paid by default; opt-ins and the own budget pass through', async () => {
+    const s = store();
+    const plain = await s.create('share', 'a', { share: {} });
+    expect(routeAccess(plain.key, s.verify(plain.plaintext)!.group)).toMatchObject({ subscription: false, paid: false });
+    const opted = await s.create('share', 'b', { share: cleanRules({ subscription: true, paidBudgetUsd: 3, sources: ['p:x'], models: ['m*'] }) });
+    opted.key.stats.costUsd = 1;
+    expect(routeAccess(opted.key, s.verify(opted.plaintext)!.group)).toEqual({ modelAllowlist: ['m*'], modelDeny: undefined, subscription: true, paid: { budgetUsd: 3, spentTodayUsd: 1 }, sources: ['p:x'] });
+    // the owner's own keys are only held to their model lists
+    const own = { id: 'k', keyGroupId: 'default', stats: { requests: 0, tokensIn: 0, tokensOut: 0, costUsd: 0, day: '' } } as any;
+    expect(routeAccess(own, group({ id: 'default' }))).toEqual({ modelAllowlist: undefined, modelDeny: undefined });
   });
 });

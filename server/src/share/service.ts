@@ -5,12 +5,13 @@
 // and every remote request runs the same path as a local one (protocol translation, privacy hook, audit log).
 import type { GatewayService } from '../gateway/service.js';
 import type { GatewayKey, ShareRules } from '../gateway/types.js';
-import { currentPeriod, keyView } from '../upstreams/keys.js';
+import { SHARE_GROUP, currentPeriod, keyView } from '../upstreams/keys.js';
 import { tr } from '../i18n/index.js';
 import type { ShareKeyView, ShareRequest, ShareStatus } from './types.js';
 export type { ShareKeyView, ShareRequest, ShareStatus } from './types.js';
+export { checkShareKey, shareUsage, type ShareLimitCode, type ShareLimitResult, type ShareUsage } from './limits.js';
 
-export const SHARE_GROUP = 'share';
+export { SHARE_GROUP };
 /** private ranges: what a fresh share group admits from outside this machine */
 const PRIVATE_RANGES = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'];
 
@@ -29,6 +30,11 @@ export function cleanRules(r: ShareRules | undefined): ShareRules {
   if (rg?.length) out.routeGroupIds = rg;
   const models = list(r?.models);
   if (models?.length) out.models = models;
+  const sources = list(r?.sources);
+  if (sources?.length) out.sources = sources;
+  if (r?.subscription === true) out.subscription = true;
+  const budget = typeof r?.paidBudgetUsd === 'number' && Number.isFinite(r.paidBudgetUsd) && r.paidBudgetUsd > 0 ? Math.round(r.paidBudgetUsd * 100) / 100 : 0;
+  if (budget > 0) out.paidBudgetUsd = budget;
   const c = num(r?.concurrent);
   if (c) out.concurrent = c;
   for (const k of ['daily', 'weekly', 'monthly'] as const) { const q = quota(r?.[k]); if (q) out[k] = q; }
@@ -43,6 +49,8 @@ export class ShareService {
 
   private async ensureGroup() {
     if (!this.keys.group(SHARE_GROUP)) {
+      // the group's empty route-group list is only its ceiling ("no extra limit"); each key reaches nothing until
+      // route groups are ticked for it (effectiveGroup), so a fresh key with nothing ticked can call nothing
       await this.keys.upsertGroup({ id: SHARE_GROUP, name: tr('共享'), allowLan: true, ipAllowlist: PRIVATE_RANGES, routeGroupIds: [] });
     }
     return this.keys.group(SHARE_GROUP)!;
