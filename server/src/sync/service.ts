@@ -17,10 +17,16 @@ export class SyncService {
 
   constructor(private deps: { meta: MetaStore; secrets?: SecretService }) {}
 
-  async exportBundle(passphrase?: string): Promise<SyncExportResult> {
+  /** The bundle text both 导出 and remote push write; `encrypted` says whether secrets are in it. */
+  async buildText(passphrase?: string): Promise<{ text: string; encrypted: boolean }> {
     const b = await buildBundle(this.deps.meta, this.deps.secrets, { passphrase: passphrase || undefined });
+    return { text: JSON.stringify(b, null, 2), encrypted: !!b.secret };
+  }
+
+  async exportBundle(passphrase?: string): Promise<SyncExportResult> {
+    const b = await this.buildText(passphrase);
     const day = new Date().toISOString().slice(0, 10);
-    return { filename: `claude-web-sync-${day}.json`, text: JSON.stringify(b, null, 2), encrypted: !!b.secret };
+    return { filename: `claude-web-sync-${day}.json`, ...b };
   }
 
   async preview(text: string, passphrase?: string): Promise<SyncPreview> {

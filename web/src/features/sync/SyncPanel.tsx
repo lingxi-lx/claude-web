@@ -30,6 +30,44 @@ function download(name: string, text: string) {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
+/** The per-item preview both 导入文件 and 远程同步拉取 use: tick what to apply, then hand the skips back. */
+export function SyncPreviewCard({ preview, busy, onApply, onCancel }: {
+  preview: SyncPreview;
+  busy: boolean;
+  onApply: (skip: string[]) => void | Promise<void>;
+  onCancel: () => void;
+}) {
+  const [skip, setSkip] = useState<Set<string>>(new Set());
+  const changes = preview.items.filter((i) => i.action !== 'same');
+  return (
+    <div className="gateway-card" style={{ marginTop: 10 }}>
+      <div className="gateway-row">
+        <b>{tr('预览')}</b>
+        <span className="sub">{preview.encrypted ? tr('含加密的密钥') : tr('不含密钥')}</span>
+        <span className="grow" />
+        <button className="btn sm ghost" disabled={busy} onClick={onCancel}>{tr('取消')}</button>
+        <button className="btn sm" disabled={busy || changes.length === 0} onClick={() => void onApply([...skip])}>{tr('导入选中的')}</button>
+      </div>
+      {changes.length === 0 && <div className="sub">{tr('没有要改的，和这台电脑一样')}</div>}
+      {changes.map((it) => (
+        <label className="gateway-row" key={it.key}>
+          <input
+            type="checkbox"
+            disabled={it.action === 'skip'}
+            checked={it.action !== 'skip' && !skip.has(it.key)}
+            onChange={(e) => setSkip((s) => { const n = new Set(s); if (e.target.checked) n.delete(it.key); else n.add(it.key); return n; })}
+          />
+          <span className="sub">{COLLECTION[it.collection]()}</span>
+          <span className="grow">{it.name}</span>
+          <span className="sub" style={it.action === 'conflict' ? { color: 'var(--warn)' } : undefined}>{ACTION[it.action]()}</span>
+          {it.fields?.length ? <span className="sub">{it.fields.join(', ')}</span> : null}
+          {it.note && <span className="sub">{it.note}</span>}
+        </label>
+      ))}
+    </div>
+  );
+}
+
 /**
  * 备份与同步: export the source settings (keys only inside the passphrase-encrypted part), import = preview what
  * changes item by item, untick what to leave, then apply. Self-contained: the gateway page mounts it.
@@ -40,7 +78,6 @@ export function SyncPanel() {
   const [importPass, setImportPass] = useState('');
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<SyncPreview | null>(null);
-  const [skip, setSkip] = useState<Set<string>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
   const pending = useRef<string | null>(null);
 
@@ -58,7 +95,6 @@ export function SyncPanel() {
     try {
       const p = await ws.request<SyncPreview>({ kind: 'sync.import', text, ...(importPass ? { passphrase: importPass } : {}) });
       setPreview(p);
-      setSkip(new Set());
     } catch (e: any) { toast(e.message); } finally { setBusy(false); }
   };
 
@@ -68,11 +104,11 @@ export function SyncPanel() {
     await doPreview(pending.current);
   };
 
-  const apply = async () => {
+  const apply = async (skip: string[]) => {
     if (!preview) return;
     setBusy(true);
     try {
-      const r = await ws.request<SyncApplyResult>({ kind: 'sync.apply', token: preview.token, skip: [...skip] });
+      const r = await ws.request<SyncApplyResult>({ kind: 'sync.apply', token: preview.token, skip });
       toast(r.conflicts ? tr('已导入 {n} 项，{c} 项冲突两边都保留了', { n: r.applied, c: r.conflicts }) : tr('已导入 {n} 项', { n: r.applied }), true);
       setPreview(null);
       pending.current = null;
@@ -84,8 +120,6 @@ export function SyncPanel() {
     setPreview(null);
     pending.current = null;
   };
-
-  const changes = preview?.items.filter((i) => i.action !== 'same') ?? [];
 
   return (
     <div className="gateway-tab cw-sync">
@@ -110,31 +144,13 @@ export function SyncPanel() {
       </div>
 
       {preview && (
-        <div className="gateway-card" style={{ marginTop: 10 }}>
-          <div className="gateway-row">
-            <b>{tr('预览')}</b>
-            <span className="sub">{preview.encrypted ? tr('含加密的密钥') : tr('不含密钥')}</span>
-            <span className="grow" />
-            <button className="btn sm ghost" disabled={busy} onClick={cancel}>{tr('取消')}</button>
-            <button className="btn sm" disabled={busy || changes.length === 0} onClick={() => void apply()}>{tr('导入选中的')}</button>
-          </div>
-          {changes.length === 0 && <div className="sub">{tr('没有要改的，和这台电脑一样')}</div>}
-          {changes.map((it) => (
-            <label className="gateway-row" key={it.key}>
-              <input
-                type="checkbox"
-                disabled={it.action === 'skip'}
-                checked={it.action !== 'skip' && !skip.has(it.key)}
-                onChange={(e) => setSkip((s) => { const n = new Set(s); if (e.target.checked) n.delete(it.key); else n.add(it.key); return n; })}
-              />
-              <span className="sub">{COLLECTION[it.collection]()}</span>
-              <span className="grow">{it.name}</span>
-              <span className="sub" style={it.action === 'conflict' ? { color: 'var(--warn)' } : undefined}>{ACTION[it.action]()}</span>
-              {it.fields?.length ? <span className="sub">{it.fields.join(', ')}</span> : null}
-              {it.note && <span className="sub">{it.note}</span>}
-            </label>
-          ))}
-        </div>
+        <SyncPreviewCard
+          key={preview.token}
+          preview={preview}
+          busy={busy}
+          onApply={apply}
+          onCancel={cancel}
+        />
       )}
     </div>
   );
