@@ -39,8 +39,14 @@ export interface PluginPermissions {
   network?: string[];
   /** paths (relative to the plugin folder, or absolute) it may read; its own folder is always readable */
   fileRead?: string[];
+  /** paths (relative to the plugin folder, or absolute) it may write; nothing is writable by default */
+  fileWrite?: string[];
   /** secret names it asks for; each one must be approved by the user */
   secrets?: string[];
+  /** may start child processes (Node --allow-child-process; they run without the plugin's limits) */
+  childProcess?: boolean;
+  /** may start worker threads (Node --allow-worker) */
+  workers?: boolean;
 }
 
 export interface PluginManifest {
@@ -56,6 +62,8 @@ export interface PluginManifest {
   timeoutMs?: number;
   /** stdout + stderr kept per call, bytes (default 64 KB, capped at 1 MB) */
   maxOutputBytes?: number;
+  /** V8 heap cap of the child, MB (default 256, 32–1024) */
+  maxMemoryMb?: number;
 }
 
 export interface PluginView {
@@ -67,8 +75,12 @@ export interface PluginView {
   /** file or folder name under the plugins directory (never an absolute path on the wire) */
   file: string;
   enabled: boolean;
-  /** executable: the permissions were approved for this exact manifest */
+  /** executable: the permissions were approved for this exact manifest and code */
   approved: boolean;
+  /** executable: not approved because its code changed (the permissions are the same as approved) */
+  codeChanged?: boolean;
+  /** executable, 'process' isolation: the user allowed it to run without file access limits */
+  unrestricted?: boolean;
   hooks: PluginHook[];
   permissions: PluginPermissions;
   /** declarative: how many sources / models it adds */
@@ -84,12 +96,67 @@ export interface PluginView {
 
 export type PluginRequest =
   | { kind: 'plugins.list' }
-  | { kind: 'plugins.enable'; id: string; approve?: boolean }
+  | { kind: 'plugins.enable'; id: string; approve?: boolean; /** 'process' isolation: the user accepted full file access */ allowUnrestricted?: boolean }
   | { kind: 'plugins.disable'; id: string }
   | { kind: 'plugins.remove'; id: string }
-  | { kind: 'plugins.reload' };
+  | { kind: 'plugins.reload' }
+  // ---- remote market (spec P7) ----
+  | { kind: 'plugins.market.status' }
+  | { kind: 'plugins.market.refresh' }
+  | { kind: 'plugins.market.set'; config: PluginMarketConfig }
+  /** `id` = a catalog entry; or `url` (https) / `path` (a local .zip, .tar.gz or .json) */
+  | { kind: 'plugins.install'; id?: string; url?: string; path?: string; sha256?: string };
 
 export interface PluginListResult { plugins: PluginView[]; dir: string; warnings: string[] }
+
+/** Where the market catalog comes from (meta setting `plugins.market`). */
+export interface PluginMarketConfig {
+  /** https URL of the catalog JSON; empty = no market configured */
+  url?: string;
+  /** Ed25519 public key (PEM or base64 SPKI DER): when set, the catalog and any signed package must verify */
+  publicKey?: string;
+}
+
+export interface PluginMarketEntry {
+  id: string;
+  name: string;
+  author: string;
+  description?: string;
+  categories: ('provider' | 'middleware' | 'tool' | 'page' | 'theme')[];
+  version: string;
+  downloads: number;
+  /** https URL of the archive / declarative JSON */
+  url: string;
+  /** hex SHA-256 of the exact bytes at `url` */
+  sha256?: string;
+  /** base64 Ed25519 signature of the exact bytes at `url` (needs `PluginMarketConfig.publicKey`) */
+  signature?: string;
+  minAppVersion?: string;
+  homepage?: string;
+  repository?: string;
+  kind: 'declarative' | 'executable';
+  hooks: PluginHook[];
+  permissions: PluginPermissions;
+}
+
+export interface PluginMarketStatus {
+  config: PluginMarketConfig;
+  entries: PluginMarketEntry[];
+  /** entries the catalog had to drop (one bad card never hides the rest) */
+  errors: { index: number; message: string }[];
+  fetchedAt?: number;
+  /** the cached catalog was verified with the configured public key */
+  signed: boolean;
+  /** the last refresh failed (cached entries are still shown) */
+  error?: string;
+}
+
+export interface PluginInstallResult {
+  installed: { id: string; name: string; version: string; kind: 'declarative' | 'executable'; file: string };
+  plugins: PluginView[];
+  dir: string;
+  warnings: string[];
+}
 
 // ---- child process protocol (Node IPC channel, JSON messages) ----
 

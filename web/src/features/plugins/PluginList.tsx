@@ -10,6 +10,9 @@ function permissionLines(p: PluginView): string[] {
   if (p.permissions.network?.length) out.push(tr('联网：{hosts}', { hosts: p.permissions.network.join('、') }));
   if (p.permissions.fileRead?.length) out.push(tr('读取文件：{paths}', { paths: p.permissions.fileRead.join('、') }));
   if (p.permissions.secrets?.length) out.push(tr('使用密钥：{names}', { names: p.permissions.secrets.join('、') }));
+  if (p.permissions.fileWrite?.length) out.push(tr('写文件：{paths}', { paths: p.permissions.fileWrite.join('、') }));
+  if (p.permissions.childProcess) out.push(tr('启动别的程序'));
+  if (p.permissions.workers) out.push(tr('开后台线程'));
   if (!out.length) out.push(tr('不联网、不读其它文件、不用密钥'));
   return out;
 }
@@ -29,16 +32,31 @@ export function PluginList() {
   useEffect(() => { void run({ kind: 'plugins.list' }); }, [run]);
 
   const enable = async (p: PluginView) => {
+    // no file access limits here (this Node has no permission model): a separate, explicit opt-in per plugin
+    const unrestricted = p.kind === 'executable' && p.isolation === 'process';
+    if (unrestricted && p.permissions.secrets?.length) {
+      toast(tr('这个插件要用密钥，但这里的 Node 不能限制它读写文件，所以不能运行'));
+      return;
+    }
     if (p.kind === 'executable' && !p.approved) {
       const ok = await dlg.confirm(tr('启用插件「{name}」？', { name: p.name }), {
-        message: tr('它会在单独的进程里运行，可以：'),
+        message: p.codeChanged ? tr('插件的代码变了。它会在单独的进程里运行，可以：') : tr('它会在单独的进程里运行，可以：'),
         items: permissionLines(p),
         okLabel: tr('允许并启用'),
       });
       if (!ok) return;
-      return run({ kind: 'plugins.enable', id: p.id, approve: true });
     }
-    return run({ kind: 'plugins.enable', id: p.id });
+    if (unrestricted && (!p.approved || !p.unrestricted)) {
+      const ok = await dlg.confirm(tr('这个插件将能读写你能访问的所有文件'), {
+        message: tr('这台电脑上的 Node 不能限制插件读写文件。只在你完全信任「{name}」时继续。', { name: p.name }),
+        okLabel: tr('仍然启用'),
+        danger: true,
+        focusCancel: true,
+      });
+      if (!ok) return;
+      return run({ kind: 'plugins.enable', id: p.id, approve: true, allowUnrestricted: true });
+    }
+    return run({ kind: 'plugins.enable', id: p.id, ...(p.kind === 'executable' && !p.approved ? { approve: true } : {}) });
   };
   const remove = async (p: PluginView) => {
     if (await dlg.confirm(tr('删除插件「{name}」？文件会一起删掉。', { name: p.name }), { danger: true })) await run({ kind: 'plugins.remove', id: p.id });
@@ -71,8 +89,8 @@ export function PluginList() {
             <>
               <div className="sub">{permissionLines(p).join(' · ')}</div>
               <div className="sub">
-                {p.isolation === 'permission' ? tr('单独进程，文件访问受限') : tr('单独进程')}
-                {p.enabled && !p.approved && ` · ${tr('插件的权限变了，要重新确认')}`}
+                {p.isolation === 'permission' ? tr('单独进程，文件访问受限') : p.unrestricted ? tr('单独进程，能读写所有文件') : tr('单独进程')}
+                {p.enabled && !p.approved && ` · ${p.codeChanged ? tr('插件的代码变了，要重新确认') : tr('插件的权限变了，要重新确认')}`}
                 {p.running && ` · ${tr('运行中')}`}
               </div>
             </>
