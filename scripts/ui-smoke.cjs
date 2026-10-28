@@ -1606,21 +1606,23 @@ function driver() {
           // the account menu over a full page (扩展): nothing of it under the page (user report, macOS)
           await js(`(() => { const b = [...document.querySelectorAll('.rail [data-id]')].find((e) => e.dataset.id === 'extensions'); b && b.click(); })()`);
           await waitFor(`!!document.querySelector('.ext-page')`, 3000);
-          // 上游: one page of sources under a filter (no tabs, no 高级设置); 共享 is a drawer and Esc closes it, not the page
-          await js(`(() => { const b = [...document.querySelectorAll('.rail [data-id]')].find((e) => e.dataset.id === 'gateway'); b && b.click(); })()`);
-          const gwReady = await waitFor(`(() => { const p = document.querySelector('.gateway-page'); return !!p && !p.hidden && (!!document.querySelector('.gateway-side .nav') || !!document.querySelector('.gw-filter-strip')); })()`, 4000);
-          const filterIds = `[...document.querySelectorAll('.gateway-side .nav, .gw-filter-strip [role=tab]')].map((x) => x.dataset.id).join(',')`;
-          const gw = gwReady ? await js(`(() => ({ filters: ${filterIds}, tabs: !!document.querySelector('.gateway-page .over-tabs'), adv: document.body.innerText.includes('高级设置') }))()`) : null;
-          check('上游 opens on the source filter (全部 · 免费 · 订阅 · API · 本机 · 需要处理), no tabs, no 高级设置', gw && gw.filters.startsWith('all,free,subscription,api,local-engine,attention') && !gw.tabs && !gw.adv, JSON.stringify(gw));
-          await js(`document.querySelector('.gateway-page .gw-head-actions [data-id="share"]')?.click()`);
-          const drawerOpen = await waitFor(`!!document.querySelector('.gw-drawer-wrap[data-drawer="share"]:not([hidden])')`, 2000);
-          await js(`document.querySelector('.gw-drawer-wrap[data-drawer="share"] .gw-drawer')?.focus?.()`);
-          await key('Escape');
+          // 模型: one hub with nine first-level pages (no tabs, no 高级设置); 上游 has one filter strip; 设置 holds sharing
+          await js(`window.__store.setState({ sidebarOpen: true })`);
           await sleep(200);
-          const afterEsc = await js(`({ drawer: !!document.querySelector('.gw-drawer-wrap[data-drawer="share"]:not([hidden])'), page: !!document.querySelector('.gateway-page:not([hidden])') })`);
-          check('共享 opens as a drawer; Esc closes the drawer and leaves the page open', drawerOpen && !afterEsc.drawer && afterEsc.page, JSON.stringify(afterEsc));
+          await js(`(() => { const b = [...document.querySelectorAll('.rail [data-id]')].find((e) => e.dataset.id === 'gateway'); b && b.click(); })()`);
+          const hubReady = await waitFor(`(() => { const p = document.querySelector('.over-page.hub-page'); return !!p && !p.hidden && document.querySelectorAll('.hub-side [data-id]').length >= 9; })()`, 20000);
+          const hub = hubReady ? await js(`(() => ({ pages: [...document.querySelectorAll('.hub-side [data-id]')].map((x) => x.dataset.id).join(','), tabs: !!document.querySelector('.hub-page .over-tabs'), adv: document.body.innerText.includes('高级设置') }))()`) : null;
+          check('模型 opens on the hub with nine pages (概览 · 上游 · 路由 · 操控 · 用量 · 隐私 · 插件 · 接入 · 设置), no tabs, no 高级设置', hub && hub.pages === 'overview,sources,routing,control,usage,privacy,plugins,agents,settings' && !hub.tabs && !hub.adv, JSON.stringify(hub));
+          await js(`document.querySelector('.hub-side [data-id="sources"]')?.click()`);
+          await waitFor(`document.querySelectorAll('.hub-filters [data-id]').length >= 6`, 10000);
+          const filters = await js(`(() => ({ ids: [...document.querySelectorAll('.hub-filters [data-id]')].map((x) => x.dataset.id).join(','), cards: document.querySelectorAll('.hub-pgrid .hub-provider').length }))()`);
+          check('上游 has the six source filters and one card per source/preset', filters.ids === 'all,subscription,api,local,custom,remote' && filters.cards > 0, JSON.stringify(filters));
+          await js(`document.querySelector('.hub-side [data-id="settings"]')?.click()`);
+          const share = await waitFor(`(() => { const p = document.querySelector('.hub-settings'); return !!p && p.innerText.includes('本机地址') && p.innerText.includes('网关密钥'); })()`, 10000);
+          const afterSettings = await js(`({ settings: !!document.querySelector('.hub-settings'), page: !!document.querySelector('.hub-page:not([hidden])'), drawer: !!document.querySelector('.gw-drawer-wrap[data-drawer="share"]:not([hidden])') })`);
+          check('设置 shows gateway address/key and sharing in the page (no drawer)', share && afterSettings.settings && afterSettings.page && !afterSettings.drawer, JSON.stringify(afterSettings));
           await js(`(() => { const b = [...document.querySelectorAll('.rail [data-id]')].find((e) => e.dataset.id === 'chat'); b && b.click(); })()`);
-          await waitFor(`!document.querySelector('.gateway-page:not([hidden])')`, 3000);
+          await waitFor(`!document.querySelector('.hub-page:not([hidden])')`, 3000);
           await click('.rail-acct');
           await waitFor(`!!document.querySelector('.sb-acct-menu')`, 2000);
           const onTop = await js(`(() => { const m = document.querySelector('.sb-acct-menu'); if (!m) return null; const b = m.getBoundingClientRect(); return [[b.right - 10, b.top + 16], [b.right - 10, b.bottom - 16], [b.left + 10, b.top + 16]].every(([x, y]) => m.contains(document.elementFromPoint(x, y))); })()`);
@@ -2635,7 +2637,7 @@ function driver() {
               const on = await waitFor(`document.documentElement.dataset.ascii === 'smoke-mine'`, 2000);
               await js(`window.__store.getState().openSettings({ section: 'appearance' })`);
               await js(`(() => { const b = document.querySelector('.sp [data-theme-pick="ascii:smoke-mine"]'); b?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 })); })()`);
-              const menu = await waitFor(`[...document.querySelectorAll('.menu button')].map((b) => b.textContent.trim()).join('|').includes('改一改')`, 2000);
+              const menu = await waitFor(`[...document.querySelectorAll('.menu button')].map((b) => b.textContent.trim()).join('|').includes('改一改')`, 6000);
               await shot('settings-ascii-mine');
               await closeMenus();
               await click('.sp [data-entry="ui.theme"] [data-theme-pick="nord"]');

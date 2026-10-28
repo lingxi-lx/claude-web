@@ -116,6 +116,14 @@ describe('ego lite', () => {
     expect(text(r)).not.toContain('browser_*');
   });
 
+  it('a clean run whose console.log went to stderr (ego-browser 2.x) shows it as output, not as an error', async () => {
+    withEgo();
+    const r = await runEgoScript('sess-stderr', 'process.stderr.write("TITLE Example Domain")', { root: dir });
+    expect(r.isError).toBeFalsy();
+    expect(text(r)).toContain('TITLE Example Domain');
+    expect(text(r)).not.toContain('错误输出');
+  });
+
   it('ego lite not running: the error says to fall back to the built-in browser', async () => {
     withEgo();
     await egoStatus(false);

@@ -22,9 +22,13 @@
 | `routing/policies.ts` | 各策略的权重打分、`capabilityScore`、自定义规则匹配、`setClassifyHook`（自然语言规则的分类器留口，现在没人接） |
 | `routing/affinity.ts` | 对话 → 上次成功的候选，6 小时，只在内存 |
 | `routing/decisions.ts` | 最近 200 条决定、每个候选最近 20 次结果和首字节 EWMA、今天的付费花费（存 meta `routing.spend`）、今天切换次数 |
-| `routing/router.ts` | `plan` → `attempt` → `finish`，网关 `run()` 里调 |
+| `routing/router.ts` | `planAsync`（先问意图判断）/ `plan`（同步，状态页预览用）→ `attempt` → `finish`，网关 `run()` 里调 |
+| `routing/selectors.ts` | `config.mode` 不是 `smart` 时的排序：order / rotate（游标只在真发出请求后前进）/ usage / pace / weight / fast |
+| `routing/intent.ts` + `intent-ask.ts` | 意图判断：`config.intents` + `intentJudge`（必须是 provider 候选，直接用它的 key 调一次，走隐私中转）；只在「自定义」、一轮第一句、条件规则没命中时调；命中的意图压过亲和 |
+| `routing/trace.ts` | 每条决定的回放步骤（group / filter / rank / rule / classifier / affinity / order / attempt / finish），`finish` 时写进 `decision.trace` |
+| `routing/quota.ts` | 每个来源（`p:<providerId>` / `a:<accountId>`）的剩余额度和 429 冷却，读 x-ratelimit-* / anthropic-ratelimit-*（含订阅的 unified utilization）/ retry-after；网关 `attempt()` 里一行 `observeUpstream` 喂它 |
 | `gateway/service.ts` | `run()` 包一层：有 `routing` 就先 plan，`runMembers` 用 plan 的顺序；`routingStatus / setRouting / ensureRoutingGroup` |
-| `web/src/features/routing/RoutingDetail.tsx` | 详情页组件，网关页挂（这个切片没碰 `features/gateway/**`） |
+| `web/src/features/routing/RoutingDetail.tsx` | 详情页组件（模型中心的 RoutingPage 也挂它）；`DecisionTraceView.tsx` 是每条决定的回放 |
 
 ## 规则（§7.3，别放松）
 
@@ -46,6 +50,10 @@
 
 ## 缺口
 
-- 剩余免费额度没进打分（额度数据在 channels，别的切片在做），现在只有「免费 / 订阅 / 付费」三档。
+- 剩余额度（2026-10-28）：只认上游自己在回应头里说的；没说过的来源算 0.7（中性偏高），打分里 `quota` 权重
+  免费优先最大。429：retry-after → 头里用完的那个窗口的重置时间 → 30s 起翻倍、最多 30 分钟；成功一次清零。
+  冷却中的来源在硬过滤里排除（原因「限流冷却中」）。账号池（`u:`）没有来源级额度。只在内存。
+- 网关的 `applyRouting` 会把候选的 `weight` 丢掉（它只留白名单字段），所以「按权重」现在实际按剩余额度当权重；
+  `mode` / `intents` / `intentJudge` 是顶层字段，原样存下来。
 - 能力数据是名字启发式 + 上下文窗口表 + 用户覆盖，没有统一的能力表。
 - 决定只在内存（重启清空）；账本里有每条的摘要。

@@ -105,7 +105,15 @@
   - 用中转的地方（`providers/service.ts`）：anthropic 档案 `ANTHROPIC_BASE_URL`；claude-account（`ANTHROPIC_BASE_URL` 原本是 ''，开着时指向中转 → api.anthropic.com——CLI 拿 OAuth 令牌照样发给自定义 base，子代理分流对账号 / 本机登录一直就是这么做的）；gemini `GEMINI_BASE_URL`（没填 base 时写出厂商默认 `…/v1beta`）；grok 关垫片 `GROK_BASE_URL`（默认 `https://api.x.ai/v1`）；openai 关垫片 `OPENAI_BASE_URL`；`agentLaunch` 里 Codex 直连 openai、ACP 的 `OPENAI_BASE_URL`、Gemini CLI 的 `GOOGLE_GEMINI_BASE_URL`；本机登录（没选档案，claude.ai 或用户 settings 里的中转）在 `session-runner` 里设 `ANTHROPIC_BASE_URL` 并进 `ours` 盖过 settings.json（分流已占用 base 时不设，分流自己脱敏）。
   - 连接测试：`chatProbe`（经 `providerEnv`，补了 loopback NO_PROXY）、`openaiChatProbe` / `openaiResponsesProbe`、模型列表 GET 都走中转；网关的「测试」本来就走网关。
   - 嵌套（分流 → 中转、垫片 → 中转不会发生，垫片直连上游）：已有占位符里的检测命中被丢掉（`detect.find` 先找占位符区间），第二层不会把 `{{API_KEY_…}}` 再包一层。
-  - **不覆盖**：开关只在对话进程启动时生效（打开后已在跑的对话要重开；关掉后已在跑的仍多一跳但原样转发）；Codex / Gemini CLI / 其它 ACP 用自己登录（没选档案）的；网关档案本来就在网关里。
+  - ~~不覆盖：开关只在对话进程启动时生效~~（10-28 W4 改掉，见下一条）；网关档案本来就在网关里。
+  - **立即生效 / 自己登录的 Agent / 输出侧 / 人名 / 本地模型（10-28，W4）**：
+    - `standby`（默认开，「改动立即生效」）：打开过一次（meta 里 `privacy.armedAt`，`settings()` 不外露）以后 `wants()` 恒真，对话都经过中转，中转每个请求按当时的设置决定（关着、本机跳过 → 原字节转发）。第一次打开时 index.ts 的 `onArm` 让空闲的 Claude 对话 `respawn()`；当时在忙的 / 其它 Agent 下次重开才走中转。
+    - 自己登录（没选档案）：`privacy/agents.ts` 的 `ownLoginLaunch`（`providers.agentLaunch` 开头一行）——Codex 内置 openai 供应商的 `OPENAI_BASE_URL` + `-c openai_base_url=`（ChatGPT 登录默认 `chatgpt.com/backend-api/codex`，0.163 两个都认）；Gemini CLI 的 `CODE_ASSIST_ENDPOINT`（Google 登录 → cloudcode-pa）/ `GOOGLE_GEMINI_BASE_URL` / `GOOGLE_VERTEX_BASE_URL`。config.toml 顶层 `model_provider` 是别家、Qwen / Kimi / OpenCode 没有可改的地址 → 隐私页标「未覆盖」（`status.coverage`）。
+    - 中转收到 `content-encoding`（Codex 会 zstd 压请求体）且要脱敏时先解开再发明文；解不开 → 503 不发。
+    - 人名：类别 `name`（默认 off），`zhname.ts` 照 Magpie 按上下文认中文名；`address` 只有本地模型找。
+    - 输出侧：`output`（默认开）——`installConsoleMask` 包住 console（server.log），诊断包 `diag/service.ts` 走 `maskForOutput`；密钥总遮，开着时再按启用的类型换成 `[EMAIL]` 之类。发布导出的 HTML 不动（用户自己的页面）。
+    - 记录落盘：`<data>/privacy-records/YYYY-MM-DD.jsonl`，30 天 / 100 MB，`privacy.records.clear` 清。
+    - 本地模型（`privacy/model/`）：AstrLink Guard int8，按 rev + SHA-256 钉死从 HF 下到 `<data>/privacy-model/<rev12>`；`onnxruntime-node` **不是依赖**，装了才动态加载（没装页面写「运行库未安装」，开关打不开）。异步，只在 `guard.prepare()` 跑：中转和网关成员尝试调用；缓存垫片 / `~s` 分流只有规则。模型开着却跑不了 → PrivacyFailed。tokenizer 对过 Magpie 的 HF golden（39/39），真模型测试：`CW_PII_DIR=<含 tokenizer.json、golden.json 的目录> CW_PII_ORT=<装了 onnxruntime-node 的目录> npx vitest run src/privacy/model`。
 - **不动的东西**：`thinking` / `redacted_thinking` / `reasoning` 块整块跳过（签名）；id、model、tool 名、schema、`data`、图片、`encrypted_content`、`thoughtSignature` 跳过。tool_use 的 `input` 对象、Gemini `args` / `response` 全部叶子都算内容；OpenAI `arguments`（JSON 文本）先解析再脱敏再序列化，保证 JSON 合法。没有命中时 body 字节原样（指纹中转不受影响）。
 - **还原**：`restoreResponse(res)` 包住 `writeHead / write / end`：SSE 按事件解析，`data:` 是 JSON 的才改；某个字符串叶子结尾像占位符的开头（`{{API_`）就把整个事件扣住，等同一个 slot（type + index 字段 + 叶子路径）的下一个事件把两段拼起来再还原；先来了别的事件就原样放出（宁可留占位符，不出错值）。`partial_json` / `arguments` / `*arguments*.delta` 里还原成 JSON 转义后的值。非流式 JSON 解析后逐叶子还原。直通且有脱敏时出站 `accept-encoding: identity`，上游仍压缩就在包装里解压再发。
 - **fail closed**：开着时 `forRequest` / 脱敏抛错 → 500「隐私保护处理失败，请求没有发出」；命中 block → 403「按隐私设置拦截」。都走 `final`（不冷却成员，不换下一个）。
@@ -114,3 +122,23 @@
 - **记录**：审计行加 `privacy: { count, categories, placeholders, blocked?, warned? }`（`audit.ts` 白名单），不含原值、不含来源名。上游错误正文先 `privacy.scrub()`（固定遮 key / 私钥 / JWT / 配置密码，开着时再加自定义词，换成 `[API_KEY]`），再进日志、账本、客户端。
 - **authStyle**：`Provider.authStyle` 未设 = 原行为（Claude 对话 Bearer；模型列表和网关翻译两个头都带；OpenAI Bearer）。设了：会话 env（anthropic：x-api-key → `ANTHROPIC_API_KEY` + `ANTHROPIC_AUTH_TOKEN=''`；both → 两个变量）、`listModels` / chat 探测、`translatedHeaders` 都照它。直通请求仍沿用客户端自己的头风格。
 - **base URL**：`providers/endpoint.ts` 的 `anthropicBase()` 去尾斜杠、`/messages`、`/v1`；会话 env、模型列表、保存档案时都用它（web 的快速连接对 anthropic 预设也用 `anthropicBase`）。网关的 `joinUrl` 本来就去重版本段。
+
+## 客户端指纹（2026-10-28，W2；`server/src/gateway/fingerprint/`、`helpers/tlsfp/`）
+
+照 CLIProxyAPI（MIT）的 `utls_client.go` / `claude_executor_request.go` / `codex_executor_request.go` / `httpwire` 做，**按来源开，默认关**。
+
+- **开关**：`settings.set 'gateway.fingerprint'` = `{ <供应商 id 或账号 id | '*'>: 'off' | 'auto' | 'claude-code' | 'codex' | 'gemini-cli' }`（自己的 id 压过 `'*'`；没写 / 乱写 = off，请求一个字节都不变）。`auto` 按出站协议挑：anthropic → claude-code，responses（或 protocol / chatPath 是 responses）→ codex，gemini → gemini-cli，chat/completions → 不做。`gateway.fingerprint.tls` = `auto`（有 helper 用 helper，否则 Node）| `node` | `off`（只改头和 body）。暂时没有界面。
+- **接入点**：只有 `service.ts` 的 `attempt()` 里 `agentFor` 那一处（`clientFingerprint(settings, p, { outbound, path, stream })`）：在隐私脱敏和插件之后改头、改所有 body 变体的键顺序，换 `agentFor`。分流转发 `forward()`、shim、privacy relay 不走它。
+- **头**：profile 的 UA（直通请求本来就是这个客户端的 UA 就保留版本；Claude 的入口改成 `cli`、去掉 `agent-sdk/…`——中转查的就是这个）、身份头（`set` 一律覆盖 / `ensure` 只补缺）、顺序和大小写。**线上顺序在 agent 里做**（`ShapedAgent.addRequest` 在 Node 写出头之前把整组头按 profile 重设一遍），这样 Host / Connection / Content-Length 也能排到真客户端的位置（Node 自己会把 Host 和 Connection 放最后、sendUpstream 补的是小写 `content-length`）。只在 profile 说这个协议时改头 / body；TLS 不管协议都改。
+- **body**：`reorderTopLevel` 只换顶层成员的先后，每个成员的字节原样（`1.0`、`\u00e9` 不会变）；已经是这个顺序就返回原 Buffer。
+- **TLS（Node 近似）**：`ShapedAgent` 把 `ciphers / sigalgs / ecdhCurve / ALPNProtocols / min/maxVersion / requestOCSP` 合进请求选项交给原来的 agent（直连的 https.Agent、进程代理、账号代理都是 agent-base，选项会进 `tls.connect` 和连接池的 key，不会和普通连接混用）。OpenSSL 控制不了扩展顺序、padding、SCT，ALPN 一律只给 `http/1.1`（我们说 HTTP/1.1；Codex 真客户端还报 h2）。gemini-cli 用 Node 默认（真客户端就是 Node）。测试里起一个裸 TCP 服务器读 ClientHello 核对套件顺序 / 组 / ALPN / status_request；真机（直连）三家都握手成功（anthropic 401、chatgpt.com 405、googleapis 403，都是到了源站）。
+- **tlsfp helper（Go + uTLS）**：`node helpers/tlsfp/build.mjs` → `helpers/tlsfp/bin/tlsfp[.exe]`（也认 `CLAUDE_WEB_TLSFP`、`<CLAUDE_WEB_DIR>/bin/`）。第一次用时 `windowsHide` 起，环境只有 `TLSFP_TOKEN`（+ SystemRoot），stdout 报 `LISTEN 127.0.0.1:<port>`，stdin 关了就退出。Node 往回环连接写一行 `CWFP/1 <token> <profile> <host> <port> <proxy|->` 再写明文 HTTP/1.1；helper 用 uTLS 的 ClientHello 连源站（http(s) CONNECT / socks5 代理），两边对拷。连不上 / 握手失败回 502 JSON（`tlsfp_error`），网关照常换成员。没起好 / 没构建 / socks4 代理 → 这次用 Node 近似。**2026-10-28 本机没有 Go，helper 没编译过、没跑过**；有 Go 之后先 `build.mjs`（会 `go mod tidy` 补 go.sum），再在临时 `CLAUDE_WEB_DIR` 下开指纹，对 tls.peet.ws 之类的回显站核对 JA3/JA4。
+- 版本号（claude-cli 2.1.280 / sdk 0.112.1、codex-tui 0.154.0、GeminiCLI 0.12.0）在 `profiles.ts` 顶上，和 CPA 的抓包一起升。
+
+## compat / 思考签名 / 回放缓存 / WebSocket 中继（2026-10-28，从 CLIProxyAPI 移植）
+
+- `gateway/compat/` 现在真的接上了：所有错误体（Anthropic / OpenAI / Gemini，含流里的 error 事件）、取 key（`readKeys`，仍尊重 `gateway.allowQueryKey`）、`/v1/models` 两种形状、CORS 预检（只回 LAN 配置里列出的 origin，不回 `*`）。OpenAI 错误多了 `param: null`。
+- `signature.ts`：透传请求发给成员前，按目标（先看模型名，再看官方 host）清理它不认的思考签名——丢掉、换成 Gemini 的 bypass 值或剥掉（Kimi）。认不出目标就不动；没东西要改时原样字节发出（指纹路径的保字节规则不破）。
+- `replay-cache.ts`：内存 LRU + TTL，键 = 网关 key + 对话。从透传的回答里记下带签名的思考，客户端下一轮丢了就补回。转换协议的请求按设计仍丢思考，缓存只帮透传。
+- `ws-relay.ts`：`/v1/responses`、`/v1/ws`（含组前缀）走 WebSocket，主端口 / 本机 / LAN 监听都有（`listener.ts` 加了 upgrade 钩子）。鉴权同 HTTP；每一轮转成一次普通的 `POST /v1/responses` 走网关，所以路由、故障转移、额度、隐私、账本都照常；不对上游开 WebSocket。审计里 WS 的 IP 显示 127.0.0.1。
+- 路由候选的 `weight` 以前保存时被丢，「按权重」排序退化成按剩余额度；现在保存时保留（0–1000）。

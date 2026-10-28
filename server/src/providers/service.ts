@@ -13,6 +13,7 @@ import { writeFlagSettings, type FlagSettings } from '../runtime/flag-settings.j
 import { tr } from '../i18n/index.js';
 import { anthropicBase, authHeaders } from './endpoint.js';
 import { privacyRoute, viaPrivacy } from '../privacy/route.js';
+import { ownLoginLaunch } from '../privacy/agents.js';
 
 /** Vendors' default bases (what the clients use when the profile names none) — the privacy relay needs them spelled out. */
 const GEMINI_DEFAULT_BASE = 'https://generativelanguage.googleapis.com/v1beta';
@@ -505,7 +506,9 @@ export class ProviderService {
    * (nothing for any other type). Without this Codex ignores the profile and talks to api.openai.com.
    */
   agentLaunch(id: string | undefined, agent: 'codex' | 'acp', kind?: string, sessionId?: string): { env: Record<string, string>; args: string[] } {
-    const type = id && id !== CLAUDE_PROVIDER_ID ? this.meta.provider(id)?.type : undefined;
+    // its own login (no profile): 隐私保护 reaches Codex / Gemini CLI through their endpoint overrides (privacy/agents.ts)
+    if (!id || id === CLAUDE_PROVIDER_ID) return ownLoginLaunch(kind ?? (agent === 'codex' ? 'codex' : undefined), (t) => privacyRoute(t));
+    const type = this.meta.provider(id)?.type;
     if (type === 'openai') {
       const p = this.forSession(id)!;
       if (agent === 'codex') {

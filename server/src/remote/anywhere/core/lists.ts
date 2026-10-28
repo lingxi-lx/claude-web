@@ -33,6 +33,26 @@ export const DEFAULT_STUN: string[] = [
   'stun:stun.l.google.com:19302',
 ];
 
+export interface TurnServer {
+  urls: string[];
+  username: string;
+  credential: string;
+}
+
+/**
+ * The project's own coturn (same VPS as the `cw` broker; /etc/turnserver.conf there). It rides with the default STUN
+ * list only (rtcConfig): a PC on a network without IPv6 and a phone on a carrier NAT find no direct path, and a TURN
+ * hop is still a WebRTC data channel, much faster than the MQTT relay. The credential is public by design; the server
+ * caps it (per-user / total allocations, bytes per second, no private or loopback peers).
+ */
+export const DEFAULT_TURN: TurnServer[] = [
+  {
+    urls: ['turn:cw.y0p66y9.me:3478?transport=udp', 'turn:cw.y0p66y9.me:3478?transport=tcp'],
+    username: 'cw',
+    credential: 'j0rw8pJbjVpPjkdh',
+  },
+];
+
 const BROKER_URL_RE = /^wss?:\/\/\S+$/i;
 const STUN_URL_RE = /^stuns?:\S+$/i;
 

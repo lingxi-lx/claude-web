@@ -10,8 +10,10 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { dataDir } from '../files/service.js';
 import { tr, trAs } from '../i18n/index.js';
-import type { CatalogEntry, CatalogSummary, ChannelCatalogOverride } from './types.js';
+import type { CatalogEntry, CatalogSummary, ChannelCatalogOverride, RemoteCatalogState } from './types.js';
 import { pluginSourceDefs } from '../plugins/declarative.js';
+import { isEd25519PublicKey } from '../plugins/market.js';
+import { guardedFetch, type FetchFn, type LookupAll } from '../net/netguard.js';
 import type { DeclarativeSource } from '../plugins/protocol.js';
 
 // FREE_NOTES = research_notes/免费模型来源深度调研/B_official_free_tiers.md; CHERRY = research_notes/可反代的模型上游调研/cherry-studio.md;
@@ -117,6 +119,19 @@ export const BASELINE: CatalogEntry[] = [
     baseUrl: 'https://api.mistral.ai/v1', free: true, mayTrain: true,
     limits: '~$10/month of credits', driver: 'provider', source: FREE_NOTES,
   },
+  // ---- official OpenAI-compatible endpoints (the API-key presets people look for first) ----
+  {
+    id: 'openai', name: 'OpenAI', category: 'api', needs: 'key', protocol: 'openai', authStyle: 'bearer',
+    baseUrl: 'https://api.openai.com/v1', signupUrl: 'https://platform.openai.com/api-keys', driver: 'provider',
+  },
+  {
+    id: 'xai', name: 'xAI', category: 'api', needs: 'key', protocol: 'openai', authStyle: 'bearer',
+    baseUrl: 'https://api.x.ai/v1', signupUrl: 'https://console.x.ai/', driver: 'provider',
+  },
+  {
+    id: 'together', name: 'Together AI', category: 'api', needs: 'key', protocol: 'openai', authStyle: 'bearer',
+    baseUrl: 'https://api.together.xyz/v1', signupUrl: 'https://api.together.ai/settings/api-keys', driver: 'provider',
+  },
   // ---- official Anthropic-compatible endpoints (Cherry Studio's list) ----
   anthropicPreset('anthropic', 'Anthropic', 'https://api.anthropic.com', { authStyle: 'x-api-key' }),
   anthropicPreset('deepseek', 'DeepSeek', 'https://api.deepseek.com/anthropic', { authStyle: 'bearer',
@@ -160,6 +175,12 @@ export const BASELINE: CatalogEntry[] = [
     id: 'magpie', name: 'Magpie', category: 'local-engine', needs: 'engine', protocol: 'anthropic', authStyle: 'both',
     signupUrl: 'https://usemagpie.ai', driver: 'engine:magpie', source: 'notes:upstreams/magpie.md',
   },
+  // ---- the user's own Claude login through the local `claude` CLI (drivers/claude-bridge.ts); off until added ----
+  {
+    id: 'claude-bridge', name: 'Claude subscription (local claude CLI)', category: 'subscription', needs: 'none', protocol: 'anthropic',
+    authStyle: 'x-api-key', limits: 'plain chat only, no tool use; one claude CLI run per request (2 at a time); uses your own Claude plan',
+    driver: 'claude-bridge', source: 'magpie internal/claudebridge',
+  },
   // ---- logins we already run (upstreams/) ----
   { id: 'claude-account', name: 'Claude', category: 'subscription', needs: 'login', protocol: 'anthropic', driver: 'upstream:claude' },
   { id: 'gemini-web', name: 'Gemini', category: 'subscription', needs: 'login', protocol: 'gemini', driver: 'upstream:gemini' },
@@ -167,13 +188,21 @@ export const BASELINE: CatalogEntry[] = [
 ];
 
 // ---------------------------------------------------------------------------------------------------------------
-// Remote catalog: signed data, never code. Off by default (setting `channels.remoteCatalog` = { url, publicKey }).
+// Remote catalog: signed data, never code. Off by default (setting `channels.remoteCatalog` = { enabled, url, publicKey });
+// no official URL / key ships: it works once the user enters both (settings -> remote model catalog).
 
 export interface RemoteCatalogSetting { enabled?: boolean; url?: string; /** PEM or base64 SPKI DER, Ed25519 */ publicKey?: string }
 interface RemoteCatalogFile { version: number; entries: unknown[]; signature: string }
 
+export type { RemoteCatalogState };
+
 const KNOWN_FIELDS = new Set(['id', 'name', 'category', 'needs', 'protocol', 'baseUrl', 'authStyle', 'signupUrl', 'free', 'mayTrain', 'modelFilter', 'models', 'limits', 'notes', 'driver', 'retired']);
 const remoteFile = () => path.join(dataDir(), 'channels', 'catalog-remote.json');
+const MAX_REMOTE_BYTES = 2 * 1024 * 1024;
+/** a verified copy older than this is fetched again in the background when the catalog is first read */
+export const REMOTE_STALE_MS = 24 * 3600_000;
+
+const remoteState: { fetchedAt?: number; error?: string; url?: string } = {};
 
 /** Strings, booleans, plain arrays/objects only; unknown fields dropped; an https / loopback URL or nothing. */
 function sanitizeEntry(raw: unknown): CatalogEntry | null {
@@ -204,30 +233,92 @@ export function verifyRemote(file: RemoteCatalogFile, publicKey: string): boolea
   }
 }
 
-/** The last remote catalog that verified (kept on disk so a failed update falls back to it). */
-export async function loadRemote(): Promise<CatalogEntry[]> {
+/**
+ * The setting as the user saves it: an https URL without credentials and an Ed25519 public key (PEM or base64
+ * SPKI DER). There is no official URL or key built in: nothing is fetched until the user supplies both.
+ */
+export function normalizeRemoteSetting(raw: unknown): RemoteCatalogSetting {
+  if (raw === null || raw === undefined) return {};
+  if (typeof raw !== 'object' || Array.isArray(raw)) throw new Error(tr('远程模型目录设置不对'));
+  const v = raw as Record<string, unknown>;
+  const out: RemoteCatalogSetting = {};
+  if (v.enabled === true) out.enabled = true;
+  const url = typeof v.url === 'string' ? v.url.trim() : '';
+  if (url) {
+    let u: URL;
+    try { u = new URL(url); } catch { throw new Error(tr('远程模型目录只接受 https 地址')); }
+    if (u.protocol !== 'https:' || u.username || u.password || url.length > 2000) throw new Error(tr('远程模型目录只接受 https 地址'));
+    out.url = u.toString();
+  }
+  const key = typeof v.publicKey === 'string' ? v.publicKey.trim() : '';
+  if (key) {
+    if (key.length > 8000 || !isEd25519PublicKey(key)) throw new Error(tr('远程模型目录的公钥不是 Ed25519 公钥'));
+    out.publicKey = key;
+  }
+  return out;
+}
+
+export function remoteCatalogState(setting: RemoteCatalogSetting | undefined, entries: number): RemoteCatalogState {
+  const s = setting ?? {};
+  const hasKey = typeof s.publicKey === 'string' && isEd25519PublicKey(s.publicKey);
+  const sameUrl = !!s.url && remoteState.url === s.url;
+  return {
+    enabled: s.enabled === true,
+    ...(s.url ? { url: s.url } : {}),
+    hasKey,
+    ready: s.enabled === true && !!s.url && /^https:\/\//i.test(s.url) && hasKey,
+    ...(sameUrl && remoteState.fetchedAt ? { fetchedAt: remoteState.fetchedAt } : {}),
+    entries: s.enabled ? entries : 0,
+    ...(sameUrl && remoteState.error ? { error: remoteState.error } : {}),
+  };
+}
+
+/** The last remote catalog that verified (kept on disk so a failed update falls back to it), for this URL only. */
+export async function loadRemote(url?: string): Promise<CatalogEntry[]> {
   try {
-    const j = JSON.parse(await fs.readFile(remoteFile(), 'utf8')) as { entries?: unknown[] };
+    const j = JSON.parse(await fs.readFile(remoteFile(), 'utf8')) as { entries?: unknown[]; at?: number; url?: string };
+    // a copy fetched from another address (the user changed it) is not this catalog
+    if (url && j.url && j.url !== url) return [];
+    if (url) { remoteState.url = url; if (typeof j.at === 'number') remoteState.fetchedAt = j.at; }
     return (j.entries ?? []).map(sanitizeEntry).filter((e): e is CatalogEntry => !!e);
   } catch {
     return [];
   }
 }
 
-/** Fetch, verify, keep. Throws (and keeps the last good copy) when anything is off. */
-export async function updateRemote(setting: RemoteCatalogSetting | undefined): Promise<CatalogEntry[]> {
+/** When the copy on disk for this URL was verified (0 = none). */
+export function remoteFetchedAt(url?: string): number {
+  return url && remoteState.url === url ? remoteState.fetchedAt ?? 0 : 0;
+}
+
+/** Fetch (netguard: internet only, every redirect hop checked), verify, keep. Throws (and keeps the last good copy). */
+export async function updateRemote(setting: RemoteCatalogSetting | undefined, o: { fetch?: FetchFn; lookup?: LookupAll } = {}): Promise<CatalogEntry[]> {
   if (!setting?.enabled || !setting.url) throw new Error(tr('远程模型目录没有打开'));
   if (!setting.publicKey) throw new Error(tr('远程模型目录没有设置验证公钥'));
   if (!/^https:\/\//i.test(setting.url)) throw new Error(tr('远程模型目录只接受 https 地址'));
-  const res = await fetch(setting.url, { signal: AbortSignal.timeout(20_000) });
-  if (!res.ok) throw new Error(tr('远程模型目录下载失败：HTTP {status}', { status: res.status }));
-  const file = await res.json() as RemoteCatalogFile;
-  if (!file || !Array.isArray(file.entries) || typeof file.signature !== 'string') throw new Error(tr('远程模型目录格式不对'));
-  if (!verifyRemote(file, setting.publicKey)) throw new Error(tr('远程模型目录签名不对，已丢弃'));
-  const entries = file.entries.map(sanitizeEntry).filter((e): e is CatalogEntry => !!e);
-  await fs.mkdir(path.dirname(remoteFile()), { recursive: true });
-  await fs.writeFile(remoteFile(), JSON.stringify({ version: file.version, at: Date.now(), entries }, null, 1), { mode: 0o600 });
-  return entries;
+  if (remoteState.url !== setting.url) { delete remoteState.fetchedAt; delete remoteState.error; }
+  remoteState.url = setting.url;
+  try {
+    const f = guardedFetch({ policy: 'public', protocols: ['https:'], ...(o.fetch ? { fetch: o.fetch } : {}), ...(o.lookup ? { lookup: o.lookup } : {}) });
+    const res = await f(setting.url, { signal: AbortSignal.timeout(20_000), headers: { accept: 'application/json' } });
+    if (!res.ok) throw new Error(tr('远程模型目录下载失败：HTTP {status}', { status: res.status }));
+    const text = await res.text();
+    if (text.length > MAX_REMOTE_BYTES) throw new Error(tr('远程模型目录太大'));
+    let file: RemoteCatalogFile;
+    try { file = JSON.parse(text) as RemoteCatalogFile; } catch { throw new Error(tr('远程模型目录格式不对')); }
+    if (!file || !Array.isArray(file.entries) || typeof file.signature !== 'string') throw new Error(tr('远程模型目录格式不对'));
+    if (!verifyRemote(file, setting.publicKey)) throw new Error(tr('远程模型目录签名不对，已丢弃'));
+    const entries = file.entries.map(sanitizeEntry).filter((e): e is CatalogEntry => !!e);
+    const at = Date.now();
+    await fs.mkdir(path.dirname(remoteFile()), { recursive: true });
+    await fs.writeFile(remoteFile(), JSON.stringify({ version: file.version, at, url: setting.url, entries }, null, 1), { mode: 0o600 });
+    remoteState.fetchedAt = at;
+    delete remoteState.error;
+    return entries;
+  } catch (e) {
+    remoteState.error = (e as Error).message;
+    throw e;
+  }
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -270,6 +361,7 @@ export function localName(name: string): string {
     case 'Qiniu': return trAs('七牛云', 'Qiniu');
     case 'SiliconFlow': return trAs('硅基流动', 'SiliconFlow');
     case 'Tencent TokenHub': return trAs('腾讯 TokenHub', 'Tencent TokenHub');
+    case 'Claude subscription (local claude CLI)': return trAs('Claude 订阅（本机 claude 命令）', 'Claude subscription (local claude CLI)');
     default: return name;
   }
 }

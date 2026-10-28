@@ -312,6 +312,11 @@ export class ProxyManager {
     }
   }
 
+  /** Whether this process's fetch sends `target` through the proxy (netguard: the proxy, not us, resolves it). */
+  proxiedFor(target: string | URL): boolean {
+    return !!this.activeUrl && !bypasses(target, this.noProxy);
+  }
+
   /** An agent for node:http / https / ws requests to `target`, or undefined = direct (use the caller's own agent). */
   agentFor(target: string | URL): http.Agent | undefined {
     const url = this.activeUrl;

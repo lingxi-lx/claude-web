@@ -93,6 +93,7 @@ describe('no Chinese text left outside tr()', () => {
     'server/src/errors/explain.ts': 'a regex that finds 「错误 404」 in a raw error',
     'server/src/memory/extract.ts': 'regexes that find decisions / constraints in a Chinese conversation',
     'server/src/memory/mcp.ts': 'the memory tool answers the model (not the screen)',
+    'server/src/privacy/zhname.ts': 'Chinese surnames and name context words the privacy filter looks for in a request',
     'server/src/memory/service.ts': 'kind labels stored in memory.db',
     'server/src/remote/anywhere/core/lists.ts': 'a list value',
     'server/src/runtime/thinking-language.ts': 'languages named in themselves, for the instruction to the model',

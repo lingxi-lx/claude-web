@@ -31,7 +31,7 @@ export interface CatalogModel {
   capabilities?: { tools?: boolean; images?: boolean; reasoning?: boolean };
 }
 
-export type CatalogDriverId = 'provider' | 'engine:cliproxyapi' | 'engine:magpie' | 'upstream:claude' | 'upstream:gemini' | 'upstream:workbuddy';
+export type CatalogDriverId = 'provider' | 'engine:cliproxyapi' | 'engine:magpie' | 'upstream:claude' | 'upstream:gemini' | 'upstream:workbuddy' | 'upstream:provider' | 'claude-bridge';
 
 /** One entry of the add-source catalog (data only: never code). */
 export interface CatalogEntry {
@@ -96,7 +96,7 @@ export interface SourceSummary {
   accountCount?: number;
   healthyAccountCount?: number;
   providerId?: string;
-  upstreamKind?: 'claude' | 'gemini' | 'workbuddy';
+  upstreamKind?: 'claude' | 'gemini' | 'workbuddy' | 'provider';
   engine?: SourceEngine;
   /** the catalog entry it was added from */
   catalogId?: string;
@@ -104,6 +104,12 @@ export interface SourceSummary {
   mayTrain?: boolean;
   limits?: string;
   signupUrl?: string;
+  /** unconfigured provider presets carry the descriptor's own grouping and sign-in hint */
+  providerKind?: 'subscription' | 'api-key' | 'local' | 'custom' | 'remote';
+  auth?: string;
+  loginHint?: string;
+  docsUrl?: string;
+  free?: boolean | 'some';
   actions: { canAddAccount: boolean; canEditProvider: boolean; canManageEngine: boolean; canRemove?: boolean };
 }
 
@@ -112,6 +118,20 @@ export interface ChannelStatus {
   warnings: string[];
   /** the add-source catalog (baseline < signed remote < user overrides) */
   available?: CatalogSummary[];
+  /** the signed remote catalog layer: off until the user sets an https URL + an Ed25519 key */
+  remoteCatalog?: RemoteCatalogState;
+}
+
+/** What the settings page shows of the remote catalog: set up?, last verified copy, entries, last failure. */
+export interface RemoteCatalogState {
+  enabled: boolean;
+  url?: string;
+  hasKey: boolean;
+  /** enabled with an https URL and a usable Ed25519 key */
+  ready: boolean;
+  fetchedAt?: number;
+  entries: number;
+  error?: string;
 }
 
 export interface ChannelCatalogOverride { hidden?: boolean; patch?: Partial<Omit<CatalogEntry, 'id' | 'driver'>> }
@@ -122,6 +142,8 @@ export type ChannelRequest =
   /** one-step add from the catalog → the new source */
   | { kind: 'channels.add'; catalogId: string; key?: string; name?: string }
   | { kind: 'channels.remove'; id: string }
+  /** 远程模型目录: { enabled, url, publicKey } (validated; fetched + verified at once when complete) → ChannelStatus */
+  | { kind: 'channels.catalog.remote'; setting: { enabled?: boolean; url?: string; publicKey?: string } | null }
   /** the user's change to a catalog entry (null = back to the catalog's values) */
   | { kind: 'channels.catalog.set'; id: string; override: ChannelCatalogOverride | null }
   /** fetch the signed remote catalog now (only when the setting turned it on) */

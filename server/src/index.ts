@@ -36,7 +36,7 @@ import { AgentTranscripts } from './agents/transcript.js';
 import { CanonicalLog } from './session/canonical.js';
 import { MemoryService } from './memory/service.js';
 import { setMemoryMcpEnabled } from './memory/launcher.js';
-import { setNodegraphHint, setPromptSuggestions, setThinkingLanguageSetting } from './runtime/session-runner.js';
+import { SessionRunner, setNodegraphHint, setPromptSuggestions, setThinkingLanguageSetting } from './runtime/session-runner.js';
 import { NODEGRAPH_HINT_KEY } from './runtime/nodegraph-hint.js';
 import { THINKING_LANGUAGE_KEY } from './runtime/thinking-language.js';
 import { LocalEnvStore } from './runtime/local-env.js';
@@ -79,15 +79,21 @@ import { DshSource } from './library/dsh-source.js';
 import { AcpListSource } from './library/acp-source.js';
 import { PrivacyService } from './privacy/service.js';
 import { setPrivacyRoute } from './privacy/route.js';
+import { installConsoleMask } from './privacy/output.js';
 import { GatewayService } from './gateway/service.js';
 import { AuditLog } from './gateway/audit.js';
+import type { GatewayAuditLine } from './gateway/types.js';
+import { OtlpExporter, setOtlpExporter } from './telemetry/otlp.js';
 import { UpstreamService } from './upstreams/service.js';
 import { ChannelService } from './channels/service.js';
+import { setClaudeBridgeOwnPorts } from './channels/drivers/claude-bridge.js';
 import { EngineManager } from './engines/manager.js';
 import { MaintenanceScheduler } from './upstreams/tasks.js';
 import { setSplitHook } from './gateway/split.js';
+import { setIntentMember } from './routing/intent-ask.js';
 import { PluginService } from './plugins/service.js';
 import { SyncService } from './sync/service.js';
+import { RemoteSyncService } from './sync/remote.js';
 import { ShareService } from './share/service.js';
 import { ImportService } from './import/service.js';
 import { AgentConfigService } from './agent-config/service.js';
@@ -379,6 +385,8 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   const upgrade = (req: http.IncomingMessage, socket: any, head: Buffer) => {
     const origin = req.headers.origin ?? '';
     const url = requestUrl(req, HOST);
+    // the model gateway's own socket (Responses over WebSocket): gateway key auth, not the app's
+    if (gateway?.handleUpgrade(req, socket, head, url)) return;
     // same-origin only: localhost, or (remote listener) whatever host the page was served from
     const originHost = origin ? (() => { try { return new URL(origin).host; } catch { return ''; } })() : '';
     const originOk = !origin || /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin) || (!!req.headers.host && originHost === req.headers.host);
@@ -457,15 +465,30 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   pool.on('message', (sessionId: string, m: unknown) => ledger.observe(sessionId, m, meta.sessionMeta(sessionId).providerId));
   // 账号池: Claude subscription logins, pools, and the targets a pool resolves to
   const upstreams = new UpstreamService({ meta, secrets });
-  // 托管程序: CLIProxyAPI / Magpie on loopback, registered as providers; the ones running last time come back
-  const engines = new EngineManager({ meta, secrets, providers });
+  // 托管程序: CLIProxyAPI / Magpie on loopback, registered as providers; the ones running last time come back.
+  // The desktop installer passes CLAUDE_WEB_ENGINES; a dev / browser start uses vendor/engines when it was fetched.
+  const bundledDir = process.env.CLAUDE_WEB_ENGINES ?? path.resolve(__dirname, '../../vendor/engines');
+  const engines = new EngineManager({ meta, secrets, providers, ...(fs.existsSync(bundledDir) ? { bundledDir } : {}) });
   void engines.resume();
+  // the Claude subscription bridge refuses to run a CLI whose proxy points back at one of these
+  setClaudeBridgeOwnPorts(() => [listenPort || PORT, remote?.port ?? 0].filter((p) => p > 0));
   const channels = new ChannelService({ providers, upstreams, engines, meta });
   // 任务中心: our scheduler, so the sidecars' own timers stay off
   const tasks = new MaintenanceScheduler({ meta, upstreams, notify: (line) => console.log(`[tasks] ${line}`) });
   const gatewayAudit = new AuditLog(path.join(dataDir(), 'logs'), () => meta.gatewayAudit());
+  // OTLP export (off until set up): the request log's batches as spans / metrics, no prompt or key ever
+  const otlp = new OtlpExporter({ meta, secrets, version });
+  setOtlpExporter(otlp);
+  gatewayAudit.on('lines', (lines: GatewayAuditLine[]) => otlp.record(lines));
   // 隐私保护: redacts what leaves through the gateway / cache shim (privacy/service.ts)
-  const privacy = new PrivacyService(meta);
+  const privacy = new PrivacyService(meta, { dataDir: dataDir() });
+  // what this process prints (server.log) is masked too: secrets always, the user's types with 「日志和导出也遮住」
+  installConsoleMask((line) => privacy.maskOutput(line));
+  // privacy turned on for the first time: idle Claude conversations restart (resume) so they go through the relay
+  // from now on; busy ones / other agents pick it up when reopened (立即生效 covers every later change)
+  privacy.onArm(() => {
+    for (const r of pool.list()) if (r instanceof SessionRunner && r.state === 'idle' && !r.hasBackgroundWork()) void r.respawn().catch(() => { /* the old process keeps going */ });
+  });
   gateway = new GatewayService({
     meta,
     privacy,
@@ -491,12 +514,15 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   // 隐私保护 on: providers not behind the gateway / shim get the privacy relay as their base URL (privacy/route.ts)
   setPrivacyRoute((target) => gateway.privacyBase(target));
   setSplitHook({ endpoint: (main, sub, model) => gateway.splitEndpoint(main, sub, model), target: (id) => providers.subagentTarget(id) });
+  // 智能路由 · 意图判断: the judge model is a provider candidate, asked with its own key (routing/intent-ask.ts)
+  setIntentMember((id) => providers.member(id));
   // plugins (declarative sources + isolated executable plugins), sync bundles, 远程共享 keys on the gateway
-  const plugins = new PluginService({ meta, secrets });
+  const plugins = new PluginService({ meta, secrets, appVersion: version });
   await plugins.init().catch((e) => console.error('[plugins]', e?.message ?? e));
   // request-before / response-after on every gateway attempt, inside 隐私保护's redact → restore (no plugin → no call)
   gateway.plugins = plugins;
   const sync = new SyncService({ meta, secrets });
+  const syncRemote = new RemoteSyncService({ meta, secrets, sync });
   const share = new ShareService(gateway);
   remote = new RemoteService(meta, () => { const s = http.createServer(handler); s.on('upgrade', upgrade); return s; });
   // 在外面也能用: bridges phones' links to the remote-access listener above (never to this main one)
@@ -613,7 +639,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
     },
   });
   themes.watch();
-  const services = { importer, customCss, orchestra, background, characters, themes, remote, anywhere, tunnels, im, vcs: new VcsService(gitSvc, { gitlabHosts: () => { const v = meta.settings()['vcs.gitlabHosts']; return Array.isArray(v) ? v : []; }, tokens: vcsTokens }), vcsTokens, wsl, goals, android: new AndroidService(), pool, sessions: sessionsSvc, config, usage: new UsageService(async (sid) => providerTimeline(await canonical.providerSwitches(sid), meta.sessionMeta(sid).providerId, (id) => { const p = meta.provider(id); return p ? { type: p.type, name: p.name } : undefined; })), files, terminal, meta, limits: new LimitsService(), schedules: new ScheduleService(meta, pool), providers, git: gitSvc, search: new SearchService(), skills: new SkillsService(), mcp: new McpService(), diag: new DiagService(version), ledger, agents, transcripts, canonical, memory, library, version, federation, agentConfig: new AgentConfigService({ agents, backupDir: path.join(dataDir(), 'config-backups') }), gateway, privacy, upstreams, channels, engines, plugins, sync, share, tasks, web, computer, siteAsk, localEnv: localEnvStore, previews, cloud };
+  const services = { importer, customCss, orchestra, background, characters, themes, remote, anywhere, tunnels, im, vcs: new VcsService(gitSvc, { gitlabHosts: () => { const v = meta.settings()['vcs.gitlabHosts']; return Array.isArray(v) ? v : []; }, tokens: vcsTokens }), vcsTokens, wsl, goals, android: new AndroidService(), pool, sessions: sessionsSvc, config, usage: new UsageService(async (sid) => providerTimeline(await canonical.providerSwitches(sid), meta.sessionMeta(sid).providerId, (id) => { const p = meta.provider(id); return p ? { type: p.type, name: p.name } : undefined; })), files, terminal, meta, limits: new LimitsService(), schedules: new ScheduleService(meta, pool), providers, git: gitSvc, search: new SearchService(), skills: new SkillsService(), mcp: new McpService(), diag: new DiagService(version), ledger, agents, transcripts, canonical, memory, library, version, federation, agentConfig: new AgentConfigService({ agents, backupDir: path.join(dataDir(), 'config-backups') }), gateway, privacy, upstreams, channels, engines, plugins, sync, syncRemote, share, tasks, web, computer, siteAsk, localEnv: localEnvStore, previews, cloud };
   new Hub(wss, services);
   tasks.start();
   // model lists older than a day (or never pulled) are refreshed in the background — list only, no tokens
@@ -688,6 +714,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
       await tasks.stop(); // before the sidecars it drives
       plugins.stop(); // the executable plugins' child processes
       await gateway.stop(); // the LAN listener, the audit buffer and the key counters
+      await otlp.stop(); // what the last audit flush handed it
       await upstreams.stop();
       await engines.stopAll(); // CLIProxyAPI / Magpie we started (their trees); they come back at the next start
       await remote.stop();

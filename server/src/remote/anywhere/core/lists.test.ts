@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { unb64u } from './keys.js';
 import {
-  DEFAULT_BROKERS, DEFAULT_STUN, MAX_LIST_ENTRIES, MAX_PAIR_LINK_BYTES, MAX_PAIR_PC_NAME, brokerEntries, isBrokerUrl, isStunUrl,
+  DEFAULT_BROKERS, DEFAULT_STUN, DEFAULT_TURN, MAX_LIST_ENTRIES, MAX_PAIR_LINK_BYTES, MAX_PAIR_PC_NAME, brokerEntries, isBrokerUrl, isStunUrl,
   pairLink, pairLinkBytes, pairLists, stunEntries,
 } from './lists.js';
 import type { BrokerDef } from './mqtt.js';
@@ -75,6 +75,17 @@ describe('STUN lists', () => {
     const list = ['stun:a.example:3478', 'turn:t.example:3478', 'stuns:b.example:5349', 'x'];
     expect(rtcConfig(list)).toEqual({ iceServers: [{ urls: list.filter(isStunUrl) }] });
     expect(rtcConfig(['turn:t.example'])).toEqual({ iceServers: [] });
+  });
+
+  it('the default STUN list brings the project TURN server; a list of its own or an empty one does not', () => {
+    expect(rtcConfig(DEFAULT_STUN)).toEqual({ iceServers: [{ urls: DEFAULT_STUN }, ...DEFAULT_TURN] });
+    expect(rtcConfig([...DEFAULT_STUN])).toEqual({ iceServers: [{ urls: DEFAULT_STUN }, ...DEFAULT_TURN] });
+    expect(rtcConfig(['stun:a.example:3478']).iceServers).toEqual([{ urls: ['stun:a.example:3478'] }]);
+    expect(rtcConfig([])).toEqual({ iceServers: [] });
+    for (const t of DEFAULT_TURN) {
+      expect(t.urls.every((u) => /^turn:/.test(u))).toBe(true);
+      expect(t.username && t.credential).toBeTruthy();
+    }
   });
 });
 

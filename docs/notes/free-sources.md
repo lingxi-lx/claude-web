@@ -44,23 +44,30 @@
 
 ## 托管程序（engines）
 
-- 下载：GitHub releases API（`/releases/latest` 或某个 tag）。按文件名里的系统 / CPU 词挑 asset，排除校验文件和
-  安装器。实测 2026-10-26：
+- **桌面安装包自带一份**（2026-10-28，用户要求「打进桌面安装包」）：`server/src/engines/manifests/bundled.json`
+  钉住 CLIProxyAPI / Magpie 的版本、平台 asset、URL、大小和 SHA-256；`scripts/engines/fetch.mjs` 在打包前下载、
+  校验、解压到 `vendor/engines/<platform>/<id>/`（`version.txt` 记版本）。`electron-builder.yml` 把它作为
+  extraResources 放到 `<resources>/engines`，`desktop/src/server-host.ts` 用 `CLAUDE_WEB_ENGINES` 告诉服务器；
+  `EngineManager` 先找用户装过的版本，再找随包的 build（`bundled: true`），两者都没有才联网下载。所以新装的桌面版
+  第一次点「启动」不会先下载引擎。`build:desktop*` 和 release workflow 都会先跑 `engines:fetch`。
+- 下载（开发 / 浏览器版，或随包版本缺失）：GitHub releases API（`/releases/latest` 或某个 tag）。按文件名里的
+  系统 / CPU 词挑 asset，排除校验文件和安装器。下面这些 asset 名是 2026-10-26 当时测的（随包版本见上）：
   - CLIProxyAPI `router-for-me/CLIProxyAPI` v8.0.44：`CLIProxyAPI_<v>_<os>_<amd64|aarch64>.tar.gz|zip`，另有
     `_no-plugin` 版（不选）、`checksums.txt`。
   - Magpie `yetone/magpie-releases` v0.1.1657：`magpie-cli-<os>-<arch>[.exe]`（选这个，纯命令行）和桌面版
     `magpie-<os>-<arch>`、`.dmg` / `.zip`，`SHA256SUMS`。
   - 两边每个 asset 都有 GitHub 的 `digest: sha256:…`，先用它，其次 checksums 文件；都没有才「首次安装记下哈希」
     并在状态里警告（`verified: 'recorded'`）。
-- 版本：没有写死的 pin（笔记里没有测过的 tag），装的是 latest，之后**不自动升级**；`engines.upgrade` 装新的、
-  切过去、启动失败自动回到旧的；`engines.rollback` 手动回退。只留当前和上一个版本。
+- 版本：随包版本写在 `bundled.json`（当前 CLIProxyAPI v8.0.45 / Magpie v0.1.1803）；手动安装装的是 latest，
+  之后**不自动升级**；`engines.upgrade` 装新的、切过去、启动失败自动回到旧的；`engines.rollback` 手动回退。
+  只留当前和上一个版本。随包 build 不能卸载（装的是应用的一部分），「更新」会装一份用户目录里的新 build 覆盖它。
 - 运行：`127.0.0.1` + 分配的端口（上次的端口空着就沿用，供应商地址不变）；`windowsHide: true`；POSIX 上独立进程组，
   停止时 Windows `taskkill /T /F`、POSIX 杀整个组。日志 `<dataDir>/engines/logs/<id>.log`，5 MB 轮转。
   意外退出 10 分钟内最多重启 3 次。服务退出时停掉，下次启动时把上次在跑的再拉起来（`autoStart`）。
 - CLIProxyAPI：写 `<dataDir>/engines/cliproxyapi/data/config.yaml`（v8 布局：`server.host/port`、
   `management.secret-key` + `allow-remote: false`、`access.api-keys`、`oauth.auth-dir`），`--config` 启动。
-  客户端 key / 管理 key 生成后用 SecretService 加密存 meta。**登录订阅账号（`--login` 等）还没接**：用户要自己对
-  这份配置跑登录命令，或之后在详情页加。
+  客户端 key / 管理 key 生成后用 SecretService 加密存 meta。订阅登录走管理 API（见「引擎登录」一节），
+  不再要求用户自己跑 `--login`。
 - Magpie：`magpie serve` + `MAGPIE_ADDR=127.0.0.1:<port>`；本机任意 key 都收，用 `magpie-claudeweb`；
   健康 = `GET /api/hello` 回 `{name:"magpie"}`。它会自己后台更新（状态里有警告）。
 - 已经在跑的：Magpie 查 `127.0.0.1:3425/api/hello`；CLIProxyAPI 查 `127.0.0.1:8317/v1/models` 有没有 JSON 回应
@@ -69,10 +76,30 @@
 - 起来之后注册成 Anthropic 格式的供应商（`http://127.0.0.1:<port>`，不带 `/v1`），`channelLinks` 标 `engine`，
   所以来源列表里只显示成托管程序那一条，模型也挂在它下面。
 
+## 第三方登录（2026-10-28）
+
+- `upstreams/oauth-registry.ts` 是每家登录的**数据**（公开 client id、端点、scope、回调端口、本地凭据路径、token → 账号映射）；`oauth.ts` 是 PKCE S256 / loopback / device code / Copilot token exchange；`provider-login.ts` 管会话、粘贴和本机凭据；`ProviderLoginWizard.tsx` 是界面。token 只在内存里，落地前走 `SecretService`。
+- 真的能用：**Codex**（Codex CLI 的公开 OAuth client，固定 1455 回调 → ChatGPT backend `/backend-api/codex/responses`，新增 Responses 出站）、**GitHub Copilot**（GitHub device flow → `copilot_internal/v2/token` → `api.githubcopilot.com/chat/completions`）、**OpenCode**（读 `auth.json`：Anthropic OAuth 变 Claude 账号，OpenAI / Google key 变 provider 账号）、**Claude Code 本机**（`~/.claude/.credentials.json` 或 `CLAUDE_CONFIG_DIR`）。
+- 原生 OAuth 列不出来、明确标不可用的：Gemini（Code Assist 不是网关的三种 wire）、Antigravity、Kimi、Grok、Devin、Kiro、Cline、Qoder、Trae、WorkBuddy、ZCode、Factory、MiMo。**不要为了凑数伪造 OAuth client 或接口地址。** 这些现在通过「引擎登录」交给 Magpie / CLIProxyAPI 的原生实现（见下一节），不是 `upstreams/oauth-registry.ts` 里的假 client。
+- 账号模型：`UpstreamKind` 加了 `provider`；账号带 `providerId`，探测走 vendor 的 `/models`，网关按 `protocol` / `chatPath` / 额外 headers（Copilot 的 editor 头、Codex 的 originator / account id）发请求。`responses` 出站只在 Codex 这一类目标上用。
+- 局限：Codex / Copilot 没有真实账号联网验过（单测用 fake fetch + 真 loopback）；Codex 的 ChatGPT backend 可能改流式要求；Copilot 受 GitHub 滥用 / 限流策略限制；provider 账号的额度卡还没做。
+
+## 引擎登录：直接拿 Magpie / CLIProxyAPI 的实现（2026-10-28）
+
+- 不重写厂商协议。`engines.login.*` 把登录交给已经能跑这些订阅的本地网关：
+  - **CLIProxyAPI**：`/v0/management/{anthropic,codex,antigravity,kimi,xai}-auth-url?is_webui=true`（management key 走 `Authorization: Bearer`），状态 `get-auth-status?state=`，取消 `DELETE oauth-session?state=`；它保存 auth 文件，网关直接供模型。
+  - **Magpie**：托管启动时加 `--web=127.0.0.1:<webPort>` + `MAGPIE_WEB_KEY`，调它的 `/api/signin`、`/api/signin/{id}`、`/api/signin/{id}/cancel`；provider 插件（Qoder、Trae CN、WorkBuddy、ZCode、Kiro、Devin、Factory、MiMo、Cline 等）由 Magpie 自己安装/登录。
+- 映射：`mimo-app → mimo`、`trae-cn → trae`、`xai → grok`、`anthropic → claude`；`EngineLoginProvider` 是唯一的对照表。
+- 界面：MCP 引擎详情/来源页有「登录账号」；来源卡片的添加向导在原生登录不可用时显示「通过 CLIProxyAPI / Magpie 登录」。账号留在引擎的账户库里，模型出现在引擎来源下，不把 token 复制到 claude-web。Magpie 的每行还有「从文件导入…」，走它的 `/api/signin/import`，可吃 Sub2API / CLIProxyAPI / Codex / Claude / Antigravity 的导出文件（8 MB 上限；文件只在内存里转给本机 Magpie）。
+- 不是托管启动的 Magpie / CLIProxyAPI（用户自己起的）不登录：它们的令牌/配置归用户，界面明确说去它们自己的管理页。Magpie 的 `--web` 端口和 key 都存在本机 meta（key 加密）。
+- 测试：`EngineManager.loginProviders` 的映射；真实 v7 `/v0/management/anthropic-auth-url?is_webui=true` 实测返回 URL/state；UI 探针确认 Antigravity 卡会出现两条引擎登录入口。**没有真实账号完整走完厂商授权**（需要用户的账号和浏览器）。
+- 桌面安装包自带这两个引擎，所以这条登录路径开箱可用，不需要用户先下载 Magpie / CLIProxyAPI（见「托管程序」一节）。
+
 ## 还没做 / 不知道的
 
-- 远程目录：没有公钥和地址（桩）。
-- 免费来源的「真实调用」健康检查和额度：只做了模型列表（ModelScope 的 `/models` 收任何 key，要真调一次才知道）；
-  429 / 额度重置时间没接。
-- CLIProxyAPI 的订阅登录流程、Magpie 的账号页没接；CLIProxyAPI 的检测只是「有 JSON 回应」。
+- 远程目录：有公钥 / 地址的验签和合并，但 `CATALOG_PUBLIC_KEYS` 还是空的，发版带公钥前远程层不生效。
+- 来源健康（2026-10-28，`channels/health.ts`，`channels.health.status / probe`）：来源卡片上的「检查」= 读模型列表，
+  免费来源再真调一次（`max_tokens: 1`）；列表每来源 60 秒最多一次、真调用 10 分钟最多一次，冷却中不发。卡片显示
+  429 冷却倒计时、剩余额度（来自 `routing/quota.ts`，网关的每次回应也在喂）、上次检查结果。没有自动定时检查。
+- CLIProxyAPI 自己的订阅登录（`--login`）和 Magpie 的账号页现在走引擎登录（见上一节）；但用户自己启动的副本仍要在它们自己的管理页登录。CLIProxyAPI 的检测只是「有 JSON 回应」。
 - Cherry 列表里 opencode（base 带 `/v1`，不确定）、vertex / bedrock（SDK 拼地址）、new-api / aionly（没地址）没收。

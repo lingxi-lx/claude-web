@@ -74,10 +74,13 @@ import type { MaintenanceScheduler } from '../upstreams/tasks.js';
 import { handleUpstreamRequest, isUpstreamRequest } from '../upstreams/handlers.js';
 import type { ChannelService } from '../channels/service.js';
 import { handleChannelRequest, isChannelRequest } from '../channels/handlers.js';
+import { handleSourceHealthRequest, isSourceHealthRequest, sourceHealth } from '../channels/health.js';
 import type { PluginService } from '../plugins/service.js';
 import { handlePluginRequest, isPluginRequest } from '../plugins/handlers.js';
 import { handleSyncRequest, isSyncRequest, type SyncService } from '../sync/service.js';
+import { handleRemoteSyncRequest, isRemoteSyncRequest, maskSyncRemoteSettings, type RemoteSyncService } from '../sync/remote.js';
 import { handleShareRequest, isShareRequest, type ShareService } from '../share/service.js';
+import { handleTelemetryRequest, isTelemetryRequest, maskOtlpSettings, otlpExporter } from '../telemetry/otlp.js';
 import type { EngineManager } from '../engines/manager.js';
 import { handleEngineRequest, isEngineRequest } from '../engines/handlers.js';
 
@@ -168,6 +171,8 @@ export interface Services {
   /** plugins / sync / 远程共享 (spec 2026-10-26 §4.3, §8); optional so test hubs need not build them */
   plugins?: PluginService;
   sync?: SyncService;
+  /** 备份与同步 → 远程同步: WebDAV / S3 / GitHub (sync/remote.ts); optional so test hubs need not build it */
+  syncRemote?: RemoteSyncService;
   share?: ShareService;
   /** 托管程序: CLIProxyAPI / Magpie (engines.*) */
   engines: EngineManager;
@@ -182,7 +187,7 @@ export interface Services {
 }
 
 /** Requests after which something connects out: they wait for a fresh look at the proxy. (`web.search` waits inside WebService, like the agents' searches.) */
-const GOES_OUT = new Set<string>(['session.open', 'session.send', 'session.setProvider', 'session.switchAgent', 'providers.probe', 'providers.refreshModels', 'import.run', 'terminal.open', 'im.set', 'im.test', 'mcp.registry']);
+const GOES_OUT = new Set<string>(['session.open', 'session.send', 'session.setProvider', 'session.switchAgent', 'providers.probe', 'providers.refreshModels', 'import.run', 'terminal.open', 'im.set', 'im.test', 'mcp.registry', 'sync.remote.test', 'sync.remote.push', 'sync.remote.pull']);
 
 export class Hub {
   private clients = new Set<WebSocket>();
@@ -700,11 +705,15 @@ export class Hub {
         return r;
       }
       case 'settings.get':
-        // the search engines' keys are stored protected and read as a mask here (web/service.ts)
-        return maskWebSettings(s.meta.settings());
+        // the search engines' keys and the remote sync credentials are stored protected and read as masks here
+        return maskOtlpSettings(maskSyncRemoteSettings(maskWebSettings(s.meta.settings())));
       case 'network.proxy':
         return proxy.refresh(!!req.refresh);
       case 'settings.set':
+        // remote sync credentials are only written through sync.remote.set (encrypted by SecretService)
+        if (req.key === 'sync.remote') throw new Error(tr('远程同步设置请在「备份与同步」里保存'));
+        // the OTLP collector's headers are only written through telemetry.otlp.set (encrypted by SecretService)
+        if (req.key === 'telemetry.otlp') throw new Error(tr('OTLP 导出请在模型中心的设置里修改'));
         if (req.key === 'network.proxy') {
           const p = parseProxySetting(req.value); // throws a sentence on SOCKS / junk
           await s.meta.setSetting(req.key, p.mode === 'custom' ? p.url : p.mode === 'off' ? 'off' : undefined);
@@ -1314,9 +1323,13 @@ export class Hub {
         return null;
     }
     if (isChannelRequest(req)) return handleChannelRequest(s.channels, req);
+    if (isSourceHealthRequest(req)) return handleSourceHealthRequest(sourceHealth({ providers: s.providers }), req);
     if (isPluginRequest(req) && s.plugins) return handlePluginRequest(s.plugins, req);
+    // remote kinds also start with `sync.`, so they must be matched before the file export / import handler
+    if (isRemoteSyncRequest(req) && s.syncRemote) return handleRemoteSyncRequest(s.syncRemote, req);
     if (isSyncRequest(req) && s.sync) return handleSyncRequest(s.sync, req);
     if (isShareRequest(req) && s.share) return handleShareRequest(s.share, req);
+    if (isTelemetryRequest(req) && otlpExporter()) return handleTelemetryRequest(otlpExporter()!, req, this.peerConns.has(ws) || this.remoteConns.has(ws));
     if (isEngineRequest(req)) return handleEngineRequest(s.engines, req, this.peerConns.has(ws) || this.remoteConns.has(ws));
     if (isUpstreamRequest(req)) return handleUpstreamRequest(s.upstreams, s.tasks, req);
     if (isGatewayRequest(req)) return handleGatewayRequest(s.gateway, req);

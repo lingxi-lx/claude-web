@@ -108,4 +108,7 @@
   文字块里没有 base64。跑完删掉临时根目录。默认只跑 ccb，`PHASE41_RUNTIMES=ccb,claude` 再跑官方二进制。把 alwaysLoad 去掉再跑，前四项会 FAIL
   （tool_result 变成一整段 JSON 字符串）。
 - ui-smoke：设置 → 联网的新一行和「重新检测」，切到内置浏览器后 `web.status` 跟着变。
-- **没在真 ego lite 上验过**（这台电脑没装）：装好并完成首次引导后，让 Claude 打开一个页面，看 ego lite 里出现 `claude-web <id8>` 这个 Space。
+- 真 ego lite（2026-10-28，ego-browser 2.1.0）：用 `egoStatus(true)` + `runEgoScript` 直接跑（不经对话）：版本读出、
+  `claude-web <id8>` Space 建出来、`page.goto/snapshot/screenshot` 都通，截图作为图片块回来。**2.x 把脚本的 `console.log`
+  打在 stderr 上**：退出码 0、stdout 空时 stderr 当「输出：」显示，不再标「错误输出」（以前模型会以为脚本出错）。
+  还没做的：经真对话让 Claude 自己调 `ego_browser`。

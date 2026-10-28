@@ -19,6 +19,7 @@ import type { UpstreamRequest } from './upstreams/types.js';
 import type { ChannelRequest } from './channels/types.js';
 export * from './upstreams/types.js';
 export type * from './channels/types.js';
+export type * from './telemetry/types.js';
 import type { EngineEvent, EngineRequest } from './engines/types.js';
 export type * from './engines/types.js';
 /** stage E5: WSL ↔ Windows paths (pure, the web side uses them too) */
@@ -807,10 +808,14 @@ export type ClientRequest =
   | PrivacyRequest
   | UpstreamRequest
   | ChannelRequest
+  // 来源健康: probe + quota / 429 state (channels/health.ts)
+  | import('./channels/health-types.js').SourceHealthRequest
   // ---- plugins / sync / 远程共享 (spec 2026-10-26 §4.3, §8) ----
   | PluginRequest
   | SyncRequest
   | ShareRequest
+  // OTLP export of the gateway's requests (telemetry/; no sessionId)
+  | import('./telemetry/types.js').TelemetryRequest
   // ---- 来源 / 托管程序 (channels/, engines/; no sessionId → no federation routing entry) ----
   | EngineRequest
   // ---- other agents' configuration center (phase 17) ----
@@ -936,6 +941,7 @@ export * from './gateway/types.js';
 export * from './privacy/types.js';
 import type { PrivacyRequest, PrivacyStatus } from './privacy/types.js';
 export * from './routing/types.js';
+export * from './channels/health-types.js';
 import type { GatewayEvent, GatewayLedgerInfo, GatewayRequest } from './gateway/types.js';
 export type * from './plugins/protocol.js';
 export type * from './sync/types.js';

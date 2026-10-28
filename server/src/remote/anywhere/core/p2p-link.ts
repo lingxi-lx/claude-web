@@ -14,7 +14,7 @@
 import { CHUNK_BYTES, HEADER_BYTES } from './frames.js';
 import { errText, report as reportAs } from './handshake.js';
 import type { Link, LinkKind } from './link.js';
-import { isStunUrl } from './lists.js';
+import { DEFAULT_STUN, DEFAULT_TURN, isStunUrl, sameStun } from './lists.js';
 import { MAX_FRAME_BYTES, MAX_QUEUED_BYTES, MAX_QUEUED_FRAMES } from './relay-link.js';
 
 /** The data channel's label; any other channel on the connection is closed. */
@@ -53,7 +53,7 @@ export interface RtcDescription {
 }
 
 export interface RtcConfig {
-  iceServers: { urls: string[] }[];
+  iceServers: { urls: string[]; username?: string; credential?: string }[];
 }
 
 /** RTCStatsReport is a Map of stats objects; only iterated. */
@@ -106,10 +106,15 @@ export interface RtcPeerConnectionLike {
  */
 export type RtcCtor = new (config: RtcConfig) => RtcPeerConnectionLike;
 
-/** STUN entries that are not stun: / stuns: URLs are dropped (a bad entry in the settings must not stop ICE). */
+/**
+ * STUN entries that are not stun: / stuns: URLs are dropped (a bad entry in the settings must not stop ICE). The
+ * default list brings DEFAULT_TURN along; a list of one's own (or an empty one, as the smoke tests use) does not.
+ */
 export function rtcConfig(stun: readonly string[]): RtcConfig {
   const urls = stun.filter(isStunUrl);
-  return { iceServers: urls.length ? [{ urls }] : [] };
+  const servers: RtcConfig['iceServers'] = urls.length ? [{ urls }] : [];
+  if (sameStun(stun, DEFAULT_STUN)) servers.push(...DEFAULT_TURN);
+  return { iceServers: servers };
 }
 
 /** A candidate to send, or one received; null for end-of-candidates ('') and anything malformed. */

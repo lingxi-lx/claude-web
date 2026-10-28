@@ -72,3 +72,9 @@ export function projectChannels(input: ChannelProjectionInput): ChannelStatus {
     || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return { sources, warnings: input.upstream.warnings ?? [] };
 }
+
+// P2 provider descriptors (codex / copilot / api-key presets / local / custom / remote …) live in providers/.
+// Re-exported here so callers keep one registry entry point. Purely additive: projectChannels above still projects
+// only configured sources, so existing callers see exactly the same output until accounts land.
+export { get, getProvider, list, listProviders, providerChannels } from './providers/registry.js';
+export type { ProviderAuth, ProviderChannel, ProviderDescriptor, ProviderKind, ProviderModelSource } from './providers/types.js';

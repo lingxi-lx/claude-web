@@ -24,12 +24,22 @@
 
 WS：`plugins.list / reload / enable / disable / remove`（remove 只删插件目录里的东西）。界面 `web/src/features/plugins/PluginList.tsx`，启用可执行插件前用 `dlg.confirm` 列出权限。
 
+### 市场与一键安装（P7）
+
+- 设置在 meta.json 的 `plugins.market`：`{ url, publicKey? }`。`url` 必须是 https；`publicKey` 是 Ed25519（PEM 或 base64 SPKI DER）。`plugins.market.set / status / refresh`。
+- 目录格式：`{ entries: [...] }`，可以再加 `signature`（base64 Ed25519，签 `JSON.stringify(entries)`）。配了公钥就必须有签名，验不过就整份丢弃；条目本身和 `plugin.json` 走同一套 `market.ts` / `manifest.ts` 校验。条目可带 `sha256`（下载字节的 SHA-256）和 `signature`（下载字节的 Ed25519 签名），`kind: 'declarative' | 'executable'`（默认 executable）。
+- 缓存：`<plugins>/.market/catalog.json`（0600，保存原始 body 和 URL；每次 status 都重新按当前公钥验签），内存里也留一份。刷新失败保留上一份好缓存。
+- 安装 `plugins.install { id? , url? , path? , sha256? }`：下载上限 64 MB、最多 5 次重定向且每一跳都要 https；先校验 SHA-256 / 签名，再解包。zip 用 `import/zip.ts` 的读取器，tar.gz 自己解析；解包层（`plugins/archive.ts`）拒绝绝对路径、`..`、盘符、设备名、链接，限制条目数 / 单文件 / 总大小；去掉共享的顶层文件夹后写进 `<plugins>/.tmp/install-*`，再 `plugin.json` 校验、`main` 必须存在，最后 rename 成 `<plugins>/<id>`。声明式则是一个 `.json`，通过 `parseDeclarative` 后写成 `<plugins>/<id>.json`。装完 `reload()`；**安装过程不 require / 不启动任何下载的代码**，可执行插件仍要启用时批准权限。
+- 同名插件不覆盖：先删再装。id 以 `.` 开头（含 `.` / `..`）一律拒绝，否则会被 reload 跳过或跳出插件目录。
+- 界面：`web/src/features/model-hub/pages/PluginsPage.tsx` 的「市场」页（地址 / 公钥、保存、刷新、条目卡片、安装中状态、空 / 错误状态）。
+
 ## 同步（`server/src/sync/`）
 
 - `backup.ts`：文件格式 `claude-web-sync` v1。明文部分：供应商（去掉 apiKey 和本机学到的 / 缓存的字段：models、modelNames、modelEfforts、modelContext、modelsAt、modelsError、promptEffortModels、no*）、账号引用（id、kind、名字、并发、每日上限、邮箱 / 套餐，**没有凭据**）、网关组（成员和模型映射）、密钥组（共享权限，不含密钥本身——密钥每台机器自己发）、设置里的 `routing.*` / `models.*`。任何设置值里像绝对路径的（`C:\`、`\\`、`~/`、`/home/…`）都去掉。
 - 加密部分（`crypto.ts`）：口令 → scrypt（N=2^15, r=8, p=1）→ AES-256-GCM，带 AAD；口令至少 8 个字。里面是供应商 key、账号凭据和代理、`privacy.*` 设置（spec：凭据与隐私配置用独立口令）。没口令就只导出明文部分。导入时 scrypt 参数有上限，伪造的文件吃不掉内存。
 - `merge.ts`：逐项。设置 / 网关组 / 密钥组按 key 和字段合并，本机独有的保留；供应商 / 账号的**凭据两边不同 = 冲突，两份都留**，传入的另存为「名字（同步）」（新 id 加后缀），绝不覆盖。本机没有 key 而文件有 → 补上。
 - WS：`sync.export { passphrase? }` → `{ filename, text }`（浏览器用 Blob 下载）；`sync.import { text, passphrase? }` → 预览（token，10 分钟，解密后的东西只在内存）；`sync.apply { token, skip }`；`sync.cancel`。界面 `web/src/features/sync/SyncPanel.tsx`。
+- 远程同步（2026-10-28，P9）：`remote.ts` + `backends/{webdav,s3,github}.ts` 把同一份 backup 放到 WebDAV / S3（SigV4）/ GitHub（contents API）。地址只收 http(s)、凭据全走 `SecretService`（状态只回圆点，保存时圆点表示保留、空串表示删除）；WebDAV 用 LOCK / If / ETag，S3 用条件请求，GitHub 用 blob sha；推送前拿锁、失败也解锁，拉取只产生 `SyncPreview`，确认后走同一个 `sync.apply` 合并。设置存 `settings['sync.remote']`，界面在「设置 → 备份与同步」的 `RemoteSyncPanel`。错误按 HTTP 401/403/404/409/412/429 分开说原因。测试 `remote.test.ts` / `backends.test.ts` 全部注入 fetch，不碰真网络。
 - 坑：账号直接写 meta（`saveUpstreams`），UpstreamService / sidecar 不会马上知道新账号，可能要重启或刷新一次。
 
 ## 远程共享（`server/src/share/`）
@@ -43,3 +53,11 @@ WS：`plugins.list / reload / enable / disable / remove`（remove 只删插件�
 ## 三个界面
 
 都是自包含组件，网关页挂载：`PluginList`、`SyncPanel`、`ShareDrawer`。样式沿用网关页的 `gateway-tab / gateway-card / gateway-row`。
+
+## 出网守卫 / OTLP / 插件系统级隔离 / 共享额度重试时间 / 远程目录（2026-10-28，从 Magpie 移植）
+
+- **出网守卫** `server/src/net/netguard.ts`：用户填的地址在请求前查每个 DNS 答案；直连时在连接那一刻再查一次（防 DNS rebinding），每次重定向都重查。三档：只公网（插件市场 / 包、远程目录、插件的 `host.fetch`）、也许局域网和本机（WebDAV / S3 / GitHub 同步、OTLP 收集器）、直装地址（保留市场原有的 localhost 放行）。云元数据（169.254.169.254）和 link-local 一律拒，IPv6 里藏的也拒。走代理时只做第一次检查（名字由代理解析，`proxy.proxiedFor()`）。
+- **OTLP 导出** `server/src/telemetry/otlp.ts`：默认关。读请求记录的批次，不碰网关；只发模型、来源、路由组、协议、状态、错误码、耗时、token——不发 key id、客户端 IP、提示词。收集器的请求头用 SecretService 加密，界面只看得到名字。请求记录关了就没东西可导，面板会说。peer / 手机只能看不能改。
+- **插件系统级隔离**：Node 权限模型（`--permission`；读只限插件目录，写只限 `.data/<id>` + 声明的路径），子进程 / worker 默认关，要 manifest 声明 + 用户批准（批准对话框和插件列表会列出「启动别的程序」「开后台线程」，启动程序算危险项）。内存默认 256 MB（32–1024），启动后降到低于正常的 CPU 优先级。Windows 上再多要原生模块。**打包后的 Electron 44（Node 24.19）验过**：`--permission` 在，写数据目录 ok，写外面 / 读家目录 / 起子进程都是 `ERR_ACCESS_DENIED`。
+- **共享密钥的重试时间**：以前一律回「本地午夜」——周 / 月额度的调用方每晚白跑一趟，日额度其实按 UTC 午夜重置，非 UTC 时区差几小时。现在 `share/limits.ts` 的 `quotaRetryAfter`：日 = 下一个 UTC 午夜，周 = 下一个本地周一，月 = 下月 1 号，几个都用完取最晚的。
+- **签名远程目录**：不内置官方地址。用户填 https 地址 + Ed25519 公钥后立刻取、验签，超过 24 小时后台再取；签名不对保留上一份好的；关掉立刻不算。模型中心 → 设置里有「远程模型目录」和「导出到 OpenTelemetry」两块。

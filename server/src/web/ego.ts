@@ -177,8 +177,10 @@ async function runRound(sessionId: string, script: string, opts: EgoRunOptions):
   if (opts.signal?.aborted) lines.push(tr('这一轮被停下了（对话停止或关掉了）。'));
   else if (r.timedOut) lines.push(tr('脚本超过 {s} 秒没跑完，已经停掉（页面停在停掉时的样子）。把事情拆小一点再试，或者把 timeout_ms 调大。', { s: Math.round(timeoutMs / 1000) }));
   else lines.push(r.code === 0 ? tr('脚本跑完了（{secs} 秒，第 {n} 轮）。', { secs, n }) : tr('脚本出错退出（代码 {code}，{secs} 秒，第 {n} 轮）。', { code: String(r.code), secs, n }));
+  // ego-browser 2.x prints the script's console.log on stderr: a clean run with only stderr is the script's output, not an error.
+  const errIsOutput = r.code === 0 && !r.timedOut && !r.out.trim();
   if (r.out.trim()) lines.push(`${tr('输出：')}\n${clip(r.out.trimEnd())}`);
-  if (r.err.trim()) lines.push(`${tr('错误输出：')}\n${clip(r.err.trimEnd(), OUTPUT_CHARS / 2)}`);
+  if (r.err.trim()) lines.push(errIsOutput ? `${tr('输出：')}\n${clip(r.err.trimEnd())}` : `${tr('错误输出：')}\n${clip(r.err.trimEnd(), OUTPUT_CHARS / 2)}`);
   if (!r.out.trim() && !r.err.trim()) lines.push(tr('（没有输出：要读的东西用 console.log 打印出来）'));
   if (!r.timedOut && r.code !== 0 && looksUnreachable(r.err + r.out)) lines.push(EGO_FALLBACK);
 

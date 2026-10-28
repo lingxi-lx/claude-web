@@ -3,12 +3,12 @@ import { tr } from '../i18n/index.js';
 import type { ChannelService } from './service.js';
 import type { ChannelRequest, ChannelStatus, SourceSummary } from './types.js';
 
-const KINDS = new Set(['channels.status', 'channels.refresh', 'channels.add', 'channels.remove', 'channels.catalog.set', 'channels.catalog.update']);
+const KINDS = new Set(['channels.status', 'channels.refresh', 'channels.add', 'channels.remove', 'channels.catalog.set', 'channels.catalog.update', 'channels.catalog.remote']);
 
 export const isChannelRequest = (req: { kind: string }): req is ChannelRequest => KINDS.has(req.kind);
 
 export async function handleChannelRequest(
-  svc: Pick<ChannelService, 'status' | 'refresh'> & Partial<Pick<ChannelService, 'add' | 'remove' | 'setCatalog' | 'updateCatalog'>>,
+  svc: Pick<ChannelService, 'status' | 'refresh'> & Partial<Pick<ChannelService, 'add' | 'remove' | 'setCatalog' | 'updateCatalog' | 'setRemoteCatalog'>>,
   req: ChannelRequest,
 ): Promise<ChannelStatus | { source: SourceSummary | null; status: ChannelStatus }> {
   switch (req.kind) {
@@ -31,6 +31,9 @@ export async function handleChannelRequest(
     case 'channels.catalog.update':
       if (!svc.updateCatalog) break;
       return svc.updateCatalog();
+    case 'channels.catalog.remote':
+      if (!svc.setRemoteCatalog) break;
+      return svc.setRemoteCatalog(req.setting ?? null);
   }
   throw new Error(`unknown channel request ${(req as { kind: string }).kind}`);
 }
