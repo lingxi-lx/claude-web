@@ -79,6 +79,7 @@ export function resolveSpawn(command: string, args: string[]): { command: string
     if (a.includes('%')) throw new Error(tr('{which}含 %，经 cmd.exe 运行 {basename} 时会被当成环境变量展开；请改用不含 % 的值', { which: which(a, i), basename: path.basename(found) }));
     if (/[\r\n]/.test(a)) throw new Error(tr('{which}含换行，经 cmd.exe 运行 {basename} 时会被截断', { which: which(a, i), basename: path.basename(found) }));
   });
-  const q = (s: string) => (/[\s"&|<>^]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
+  // an empty argument must stay one (`--tools ""`): left bare it vanishes and the next flag becomes its value
+  const q = (s: string) => (s === '' || /[\s"&|<>^]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
   return { command: process.env.ComSpec ?? 'cmd.exe', args: ['/d', '/s', '/c', `"${[found, ...args].map(q).join(' ')}"`], env: {}, via: 'cmd' };
 }

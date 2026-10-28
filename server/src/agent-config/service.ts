@@ -11,6 +11,7 @@ import type { CliSpec } from './cli.js';
 import { CodexConfigAdapter } from './codex.js';
 import { GEMINI, GeminiLikeConfigAdapter, QWEN } from './gemini.js';
 import { OpenCodeConfigAdapter } from './opencode.js';
+import { AgentSelectionService } from './selections.js';
 import { parseConfig } from './edit.js';
 import { findOnPath } from '../agents/resolve.js';
 import { tr } from '../i18n/index.js';
@@ -34,6 +35,8 @@ export interface AgentConfigOptions {
   claudeDir?: string;
   /** how long to wait for the install probe before falling back to a PATH lookup (default 3 s) */
   probeWaitMs?: number;
+  /** 接入: where the per-agent model records live (default: agent-selections.json next to backupDir) */
+  selectionsFile?: string;
 }
 
 const NAME = /^[A-Za-z0-9_-]{1,64}$/;
@@ -107,11 +110,14 @@ export function fromClaude(name: string, c: any): McpSpec {
 
 export class AgentConfigService {
   readonly backups: BackupStore;
+  /** 接入: every registry agent's model / effort, what we wrote, and drift (selections.ts) */
+  readonly selections: AgentSelectionService;
   private adapters: Map<AgentConfigKind, AgentConfigAdapter>;
   private models: Partial<Record<AgentConfigKind, string[]>> = {};
 
   constructor(private opts: AgentConfigOptions) {
     this.backups = new BackupStore(opts.backupDir);
+    this.selections = new AgentSelectionService({ file: opts.selectionsFile ?? path.join(path.dirname(opts.backupDir), 'agent-selections.json'), home: opts.home });
     const ctx = (kind: AgentConfigKind): AdapterCtx => ({
       cli: () => opts.cli?.(kind) ?? (() => { const l = opts.agents.launch(kind); return { command: l.command, env: l.env }; })(),
       backups: this.backups,

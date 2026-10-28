@@ -24,6 +24,11 @@ export async function handleAgentConfig(svc: AgentConfigService, req: AgentConfi
     case 'agentConfig.createFile': return svc.createFile(kindOk(req.agent), req.path, req.cwd);
     case 'agentConfig.backups': return svc.listBackups(req.agent ? kindOk(req.agent) : undefined);
     case 'agentConfig.restore': return svc.restore(req.id);
+    case 'agentConfig.selections': return svc.selections.list();
+    case 'agentConfig.selection.apply': return svc.selections.apply(String(req.agent), String(req.model ?? ''), req.effort === undefined ? undefined : req.effort === null ? null : String(req.effort));
+    case 'agentConfig.selection.reapply': return svc.selections.reapply(String(req.agent));
+    case 'agentConfig.selection.accept': return svc.selections.accept(String(req.agent));
+    case 'agentConfig.selection.restore': return svc.selections.restore(String(req.agent));
   }
   throw new Error(`unknown request ${(req as { kind: string }).kind}`);
 }

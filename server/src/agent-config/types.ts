@@ -86,4 +86,47 @@ export type AgentConfigRequest =
   | { kind: 'agentConfig.set'; agent: AgentConfigKind; key: string; value: string | null }
   | { kind: 'agentConfig.createFile'; agent: AgentConfigKind; path: string; cwd?: string }
   | { kind: 'agentConfig.backups'; agent?: AgentConfigKind }
-  | { kind: 'agentConfig.restore'; id: string };
+  | { kind: 'agentConfig.restore'; id: string }
+  // 接入 (selections.ts): every agent in the registry, its model / effort, what claude-web wrote, drift
+  | { kind: 'agentConfig.selections' }
+  | { kind: 'agentConfig.selection.apply'; agent: string; model: string; effort?: string | null }
+  | { kind: 'agentConfig.selection.reapply'; agent: string }
+  | { kind: 'agentConfig.selection.accept'; agent: string }
+  | { kind: 'agentConfig.selection.restore'; agent: string };
+
+export type { DriftReport, DriftChange, ModelSelection } from './drift.js';
+import type { DriftReport, ModelSelection } from './drift.js';
+
+/** The same agent's config inside a WSL distro (read-only). */
+export interface AgentSelectionTwin {
+  distro: string;
+  configPath: string;
+  model: string;
+  effort: string;
+  /** compared with the same `expected` as the Windows side */
+  drift: DriftReport | null;
+}
+
+/** One registry agent on the 接入 page. */
+export interface AgentSelectionState {
+  /** registry id: claude-code | codex | gemini-cli | opencode | cursor | trae | qoder */
+  id: string;
+  name: string;
+  configPath: string;
+  detected: boolean;
+  /** what the config says now ('' = not set) */
+  model: string;
+  effort: string;
+  /** this agent has a reasoning-strength key we can write */
+  effortField: boolean;
+  /** what claude-web last wrote; absent = never written by us */
+  expected?: ModelSelection;
+  appliedAt?: number;
+  /** the file differs from `expected` (changed outside claude-web) */
+  drift: DriftReport | null;
+  /** we hold a restore point (the values before our first write) */
+  restorable: boolean;
+  /** the file could not be read / parsed */
+  error?: string;
+  wsl?: AgentSelectionTwin[];
+}

@@ -90,6 +90,12 @@ describe.skipIf(process.platform !== 'win32')('resolveSpawn (Windows .cmd shims)
     expect(() => resolveSpawn(shim, ['a\nb'])).toThrow(/换行/);
     expect(resolveSpawn(shim, ['50 percent', 'x"y']).via).toBe('cmd');
   });
+
+  it('an empty argument survives cmd.exe as its own argument (`--tools ""`), not swallowed', () => {
+    const { shim } = setup('#!/bin/sh\necho 1\n');
+    const r = resolveSpawn(shim, ['--tools', '', '--strict-mcp-config']);
+    expect(r.args[r.args.length - 1]).toContain('--tools "" --strict-mcp-config');
+  });
 });
 
 describe.skipIf(process.platform !== 'win32')('resolveSpawn puts the spawn guard in front of a node-shim entry', () => {

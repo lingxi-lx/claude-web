@@ -29,9 +29,9 @@ export class UpstreamFamilyDriver implements ChannelDriver {
   }
 
   async refresh(): Promise<void> {
-    if (this.family === 'claude') {
+    if (this.family === 'claude' || this.family === 'provider') {
       for (const account of this.upstreams.status().accounts) {
-        if (account.kind !== 'claude') continue;
+        if (account.kind !== this.family) continue;
         const result = await this.upstreams.probe(account.id);
         if (result.health !== 'ok') throw new Error(result.lastError || tr('账号健康检查失败'));
       }
