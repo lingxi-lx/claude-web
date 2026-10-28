@@ -10,14 +10,71 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describeApp, grantCovers, knownApp, normalizeApp, pickStartApp, sameExe, type WindowApp } from './apps.js';
-import { MAX_EDGE, toImage, toScreen, zoomRect, type Frame } from './coords.js';
+import { MAX_EDGE, NEED_SCREENSHOT, toImage, toScreen, zoomRect, type Frame } from './coords.js';
 import { Grants, NO_GRANT_TEXT, TOOL_NEEDS, gate, isSelf, namesSelf, type GrantFlags, type Seen, type SelfId } from './grants.js';
 import { HelperError, type HelperLike } from './helper-win.js';
 import { isModifierKey, isSystemCombo, parseKeys, parseModifiers, type Chord, type KeyStroke } from './keys.js';
-import { BATCH_ACTIONS } from './tools.js';
+import { abortError, defaultWait, runTask, waitFor as waitForCondition, type Plan, type PlanAction, type PlannerDeps, type PlanStep, type WaitCondition } from './planner.js';
+import { BATCH_ACTIONS, HIGH_LEVEL_TOOLS } from './tools.js';
+import { compressTree, describeMatch, findNodes, refById, type CompressedTree, type FindQuery, type Rect, type UiaSnapshot, type UiRef } from './uia.js';
+import { VisionService } from '../vision/service.js';
 import { tr } from '../i18n/index.js';
 
 export const UNSUPPORTED_TEXT = tr('操控电脑目前只支持 Windows。');
+export const AUTOMATION_UNAVAILABLE_TEXT = tr('这台电脑还没有接入 UI Automation：先用 screenshot / zoom 和低层工具，等辅助进程接入后再用结构化工具。');
+
+/** One action for the UIA driver. The driver must re-check the foreground window and the grants before sending input. */
+export interface AutomationAction {
+  action: string;
+  ref?: string;
+  coordinate?: [number, number];
+  text?: string;
+  value?: string;
+  count?: number;
+  ms?: number;
+  duration?: number;
+}
+
+/**
+ * What a ref pointed at, so the driver can find the same control again in the live window instead of trusting a
+ * position in a tree that may have changed.
+ */
+export interface AutomationTarget {
+  /** the top-level window the snapshot came from */
+  hwnd?: number;
+  /** that window's application, so a ref can never act on an ungranted window behind a granted one */
+  app?: Pick<WindowApp, 'hwnd' | 'pid' | 'name' | 'exe' | 'description' | 'product' | 'title'>;
+  role: string;
+  name?: string;
+  automationId?: string;
+  bounds?: Rect;
+}
+
+/** The look the action was decided on; the helper checks it once more just before the action. */
+export interface AutomationExpect { fg: number; under: Array<{ hwnd: number; pid: number }> }
+
+export interface AutomationActOptions {
+  signal?: AbortSignal;
+  target?: AutomationTarget;
+  expect?: AutomationExpect;
+}
+
+export interface AutomationResult {
+  ok: boolean;
+  text?: string;
+  error?: string;
+  /** the window in front changed between the look and the action: nothing was sent */
+  changed?: boolean;
+  /** Claude Web itself was in front or under the point: nothing was sent */
+  self?: boolean;
+  sent?: number;
+}
+
+/** What the service needs from the UIA layer. A fake tree in tests; the Windows helper later. */
+export interface ComputerAutomation {
+  observe(opts?: { window?: string }): Promise<UiaSnapshot>;
+  act(action: AutomationAction, opts?: AutomationActOptions): Promise<AutomationResult>;
+}
 
 export type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string };
 export interface ToolAnswer { content: Content[]; isError?: boolean }
@@ -64,6 +121,10 @@ export interface ComputerOptions {
   /** where `save_to_disk` puts images */
   shotsDir?: string;
   sleep?: (ms: number) => Promise<void>;
+  /** UI Automation driver; absent: the structured tools fail closed until Windows support is wired in. */
+  automation?: ComputerAutomation | null;
+  /** seer for computer_look; absent: look fails closed. */
+  vision?: VisionService | null;
 }
 
 export class ComputerService {
@@ -75,11 +136,17 @@ export class ComputerService {
   private held = false;
   private chain: Promise<unknown> = Promise.resolve();
   private shots = 0;
+  private readonly automation: ComputerAutomation | null;
+  private readonly vision: VisionService;
+  private lastTree: CompressedTree | null = null;
+  private lastSnapshot: UiaSnapshot | null = null;
 
   constructor(private readonly opts: ComputerOptions) {
     this.helper = opts.helper;
     this.self = { exe: opts.selfExe || undefined };
     this.sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
+    this.automation = opts.automation ?? null;
+    this.vision = opts.vision ?? new VisionService();
   }
 
   /** One tool call, after the ones before it. Never rejects: every failure is a result the model can read. */
@@ -138,7 +205,86 @@ export class ComputerService {
     return { ok: false, text: 'The window in front kept changing, so nothing was sent. Take a screenshot and try again.' };
   }
 
+  /** The control a ref named, with the window it was seen in — what the UIA driver needs to find it again. */
+  private automationTarget(ref: UiRef | null | undefined): AutomationTarget | undefined {
+    if (!ref) return undefined;
+    const win = this.lastSnapshot?.window ?? this.lastSnapshot?.app;
+    const app = win?.hwnd !== undefined
+      ? { hwnd: win.hwnd, pid: win.pid ?? 0, name: win.name ?? '', exe: win.exe ?? '', description: win.description ?? '', product: win.product ?? '', title: win.title ?? '' }
+      : undefined;
+    return {
+      ...(typeof win?.hwnd === 'number' ? { hwnd: win.hwnd } : {}),
+      ...(app ? { app } : {}),
+      role: ref.role,
+      ...(ref.name ? { name: ref.name } : {}),
+      ...(ref.automationId ? { automationId: ref.automationId } : {}),
+      ...(ref.bounds ? { bounds: ref.bounds } : {}),
+    };
+  }
+
+  private centreOf(bounds: Rect | undefined): [number, number] | undefined {
+    if (!bounds || !(bounds.width > 0) || !(bounds.height > 0)) return undefined;
+    return [Math.round(bounds.x + bounds.width / 2), Math.round(bounds.y + bounds.height / 2)];
+  }
+
+  /** The structured tools press keys too: system-wide combinations need the same flag as the low-level ones. */
+  private keyApproval(action: string, text: string | undefined): string | null {
+    if (action === 'key') {
+      const parsed = parseKeys(text);
+      if (!parsed.ok) return parsed.error;
+      if (parsed.chords.some(isSystemCombo) && !this.grants.flags.systemKeyCombos) {
+        return notApproved(`Pressing a system-wide key combination (${String(text ?? '').trim()})`, 'systemKeyCombos');
+      }
+    }
+    if (action === 'click' || action === 'scroll') {
+      const mods = parseModifiers(text);
+      if (!mods.ok) return mods.error;
+      if (isSystemCombo(mods.mods) && !this.grants.flags.systemKeyCombos) return notApproved('Holding the Windows key', 'systemKeyCombos');
+    }
+    return null;
+  }
+
+  /**
+   * Look, decide, act for the structured tools: the same probe and the same gate as `input()`, then the action goes
+   * through UI Automation. The helper checks the expectation once more at the last moment; when it saw another window
+   * in front (and sent nothing) the look is taken again, as `input()` does.
+   */
+  private async automationInput(
+    automation: ComputerAutomation,
+    action: AutomationAction,
+    target: AutomationTarget | undefined,
+    points: Array<[number, number] | null>,
+    labels: string[],
+    signal?: AbortSignal,
+  ): Promise<InputResult> {
+    // the window the ref came from must be granted too: a granted window in front must not let UIA act on an
+    // ungranted one behind it (the foreground check alone would pass).
+    if (target?.app) {
+      if (isSelf(target.app, this.self)) return { ok: false, text: SELF_REFUSAL };
+      if (!this.grants.covering(target.app)) {
+        return { ok: false, text: `${describeApp(target.app)} is the window the control belongs to, and it is not a granted application, so nothing was sent. Call request_access for it, or observe a granted application.` };
+      }
+    }
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (signal?.aborted) return { ok: false, text: 'Stopped before the action was sent.' };
+      const probe = await this.ask('probe', { points });
+      if (!probe.ok) return { ok: false, text: `Could not look at the screen: ${probe.error ?? 'unknown error'}. Nothing was sent.` };
+      const seen: Seen = { fg: asApp(probe.fg), under: points.map((_, i) => ({ at: labels[i] ?? 'that position', app: asApp(probe.under?.[i]) })) };
+      const verdict = gate('input', this.grants, seen, this.self);
+      if (!verdict.ok) return { ok: false, text: verdict.text };
+      const expect: AutomationExpect = { fg: seen.fg!.hwnd, under: seen.under!.map((u) => ({ hwnd: u.app!.hwnd, pid: u.app!.pid })) };
+      const r = await automation.act(action, { expect, ...(target ? { target } : {}), ...(signal ? { signal } : {}) });
+      if (r.ok) return { ok: true, r: {} };
+      if (r.self) return { ok: false, text: SELF_REFUSAL };
+      if (r.changed && !r.sent) continue;
+      if (r.changed) return { ok: false, text: 'The window in front changed part-way through.' };
+      return { ok: false, text: `${r.error ?? r.text ?? 'The action failed'}.` };
+    }
+    return { ok: false, text: 'The window in front kept changing, so nothing was sent. Take a screenshot and try again.' };
+  }
+
   private async step(name: string, a: Record<string, unknown>): Promise<Step> {
+    if ((HIGH_LEVEL_TOOLS as readonly string[]).includes(name)) return this.highLevel(name, a);
     const need = TOOL_NEEDS[name];
     if (need === undefined || name === 'computer_batch') return bad(`Unknown tool ${name}.`);
     if (need !== 'none' && !this.grants.any()) return bad(NO_GRANT_TEXT);
@@ -501,6 +647,305 @@ export class ComputerService {
     if (!this.grants.flags.clipboardWrite) return bad(notApproved('Writing the clipboard', 'clipboardWrite'));
     const res = await this.input('clipset', { text: a.text });
     return res.ok ? good(`Put ${a.text.length} character${a.text.length === 1 ? '' : 's'} on the clipboard. Paste with key "ctrl+v".`) : bad(res.text);
+  }
+
+  // ---- structured tools: UI Automation first ----
+
+  private async highLevel(name: string, a: Record<string, unknown>): Promise<Step> {
+    switch (name) {
+      case 'computer_observe': return this.observeTool(a);
+      case 'computer_find': return this.findTool(a);
+      case 'computer_act': return this.actTool(a);
+      case 'computer_task': return this.taskTool(a);
+      case 'computer_wait_for': return this.waitForTool(a);
+      case 'computer_look': return this.look(a);
+      default: return bad(`Unknown tool ${name}.`);
+    }
+  }
+
+  private automationReady(): { ok: true; automation: ComputerAutomation } | { ok: false; text: string } {
+    if (!this.grants.any()) return { ok: false, text: NO_GRANT_TEXT };
+    if (!this.automation) return { ok: false, text: AUTOMATION_UNAVAILABLE_TEXT };
+    return { ok: true, automation: this.automation };
+  }
+
+  private async snapshotOf(a: Record<string, unknown>): Promise<{ ok: true; snapshot: UiaSnapshot; tree: CompressedTree } | { ok: false; text: string }> {
+    const ready = this.automationReady();
+    if (!ready.ok) return ready;
+    try {
+      const snapshot = await ready.automation.observe({ ...(typeof a.window === 'string' && a.window.trim() ? { window: a.window.trim() } : {}) });
+      const tree = compressTree(snapshot);
+      this.lastTree = tree;
+      this.lastSnapshot = snapshot;
+      return { ok: true, snapshot, tree };
+    } catch (e) {
+      return { ok: false, text: tr('读不到窗口的控件树：{message}', { message: (e as Error)?.message ?? String(e) }) };
+    }
+  }
+
+  private async observeTool(a: Record<string, unknown>): Promise<Step> {
+    const got = await this.snapshotOf(a);
+    if (!got.ok) return bad(got.text);
+    const lines: string[] = [];
+    const app = [got.snapshot.app?.name, got.snapshot.app?.title].filter((v): v is string => !!v && !!v.trim()).join(' · ');
+    if (app) lines.push(tr('前台应用：{app}', { app }));
+    if (got.snapshot.window?.title && got.snapshot.window.title !== got.snapshot.app?.title) lines.push(tr('窗口：{title}', { title: got.snapshot.window.title }));
+    lines.push(tr('控件树：{nodes} 个节点，{refs} 个可操作，省略 {omitted} 个。', {
+      nodes: got.tree.stats.nodes, refs: got.tree.stats.refs, omitted: got.tree.stats.omitted,
+    }));
+    lines.push(got.tree.text);
+    let image: Step['image'];
+    if (a.include_screenshot !== false) {
+      const shot = await this.screenshot({ save_to_disk: a.save_to_disk === true });
+      if (shot.image) {
+        image = shot.image;
+        lines.push(shot.text);
+      } else {
+        lines.push(tr('（截图失败：{text}）', { text: shot.text }));
+      }
+    }
+    return good(lines.filter(Boolean).join('\n'), image);
+  }
+
+  private async findTool(a: Record<string, unknown>): Promise<Step> {
+    const got = await this.snapshotOf(a);
+    if (!got.ok) return bad(got.text);
+    const query: FindQuery = {
+      ...(typeof a.role === 'string' ? { role: a.role } : {}),
+      ...(typeof a.name === 'string' ? { name: a.name } : {}),
+      ...(typeof a.text === 'string' ? { text: a.text } : {}),
+      ...(typeof a.window === 'string' ? { window: a.window } : {}),
+      ...(a.actionable_only === true ? { actionableOnly: true } : {}),
+      ...(typeof a.limit === 'number' ? { limit: a.limit } : {}),
+    };
+    if (!query.role?.trim() && !query.name?.trim() && !query.text?.trim()) {
+      return bad(tr('要查找什么？请给出 role、name 或 text 之一。'));
+    }
+    const matches = findNodes(got.tree, query);
+    if (!matches.length) return good(tr('没有找到匹配的控件。'));
+    const lines = [tr('找到 {n} 个控件：', { n: matches.length })];
+    for (const m of matches) lines.push(describeMatch(m));
+    return good(lines.join('\n'));
+  }
+
+  private async actTool(a: Record<string, unknown>): Promise<Step> {
+    const ready = this.automationReady();
+    if (!ready.ok) return bad(ready.text);
+    const action = typeof a.action === 'string' ? a.action.trim() : '';
+    const allowed = ['invoke', 'value', 'toggle', 'select', 'expand', 'collapse', 'click', 'type', 'key', 'scroll'];
+    if (!allowed.includes(action)) return bad(tr('"action" 必须是：{list}。', { list: allowed.join(', ') }));
+    const ref = typeof a.ref === 'string' ? a.ref.trim() : '';
+    let target: UiRef | null = null;
+    if (ref) {
+      target = refById(this.lastTree, ref);
+      if (!target) return bad(tr('ref {ref} 已经失效：先重新调用 computer_observe 或 computer_find。', { ref }));
+    }
+    let point: [number, number] | undefined;
+    if (a.coordinate !== undefined) {
+      const p = toScreen(this.frame, a.coordinate);
+      if (!p.ok) return bad(p.error);
+      point = [p.x, p.y];
+    }
+    const needsRef = ['invoke', 'value', 'toggle', 'select', 'expand', 'collapse'].includes(action);
+    if (needsRef && !target) return bad(tr('动作 {action} 需要一个 ref：先用 computer_observe 或 computer_find 找控件。', { action }));
+    if (action === 'click' && !target && !point) return bad(tr('click 需要 ref 或 coordinate。'));
+    if (action === 'scroll' && !target && !point) return bad(tr('scroll 需要 ref 或 coordinate。'));
+    if ((action === 'click' || action === 'scroll') && target && point) return bad(tr('{action} 只给 ref 或 coordinate 其中一个。', { action }));
+    const text = typeof a.text === 'string' ? a.text : typeof a.value === 'string' ? a.value : undefined;
+    if ((action === 'value' || action === 'type' || action === 'key') && (typeof text !== 'string' || !text.length)) {
+      return bad(tr('动作 {action} 需要 text。', { action }));
+    }
+    const refusal = this.keyApproval(action, text);
+    if (refusal) return bad(refusal);
+    const call: AutomationAction = {
+      action,
+      ...(target ? { ref: target.ref } : {}),
+      ...(point ? { coordinate: point } : {}),
+      ...(text !== undefined ? { text } : {}),
+      ...(action === 'value' && text !== undefined ? { value: text } : {}),
+      ...(typeof a.count === 'number' ? { count: a.count } : {}),
+      ...(typeof a.ms === 'number' ? { ms: a.ms } : {}),
+      ...(typeof a.duration === 'number' ? { duration: a.duration } : {}),
+    };
+    // A ref action has a place on the screen when the control did: the gate checks what is under it (a click, and
+    // the helper's click fallback for a control without a pattern, land there), and the helper checks once more.
+    const points: Array<[number, number] | null> = [];
+    const labels: string[] = [];
+    const usesTarget = ['invoke', 'value', 'toggle', 'select', 'expand', 'collapse', 'click', 'scroll'].includes(action);
+    if (usesTarget) {
+      const at = point ?? this.centreOf(target?.bounds);
+      if (at) { points.push(at); labels.push(`(${at[0]}, ${at[1]})`); }
+    }
+    try {
+      const res = await this.automationInput(ready.automation, call, this.automationTarget(target), points, labels);
+      if (!res.ok) return bad(res.text);
+      return good(tr('已执行 {action}。', { action }));
+    } catch (e) {
+      return bad(tr('动作失败：{message}', { message: (e as Error)?.message ?? String(e) }));
+    }
+  }
+
+  private conditionFrom(raw: any): WaitCondition {
+    const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+    const condition: WaitCondition = { present: raw?.present !== false };
+    if (typeof raw?.role === 'string') condition.role = raw.role;
+    if (typeof raw?.name === 'string') condition.name = raw.name;
+    if (typeof raw?.text === 'string') condition.text = raw.text;
+    if (typeof raw?.window === 'string') condition.window = raw.window;
+    if (typeof raw?.ref === 'string') condition.ref = raw.ref;
+    const count = num(raw?.count);
+    const interval = num(raw?.interval_ms) ?? num(raw?.intervalMs);
+    const timeout = num(raw?.timeout_ms) ?? num(raw?.timeoutMs);
+    if (count !== undefined) condition.count = count;
+    if (interval !== undefined) condition.intervalMs = interval;
+    if (timeout !== undefined) condition.timeoutMs = timeout;
+    return condition;
+  }
+
+  private planAction(raw: any): PlanAction | undefined {
+    if (!raw || typeof raw !== 'object' || typeof raw.action !== 'string' || !raw.action.trim()) return undefined;
+    let coordinate: [number, number] | undefined;
+    if (Array.isArray(raw.coordinate) && raw.coordinate.length === 2 && raw.coordinate.every((v: unknown) => typeof v === 'number')) {
+      const p = toScreen(this.frame, raw.coordinate);
+      if (p.ok) coordinate = [p.x, p.y];
+    }
+    return {
+      action: raw.action.trim(),
+      ...(typeof raw.ref === 'string' ? { ref: raw.ref } : {}),
+      ...(coordinate ? { coordinate } : {}),
+      ...(typeof raw.text === 'string' ? { text: raw.text } : {}),
+      ...(typeof raw.value === 'string' ? { value: raw.value } : {}),
+      ...(typeof raw.count === 'number' ? { count: raw.count } : {}),
+      ...(typeof raw.ms === 'number' ? { ms: raw.ms } : {}),
+      ...(typeof raw.duration === 'number' ? { duration: raw.duration } : {}),
+    };
+  }
+
+  private planStep(raw: any): PlanStep {
+    const conditions = raw?.wait_for ?? raw?.waitFor;
+    let waitFor: WaitCondition | WaitCondition[] | undefined;
+    if (Array.isArray(conditions)) waitFor = conditions.map((c) => this.conditionFrom(c));
+    else if (conditions && typeof conditions === 'object') waitFor = this.conditionFrom(conditions);
+    const timeout = typeof raw?.timeout_ms === 'number' ? raw.timeout_ms : typeof raw?.timeoutMs === 'number' ? raw.timeoutMs : undefined;
+    const action = this.planAction(raw?.action);
+    return {
+      ...(typeof raw?.label === 'string' ? { label: raw.label } : {}),
+      ...(action ? { action } : {}),
+      ...(waitFor ? { waitFor } : {}),
+      ...(timeout !== undefined ? { timeoutMs: timeout } : {}),
+    };
+  }
+
+  private plannerDeps(automation: ComputerAutomation): PlannerDeps {
+    return {
+      observe: () => automation.observe(),
+      act: async (action, ctx) => {
+        if (ctx.signal.aborted) return { ok: false, error: 'Stopped before the action was sent.' };
+        const refusal = this.keyApproval(action.action, action.text);
+        if (refusal) return { ok: false, error: refusal };
+        const ref = action.ref ? refById(this.lastTree, action.ref) : null;
+        // A ref action has a place on the screen when the control did: the gate checks what is under it (a click, and
+        // the helper's click fallback for a control without a pattern, land there), and the helper checks once more.
+        const points: Array<[number, number] | null> = [];
+        const labels: string[] = [];
+        const usesTarget = ['invoke', 'value', 'toggle', 'select', 'expand', 'collapse', 'click', 'scroll'].includes(action.action);
+        if (usesTarget) {
+          const at = action.coordinate ?? this.centreOf(ref?.bounds);
+          if (at) { points.push(at); labels.push(`(${at[0]}, ${at[1]})`); }
+        }
+        const r = await this.automationInput(automation, action, this.automationTarget(ref), points, labels, ctx.signal);
+        return r.ok ? { ok: true } : { ok: false, error: r.text };
+      },
+      wait: (ms, signal) => this.sleepWithAbort(ms, signal),
+      now: () => Date.now(),
+    };
+  }
+
+  /** `this.sleep` in tests, but ending at once when the task is taken over. */
+  private sleepWithAbort(ms: number, signal: AbortSignal): Promise<void> {
+    if (!this.opts.sleep) return defaultWait(ms, signal);
+    return new Promise((resolve, reject) => {
+      if (signal.aborted) { reject(abortError()); return; }
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        signal.removeEventListener('abort', onAbort);
+        resolve();
+      };
+      const onAbort = () => {
+        if (done) return;
+        done = true;
+        reject(abortError());
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+      this.sleep(Math.max(0, Math.round(ms))).then(finish, (e) => {
+        if (done) return;
+        done = true;
+        signal.removeEventListener('abort', onAbort);
+        reject(e);
+      });
+    });
+  }
+
+  private async taskTool(a: Record<string, unknown>): Promise<Step> {
+    const ready = this.automationReady();
+    if (!ready.ok) return bad(ready.text);
+    const rawSteps = a.steps;
+    if (!Array.isArray(rawSteps) || !rawSteps.length) return bad(tr('"steps" 必须是非空的动作列表。'));
+    if (!this.frame && rawSteps.some((s: any) => s?.action?.coordinate !== undefined)) return bad(NEED_SCREENSHOT);
+    const plan: Plan = {
+      steps: rawSteps.map((s) => this.planStep(s)),
+      ...(typeof a.budget_ms === 'number' ? { budgetMs: a.budget_ms } : {}),
+    };
+    let result: Awaited<ReturnType<typeof runTask>>;
+    try {
+      result = await runTask(plan, this.plannerDeps(ready.automation), {
+        ...(typeof a.budget_ms === 'number' ? { budgetMs: a.budget_ms } : {}),
+      });
+    } catch (e) {
+      return bad(tr('任务失败：{message}', { message: (e as Error)?.message ?? String(e) }));
+    }
+    const shot = await this.screenshot({});
+    let text = result.text;
+    if (shot.ok) text += `\n${shot.text}`;
+    else text += `\n${tr('（最后截图失败：{text}）', { text: shot.text })}`;
+    return result.ok ? good(text, shot.image) : { ok: false, text, ...(shot.image ? { image: shot.image } : {}) };
+  }
+
+  private async waitForTool(a: Record<string, unknown>): Promise<Step> {
+    const ready = this.automationReady();
+    if (!ready.ok) return bad(ready.text);
+    const condition = this.conditionFrom(a);
+    if (!condition.role?.trim() && !condition.name?.trim() && !condition.text?.trim() && !condition.window?.trim() && !condition.ref?.trim()) {
+      return bad(tr('要等什么？请给出 text、name、role、window 或 ref 之一。'));
+    }
+    const deps: PlannerDeps = {
+      observe: () => ready.automation.observe(),
+      act: async () => ({ ok: false, error: tr('wait_for 不执行动作。') }),
+      wait: (ms, signal) => this.sleepWithAbort(ms, signal),
+      now: () => Date.now(),
+    };
+    const res = await waitForCondition(condition, deps, {
+      ...(typeof a.timeout_ms === 'number' ? { timeoutMs: a.timeout_ms } : {}),
+    });
+    if (!res.ok) return bad(res.text);
+    const tail = res.matches.length ? `\n${res.matches.map(describeMatch).join('\n')}` : '';
+    return good(`${res.text}${tail}`);
+  }
+
+  private async look(a: Record<string, unknown>): Promise<Step> {
+    if (!this.grants.any()) return bad(NO_GRANT_TEXT);
+    if (!this.vision.configured) return bad(tr('没有配置看图模型，无法描述这张图。'));
+    if (typeof a.question !== 'string' || !a.question.trim()) return bad(tr('"question" 必须说明要看什么。'));
+    const shot = Array.isArray(a.region)
+      ? await this.zoom({ region: a.region, save_to_disk: a.save_to_disk === true })
+      : await this.screenshot({ save_to_disk: a.save_to_disk === true });
+    if (!shot.ok || !shot.image) return bad(shot.text);
+    const answer = await this.vision.describe({ image: shot.image.data, mimeType: shot.image.mimeType, question: a.question });
+    if (!answer.ok) return bad(answer.error);
+    const lead = answer.cached ? tr('看图结果（缓存）：{text}', { text: answer.text }) : tr('看图结果：{text}', { text: answer.text });
+    return good(a.save_to_disk === true ? `${lead}\n${shot.text}` : lead);
   }
 
   // ---- several at once ----

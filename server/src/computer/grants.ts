@@ -117,6 +117,13 @@ export const TOOL_NEEDS: Record<string, Need> = {
   hold_key: 'input',
   write_clipboard: 'input',
   computer_batch: 'none', // each action inside goes through its own gate
+  // Structured tools (P6): observe/find/wait/look only look; act sends input; task runs each step through its own gate.
+  computer_observe: 'grant',
+  computer_find: 'grant',
+  computer_act: 'input',
+  computer_task: 'none',
+  computer_wait_for: 'grant',
+  computer_look: 'grant',
 };
 
 /** The tools that put input into the machine (the rest only look, wait or manage access). */

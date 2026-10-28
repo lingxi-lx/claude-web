@@ -53,6 +53,28 @@ describe('the helper script', () => {
     expect(HELPER_SCRIPT).toContain('i.u.ki.wScan = (ushort)c; i.u.ki.dwFlags = (uint)(4 |');
   });
 
+  it('reads the foreground window through UI Automation and acts on refs after the same last-moment check', () => {
+    // the UIA assemblies are compiled in; both ops are dispatched
+    expect(HELPER_SCRIPT).toContain("'UIAutomationClient', 'UIAutomationTypes', 'WindowsBase'");
+    expect(HELPER_SCRIPT).toContain('using System.Windows.Automation;');
+    expect(HELPER_SCRIPT).toContain('if (op == "uia.snapshot") return UiSnapshot(q);');
+    expect(HELPER_SCRIPT).toContain('if (op == "uia.act") return UiAct(q);');
+    // the snapshot is capped, carries the foreground app and window, and names patterns the way uia.ts expects
+    expect(HELPER_SCRIPT).toContain('int maxNodes = Math.Max(1, Math.Min(3000, I(q, "maxNodes", 800)));');
+    expect(HELPER_SCRIPT).toContain('r["app"] = app; r["window"] = app; r["root"] = tree;');
+    expect(HELPER_SCRIPT).toContain('if (s.EndsWith("PatternIdentifiers"))');
+    // every UIA action re-checks the expectation first, and the click fallback settles the pointer like Click does
+    const act = HELPER_SCRIPT.indexOf('static Dictionary<string, object> UiAct(');
+    const click = HELPER_SCRIPT.indexOf('static Dictionary<string, object> UiClick(');
+    for (const at of [act, click]) {
+      expect(at).toBeGreaterThan(0);
+      const body = HELPER_SCRIPT.slice(at, HELPER_SCRIPT.indexOf('\n    }\n', at));
+      const check = body.indexOf('Check(q,');
+      expect(check, `Check before acting at ${at}`).toBeGreaterThan(0);
+    }
+    expect(HELPER_SCRIPT).toContain('if (IsSelf(hwnd)) return Blocked("self", 0);');
+  });
+
   it('is written once, content-addressed, and rewritten when its bytes are not ours', () => {
     const dir = path.join(tmp, 'a', 'b');
     const file = helperScriptFile(dir)!;
@@ -128,6 +150,13 @@ describe.skipIf(!live)('the helper on this machine (CW_COMPUTER_LIVE=1)', () => 
       expect(Math.max(shot.w, shot.h)).toBeLessThanOrEqual(1568);
       expect(shot.rect).toEqual({ x: 0, y: 0, width: hello.screen.width, height: hello.screen.height });
       expect(String(shot.data).startsWith('/9j/')).toBe(true); // a JPEG
+      // UI Automation reads the foreground window (read-only: no input is sent here)
+      const tree = await h.call('uia.snapshot', {}, 60_000);
+      expect(tree.ok).toBe(true);
+      expect(typeof tree.root?.role).toBe('string');
+      expect(tree.root.role.length).toBeGreaterThan(0);
+      expect(tree.window?.hwnd).toBeGreaterThan(0);
+      expect(Array.isArray(tree.root.children ?? [])).toBe(true);
       // no expectation, or the wrong window: nothing is sent
       expect(await h.call('type', { text: 'x' })).toMatchObject({ ok: false, unchecked: true, sent: 0 });
       expect(await h.call('click', { x: 1, y: 1, button: 'left', count: 1, expect: { fg: 1, under: [{ hwnd: 1, pid: 1 }] } })).toMatchObject({ ok: false, changed: true, sent: 0 });

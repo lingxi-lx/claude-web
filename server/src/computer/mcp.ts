@@ -23,6 +23,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SELF_TITLE } from './grants.js';
+import { HelperAutomation } from './helper-automation.js';
 import { WinHelper, computerDir } from './helper-win.js';
 import { ComputerService, type AccessAsk, type AccessVerdict } from './service.js';
 import { INSTRUCTIONS, SERVER_NAME, TOOLS } from './tools.js';
@@ -61,12 +62,16 @@ export async function askHost(env: NodeJS.ProcessEnv, ask: AccessAsk, fetchFn: t
   }
 }
 
-/** The service for this machine: a PowerShell helper on Windows, none elsewhere. */
+/**
+ * The service for this machine: a PowerShell helper and UI Automation through it on Windows, neither elsewhere (the
+ * structured tools then fail closed with AUTOMATION_UNAVAILABLE_TEXT, as they do in tests that inject no adapter).
+ */
 export function createService(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): ComputerService {
   const selfExe = env.CW_COMPUTER_SELF_EXE?.trim() || undefined;
   const helper = platform === 'win32' ? new WinHelper({ selfExe, selfTitle: SELF_TITLE, debug: env.CW_COMPUTER_DEBUG === '1' }) : null;
+  const automation = helper ? new HelperAutomation(helper) : null;
   const approve = env.CW_COMPUTER_ASK_URL?.trim() ? (ask: AccessAsk) => askHost(env, ask) : undefined;
-  return new ComputerService({ helper, selfExe, shotsDir: path.join(computerDir(), 'shots'), approve });
+  return new ComputerService({ helper, selfExe, shotsDir: path.join(computerDir(), 'shots'), approve, automation });
 }
 
 function main() {

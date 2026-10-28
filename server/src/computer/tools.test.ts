@@ -13,6 +13,7 @@ describe('the tool list', () => {
       'request_access', 'list_granted_applications', 'open_application', 'screenshot', 'zoom', 'cursor_position', 'mouse_move',
       'left_click', 'right_click', 'middle_click', 'double_click', 'triple_click', 'left_click_drag', 'left_mouse_down', 'left_mouse_up',
       'scroll', 'type', 'key', 'hold_key', 'wait', 'read_clipboard', 'write_clipboard', 'computer_batch',
+      'computer_observe', 'computer_find', 'computer_act', 'computer_task', 'computer_wait_for', 'computer_look',
     ]);
     expect(new Set(TOOL_NAMES).size).toBe(TOOL_NAMES.length);
   });
@@ -20,8 +21,8 @@ describe('the tool list', () => {
   it('the tools that answer with a picture are not deferred on our engine (alwaysLoad), and no other tool is', () => {
     // ccb hides MCP tools behind ExecuteExtraTool, whose result is one JSON string: a screenshot would be base64 text
     const loaded = TOOLS.filter((t) => (t as { _meta?: Record<string, unknown> })._meta?.['anthropic/alwaysLoad'] === true).map((t) => t.name);
-    expect(loaded).toEqual(['screenshot', 'zoom', 'computer_batch']);
-    for (const name of ['request_access', 'left_click', 'type', 'key', 'read_clipboard', 'wait']) expect((tool(name) as { _meta?: unknown })._meta, name).toBeUndefined();
+    expect(loaded).toEqual(['screenshot', 'zoom', 'computer_batch', 'computer_observe', 'computer_task']);
+    for (const name of ['request_access', 'left_click', 'type', 'key', 'read_clipboard', 'wait', 'computer_find', 'computer_act', 'computer_wait_for', 'computer_look']) expect((tool(name) as { _meta?: unknown })._meta, name).toBeUndefined();
   });
 
   it('takes the same parameter names', () => {
@@ -51,6 +52,19 @@ describe('the tool list', () => {
     const item = (tool('computer_batch').inputSchema as any).properties.actions.items;
     expect(Object.keys(item.properties).sort()).toEqual(['action', 'coordinate', 'duration', 'repeat', 'scroll_amount', 'scroll_direction', 'start_coordinate', 'text']);
     expect(item.properties.action.enum).toEqual(BATCH_ACTIONS);
+
+    expect(props('computer_observe')).toEqual(['include_screenshot', 'save_to_disk', 'window']);
+    expect(required('computer_observe')).toEqual([]);
+    expect(props('computer_find')).toEqual(['actionable_only', 'limit', 'name', 'role', 'text', 'window']);
+    expect(props('computer_act')).toEqual(['action', 'coordinate', 'count', 'ref', 'text']);
+    expect(required('computer_act')).toEqual(['action']);
+    expect(props('computer_task')).toEqual(['budget_ms', 'steps']);
+    expect(required('computer_task')).toEqual(['steps']);
+    const taskStep = (tool('computer_task').inputSchema as any).properties.steps.items;
+    expect(Object.keys(taskStep.properties).sort()).toEqual(['action', 'label', 'timeout_ms', 'wait_for']);
+    expect(props('computer_wait_for')).toEqual(['name', 'present', 'ref', 'role', 'text', 'timeout_ms', 'window']);
+    expect(props('computer_look')).toEqual(['question', 'region', 'save_to_disk']);
+    expect(required('computer_look')).toEqual(['question']);
   });
 
   it('a batch can hold the single-action tools, and none that manage access', () => {
@@ -80,7 +94,7 @@ describe('the tool list', () => {
     expect(INSTRUCTIONS).toContain('untrusted');
     expect(INSTRUCTIONS).toContain('request_access');
     // looking is marked read-only, acting is not
-    for (const t of ['screenshot', 'zoom', 'cursor_position', 'list_granted_applications', 'read_clipboard', 'wait']) expect(tool(t).annotations.readOnlyHint, t).toBe(true);
-    for (const t of ['left_click', 'type', 'key', 'scroll', 'write_clipboard', 'open_application', 'computer_batch', 'request_access', 'mouse_move']) expect(tool(t).annotations.readOnlyHint, t).toBe(false);
+    for (const t of ['screenshot', 'zoom', 'cursor_position', 'list_granted_applications', 'read_clipboard', 'wait', 'computer_observe', 'computer_find', 'computer_wait_for', 'computer_look']) expect(tool(t).annotations.readOnlyHint, t).toBe(true);
+    for (const t of ['left_click', 'type', 'key', 'scroll', 'write_clipboard', 'open_application', 'computer_batch', 'request_access', 'mouse_move', 'computer_act', 'computer_task']) expect(tool(t).annotations.readOnlyHint, t).toBe(false);
   });
 });

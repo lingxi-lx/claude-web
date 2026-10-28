@@ -950,12 +950,17 @@ describe('every tool that sends input', () => {
       left_mouse_down: {}, left_mouse_up: {}, scroll: { coordinate: [100, 100], scroll_direction: 'down', scroll_amount: 1 },
       type: { text: 'x' }, key: { text: 'Return' }, hold_key: { text: 'a', duration: 0.1 }, write_clipboard: { text: 'x' },
     };
-    expect(Object.keys(args).sort()).toEqual([...INPUT_TOOLS].sort());
-    for (const t of INPUT_TOOLS) {
+    // computer_act goes through the injected UI Automation adapter, which is absent in this fake; its own refusal is
+    // asserted below instead of the pointer/keyboard gate.
+    expect(Object.keys(args).sort()).toEqual(INPUT_TOOLS.filter((t) => t !== 'computer_act').sort());
+    for (const t of INPUT_TOOLS.filter((x) => x !== 'computer_act')) {
       const r = await svc.call(t, args[t]);
       expect(r.isError, t).toBe(true);
       expect(text(r), t).toContain('not a granted application');
     }
+    const act = await svc.call('computer_act', { action: 'invoke', ref: 'e1' });
+    expect(act.isError).toBe(true);
+    expect(text(act)).toContain('UI Automation');
     expect(desk.sent()).toEqual([]);
   });
 });

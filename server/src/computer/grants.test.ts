@@ -192,8 +192,8 @@ describe('the table of needs', () => {
 
   it('everything that sends input needs the app in front', () => {
     expect([...INPUT_TOOLS].sort()).toEqual([
-      'double_click', 'hold_key', 'key', 'left_click', 'left_click_drag', 'left_mouse_down', 'left_mouse_up', 'middle_click',
-      'right_click', 'scroll', 'triple_click', 'type', 'write_clipboard',
+      'computer_act', 'double_click', 'hold_key', 'key', 'left_click', 'left_click_drag', 'left_mouse_down', 'left_mouse_up',
+      'middle_click', 'right_click', 'scroll', 'triple_click', 'type', 'write_clipboard',
     ]);
   });
 });

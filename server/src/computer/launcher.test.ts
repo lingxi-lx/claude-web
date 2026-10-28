@@ -57,7 +57,7 @@ describe('what a Claude conversation with it on is handed', () => {
     configureComputerMcp({ url: 'http://127.0.0.1:3090', token: secret }, tmp);
     const allowed = computerAllowedTools({ platform: 'win32' });
     expect(allowed).toHaveLength(TOOL_NAMES.length);
-    expect(allowed).toHaveLength(23);
+    expect(allowed).toHaveLength(29);
     expect(allowed.every((t) => t.startsWith('mcp__computer__'))).toBe(true);
     expect(allowed).toContain('mcp__computer__request_access');
   });
