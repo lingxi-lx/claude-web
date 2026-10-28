@@ -67,6 +67,10 @@ extraResources:
   # without them the server downloads on first use into the data directory)
   - from: vendor/sidecars
     to: sidecars
+  # CLIProxyAPI / Magpie, fetched by scripts/engines/fetch.mjs before packaging: a fresh install signs in and runs
+  # without downloading an engine first (server/src/engines/manager.ts reads <resources>/engines)
+  - from: vendor/engines
+    to: engines
 win:
   target:
     - nsis

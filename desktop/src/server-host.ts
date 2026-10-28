@@ -56,6 +56,8 @@ export class ServerHost extends EventEmitter {
           CLAUDE_WEB_DIST: dist,
           // the pinned sidecars travel with the installer (electron-builder extraResources)
           ...(app.isPackaged ? { CLAUDE_WEB_SIDECARS: path.join(process.resourcesPath, 'sidecars') } : {}),
+          // CLIProxyAPI / Magpie come with the app too: first use starts them instead of downloading them
+          ...(app.isPackaged ? { CLAUDE_WEB_ENGINES: path.join(process.resourcesPath, 'engines') } : {}),
         },
       });
       this.proc = proc;

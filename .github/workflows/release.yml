@@ -34,6 +34,8 @@ jobs:
       - run: npm ci
       - name: fetch sidecars (pinned, SHA256 checked)
         run: node scripts/sidecars/fetch.mjs --platform ${{ matrix.sidecar_platform }}
+      - name: fetch engines (pinned, SHA256 checked)
+        run: node scripts/engines/fetch.mjs --platform ${{ matrix.sidecar_platform }}
       - run: npm run build:all
       - name: package
         shell: bash

@@ -44,6 +44,40 @@ function setup(release: (name: string, body: Buffer) => object, extra: Record<st
 const wrong = 'sha256:' + '0'.repeat(64);
 const sha = (b: Buffer) => crypto.createHash('sha256').update(b).digest('hex');
 
+describe('EngineManager login catalog', () => {
+  it('maps engine sign-in ids to the hub catalog ids, for both engines', () => {
+    const s = setup((name, body) => ({ tag_name: 'v9.9.9', assets: [{ name, browser_download_url: `https://dl.example/${name}`, size: body.length }] }));
+    const list = s.mgr.loginProviders();
+    expect(list).toEqual(expect.arrayContaining([
+      expect.objectContaining({ engine: 'cliproxyapi', provider: 'anthropic', catalogId: 'claude' }),
+      expect.objectContaining({ engine: 'cliproxyapi', provider: 'xai', catalogId: 'grok' }),
+      expect.objectContaining({ engine: 'magpie', provider: 'mimo-app', catalogId: 'mimo' }),
+      expect.objectContaining({ engine: 'magpie', provider: 'trae-cn', catalogId: 'trae' }),
+      expect.objectContaining({ engine: 'magpie', provider: 'qoder', catalogId: 'qoder' }),
+    ]));
+  });
+});
+
+describe('EngineManager bundled builds', () => {
+  it('reports the build carried by the installer as installed, with its version, and never asks GitHub', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-engines-data-'));
+    const bundled = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-engines-bundled-'));
+    dirs.push(root, bundled);
+    const dir = path.join(bundled, `${process.platform}-${process.arch}`, 'magpie');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `magpie${process.platform === 'win32' ? '.exe' : ''}`), 'fake');
+    fs.writeFileSync(path.join(dir, 'version.txt'), 'v0.1.1803\n');
+    vi.stubGlobal('fetch', async () => { throw new Error('no network'); });
+    const state: any = {};
+    const meta: any = { engineState: () => state, saveChannels: async () => {} };
+    const providers: any = { upsert: async () => ({}), remove: async () => {}, refreshModels: async () => {}, list: () => [] };
+    const mgr = new EngineManager({ meta, providers, root, bundledDir: bundled });
+    const st = await mgr.status('magpie');
+    expect(st).toMatchObject({ id: 'magpie', installed: true, bundled: true, version: 'v0.1.1803', health: 'stopped' });
+    expect(st.verified).toBeUndefined();
+  });
+});
+
 describe('EngineManager install verification', () => {
   it('a GitHub asset digest that does not match refuses the install and leaves nothing behind', async () => {
     const s = setup((name, body) => ({ tag_name: 'v9.9.9', assets: [{ name, browser_download_url: `https://dl.example/${name}`, size: body.length, digest: wrong }] }));

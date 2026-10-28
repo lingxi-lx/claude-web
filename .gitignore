@@ -8,6 +8,9 @@ dist-desktop-*/
 # pinned sidecars, fetched by scripts/sidecars/fetch.mjs (never committed)
 vendor/sidecars/*
 !vendor/sidecars/.gitkeep
+# CLIProxyAPI / Magpie builds, fetched by scripts/engines/fetch.mjs before packaging (never committed)
+vendor/engines/*
+!vendor/engines/.gitkeep
 *.log
 hello.txt
 color.txt

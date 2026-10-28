@@ -26,6 +26,9 @@ exports.default = async function afterPack(ctx) {
   // the pinned sidecars are plain executables under resources/sidecars/<platform>/<id>/
   const sidecars = [];
   walk(path.join(resources, 'sidecars'), sidecars, true);
-  for (const f of [...files, ...sidecars]) fs.chmodSync(f, 0o755);
-  console.log(`  • after-pack: chmod +x ${files.length} helper binaries, ${sidecars.length} sidecars`);
+  // CLIProxyAPI / Magpie under resources/engines/<platform>/<id>/ (version.txt is not executable; harmless)
+  const engines = [];
+  walk(path.join(resources, 'engines'), engines, true);
+  for (const f of [...files, ...sidecars, ...engines]) fs.chmodSync(f, 0o755);
+  console.log(`  • after-pack: chmod +x ${files.length} helper binaries, ${sidecars.length} sidecars, ${engines.length} engines`);
 };

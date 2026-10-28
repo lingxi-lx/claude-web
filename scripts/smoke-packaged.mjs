@@ -102,6 +102,16 @@ async function run() {
   check('engine resolves inside the app', !!eng.path && eng.path.includes('app.asar.unpacked'), `${eng.runtime} ${eng.version ?? ''} ${eng.path ?? eng.error}`);
   check('fallback engine resolves inside the app', !!eng.fallback?.path?.includes('app.asar.unpacked'), `${eng.fallback?.runtime} ${eng.fallback?.version ?? ''}`);
 
+  // 托管程序: CLIProxyAPI / Magpie travel in <resources>/engines — a fresh install starts them without a download
+  const engs = await req({ kind: 'engines.status' }).catch((e) => ({ error: e.message, engines: [] }));
+  const byId = Object.fromEntries((engs.engines ?? []).map((e) => [e.id, e]));
+  check('CLIProxyAPI and Magpie ship with the app', ['cliproxyapi', 'magpie'].every((id) => byId[id]?.installed && byId[id]?.bundled), engs.error ?? ['cliproxyapi', 'magpie'].map((id) => `${id}: ${byId[id]?.version ?? 'missing'}${byId[id]?.bundled ? ' (bundled)' : ''}`).join(', '));
+  for (const id of ['magpie', 'cliproxyapi']) {
+    const started = await req({ kind: 'engines.start', id }).catch((e) => ({ error: e.message }));
+    check(`bundled ${id} starts`, started.running === true && started.health === 'ok', started.error ?? `${started.version ?? ''} · port ${started.port ?? '?'}`);
+    await req({ kind: 'engines.stop', id }).catch(() => {});
+  }
+
   const v = await req({ kind: 'engine.cli', args: ['--version'] }).catch((e) => ({ code: -1, stderr: e.message }));
   check('engine runs (Electron as node)', v.code === 0 && /\d+\.\d+\.\d+/.test(v.stdout), (v.stdout || v.stderr).trim().slice(0, 200));
 
@@ -200,7 +210,7 @@ if (process.platform === 'win32') {
   const answers = String(r.stdout ?? '').split('\n').map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
   const init = answers.find((a) => a.id === 1)?.result;
   const names = (answers.find((a) => a.id === 2)?.result?.tools ?? []).map((t) => t.name);
-  check('the computer MCP server starts from inside the app (Electron as node)', init?.serverInfo?.name === 'claude-web-computer' && names.length === 23 && names.includes('request_access') && names.includes('screenshot'), r.error ? r.error.message : `exit ${r.status}: ${init?.serverInfo?.name ?? 'no handshake'}, ${names.length} tools ${String(r.stderr ?? '').trim().slice(0, 200)}`);
+  check('the computer MCP server starts from inside the app (Electron as node)', init?.serverInfo?.name === 'claude-web-computer' && names.length === 29 && names.includes('request_access') && names.includes('screenshot'), r.error ? r.error.message : `exit ${r.status}: ${init?.serverInfo?.name ?? 'no handshake'}, ${names.length} tools ${String(r.stderr ?? '').trim().slice(0, 200)}`);
 }
 
 // the app's own update check (desktop/src/main.ts): main.log records each step

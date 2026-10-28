@@ -5,7 +5,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { EngineId } from '../types.js';
 
-export interface EngineContext { port: number; dir: string; clientKey: string; managementKey: string }
+export interface EngineContext { port: number; dir: string; clientKey: string; managementKey: string; webPort?: number; webKey?: string }
 
 export interface EngineManifest {
   id: EngineId;
@@ -118,8 +118,8 @@ const magpie: EngineManifest = {
   baseUrl: (port) => `http://127.0.0.1:${port}`,
   fixedClientKey: 'magpie-claudeweb',
   managementKey: false,
-  args: () => ['serve'],
-  env: (ctx) => ({ MAGPIE_ADDR: `127.0.0.1:${ctx.port}` }),
+  args: (ctx) => ['serve', ...(ctx.webPort ? [`--web=127.0.0.1:${ctx.webPort}`] : [])],
+  env: (ctx) => ({ MAGPIE_ADDR: `127.0.0.1:${ctx.port}`, ...(ctx.webKey ? { MAGPIE_WEB_KEY: ctx.webKey } : {}) }),
   async health({ port }) {
     return !!(await magpie.detect(port));
   },

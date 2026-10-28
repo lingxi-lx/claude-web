@@ -4,7 +4,7 @@
 // as an Anthropic-compatible provider. A copy the user already runs is connected instead of installed again.
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import type { ChildProcess } from 'node:child_process';
@@ -19,7 +19,7 @@ import { planModels } from '../channels/plan.js';
 import { proxy } from '../net/proxy.js';
 import { MANIFESTS, type EngineManifest } from './manifests/index.js';
 import { startProcess, stopTree, tailLog } from './process.js';
-import type { EngineId, EngineStatus } from './types.js';
+import type { EngineId, EngineLoginImportResult, EngineLoginProvider, EngineLoginSession, EngineStatus } from './types.js';
 
 const READY_MS = 30_000;
 const HEALTH_MS = 30_000;
@@ -31,6 +31,8 @@ interface EngineState {
   previousVersion?: string;
   builds?: Record<string, Build>;
   port?: number;
+  webPort?: number;
+  webKey?: string;
   clientKey?: string;
   managementKey?: string;
   providerId?: string;
@@ -59,6 +61,8 @@ export interface EngineDeps {
   providers: Pick<ProviderService, 'upsert' | 'remove' | 'refreshModels' | 'list'>;
   /** default <dataDir>/engines */
   root?: string;
+  /** builds that travel with the desktop app (`CLAUDE_WEB_ENGINES`, <resources>/engines): <platform>/<id>/<entry> */
+  bundledDir?: string;
 }
 
 const exe = process.platform === 'win32' ? '.exe' : '';
@@ -119,6 +123,7 @@ async function findEntry(dir: string, entry: string, depth = 0): Promise<string 
 
 export class EngineManager extends EventEmitter {
   readonly root: string;
+  private readonly bundledRoot: string;
   private runs = new Map<EngineId, Runtime>();
   private busy = new Map<EngineId, Promise<unknown>>();
   private detected = new Map<EngineId, { at: number; hit: { port: number; version?: string } | null }>();
@@ -127,6 +132,7 @@ export class EngineManager extends EventEmitter {
   constructor(private deps: EngineDeps) {
     super();
     this.root = deps.root ?? path.join(dataDir(), 'engines');
+    this.bundledRoot = deps.bundledDir ?? process.env.CLAUDE_WEB_ENGINES ?? '';
   }
 
   private state(id: EngineId): EngineState {
@@ -134,6 +140,202 @@ export class EngineManager extends EventEmitter {
     return (all[id] ??= {}) as EngineState;
   }
   private async save() { await this.deps.meta.saveChannels(); }
+
+  /**
+   * Subscriptions the engines can sign in to, as the engine's own code defines them. The hub does not reimplement
+   * vendor protocols: CLIProxyAPI's management API and Magpie's web sign-in API keep the accounts and serve the models.
+   * Catalog ids map them back to the provider cards (mimo-app → mimo, trae-cn → trae).
+   */
+  loginProviders(): EngineLoginProvider[] {
+    const rows: Omit<EngineLoginProvider, 'engine'>[] = [
+      // CLIProxyAPI (v7/v8 management endpoints; older builds answer 404 for what they do not know)
+      { provider: 'anthropic', catalogId: 'claude', name: 'Claude', method: 'browser' },
+      { provider: 'codex', catalogId: 'codex', name: 'Codex', method: 'browser' },
+      { provider: 'antigravity', catalogId: 'antigravity', name: 'Antigravity', method: 'browser' },
+      { provider: 'kimi', catalogId: 'kimi', name: 'Kimi', method: 'device' },
+      { provider: 'xai', catalogId: 'grok', name: 'Grok', method: 'device' },
+      // Magpie's web sign-in (plugins included; a plugin that isn't installed says so when it is started)
+      { provider: 'gemini', catalogId: 'gemini', name: 'Gemini', method: 'browser' },
+      { provider: 'antigravity', catalogId: 'antigravity', name: 'Antigravity', method: 'browser' },
+      { provider: 'grok', catalogId: 'grok', name: 'Grok', method: 'browser' },
+      { provider: 'copilot', catalogId: 'copilot', name: 'GitHub Copilot', method: 'device' },
+      { provider: 'qoder', catalogId: 'qoder', name: 'Qoder', method: 'browser' },
+      { provider: 'qoder-cn', catalogId: 'qoder', name: 'Qoder CN', method: 'browser' },
+      { provider: 'trae-cn', catalogId: 'trae', name: 'Trae CN', method: 'browser' },
+      { provider: 'workbuddy', catalogId: 'workbuddy', name: 'WorkBuddy', method: 'browser' },
+      { provider: 'zcode', catalogId: 'zcode', name: 'ZCode', method: 'browser' },
+      { provider: 'kiro', catalogId: 'kiro', name: 'Kiro', method: 'browser' },
+      { provider: 'devin', catalogId: 'devin', name: 'Devin', method: 'browser' },
+      { provider: 'factory', catalogId: 'factory', name: 'Factory', method: 'browser' },
+      { provider: 'mimo-app', catalogId: 'mimo', name: 'Xiaomi MiMo', method: 'browser' },
+      { provider: 'cline', catalogId: 'cline', name: 'Cline', method: 'browser' },
+      { provider: 'claude', catalogId: 'claude', name: 'Claude', method: 'browser' },
+      { provider: 'codex', catalogId: 'codex', name: 'Codex', method: 'browser' },
+    ];
+    const cpa = rows.slice(0, 5).map((r) => ({ ...r, engine: 'cliproxyapi' as const }));
+    const magpie = rows.slice(5).map((r) => ({ ...r, engine: 'magpie' as const }));
+    return [...cpa, ...magpie];
+  }
+
+  private loginDef(id: EngineId, provider: string): EngineLoginProvider {
+    const p = this.loginProviders().find((x) => x.engine === id && x.provider === provider);
+    if (!p) throw new Error(tr('这个托管程序不认识这个登录方式'));
+    return p;
+  }
+
+  private loginSessions = new Map<string, {
+    view: EngineLoginSession;
+    backendState?: string;
+    backendId?: string;
+    webPort?: number;
+    webKey?: string;
+  }>();
+
+  private async engineJson(url: string, init: RequestInit = {}, timeoutMs = 30000): Promise<any> {
+    let r: Response;
+    try {
+      r = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+    } catch (e: any) {
+      throw new Error(tr('连不上托管程序：{message}', { message: e?.message ?? String(e) }));
+    }
+    const text = await r.text().catch(() => '');
+    let j: any = null;
+    try { j = text ? JSON.parse(text) : null; } catch { /* a non-JSON error */ }
+    if (!r.ok) throw new Error(tr('托管程序说：{message}', { message: String(j?.error ?? j?.message ?? text.slice(0, 240) ?? `HTTP ${r.status}`).slice(0, 240) }));
+    return j;
+  }
+
+  /** Start the vendor sign-in in the engine's own account store. The engine's gateway serves the models afterwards. */
+  async loginBegin(id: EngineId, provider: string): Promise<EngineLoginSession> {
+    const def = this.loginDef(id, provider);
+    await this.start(id);
+    const st = this.state(id);
+    const now = Date.now();
+    if (id === 'cliproxyapi') {
+      if (st.mode === 'connected') throw new Error(tr('这个 CLIProxyAPI 不是 claude-web 启动的，请用它自己的管理页登录'));
+      const key = await this.reveal(st.managementKey);
+      const path = provider === 'anthropic' ? 'anthropic-auth-url'
+        : provider === 'codex' ? 'codex-auth-url'
+          : provider === 'antigravity' ? 'antigravity-auth-url'
+            : provider === 'kimi' ? 'kimi-auth-url'
+              : provider === 'xai' ? 'xai-auth-url'
+                : '';
+      if (!path) throw new Error(tr('这个版本的 CLIProxyAPI 没有这个登录入口'));
+      const j = await this.engineJson(`http://127.0.0.1:${st.port}/v0/management/${path}?is_webui=true`, {
+        headers: { authorization: `Bearer ${key}`, accept: 'application/json' },
+      });
+      if (!j?.url) throw new Error(tr('CLIProxyAPI 没有返回登录地址'));
+      const view: EngineLoginSession = {
+        id: `el_${crypto.randomBytes(6).toString('hex')}`, engine: id, provider, catalogId: def.catalogId,
+        state: 'pending', url: String(j.url), at: now,
+        ...(j.user_code ? { userCode: String(j.user_code) } : {}),
+        ...(j.flow === 'device' ? { message: tr('在浏览器里输入这个代码') } : {}),
+      };
+      this.loginSessions.set(view.id, { view, backendState: typeof j.state === 'string' ? j.state : undefined });
+      return view;
+    }
+    if (st.mode === 'connected' || !st.webPort) throw new Error(tr('这个 Magpie 不是 claude-web 启动的，登录入口在 Magpie 自己的窗口里'));
+    const key = await this.reveal(st.webKey).catch(() => '');
+    const base = `http://127.0.0.1:${st.webPort}`;
+    const headers = { 'content-type': 'application/json', cookie: `magpie_web_${st.webPort}=${key}` };
+    let j: any;
+    try {
+      j = await this.engineJson(`${base}/api/signin`, { method: 'POST', headers, body: JSON.stringify({ agent: provider }) });
+    } catch (e: any) {
+      // A retired built-in now lives on its community plugin: Magpie's plugin sign-in takes a method index,
+      // while /api/signin only drives the built-in. Most plugins have one (0); a prompt it needs is shown as an error.
+      if (!/plugin/i.test(String(e?.message ?? ''))) throw e;
+      const hint = await this.engineJson(`${base}/api/plugin-signin/prompt`, { method: 'POST', headers, body: JSON.stringify({ provider, method: 0, inputs: {} }) });
+      if (hint?.prompt) throw new Error(tr('这个 Magpie 插件登录先要回答一个问题：{q}', { q: String(hint.prompt?.label ?? hint.prompt?.key ?? hint.prompt) }));
+      j = await this.engineJson(`${base}/api/plugin-signin`, { method: 'POST', headers, body: JSON.stringify({ provider, method: 0, inputs: hint?.inputs ?? {} }) });
+    }
+    if (!j?.id) throw new Error(tr('Magpie 没有返回登录编号'));
+    const view: EngineLoginSession = {
+      id: `el_${crypto.randomBytes(6).toString('hex')}`, engine: id, provider, catalogId: def.catalogId,
+      state: 'pending', ...(j.url ? { url: String(j.url) } : {}),
+      ...(j.code ? { userCode: String(j.code) } : {}),
+      ...(j.instructions ? { message: String(j.instructions) } : {}),
+      at: now,
+    };
+    this.loginSessions.set(view.id, { view, backendId: String(j.id), webPort: st.webPort, webKey: key });
+    return view;
+  }
+
+  async loginStatus(id: EngineId, loginId: string): Promise<EngineLoginSession> {
+    const s = this.loginSessions.get(loginId);
+    if (!s || s.view.engine !== id) throw new Error(tr('这个登录已经结束了'));
+    if (s.view.state !== 'pending') return s.view;
+    const st = this.state(id);
+    try {
+      if (id === 'cliproxyapi') {
+        const key = await this.reveal(st.managementKey);
+        const j = await this.engineJson(`http://127.0.0.1:${st.port}/v0/management/get-auth-status?state=${encodeURIComponent(s.backendState ?? '')}`, { headers: { authorization: `Bearer ${key}` } });
+        const status = String(j?.status ?? '');
+        if (status === 'ok') s.view = { ...s.view, state: 'done' };
+        else if (status === 'error') s.view = { ...s.view, state: 'error', message: String(j?.error ?? tr('登录没有完成')) };
+        else s.view = { ...s.view, message: tr('等待浏览器授权…') };
+      } else {
+        const j = await this.engineJson(`http://127.0.0.1:${s.webPort}/api/signin/${encodeURIComponent(s.backendId ?? '')}`, {
+          headers: { cookie: `magpie_web_${s.webPort}=${s.webKey}` },
+        });
+        const state = String(j?.state ?? '');
+        if (state === 'done') s.view = { ...s.view, state: 'done', ...(j.user ? { message: String(j.user) } : {}) };
+        else if (state === 'failed' || state === 'error') s.view = { ...s.view, state: 'error', message: String(j?.error ?? j?.message ?? tr('登录没有完成')) };
+        else if (state === 'canceled' || state === 'cancelled') s.view = { ...s.view, state: 'cancelled' };
+        else s.view = { ...s.view, ...(j?.url ? { url: String(j.url) } : {}), ...(j?.code ? { userCode: String(j.code) } : {}), message: tr('等待浏览器授权…') };
+      }
+      if (s.view.state === 'done') {
+        const pid = st.providerId;
+        if (pid) void this.deps.providers.refreshModels([pid]).catch(() => {});
+        this.emit('changed', id);
+      }
+    } catch (e: any) {
+      s.view = { ...s.view, state: 'error', message: e?.message ?? String(e) };
+    }
+    return s.view;
+  }
+
+  /**
+   * Import an export into Magpie's account store. Magpie accepts Sub2API / CLIProxyAPI / Codex / Claude / Antigravity
+   * files (`/api/signin/import`), so the user's existing accounts do not have to be signed in again.
+   */
+  async loginImport(id: EngineId, provider: string, text: string): Promise<EngineLoginImportResult> {
+    const def = this.loginDef(id, provider);
+    if (id !== 'magpie') throw new Error(tr('只有 Magpie 能从文件导入账号'));
+    if (!text.trim()) throw new Error(tr('这个文件是空的'));
+    if (text.length > 8 * 1024 * 1024) throw new Error(tr('这个文件太大了（最多 8 MB）'));
+    await this.start(id);
+    const st = this.state(id);
+    if (st.mode === 'connected' || !st.webPort) throw new Error(tr('这个 Magpie 不是 claude-web 启动的，导入入口在 Magpie 自己的窗口里'));
+    const key = await this.reveal(st.webKey).catch(() => '');
+    const j = await this.engineJson(`http://127.0.0.1:${st.webPort}/api/signin/import`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: `magpie_web_${st.webPort}=${key}` },
+      body: JSON.stringify({ Agent: provider, Files: [text] }),
+    }, 180_000);
+    const results = Array.isArray(j?.results) ? j.results as EngineLoginImportResult['results'] : [];
+    const imported = results.filter((r) => !r.error && r.status !== 'failed').length;
+    if (!imported && results.some((r) => r.error)) throw new Error(String(results.find((r) => r.error)?.error));
+    if (!results.length) throw new Error(tr('这个文件里没有可导入的账号'));
+    if (st.providerId) void this.deps.providers.refreshModels([st.providerId]).catch(() => {});
+    this.emit('changed', id);
+    return { imported, results };
+  }
+
+  async loginCancel(id: EngineId, loginId: string): Promise<void> {
+    const s = this.loginSessions.get(loginId);
+    if (!s || s.view.engine !== id || s.view.state !== 'pending') return;
+    const st = this.state(id);
+    try {
+      if (id === 'cliproxyapi') {
+        const key = await this.reveal(st.managementKey);
+        await fetch(`http://127.0.0.1:${st.port}/v0/management/oauth-session?state=${encodeURIComponent(s.backendState ?? '')}`, { method: 'DELETE', headers: { authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(10000) });
+      } else {
+        await fetch(`http://127.0.0.1:${s.webPort}/api/signin/${encodeURIComponent(s.backendId ?? '')}/cancel`, { method: 'POST', headers: { cookie: `magpie_web_${s.webPort}=${s.webKey}` }, signal: AbortSignal.timeout(10000) });
+      }
+    } catch { /* the engine may have stopped; the local session is cancelled anyway */ }
+    s.view = { ...s.view, state: 'cancelled' };
+  }
 
   private async protect(plain: string, id: string): Promise<string> {
     return this.deps.secrets ? this.deps.secrets.protect(plain, `engine-${id}`) : plain;
@@ -165,6 +367,29 @@ export class EngineManager extends EventEmitter {
     return existsSync(p) ? p : null;
   }
 
+  /** The build that came with the desktop installer (electron-builder extraResources → <resources>/engines). */
+  private bundledDir(id: EngineId): string | null {
+    return this.bundledRoot ? path.join(this.bundledRoot, platformKey(), id) : null;
+  }
+
+  private bundledBinary(id: EngineId): string | null {
+    const dir = this.bundledDir(id);
+    if (!dir) return null;
+    const p = path.join(dir, `${this.manifest(id).entry}${exe}`);
+    return existsSync(p) ? p : null;
+  }
+
+  private bundledVersion(id: EngineId): string | undefined {
+    const dir = this.bundledDir(id);
+    if (!dir) return undefined;
+    try {
+      const v = readFileSync(path.join(dir, 'version.txt'), 'utf8').trim();
+      return v || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   // ---- status ----
 
   private async detect(id: EngineId): Promise<{ port: number; version?: string } | null> {
@@ -181,7 +406,7 @@ export class EngineManager extends EventEmitter {
     const st = this.state(id);
     const out: string[] = [];
     for (const w of this.manifest(id).warnings) if (w === 'self-update') out.push(tr('Magpie 会在后台自己更新，实际运行的版本可能和这里装的不同'));
-    const b = st.version ? st.builds?.[st.version] : undefined;
+    const b = st.version && this.binary(id) ? st.builds?.[st.version] : undefined;
     if (b?.verified === 'recorded') out.push(tr('这个版本的发布没有附带 SHA-256：首次安装时记下了文件的哈希，只能保证之后没被换过'));
     return out;
   }
@@ -190,7 +415,10 @@ export class EngineManager extends EventEmitter {
     const m = this.manifest(id);
     const st = this.state(id);
     const run = this.runs.get(id);
-    const installed = !!this.binary(id);
+    const managed = !!this.binary(id);
+    const bundled = !managed && !!this.bundledBinary(id);
+    const installed = managed || bundled;
+    const version = managed ? st.version : bundled ? this.bundledVersion(id) : undefined;
     let health: EngineStatus['health'] = run?.health ?? 'stopped';
     let detail = run?.detail;
     let running = !!run && run.health !== 'stopped';
@@ -203,7 +431,7 @@ export class EngineManager extends EventEmitter {
       detail = alive ? undefined : tr('连不上 127.0.0.1:{port} 上的 {name}', { port: st.connectedPort, name: m.name });
     }
     const detected = !running && st.mode !== 'connected' ? await this.detect(id) : null;
-    const b = st.version ? st.builds?.[st.version] : undefined;
+    const b = managed && st.version ? st.builds?.[st.version] : undefined;
     return {
       id,
       name: m.name,
@@ -212,10 +440,12 @@ export class EngineManager extends EventEmitter {
       installed,
       running,
       ...(st.mode ? { mode: st.mode } : {}),
-      ...(installed && st.version ? { version: st.version } : {}),
+      ...(installed && version ? { version } : {}),
+      ...(bundled ? { bundled: true } : {}),
       ...(st.previousVersion ? { previousVersion: st.previousVersion } : {}),
       ...(b ? { verified: b.verified, sha256: b.sha256 } : {}),
       ...(port ? { port } : {}),
+      ...(id === 'magpie' && st.mode !== 'connected' && st.webPort ? { webPort: st.webPort } : {}),
       health,
       ...(detail ? { detail } : {}),
       ...(detected ? { detected } : {}),
@@ -427,17 +657,34 @@ export class EngineManager extends EventEmitter {
       return;
     }
     if (this.runs.get(id)?.health === 'ok') return;
-    if (!this.binary(id)) await this.installNow(id);
-    const bin = this.binary(id);
+    // a build the installer carried is used as-is; only a missing one is downloaded
+    let bin = this.binary(id) ?? this.bundledBinary(id);
+    if (!bin) {
+      await this.installNow(id);
+      bin = this.binary(id);
+    }
     if (!bin) throw new Error(tr('{name} 没有装好', { name: m.name }));
     const { clientKey, managementKey } = await this.keys(id, m);
     this.emit('progress', id, 'start');
     // the port it had last time when it is free (the provider's address stays the same), else a new one
     const port = st.port && st.port !== m.defaultPort && await portFree(st.port) ? st.port : await freePort();
     if (st.port !== port) { st.port = port; await this.save(); }
+    // Magpie's web page carries the vendor sign-ins; keep it on a port of our own and a key we know.
+    let webPort: number | undefined;
+    let webKey: string | undefined;
+    if (id === 'magpie') {
+      webPort = st.webPort && await portFree(st.webPort) ? st.webPort : await freePort();
+      if (st.webPort !== webPort) { st.webPort = webPort; await this.save(); }
+      webKey = await this.reveal(st.webKey).catch(() => '');
+      if (!webKey) {
+        webKey = crypto.randomBytes(16).toString('hex');
+        st.webKey = await this.protect(webKey, 'magpie-web');
+        await this.save();
+      }
+    }
     const dir = path.join(this.root, id, 'data');
     await fs.mkdir(dir, { recursive: true });
-    const ctx = { port, dir, clientKey, managementKey };
+    const ctx = { port, dir, clientKey, managementKey, ...(webPort ? { webPort } : {}), ...(webKey ? { webKey } : {}) };
     if (m.prepare) await m.prepare(ctx);
     // the proxy `network.proxy` decides is the only one the engine is handed (engineEnv)
     await proxy.refresh().catch(() => {});
@@ -564,7 +811,7 @@ export class EngineManager extends EventEmitter {
   async resume(): Promise<void> {
     for (const id of Object.keys(MANIFESTS) as EngineId[]) {
       const st = this.state(id);
-      if (st.mode !== 'connected' && st.autoStart && this.binary(id)) await this.start(id).catch((e) => console.error(`[engines] ${id}: ${(e as Error).message}`));
+      if (st.mode !== 'connected' && st.autoStart && (this.binary(id) || this.bundledBinary(id))) await this.start(id).catch((e) => console.error(`[engines] ${id}: ${(e as Error).message}`));
     }
   }
 

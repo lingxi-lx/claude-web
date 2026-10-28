@@ -4,7 +4,7 @@ import type { EngineManager } from './manager.js';
 import { MANIFESTS } from './manifests/index.js';
 import type { EngineId, EngineRequest } from './types.js';
 
-const KINDS = new Set(['engines.status', 'engines.install', 'engines.upgrade', 'engines.rollback', 'engines.start', 'engines.stop', 'engines.uninstall', 'engines.connect', 'engines.logs']);
+const KINDS = new Set(['engines.status', 'engines.install', 'engines.upgrade', 'engines.rollback', 'engines.start', 'engines.stop', 'engines.uninstall', 'engines.connect', 'engines.logs', 'engines.login.providers', 'engines.login.begin', 'engines.login.status', 'engines.login.cancel', 'engines.login.import']);
 
 export const isEngineRequest = (req: { kind: string }): req is EngineRequest => KINDS.has(req.kind);
 
@@ -33,6 +33,11 @@ export async function handleEngineRequest(svc: EngineManager, req: EngineRequest
     case 'engines.uninstall': return svc.uninstall(engineId(req.id));
     case 'engines.connect': return svc.connect(engineId(req.id), typeof req.port === 'number' ? req.port : undefined, typeof req.key === 'string' ? req.key : undefined);
     case 'engines.logs': return { text: await svc.logs(engineId(req.id), typeof req.lines === 'number' ? req.lines : 200) };
+    case 'engines.login.providers': return { providers: svc.loginProviders() };
+    case 'engines.login.begin': return svc.loginBegin(engineId(req.id), req.provider);
+    case 'engines.login.status': return svc.loginStatus(engineId(req.id), req.loginId);
+    case 'engines.login.cancel': await svc.loginCancel(engineId(req.id), req.loginId); return null;
+    case 'engines.login.import': return svc.loginImport(engineId(req.id), req.provider, req.text);
   }
   throw new Error(`unknown engine request ${(req as { kind: string }).kind}`);
 }
