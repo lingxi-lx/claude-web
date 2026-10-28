@@ -11,6 +11,7 @@ const TOOL: Record<string, string> = {
   hermes: 'Hermes Agent', 'cc-switch': 'CC Switch', codex: 'Codex', opencode: 'OpenCode', gemini: 'Gemini CLI', qwen: 'Qwen Code',
   cursor: 'Cursor', windsurf: 'Windsurf', kiro: 'Kiro', 'claude-desktop': 'Claude Desktop', vscode: 'VS Code', cline: 'Cline', roo: 'Roo Code',
   continue: 'Continue', zed: 'Zed', goose: 'Goose', ollama: 'Ollama', mirasim: 'Mirasim', 'cherry-studio': 'Cherry Studio',
+  cliproxyapi: 'CLIProxyAPI', magpie: 'Magpie',
 };
 export const toolName = (id: string) => TOOL[id] ?? id;
 
@@ -56,7 +57,7 @@ export function ImportDialog({ only, onClose }: { only?: ImportItem['kind']; onC
     <div className="modal-bg dialog-bg" onMouseDown={(e) => e.target === e.currentTarget && onClose()} onKeyDown={(e) => { if (e.key === 'Escape' && !imeComposing(e.nativeEvent)) { e.stopPropagation(); onClose(); } }}>
       <div className="modal import-dialog" role="dialog" aria-modal="true" aria-label={tr('从其它工具导入')}>
         <h3>{tr('从其它工具导入')}</h3>
-        <p className="sub">{tr('读取这台电脑上其它工具（Hermes、CC Switch、Codex、OpenCode、Cursor、Claude Desktop、VS Code…）里配好的供应商和 MCP 服务器。只读它们的文件，不改动；密钥只在本机。')}</p>
+        <p className="sub">{tr('读取这台电脑上其它工具（Hermes、CC Switch、Codex、OpenCode、Cursor、Claude Desktop、VS Code、CLIProxyAPI、Magpie…）里配好的供应商和 MCP 服务器。只读它们的文件，不改动；密钥只在本机。')}</p>
         {err && <div className="imp-err">{err}</div>}
         {!scan && !err && <div className="imp-wait"><span className="spin" aria-hidden /> {tr('正在查找…')}</div>}
         {scan && !done && (

@@ -104,6 +104,8 @@
 .gw-add-search { display: flex; align-items: center; gap: 6px; margin: 12px 0 6px; padding: 0 10px; height: 32px; border-radius: var(--r-md); background: var(--surface-1); box-shadow: inset 0 0 0 var(--hairline) var(--edge-subtle); color: var(--ink-3); }
 .gw-add-search input { flex: 1; border: 0; background: transparent; outline: none; color: var(--ink-1); padding: 0; }
 .gw-catalog { display: flex; flex-direction: column; gap: 2px; min-height: 120px; }
+.gw-catalog-item { display: flex; flex-direction: column; gap: 2px; }
+.gw-catalog-item > .link { align-self: flex-start; margin: 0 0 3px 10px; font-size: var(--fs-meta); }
 .gw-catalog-row { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border: 0; border-radius: var(--r-md); background: transparent; color: var(--ink-3); cursor: pointer; text-align: left; transition: background 150ms var(--ease-out); }
 .gw-catalog-row:hover, .gw-catalog-row:focus-visible { background: var(--surface-1); outline: none; }
 .gw-add-done { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 18px 0 4px; text-align: center; color: var(--ok); animation: gw-in 180ms var(--ease-out) both; }
