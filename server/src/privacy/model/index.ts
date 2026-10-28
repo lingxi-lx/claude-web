@@ -121,7 +121,11 @@ export async function fetchPinned(url: string, dest: string, f: PinnedFile, o: {
     if (n !== f.size || sha !== f.sha256) throw new Error(tr('校验不通过（SHA-256 不符），文件已删除'));
     await fs.promises.rename(part, dest);
   } catch (e) {
+    // the stream opens its file asynchronously: a failure on the first chunk can come before the open, and an rm
+    // then would run before the file exists — wait until it is closed, then remove it
+    const closed = out.closed ? Promise.resolve() : new Promise<void>((r) => out.once('close', () => r()));
     out.destroy();
+    await closed;
     await fs.promises.rm(part, { force: true }).catch(() => {});
     throw e;
   }
