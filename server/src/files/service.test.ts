@@ -183,3 +183,35 @@ describe('files', () => {
     }
   });
 });
+
+// issue #12: the page's own folder browser lists the server's folders
+describe('FilesService.dirs', () => {
+  it('lists subfolders (no files), sorted; the parent; the roots; home when no path', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'cw-dirs-'));
+    try {
+      await fs.mkdir(path.join(dir, 'b10'));
+      await fs.mkdir(path.join(dir, 'b9'));
+      await fs.mkdir(path.join(dir, 'A'));
+      await fs.mkdir(path.join(dir, '.hidden'));
+      await fs.writeFile(path.join(dir, 'file.txt'), 'x');
+      const svc = new FilesService();
+      const d = await svc.dirs(dir);
+      expect(d.path).toBe(path.resolve(dir));
+      expect(d.dirs).toEqual(['.hidden', 'A', 'b9', 'b10']);
+      expect(d.parent).toBe(path.dirname(path.resolve(dir)));
+      expect(d.sep).toBe(path.sep);
+      expect(d.roots.length).toBeGreaterThan(0);
+      expect((await svc.dirs()).path).toBe(path.resolve(os.homedir()));
+      const top = await svc.dirs(d.roots[0]);
+      expect(top.parent).toBeNull();
+    } finally { await fs.rm(dir, { recursive: true, force: true }); }
+  });
+
+  it('a folder that does not exist fails; a network path is refused before fs is touched', async () => {
+    const svc = new FilesService();
+    await expect(svc.dirs(path.join(os.tmpdir(), 'cw-no-such-dir-' + Date.now()))).rejects.toThrow();
+    const spy = vi.spyOn(fs, 'readdir');
+    await expect(svc.dirs('//host/share')).rejects.toThrow();
+    expect(spy).not.toHaveBeenCalled();
+  });
+});

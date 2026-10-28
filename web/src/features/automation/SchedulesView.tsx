@@ -8,12 +8,13 @@ import { EMPTY, MODE_LABEL, TERMS } from '@/ui/terms';
 import { EmptyState } from '@/ui/EmptyState';
 import { agoText } from '@/features/home/model';
 import { isWithin } from '@/features/paths';
-import { desktop } from '@/desktop';
 import { Icon } from '@/ui/icons';
 import { cronText, nextRunText, scheduleText } from './schedule-text';
 import { SCHEDULES_HERO, templateLook } from './templates';
 import { tr } from '@/i18n';
 import { Select } from '@/ui/Select';
+import { SwitchLine } from '@/ui/Switch';
+import { pickFolder } from '@/ui/pick-folder';
 
 interface Template { id: string; name: string; cron: string; prompt: string; permissionMode: PermissionMode; freshSession?: boolean }
 
@@ -55,7 +56,7 @@ export function SchedulesView({ compact = false, page = false, newSignal = 0 }: 
     return ws?.path ?? cur ?? workspaces[0]?.path ?? '';
   };
   const browse = async () => {
-    const p = desktop ? await desktop.pickDir() : await ws.request<string | null>({ kind: 'fs.pickDir' }).catch(() => null);
+    const p = await pickFolder({ start: editing?.cwd }).catch(() => null);
     if (p && editing) setEditing({ ...editing, cwd: p });
   };
   const save = async () => {
@@ -118,8 +119,8 @@ export function SchedulesView({ compact = false, page = false, newSignal = 0 }: 
         <span className="sf-l">{tr('权限')}</span>
         <Select className="field sf-pick" value={editing.permissionMode ?? 'acceptEdits'} onValueChange={(value) => setEditing({ ...editing, permissionMode: String(value) })} aria-label={tr('权限')} options={Object.entries(MODE_LABEL).map(([k, l]) => ({ value: k, label: l }))} />
       </div>
-      <label className="sf-check"><input type="checkbox" checked={!!editing.freshSession} onChange={(e) => setEditing({ ...editing, freshSession: e.target.checked, ...(e.target.checked ? {} : { worktree: false }) })} /> {tr('每次新开对话（不累积上下文）')}</label>
-      {editing.freshSession && <label className="sf-check"><input type="checkbox" checked={!!editing.worktree} onChange={(e) => setEditing({ ...editing, worktree: e.target.checked })} /> {tr('每次在独立的{worktree}里跑（不碰你工作区里没提交的改动）', { worktree: TERMS.worktree })}</label>}
+      <SwitchLine className="sf-check" on={!!editing.freshSession} onChange={(on) => setEditing({ ...editing, freshSession: on, ...(on ? {} : { worktree: false }) })}>{tr('每次新开对话（不累积上下文）')}</SwitchLine>
+      {editing.freshSession && <SwitchLine className="sf-check" on={!!editing.worktree} onChange={(on) => setEditing({ ...editing, worktree: on })}>{tr('每次在独立的{worktree}里跑（不碰你工作区里没提交的改动）', { worktree: TERMS.worktree })}</SwitchLine>}
       <div className="sf-row"><button className="btn sm primary" onClick={save}>{tr('保存')}</button><button className="btn sm" onClick={() => setEditing(null)}>{tr('取消')}</button></div>
     </div>
   );

@@ -10,6 +10,7 @@ import { resolveClaudeExe } from '../claude-exe.js';
 import { tr } from '../i18n/index.js';
 import { localEnv } from '../runtime/local-env.js';
 import { toWslPath } from '../wsl/paths.js';
+import type { PickDirResult } from '../protocol.js';
 
 type Pty = { write(d: string): void; resize(c: number, r: number): void; kill(): void; onData(cb: (d: string) => void): void; onExit(cb: (e: { exitCode: number }) => void): void };
 
@@ -107,18 +108,46 @@ export class TerminalService extends EventEmitter {
     for (const id of [...this.terms.keys()]) this.close(id);
   }
 
-  /** Native folder picker (PowerShell on Windows, AppleScript on macOS, zenity on Linux). Returns null when cancelled. */
-  pickDir(): Promise<string | null> {
+  /** Native folder picker (PowerShell on Windows, AppleScript on macOS, zenity / kdialog on Linux). Null when cancelled. */
+  pickDir(): Promise<PickDirResult> {
     const done = (res: (v: string | null) => void) => (_e: unknown, out: string) => res(String(out ?? '').trim().replace(/(.)\/$/, '$1') || null);
     if (process.platform === 'darwin') {
       return new Promise((res) => execFile('osascript', ['-e', tr('POSIX path of (choose folder with prompt "选择工作目录")')], { windowsHide: true }, done(res)));
     }
-    if (process.platform !== 'win32') {
-      return new Promise((res) => execFile('zenity', ['--file-selection', '--directory', tr('--title=选择工作目录')], { windowsHide: true }, done(res)));
-    }
+    if (process.platform !== 'win32') return linuxPickDir(process.env, runPicker);
     const script = 'Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; $d.ShowNewFolderButton = $true; if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $d.SelectedPath }';
     return new Promise((res) => execFile('powershell', ['-NoProfile', '-STA', '-Command', script], { windowsHide: true }, (_e, out) => res(out.trim() || null)));
   }
+}
+
+type PickerRun = (file: string, args: string[]) => Promise<{ code: number | string | null; out: string; err: string }>;
+
+const runPicker: PickerRun = (file, args) => new Promise((res) => execFile(file, args, { windowsHide: true }, (e, out, err) => {
+  res({ code: e ? ((e as NodeJS.ErrnoException).code ?? (e as { status?: number }).status ?? 1) : 0, out: String(out ?? ''), err: String(err ?? '') });
+}));
+
+/**
+ * Linux: zenity, then kdialog. Before issue #12 a missing zenity (Debian server / minimal installs) or no display
+ * (a headless box, ssh, a service) answered null — the same as "cancelled" — and clicking the button did nothing;
+ * now the page is told the native dialog is unavailable and opens its own folder browser.
+ */
+export async function linuxPickDir(env: Record<string, string | undefined>, run: PickerRun): Promise<PickDirResult> {
+  if (!env.DISPLAY && !env.WAYLAND_DISPLAY) return { unavailable: 'no-display' };
+  const tools: Array<[string, string[]]> = [
+    ['zenity', ['--file-selection', '--directory', tr('--title=选择工作目录')]],
+    ['kdialog', ['--getexistingdirectory', env.HOME || os.homedir(), '--title', tr('选择工作目录')]],
+  ];
+  for (const [file, args] of tools) {
+    const r = await run(file, args);
+    // it could not be started at all (ENOENT; EACCES when something by that name on PATH is not runnable — seen in
+    // WSL, whose PATH carries the Windows folders): the next one. An exit status is a number.
+    if (typeof r.code === 'string') continue;
+    const picked = r.out.trim().replace(/(.)\/$/, '$1');
+    if (r.code === 0 && picked) return picked;
+    if (/cannot open display|failed to open display|could not connect to display|could not connect: /i.test(r.err)) return { unavailable: 'no-display' };
+    return null; // cancelled (zenity / kdialog exit 1 with nothing printed)
+  }
+  return { unavailable: 'no-dialog' };
 }
 
 /** npm tarballs can drop the +x bit on node-pty's darwin `spawn-helper`; pty.spawn then fails with "posix_spawnp failed". */

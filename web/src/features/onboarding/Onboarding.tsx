@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '@/store';
-import { ws } from '@/ws/client';
-import { desktop } from '@/desktop';
 import { basename, clsx } from '@/util';
 import { Icon } from '@/ui/icons';
 import { fillComposer } from '@/features/composer/fill';
@@ -9,6 +7,7 @@ import { QuickConnect } from '@/features/providers/QuickConnect';
 import { loginInTerminal } from '@/features/providers/ConnectModel';
 import { STEP_TITLE, currentStep, onboardingSteps, recentFolders } from './steps';
 import { tr } from '@/i18n';
+import { pickFolder } from '@/ui/pick-folder';
 
 const STEP_LABEL = { login: tr('接一个模型'), project: tr('选一个项目文件夹') } as const;
 
@@ -67,7 +66,7 @@ export function Onboarding() {
     setBusy(false);
   };
   const browse = async () => {
-    const p = desktop ? await desktop.pickDir() : await ws.request<string | null>({ kind: 'fs.pickDir' });
+    const p = await pickFolder().catch((e) => { toast((e as Error).message); return null; });
     if (p) await use(p);
   };
   // the terminal would open behind the wizard: the wizard steps aside (picking the project waits in the start page's

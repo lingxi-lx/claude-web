@@ -528,8 +528,20 @@ button.link:hover { text-decoration: underline; }
 .toggle:active:not(:disabled)::after { width: 19px; }
 .toggle.on:active:not(:disabled)::after { transform: translateX(13px); }
 .toggle:disabled { opacity: 0.4; cursor: default; }
+/* ui/Switch.tsx SwitchLine: the text on the left, the switch on the right (a <label>, so the text flips it too) */
+label.switch-line, .modal label.switch-line { display: flex; align-items: center; gap: 12px; margin: 0; padding: 6px 0; min-height: 34px; font-size: var(--fs-sm); color: var(--ink-1); cursor: pointer; }
+label.switch-line.disabled { cursor: default; opacity: 0.6; }
+.switch-line-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.switch-line-text .sub { color: var(--ink-3); font-size: var(--fs-sm); }
+/* a small switch with its words inside a row of other controls (a candidate's / a rule's options) */
+label.switch-inline, .modal label.switch-inline { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: var(--fs-sm); color: var(--ink-2); white-space: nowrap; cursor: pointer; }
+/* the checkboxes / radios that stay (picking items from a list): the app's accent, not the system blue */
+input[type='checkbox'], input[type='radio'] { accent-color: var(--accent); }
+.modal input[type='checkbox'], .modal input[type='radio'] { width: auto; padding: 0; }
 textarea.code { width: 100%; min-height: 240px; margin: 0; overflow: auto; resize: vertical; background: var(--fill-subtle); border: 1px solid transparent; border-radius: var(--r-lg); padding: 10px; font-family: var(--mono); font-size: 13px; }
 input.field, select.field, textarea.field { background: var(--fill-subtle); border: 1px solid transparent; border-radius: var(--r-row); padding: 5px 9px; font-size: var(--fs-base); transition: background var(--dur-fast) var(--ease-out); }
+textarea.field { color: var(--ink-1); font: inherit; font-size: var(--fs-base); line-height: 1.5; resize: vertical; }
+label.field > textarea.field, .memory-new textarea.field, .mem-row textarea.field { display: block; width: 100%; box-sizing: border-box; }
 input.field:hover, select.field:hover, textarea.field:hover { background: color-mix(in oklab, var(--fg) 6%, transparent); }
 input.field:focus-visible, select.field:focus-visible, textarea.field:focus-visible, textarea.code:focus-visible, .modal input:focus-visible, .modal select:focus-visible, .modal textarea:focus-visible { outline: 1.5px solid var(--focus-ring); outline-offset: 0; background: var(--surface-0); }
 .modal-bg { position: fixed; inset: 0; background: var(--scrim); display: flex; align-items: center; justify-content: center; z-index: 50; animation: scrim-in var(--dur-base) var(--ease-out); }
@@ -988,7 +1000,7 @@ html[data-reduce-motion='1'] * { animation: none !important; transition: none !i
 .cloud-dialog details > summary { cursor: pointer; color: var(--ink-3); font-size: 13px; margin-top: 4px; }
 .cloud-dialog .cloud-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 .cloud-dialog .cloud-row .pj-label { margin: 0; min-width: 48px; }
-.cloud-dialog .cloud-row select.field { flex: 1; }
+.cloud-dialog .cloud-row select.field, .cloud-dialog .cloud-row .select-trigger { flex: 1; }
 .cloud-peers { display: flex; flex-direction: column; border: var(--hairline) solid var(--edge-subtle); border-radius: var(--r-md); margin-top: 8px; }
 .cloud-peer { display: flex; align-items: center; gap: 8px; padding: 8px 10px; font-size: 13px; color: var(--ink-2); cursor: pointer; }
 .cloud-peer + .cloud-peer { border-top: var(--hairline) solid var(--edge-subtle); }
@@ -1007,6 +1019,25 @@ html[data-reduce-motion='1'] * { animation: none !important; transition: none !i
 .peer-always { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ink-3); }
 .all-arts-published { display: flex; align-items: center; gap: 4px; margin: 2px 8px 6px; }
 .modal.dialog .field { width: 100%; margin-bottom: 10px; }
+/* the page's own folder browser (ui/FolderBrowser.tsx, issue #12) */
+.modal.dialog.folder-dialog { width: min(600px, calc(100vw - 32px)); }
+.folder-browser:focus { outline: none; } /* focused itself on open so Esc reaches the dialog */
+.folder-browser .fb-bar { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.modal.dialog .folder-browser .fb-bar .field { flex: 1; min-width: 0; margin: 0; font-family: var(--mono); font-size: 13px; }
+.folder-browser .fb-roots { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.folder-browser .fb-list { height: min(340px, 50vh); overflow: auto; border: var(--hairline) solid var(--edge-subtle); border-radius: var(--r-md); padding: 4px; }
+.folder-browser .fb-row { display: flex; width: 100%; align-items: center; gap: 8px; min-height: 32px; padding: 4px 8px; background: none; border: 0; border-radius: var(--r-sm); color: var(--ink-2); font-size: 13px; text-align: left; cursor: pointer; }
+.folder-browser .fb-row:hover, .folder-browser .fb-row:focus-visible { background: var(--layer-hover); color: var(--ink-1); }
+.folder-browser .fb-row .fb-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder-browser .fb-row .fb-go { color: var(--ink-4); opacity: 0; }
+.folder-browser .fb-row:hover .fb-go { opacity: 1; }
+.folder-browser .fb-new { cursor: default; }
+.folder-browser .fb-new:hover { background: none; }
+.modal.dialog .folder-browser .fb-new .field { flex: 1; margin: 0; }
+.folder-browser .fb-empty { padding: 16px 8px; color: var(--ink-4); font-size: 13px; text-align: center; }
+.folder-browser .fb-err { margin-top: 8px; color: var(--err); font-size: 13px; word-break: break-all; }
+.folder-browser .actions { align-items: center; margin-top: 12px; }
+.folder-browser .actions .grow { flex: 1; }
 .btn.danger.solid { background: var(--err); color: #fff; border-color: transparent; }
 .btn.danger.solid:hover { filter: brightness(1.1); background: var(--err); }
 
@@ -1905,9 +1936,11 @@ html.desktop:not(.mac) .dock.simple:not(.min) .dock-tabs .tab.fixed { padding: 0
 svg.flip { transform: scaleX(-1); }
 .menu.dirmenu button.dirmenu-wt { align-items: center; gap: var(--sp-2); }
 .menu.dirmenu button.dirmenu-wt .grow { flex: 1; }
-/* popovers portalled to <body> can overlap a 52px title row (a short window): a drag region under them would
-   swallow their clicks, so they are explicitly not draggable */
-html.desktop body > .menu, html.desktop .menu.cm, html.desktop .menu.dirmenu, html.desktop .menu.mm, html.desktop .ctx-card { -webkit-app-region: no-drag; }
+/* a menu / popover / dropdown list can overlap a title row (the sidebar's 主工作区 row, a pane head, the top strip):
+   a drag region under it swallows its clicks (the top items of a sidebar row's menu looked open but did nothing), so
+   every one of them is explicitly not draggable — by class and by role, wherever it is rendered */
+html.desktop .menu, html.desktop .ctx-card, html.desktop [role="menu"], html.desktop [role="listbox"],
+html.desktop [role="dialog"], html.desktop .popover { -webkit-app-region: no-drag; }
 
 /* Shared Select: native select behavior presented with the same anchored menu surface as 更多. */
 .select-trigger { min-width: 120px; max-width: 100%; min-height: 32px; display: inline-flex; align-items: center; gap: 8px; justify-content: space-between; padding: 5px 9px; border: 1px solid transparent; border-radius: var(--r-row); background: var(--fill-subtle); color: var(--ink-1); font: inherit; text-align: left; cursor: pointer; }

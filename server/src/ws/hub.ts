@@ -189,6 +189,8 @@ export interface Services {
 /** Requests after which something connects out: they wait for a fresh look at the proxy. (`web.search` waits inside WebService, like the agents' searches.) */
 const GOES_OUT = new Set<string>(['session.open', 'session.send', 'session.setProvider', 'session.switchAgent', 'providers.probe', 'providers.refreshModels', 'import.run', 'terminal.open', 'im.set', 'im.test', 'mcp.registry', 'sync.remote.test', 'sync.remote.push', 'sync.remote.pull']);
 
+const isLoopback = (a: string | undefined) => !!a && (a === '::1' || a.startsWith('127.') || a.startsWith('::ffff:127.'));
+
 export class Hub {
   private clients = new Set<WebSocket>();
   /** Connections from another machine's FederationService (`?peer=<serverId>`): never sent what we got from our own peers. */
@@ -198,6 +200,8 @@ export class Hub {
    * with a paired device's token. They may use everything else, but not host the built-in browser.
    */
   private remoteConns = new WeakSet<WebSocket>();
+  /** Connections whose screen is not this machine's: a native dialog (`fs.pickDir`) would open where nobody sees it. */
+  private otherScreen = new WeakSet<WebSocket>();
   /** renderer error reports (`client.log`): 20 per connection, 60 in all per minute, duplicates counted */
   private clientLogs = new ClientLogGate<WebSocket>();
 
@@ -312,6 +316,7 @@ export class Hub {
     this.clients.add(ws);
     try { if (req && new URL(req.url ?? '/', 'http://x').searchParams.get('peer')) this.peerConns.add(ws); } catch { /* not a peer */ }
     if (req && ((req.socket as any)?.cwRemote || (req as any).cwDevice)) this.remoteConns.add(ws);
+    if (this.peerConns.has(ws) || this.remoteConns.has(ws) || !isLoopback(req?.socket?.remoteAddress)) this.otherScreen.add(ws);
     const fed = this.s.federation;
     this.send(ws, { type: 'event', event: { kind: 'hello', version: this.s.version, ...(fed ? { serverId: fed.serverId, name: fed.name, bootId: fed.bootId } : {}) } });
     // startup discovery happens before anyone is connected: tell each new client what's waiting to be joined
@@ -1048,8 +1053,13 @@ export class Hub {
         return s.files.list(req.path);
       case 'fs.read':
         return s.files.read(req.path);
-      case 'fs.pickDir':
-        return s.terminal.pickDir();
+      case 'fs.pickDir': {
+        if (this.otherScreen.has(ws)) return req.fallback ? { unavailable: 'remote' } : null;
+        const r = await s.terminal.pickDir();
+        return typeof r === 'object' && r && !req.fallback ? null : r;
+      }
+      case 'fs.dirs':
+        return s.files.dirs(req.path);
       case 'fs.stat':
         return s.files.stat(req.path);
       case 'fs.open':

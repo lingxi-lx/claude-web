@@ -1,15 +1,26 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createReadStream } from 'node:fs';
 import readline from 'node:readline';
 import { EventEmitter } from 'node:events';
 import chokidar from 'chokidar';
-import type { FsEntry, FsOpenResult, FsStat } from '../protocol.js';
+import type { FsDirs, FsEntry, FsOpenResult, FsStat } from '../protocol.js';
 import { tr } from '../i18n/index.js';
 
 const execFileAsync = promisify(execFile);
+
+/** `/`, or the Windows drive letters that exist (C:\ … Z:\; A: / B: are skipped — probing a floppy letter can hang). */
+async function fsRoots(): Promise<string[]> {
+  if (process.platform !== 'win32') return ['/'];
+  const letters = 'CDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  // a disconnected mapped drive can take many seconds to fail: list what answers quickly
+  const quick = (p: Promise<boolean>) => Promise.race([p, new Promise<boolean>((r) => setTimeout(() => r(false), 1500).unref())]);
+  const ok = await Promise.all(letters.map((l) => quick(fs.access(`${l}:\\`).then(() => true, () => false))));
+  return letters.filter((_, i) => ok[i]).map((l) => `${l}:\\`);
+}
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
 
 export interface ChangedFile {
@@ -305,6 +316,23 @@ export class FilesService extends EventEmitter {
       out.push({ name: e.name, dir: isDir, size, mtime, symlink: symlink || undefined });
     }
     return out.sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name));
+  }
+
+  /** The page's own folder browser (issue #12): subfolders of `dir` (default: home), its parent, and the roots. */
+  async dirs(dir?: string): Promise<FsDirs> {
+    const home = os.homedir();
+    const raw = dir && dir.trim() ? dir.trim() : home;
+    const p = path.resolve(raw);
+    this.local(raw, p);
+    const entries = await fs.readdir(p, { withFileTypes: true });
+    const dirs: string[] = [];
+    for (const e of entries) {
+      if (e.isDirectory()) { dirs.push(e.name); continue; }
+      if (e.isSymbolicLink() && (await fs.stat(path.join(p, e.name)).then((st) => st.isDirectory(), () => false))) dirs.push(e.name);
+    }
+    dirs.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true }));
+    const up = path.dirname(p);
+    return { path: p, parent: up === p ? null : up, dirs, roots: await fsRoots(), home, sep: path.sep };
   }
 
   async read(p: string) {

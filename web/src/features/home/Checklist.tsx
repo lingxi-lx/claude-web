@@ -1,7 +1,5 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '@/store';
-import { ws } from '@/ws/client';
-import { desktop } from '@/desktop';
 import { clsx } from '@/util';
 import { Icon } from '@/ui/icons';
 import { modKey } from '@/features/workbench/shortcuts';
@@ -10,6 +8,7 @@ import { fillComposer } from '@/features/composer/fill';
 import { CHECKLIST_KEY, checklistView, readChecklist, type ChecklistId } from './model';
 import { markChecklist } from './checklist-sync';
 import { tr } from '@/i18n';
+import { pickFolder } from '@/ui/pick-folder';
 
 /** What each step says; the palette step also carries the shortcuts the old 就绪 page listed (spec §5.8). */
 const STEP: Record<ChecklistId, { label: string; hint: string; action: string }> = {
@@ -21,7 +20,7 @@ const STEP: Record<ChecklistId, { label: string; hint: string; action: string }>
 
 async function pickProject(tileId: string) {
   const st = useStore.getState();
-  const p = desktop ? await desktop.pickDir() : await ws.request<string | null>({ kind: 'fs.pickDir' });
+  const p = await pickFolder().catch((e) => { useStore.getState().toast((e as Error).message); return null; });
   if (!p) return;
   try { await st.addWorkspace(p); fillComposer({ tileId, cwd: p, focus: true }); } catch (e) { st.toast((e as Error).message); }
 }

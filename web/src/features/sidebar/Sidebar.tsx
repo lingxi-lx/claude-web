@@ -2,7 +2,6 @@ import { openDispatch } from '@/features/cloud/cloud-open';
 import { modKey } from '@/features/workbench/shortcuts';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useStore } from '@/store';
-import { ws } from '@/ws/client';
 import { desktop } from '@/desktop';
 import { clsx } from '@/util';
 import { folderLabels, splitFolders } from './folders';
@@ -37,6 +36,7 @@ import { openBackground } from '@/features/background/state';
 import { useSection } from '@/features/sections';
 import type { CustomId, ProjectMenuId, ProjectsHeadId, RowId, SectionId, TopId } from './entries';
 import { tr, trAs } from '@/i18n';
+import { pickFolder } from '@/ui/pick-folder';
 
 /** Ids of conversations that must stay in view past a group's cut: running / waiting ones (a stable string, not the `open` map). */
 const busyIds = (s: ReturnType<typeof useStore.getState>) =>
@@ -237,7 +237,7 @@ export function Sidebar({ onNew }: { onNew: () => void }) {
   const customCtx: RowCtx = { ...ctx, where: 'custom' };
   const toggleGroup = (k: string, cur = !!collapsed[k]) => dispatch({ t: 'sidebar.set', patch: { sections: { ...collapsed, [k]: !cur } } });
   const pickWorkspace = async () => {
-    const p = desktop ? await desktop.pickDir() : await ws.request<string | null>({ kind: 'fs.pickDir' });
+    const p = await pickFolder().catch((e) => { toast((e as Error).message); return null; });
     if (p) await addWorkspace(p).catch((e) => toast(e.message));
   };
   const groupProps = (k: string, items: SessionSummary[]) => ({

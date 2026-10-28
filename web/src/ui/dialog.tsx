@@ -1,13 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { create } from 'zustand';
 import { imeComposing } from './ime';
+import { FolderBrowser, type FolderApi } from './FolderBrowser';
 import { tr } from '@/i18n';
 
 // Promise-based replacements for window.confirm / prompt / alert, rendered in-app (Electron's native dialogs
 // steal focus and look foreign; browsers may block them). One dialog at a time, queued.
 
 export interface DialogSpec {
-  kind: 'confirm' | 'prompt' | 'alert';
+  kind: 'confirm' | 'prompt' | 'alert' | 'folder';
+  /** kind 'folder': where the folders come from, and the folder to open first */
+  folder?: { api: FolderApi; start?: string };
   title: string;
   message?: string;
   okLabel?: string;
@@ -38,6 +41,8 @@ export const dlg = {
   confirm: (title: string, o: Partial<DialogSpec> = {}) => ask<boolean>({ kind: 'confirm', title, okLabel: tr('确定'), cancelLabel: tr('取消'), ...o }),
   prompt: (title: string, defaultValue = '', o: Partial<DialogSpec> = {}) => ask<string | null>({ kind: 'prompt', title, defaultValue, okLabel: tr('确定'), cancelLabel: tr('取消'), ...o }),
   alert: (title: string, o: Partial<DialogSpec> = {}) => ask<void>({ kind: 'alert', title, okLabel: tr('好'), ...o }),
+  /** The page's own folder browser (ui/pick-folder.ts uses it when no native dialog can be shown): a path or null. */
+  folder: (title: string, api: FolderApi, o: Partial<DialogSpec> & { start?: string } = {}) => ask<string | null>({ kind: 'folder', title, okLabel: tr('选择这个文件夹'), cancelLabel: tr('取消'), ...o, folder: { api, start: o.start } }),
 };
 
 export function DialogHost() {
@@ -53,10 +58,22 @@ export function DialogHost() {
   if (!cur) return null;
   const { spec } = cur;
   const done = (v: any) => { cur.resolve(v); shift(); };
-  const cancel = () => done(spec.kind === 'confirm' ? false : spec.kind === 'prompt' ? null : undefined);
+  const cancel = () => done(spec.kind === 'confirm' ? false : spec.kind === 'prompt' || spec.kind === 'folder' ? null : undefined);
   const ok = () => done(spec.kind === 'confirm' ? true : spec.kind === 'prompt' ? value : undefined);
+  const esc = (e: ReactKeyboardEvent) => { if (e.key === 'Escape' && !imeComposing(e.nativeEvent)) { e.stopPropagation(); cancel(); } };
+  if (spec.kind === 'folder' && spec.folder) {
+    return (
+      <div key={cur.id} className="modal-bg dialog-bg" onMouseDown={(e) => e.target === e.currentTarget && cancel()} onKeyDown={esc}>
+        <div className="modal dialog folder-dialog" role="dialog" aria-modal="true" aria-label={spec.title}>
+          <h3>{spec.title}</h3>
+          {spec.message && <div className="dialog-msg">{spec.message}</div>}
+          <FolderBrowser api={spec.folder.api} start={spec.folder.start} okLabel={spec.okLabel ?? tr('选择这个文件夹')} cancelLabel={spec.cancelLabel ?? tr('取消')} onDone={done} />
+        </div>
+      </div>
+    );
+  }
   return (
-    <div key={cur.id} className="modal-bg dialog-bg" onMouseDown={(e) => e.target === e.currentTarget && cancel()} onKeyDown={(e) => { if (e.key === 'Escape' && !imeComposing(e.nativeEvent)) { e.stopPropagation(); cancel(); } }}>
+    <div key={cur.id} className="modal-bg dialog-bg" onMouseDown={(e) => e.target === e.currentTarget && cancel()} onKeyDown={esc}>
       <div className="modal dialog" role="dialog" aria-modal="true">
         <h3>{spec.title}</h3>
         {spec.message && <div className="dialog-msg">{spec.message}</div>}

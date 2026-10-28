@@ -69,6 +69,7 @@ import { onRecorded, openPicker } from '@/features/recording/recorder';
 import { framesState, withFrames, withoutFrame, type ComposerRecording } from '@/features/recording/pending';
 import { extractKeyframes } from '@/features/recording/extract';
 import { fmtDuration } from '@/features/recording/keyframes';
+import { pickFolder } from '@/ui/pick-folder';
 // review X1: the SSH dialog loads when it is opened
 const AddSshDialog = lazy(() => import('@/features/remote/AddSshDialog').then((m) => ({ default: m.AddSshDialog })));
 
@@ -913,7 +914,7 @@ export function Composer({ welcome = false, target, disabled = false, visible = 
     setStarting(false);
   };
   const pickDir = async () => {
-    const p = desktop ? await desktop.pickDir() : await ws.request<string | null>({ kind: 'fs.pickDir' });
+    const p = await pickFolder({ start: cwd || undefined }).catch((e) => { toast((e as Error).message); return null; });
     if (p) setCwd(p);
   };
 

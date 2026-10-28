@@ -649,7 +649,10 @@ export type ClientRequest =
   | { kind: 'files.diff'; sessionId: string; path: string }
   | { kind: 'fs.list'; path: string }
   | { kind: 'fs.read'; path: string }
-  | { kind: 'fs.pickDir' }
+  // `fallback`: the page has its own folder browser — answer `{ unavailable }` instead of a silent null when no native
+  // dialog can be shown to this client (issue #12: Linux without zenity / a display, a browser on another machine)
+  | { kind: 'fs.pickDir'; fallback?: boolean }
+  | { kind: 'fs.dirs'; path?: string }
   // phase 3: editor / file operations / search / git
   | { kind: 'fs.stat'; path: string }
   | { kind: 'fs.open'; path: string } // text + mtime for the editor
@@ -898,6 +901,10 @@ export type ServerEvent =
 // ---------- phase 3: files / search / git ----------
 export interface FsEntry { name: string; dir: boolean; size?: number; mtime?: number; symlink?: boolean }
 export interface FsStat { path: string; dir: boolean; size: number; mtime: number; binary?: boolean }
+/** `fs.pickDir` with `fallback`: the chosen folder, null when cancelled, or why no native dialog can be shown. */
+export type PickDirResult = string | null | { unavailable: 'remote' | 'no-display' | 'no-dialog' };
+/** One folder for the page's folder browser: its subfolders (names), its parent (null at a root), the roots to jump to. */
+export interface FsDirs { path: string; parent: string | null; dirs: string[]; roots: string[]; home: string; sep: string }
 export interface FsOpenResult { text: string; mtime: number; size: number; binary: boolean; truncated?: boolean }
 
 export interface SearchOptions { regex?: boolean; caseSensitive?: boolean; wholeWord?: boolean; include?: string[]; exclude?: string[]; includeHidden?: boolean; noIgnore?: boolean; maxResults?: number }

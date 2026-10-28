@@ -21,6 +21,7 @@ import { zoomPercent } from '@/ui/zoom-math';
 import { commandHits } from './filter';
 import { tr } from '@/i18n';
 import { openWhatsNew } from '@/features/update/WhatsNew';
+import { pickFolder } from '@/ui/pick-folder';
 
 interface Cmd { id: string; label: string; sub?: string; ic?: IconName; group: string; run: () => void }
 
@@ -73,7 +74,7 @@ export function CommandPalette() {
       { id: 'dispatch', label: tr('派活…'), ic: 'send', group: tr('对话'), run: () => openDispatch() },
       { id: 'published', label: tr('已发布的文件'), ic: 'share', group: tr('对话'), run: () => openPublished() },
       { id: 'claudeai.import', label: tr('导入 claude.ai 数据…'), ic: 'cloud', group: tr('对话'), run: () => openClaudeAiImport() },
-      { id: 'ws.add', label: tr('打开项目文件夹…'), ic: 'folder', group: tr('对话'), run: async () => { const p = await ws.request<string | null>({ kind: 'fs.pickDir' }); if (p) await st.addWorkspace(p); } },
+      { id: 'ws.add', label: tr('打开项目文件夹…'), ic: 'folder', group: tr('对话'), run: async () => { const p = await pickFolder(); if (p) await st.addWorkspace(p); } },
       { id: 'sidebar', label: st.sidebarOpen ? tr('收起侧栏') : tr('展开侧栏'), sub: 'Ctrl+B', ic: 'sidebar', group: tr('视图'), run: () => useStore.setState((s) => ({ sidebarOpen: !s.sidebarOpen })) },
       { id: 'archived', label: st.showArchived ? tr('隐藏已归档的对话') : tr('显示已归档的对话'), ic: 'archive', group: tr('视图'), run: () => useStore.getState().setShowArchived(!useStore.getState().showArchived) },
       { id: 'keys', label: tr('键盘快捷键'), sub: 'Ctrl+/', ic: 'keyboard', group: tr('视图'), run: () => useStore.setState({ shortcutsOpen: true }) },

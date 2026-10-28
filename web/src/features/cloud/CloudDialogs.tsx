@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ClaudeAiImportResult, ClaudeAiScan, PeerInfo, PublishedItem, PublishExpiry } from '@shared';
 import { useStore } from '@/store';
 import { ws } from '@/ws/client';
-import { desktop } from '@/desktop';
 import { dlg } from '@/ui/dialog';
 import { Icon } from '@/ui/icons';
 import { imeComposing } from '@/ui/ime';
@@ -13,6 +12,8 @@ import { openExternal } from '@/features/chat/link-route';
 import { expiryText, publishLinks, uploadTo, useDialogFocus } from './logic';
 
 import { useCloud, closeCloud as close } from './cloud-open';
+import { Select } from '@/ui/Select';
+import { pickFolder as chooseFolder } from '@/ui/pick-folder';
 // the open* functions live in cloud-open.ts (this module is loaded on first open — review X1)
 export { openDispatch, openClaudeAiImport, openPublish, openPublished } from './cloud-open';
 const toast = (t: string, ok = false) => useStore.getState().toast(t, ok);
@@ -85,17 +86,17 @@ function DispatchDialog() {
         onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !imeComposing(e.nativeEvent)) { e.preventDefault(); void go(); } }} />
       <div className="cloud-row">
         <label className="pj-label" htmlFor="dispatch-peer">{tr('机器')}</label>
-        <select id="dispatch-peer" className="field" value={peer ?? ''} onChange={(e) => setPeer(e.target.value)}>
+        <Select id="dispatch-peer" className="field" label={tr('机器')} value={peer ?? ''} onValueChange={(v) => setPeer(String(v))}>
           <option value="">{tr('本机')}</option>
           {d?.peers.map((p) => <option key={p.id} value={p.id} disabled={!p.online}>{p.online ? p.name : tr('{name}（现在连不上）', { name: p.name })}</option>)}
-        </select>
+        </Select>
       </div>
       <div className="cloud-row">
         <label className="pj-label" htmlFor="dispatch-project">{tr('项目')}</label>
-        <select id="dispatch-project" className="field" value={workspaceId} onChange={(e) => setWorkspaceId(e.target.value)}>
+        <Select id="dispatch-project" className="field" label={tr('项目')} value={workspaceId} onValueChange={(v) => setWorkspaceId(String(v))}>
           <option value="">{tr('不放进项目（主目录）')}</option>
           {d?.workspaces.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-        </select>
+        </Select>
       </div>
       <div className="dialog-msg pj-note"><div>{tr('权限模式按项目原来的设置；需要你允许的操作会推到这里。')}</div></div>
       <div className="actions">
@@ -127,7 +128,7 @@ function ClaudeAiImportDialog() {
     setBusy(false); setProgress(null);
   };
   const pickFolder = async () => {
-    const p = desktop ? await desktop.pickDir() : await ws.request<string | null>({ kind: 'fs.pickDir' }).catch((e) => { toast(e.message); return null; });
+    const p = await chooseFolder({ start: folder || undefined }).catch((e) => { toast(e.message); return null; });
     if (p) setFolder(p);
   };
   const run = async () => {

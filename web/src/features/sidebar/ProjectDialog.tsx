@@ -9,7 +9,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PermissionMode, ProjectFile, Workspace } from '@shared';
 import { useStore } from '@/store';
 import { ws } from '@/ws/client';
-import { desktop } from '@/desktop';
 import { dlg } from '@/ui/dialog';
 import { Icon } from '@/ui/icons';
 import { imeComposing } from '@/ui/ime';
@@ -20,6 +19,9 @@ import { projectSessions, uploadTo } from '@/features/cloud/logic';
 import { isWinPath, samePath } from './project-paths';
 
 import { useProjectDialog, type ProjectTab } from './project-dialog-open';
+import { Select } from '@/ui/Select';
+import { SwitchLine } from '@/ui/Switch';
+import { pickFolder } from '@/ui/pick-folder';
 // opening it lives in project-dialog-open.ts (this module is loaded on first open — review X1)
 export { openProjectDialog, type ProjectTab } from './project-dialog-open';
 const close = () => useProjectDialog.setState({ id: null });
@@ -129,7 +131,7 @@ function ProjectDialog({ w }: { w: Workspace }) {
 
   const add = async () => {
     const failed = (e: unknown) => { toast(e instanceof Error ? e.message : String(e)); return null; };
-    const p = desktop ? await desktop.pickDir().catch(failed) : await ws.request<string | null>({ kind: 'fs.pickDir' }).catch(failed);
+    const p = await pickFolder({ start: w.path }).catch(failed);
     if (!p) return;
     const win = isWinPath(w.path);
     if ([w.path, ...folders].some((f) => samePath(f, p, win))) { toast(tr('这个文件夹已经在项目里了')); return; }
@@ -187,12 +189,12 @@ function ProjectDialog({ w }: { w: Workspace }) {
           <label className="pj-label" htmlFor="pj-instr">{tr('项目说明')}</label>
           <textarea id="pj-instr" className="field pj-instructions" rows={8} maxLength={20000} value={instructions} placeholder={tr('比如：用 pnpm；回答用中文；改完跑 npm test')} onChange={(e) => setInstructions(e.target.value)} />
           <div className="dialog-msg pj-note"><div>{tr('这个项目里的每个对话都会带上这段说明；正在运行的对话下次打开时生效。')}</div></div>
-          <label className="pj-check"><input type="checkbox" data-act="scope" checked={scoped} onChange={(e) => setScoped(e.target.checked)} /> {tr('跨对话工具只看见本项目的对话')}</label>
+          <SwitchLine className="pj-check" data-act="scope" on={scoped} onChange={setScoped}>{tr('跨对话工具只看见本项目的对话')}</SwitchLine>
           <label className="pj-label" htmlFor="pj-mode">{tr('派活用的权限模式')}</label>
-          <select id="pj-mode" className="field" value={mode} onChange={(e) => setMode(e.target.value as PermissionMode | '')}>
+          <Select id="pj-mode" className="field" label={tr('派活用的权限模式')} value={mode} onValueChange={(v) => setMode(String(v) as PermissionMode | '')}>
             <option value="">{tr('跟新对话的默认一样')}</option>
             {PERMISSION_MODE_ORDER.map((m) => <option key={m} value={m}>{MODE_LABEL[m]}</option>)}
-          </select>
+          </Select>
         </div>
         <div hidden={tab !== 'files'}>{tab === 'files' && <ProjectFiles w={w} />}</div>
         <div hidden={tab !== 'conversations'}>{tab === 'conversations' && <ProjectConversations w={w} />}</div>

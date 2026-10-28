@@ -9,9 +9,9 @@ import { Icon } from '@/ui/icons';
 import { useDropdown } from '@/ui/menus';
 import { imeComposing } from '@/ui/ime';
 import { tr, dateLocale } from '@/i18n';
-import { desktop } from '@/desktop';
 import { EMPTY } from '@/ui/terms';
 import { EmptyState } from '@/ui/EmptyState';
+import { pickFolder } from '@/ui/pick-folder';
 
 function join(dir: string, name: string) {
   const sep = dir.includes('\\') ? '\\' : '/';
@@ -192,7 +192,7 @@ export function FileTree({ root, gitStatus, onPickRoot }: { root: string; gitSta
 
   if (!root) {
     const pick = async () => {
-      const p = desktop ? await desktop.pickDir() : await ws.request<string | null>({ kind: 'fs.pickDir' }).catch(() => null);
+      const p = await pickFolder().catch(() => null);
       if (p) onPickRoot?.(p);
     };
     return <EmptyState e={EMPTY.filesNoFolder} action={onPickRoot ? <button className="btn sm" onClick={() => void pick()}>{tr('打开一个文件夹')}</button> : undefined} />;

@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { terminalShell } from './service.js';
+import { linuxPickDir, terminalShell } from './service.js';
 
 describe('terminalShell: the terminal panel is a real shell, not the claude TUI', () => {
   const claudeExe = path.join('C:', 'app', 'sdk-win32-x64', 'claude.exe');
@@ -27,5 +27,43 @@ describe('terminalShell: the terminal panel is a real shell, not the claude TUI'
 
   it('no bundled claude: PATH untouched', () => {
     expect(terminalShell('linux', { PATH: '/usr/bin' }, null).env.PATH).toBe('/usr/bin');
+  });
+});
+
+// issue #12: on Linux a missing zenity or display used to answer null — the same as "cancelled" — and the button did nothing
+describe('linuxPickDir: the native folder dialog on Linux, or why there is none', () => {
+  type R = { code: number | string | null; out: string; err: string };
+  const runner = (answers: Record<string, R>) => {
+    const calls: string[] = [];
+    const run = async (file: string) => { calls.push(file); return answers[file] ?? { code: 'ENOENT', out: '', err: '' }; };
+    return { run, calls };
+  };
+
+  it('no DISPLAY / WAYLAND_DISPLAY: unavailable without trying a program', async () => {
+    const r = runner({ zenity: { code: 0, out: '/home/u/p\n', err: '' } });
+    expect(await linuxPickDir({ HOME: '/home/u' }, r.run)).toEqual({ unavailable: 'no-display' });
+    expect(r.calls).toEqual([]);
+  });
+
+  it('zenity picks a folder (trailing slash dropped); Wayland counts as a display', async () => {
+    expect(await linuxPickDir({ DISPLAY: ':0' }, runner({ zenity: { code: 0, out: '/home/u/p/\n', err: '' } }).run)).toBe('/home/u/p');
+    expect(await linuxPickDir({ WAYLAND_DISPLAY: 'wayland-0' }, runner({ zenity: { code: 0, out: '/srv\n', err: '' } }).run)).toBe('/srv');
+  });
+
+  it('cancelled: null (zenity exits 1 with nothing printed, Gtk warnings on stderr do not matter)', async () => {
+    expect(await linuxPickDir({ DISPLAY: ':0' }, runner({ zenity: { code: 1, out: '', err: 'Gtk-Message: GtkDialog mapped without a transient parent' } }).run)).toBeNull();
+  });
+
+  it('no zenity: kdialog; neither installed: unavailable (no-dialog)', async () => {
+    const k = runner({ kdialog: { code: 0, out: '/home/u/k\n', err: '' } });
+    expect(await linuxPickDir({ DISPLAY: ':0' }, k.run)).toBe('/home/u/k');
+    expect(k.calls).toEqual(['zenity', 'kdialog']);
+    expect(await linuxPickDir({ DISPLAY: ':0' }, runner({}).run)).toEqual({ unavailable: 'no-dialog' });
+    // something named zenity on PATH that cannot be run (WSL: the Windows folders are on PATH) is not "cancelled"
+    expect(await linuxPickDir({ DISPLAY: ':0' }, runner({ zenity: { code: 'EACCES', out: '', err: '' }, kdialog: { code: 'EACCES', out: '', err: '' } }).run)).toEqual({ unavailable: 'no-dialog' });
+  });
+
+  it('a DISPLAY nobody can open (ssh without forwarding, a service): unavailable (no-display)', async () => {
+    expect(await linuxPickDir({ DISPLAY: ':9' }, runner({ zenity: { code: 1, out: '', err: '(zenity:42): Gtk-WARNING **: cannot open display: :9' } }).run)).toEqual({ unavailable: 'no-display' });
   });
 });
