@@ -18,6 +18,7 @@ import { useMenuMotion } from '@/ui/menu-motion';
 import { ActionSheet, useSheetMenu } from '@/ui/ActionSheet';
 import { tr } from '@/i18n';
 import { openGateway } from '@/features/gateway/state';
+import { Switch } from '@/ui/Switch';
 
 /** `5 分钟前` / `刚刚` / a date */
 export function agoText(t: number): string {
@@ -295,8 +296,8 @@ export function ModelMenu(p: ModelMenuProps) {
       </div>
       {p.subagent && (
         <label className="mm-subdef" data-id={SUBAGENT_MENU_ID.default} title={tr('新开的对话（也包括 IM、定时任务）的子代理都用这里选的，不管主对话用哪个供应商')}>
-          <input type="checkbox" checked={p.subagent.isDefault} disabled={p.subagent.same && p.subagent.isDefault} onChange={() => p.subagent!.onToggleDefault()} />
-          <span>{tr('新对话都这样')}</span>
+          <span className="grow">{tr('新对话都这样')}</span>
+          <Switch on={p.subagent.isDefault} disabled={p.subagent.same && p.subagent.isDefault} onChange={() => p.subagent!.onToggleDefault()} />
         </label>
       )}
       {p.subagentRow && !p.subagent && (

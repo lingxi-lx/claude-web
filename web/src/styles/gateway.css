@@ -1,7 +1,7 @@
 /* 上游 section: lists, cards, quota bars and the audit log (the old tab bodies, now inside modules / drawers). */
-.gateway-page .gateway-tab { padding: 4px 0; }
-.gateway-page .gateway-tab h4 { margin: 18px 0 8px; font-size: var(--fs-base); }
-.gateway-page .gateway-tab h4:first-child { margin-top: 4px; }
+.gateway-tab { padding: 4px 0; }
+.gateway-tab h4 { margin: 18px 0 8px; font-size: var(--fs-base); }
+.gateway-tab h4:first-child { margin-top: 4px; }
 .gateway-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
 .gateway-card { background: var(--surface-0); border-radius: var(--r-card); box-shadow: var(--elev-1); padding: 12px 14px; }
 .gateway-card .n { font-size: var(--fs-xl); font-weight: 600; }
@@ -36,13 +36,15 @@
 .gateway-start { box-shadow: inset 0 0 0 var(--hairline) var(--accent); background: var(--accent-soft); }
 
 /* forms: a label above its control, each control keeping its own width, room between a row's fields */
-.gateway-page .gateway-tab .row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 12px; margin: 6px 0; }
-.gateway-page .gateway-tab label.field { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-sm); color: var(--ink-3); }
-.gateway-page .gateway-tab label.field > span { line-height: 1.45; }
-.gateway-page .gateway-tab .chip { align-self: center; }
-.gateway-page .gateway-tab .gateway-row .select-trigger,
-.gateway-page .gateway-tab .gateway-row input { max-width: 260px; }
-.gateway-page .gateway-card .gateway-row { gap: 8px; flex-wrap: wrap; }
+.gateway-tab .row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 12px; margin: 6px 0; }
+.gateway-tab label.field { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-sm); color: var(--ink-3); }
+.gateway-tab label.field > span { line-height: 1.45; }
+.gateway-tab .chip { align-self: center; }
+.gateway-tab .gateway-row .select-trigger,
+.gateway-tab .gateway-row input { max-width: 260px; }
+/* a box marked `grow` takes the rest of its row (an address, a key), like a textarea marked `grow` already does */
+.gateway-row input.grow, .gateway-tab .gateway-row input.grow { flex: 1 1 auto; min-width: 0; max-width: none; }
+.gateway-card .gateway-row { gap: 8px; flex-wrap: wrap; }
 .gateway-local-card { margin: 8px 0 6px; }
 .gateway-local-card .l { font-family: var(--mono); font-size: var(--fs-sm); }
 

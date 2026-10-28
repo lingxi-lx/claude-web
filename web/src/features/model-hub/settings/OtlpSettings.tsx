@@ -3,6 +3,7 @@ import type { OtlpView } from '@shared';
 import { ws } from '@/ws/client';
 import { useStore } from '@/store';
 import { tr } from '@/i18n';
+import { Switch } from '@/ui/Switch';
 
 /** the value the server reads as "keep the stored one" (telemetry/types.ts OTLP_MASK) */
 const MASK = '••••••';
@@ -79,9 +80,15 @@ export function OtlpSettings() {
           </div>
         ))}
         <div className="gateway-row">
+          <span className="sub grow">{tr('请求链路（traces）')}</span>
+          <Switch hub on={view.traces} disabled={busy} label={tr('请求链路（traces）')} onChange={(on) => void save({ traces: on })} />
+        </div>
+        <div className="gateway-row">
+          <span className="sub grow">{tr('指标（metrics）')}</span>
+          <Switch hub on={view.metrics} disabled={busy} label={tr('指标（metrics）')} onChange={(on) => void save({ metrics: on })} />
+        </div>
+        <div className="gateway-row">
           <button className="btn sm ghost" disabled={busy || rows.length >= 20} onClick={() => setRows((rs) => [...rs, { name: '', value: '' }])}>{tr('添加请求头')}</button>
-          <label className="sub"><input type="checkbox" checked={view.traces} disabled={busy} onChange={(e) => void save({ traces: e.target.checked })} /> {tr('请求链路（traces）')}</label>
-          <label className="sub"><input type="checkbox" checked={view.metrics} disabled={busy} onChange={(e) => void save({ metrics: e.target.checked })} /> {tr('指标（metrics）')}</label>
           <span className="grow" />
           <button className="btn sm" disabled={busy} onClick={() => void save()}>{tr('保存')}</button>
           <button className="btn sm" disabled={busy || dirty || !view.endpoint} onClick={() => void test()}>{tr('发送测试数据')}</button>

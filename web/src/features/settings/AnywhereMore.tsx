@@ -9,6 +9,7 @@ import {
   RESCAN_NOTE, brokerProblem, cleanBrokers, cleanStun, pairLinkProblem, recentRows, shellUrlProblem, stunProblem, type BrokerDraft,
 } from './anywhere';
 import { tr } from '@/i18n';
+import { SwitchChip } from '@/ui/Switch';
 
 // 设置 → 手机与其它电脑 → 更多选项: what 在外面也能用 runs on — the signaling brokers, the STUN servers, the phone page
 // the QR opens — and its last 20 connections. The network words (MQTT / WebRTC / STUN / ICE) are allowed here and in
@@ -93,7 +94,7 @@ export function AnywhereMore() {
               <input className="field aw-name" data-f="name" aria-label={tr('名称')} placeholder={tr('名称')} value={r.name} onChange={(e) => editBroker(i, { name: e.target.value })} />
               <input className="field aw-url" data-f="url" aria-label={tr('地址')} placeholder="wss://broker.example:8084/mqtt" value={r.url} onChange={(e) => editBroker(i, { url: e.target.value })} title={r.username ? tr('用户名 {username}（保存时保留）', { username: r.username }) : undefined} />
               <span className={clsx('badge aw-st', s.tone)} title={s.title}>{s.t}</span>
-              <label className="aw-relay" title={tr('直连打不通时，慢速转发经这个服务器传数据')}><input type="checkbox" data-f="relay" checked={r.relay} onChange={(e) => editBroker(i, { relay: e.target.checked })} />{tr('用于转发')}</label>
+              <SwitchChip className="aw-relay" title={tr('直连打不通时，慢速转发经这个服务器传数据')} data-f="relay" on={r.relay} onChange={(on) => editBroker(i, { relay: on })}>{tr('用于转发')}</SwitchChip>
               <button className="icon-btn xs" aria-label={tr('删除这一行')} title={tr('删除这一行')} onClick={() => setBrokers((rows) => rows.filter((_, j) => j !== i))}><Icon name="close" size={12} /></button>
             </div>
           );

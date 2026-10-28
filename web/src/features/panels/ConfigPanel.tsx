@@ -13,6 +13,7 @@ import { REGION_BLOCKED, REGION_RE } from '@/features/providers/quick';
 import { contextWindowFor, contextWindowSource } from '../../../../server/src/models/context-window';
 import { tr } from '@/i18n';
 import { Select } from '@/ui/Select';
+import { SwitchLine } from '@/ui/Switch';
 import { CompactAt } from '@/features/settings/CompactAt';
 import { compactWindowOfProvider } from '@/features/settings/compact-model';
 
@@ -115,13 +116,13 @@ export function Plugins() {
       <div className="section">
         <h5>{tr('安装插件')}</h5>
         <div style={{ display: 'flex', gap: 6 }}>
-          <input value={spec} onChange={(e) => setSpec(e.target.value)} placeholder="plugin@marketplace" style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 4, padding: '4px 8px' }} />
+          <input className="field" style={{ flex: 1, minWidth: 0 }} aria-label={tr('安装插件')} value={spec} onChange={(e) => setSpec(e.target.value)} placeholder="plugin@marketplace" />
           <button className="btn sm" disabled={busy || !spec} onClick={() => run({ kind: 'config.plugin.install', spec })}>{tr('安装')}</button>
         </div>
         <h5>{tr('市场 ({marketListCount})', { marketListCount: marketList.length })}</h5>
         {marketList.map((m: any) => <div key={m.name} className="row"><div className="grow"><div>{m.name}</div><div className="sub">{m.source?.source ?? ''} {m.source?.repo ?? m.source?.url ?? m.source?.path ?? ''}</div></div></div>)}
         <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-          <input value={mkSrc} onChange={(e) => setMkSrc(e.target.value)} placeholder={tr('owner/repo 或 git URL 或本地路径')} style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 4, padding: '4px 8px' }} />
+          <input className="field" style={{ flex: 1, minWidth: 0 }} value={mkSrc} onChange={(e) => setMkSrc(e.target.value)} placeholder={tr('owner/repo 或 git URL 或本地路径')} aria-label={tr('owner/repo 或 git URL 或本地路径')} />
           <button className="btn sm" disabled={busy || !mkSrc} onClick={() => run({ kind: 'config.marketplace.add', source: mkSrc })}>{tr('添加市场')}</button>
         </div>
         <div style={{ fontSize: 12, color: 'var(--fg-2)', marginTop: 6 }}>{tr('启停 / 安装后要重启对话进程才生效（对话右上角 ··· →「结束进程」，再发一条消息继续）')}</div>
@@ -194,7 +195,7 @@ export function McpAddJson() {
       <div className="section">
         <h5>{tr('添加 MCP server（JSON）')}</h5>
         <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder={tr('名称')} style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 4, padding: '4px 8px' }} />
+          <input className="field" style={{ flex: 1, minWidth: 0 }} value={name} onChange={(e) => setName(e.target.value)} placeholder={tr('名称')} aria-label={tr('名称')} />
           <Select value={scope} onValueChange={(value) => setScope(String(value) as typeof scope)} aria-label={tr('装到哪个范围')} options={[{ value: 'user', label: 'user' }, { value: 'project', label: 'project' }, { value: 'local', label: 'local' }]} />
         </div>
         <textarea className="code" style={{ minHeight: 80 }} value={json} onChange={(e) => setJson(e.target.value)} />
@@ -462,10 +463,9 @@ export function ProviderProfiles() {
           <CompactAt key={editSeq} value={editing.compactAt ?? undefined} window={compactWindowOfProvider({ ...editing, modelContext: probe?.ok ? probe.modelContext : editing.modelContext })}
             onChange={(v, e) => { setCompactErr(e ?? ''); setEditing((d) => (d ? { ...d, compactAt: v ?? (null as any) } : d)); }} />
           {(editing.type === 'anthropic' || editing.type === 'gateway') && (
-            <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13, color: 'var(--fg-2)', margin: '6px 0' }}>
-              <input type="checkbox" checked={editing.runtime === 'claude'} onChange={(e) => setEditing({ ...editing, runtime: e.target.checked ? 'claude' : (null as any) })} />
+            <SwitchLine on={editing.runtime === 'claude'} onChange={(on) => setEditing({ ...editing, runtime: on ? 'claude' : (null as any) })}>
               {tr('这个端点只认官方 Claude Code 二进制（被拒时再勾）')}
-            </label>
+            </SwitchLine>
           )}
           <CacheOptions editing={editing} set={setEditing} />
           <div style={{ display: 'flex', gap: 8 }}>
@@ -542,28 +542,24 @@ function CacheOptions({ editing, set }: { editing: Draft; set: (d: Draft) => voi
   return (
     <>
       {oai && (
-        <label style={row} title={tr('Claude 对话经本机缓存垫片访问这个端点：补 prompt_cache_key 与会话亲和头（session affinity：中转按它把同一对话路由到同一渠道），把只报在顶层的命中数（DeepSeek / Kimi）补到 ccb 读的字段里，每次调用记账本')}>
-          <input type="checkbox" checked={shimOn} onChange={(e) => set({ ...editing, cacheShim: e.target.checked ? (null as any) : false })} />
+        <SwitchLine title={tr('Claude 对话经本机缓存垫片访问这个端点：补 prompt_cache_key 与会话亲和头（session affinity：中转按它把同一对话路由到同一渠道），把只报在顶层的命中数（DeepSeek / Kimi）补到 ccb 读的字段里，每次调用记账本')} on={shimOn} onChange={(on) => set({ ...editing, cacheShim: on ? (null as any) : false })}>
           {tr('缓存优化（经本机垫片补上缓存键、让同一对话走同一渠道，修正命中统计；关掉 = 直连）')}
-        </label>
+        </SwitchLine>
       )}
       {editing.type === 'openai' && shimOn && (
-        <label style={row} title={tr('new-api 类中转默认只对 /v1/responses + prompt_cache_key 做会话亲和（Codex 规则），chat/completions 每次随机渠道；端点没有这个接口时自动退回并记住')}>
-          <input type="checkbox" checked={editing.responsesApi !== false} onChange={(e) => set({ ...editing, responsesApi: e.target.checked ? (null as any) : false })} />
+        <SwitchLine title={tr('new-api 类中转默认只对 /v1/responses + prompt_cache_key 做会话亲和（Codex 规则），chat/completions 每次随机渠道；端点没有这个接口时自动退回并记住')} on={editing.responsesApi !== false} onChange={(on) => set({ ...editing, responsesApi: on ? (null as any) : false })}>
           {tr('gpt-* 模型改走 /v1/responses（对 new-api 类中转命中率更高）')}
-        </label>
+        </SwitchLine>
       )}
       {editing.type === 'openai' && (
-        <label style={row} title={tr('模型网关把 Anthropic 请求转给这个成员时，在 system / 最后一个工具 / 最后一条消息上带 cache_control')}>
-          <input type="checkbox" checked={editing.cacheControlFormat === 'anthropic'} onChange={(e) => set({ ...editing, cacheControlFormat: e.target.checked ? 'anthropic' : (null as any) })} />
+        <SwitchLine title={tr('模型网关把 Anthropic 请求转给这个成员时，在 system / 最后一个工具 / 最后一条消息上带 cache_control')} on={editing.cacheControlFormat === 'anthropic'} onChange={(on) => set({ ...editing, cacheControlFormat: on ? 'anthropic' : (null as any) })}>
           {tr('经模型网关时带 Anthropic 格式 cache_control（百炼 qwen 显式缓存、OpenRouter anthropic/*）')}
-        </label>
+        </SwitchLine>
       )}
       {editing.type === 'anthropic' && (
-        <label style={row} title={tr('官方二进制：ENABLE_PROMPT_CACHING_1H=1；模型网关转成 Anthropic 请求给这个成员时：ttl 1h。写入按 2× 基础价（5 分钟是 1.25×），适合经常停下来超过 5 分钟的对话')}>
-          <input type="checkbox" checked={!!editing.cache1h} onChange={(e) => set({ ...editing, cache1h: e.target.checked ? true : (null as any) })} />
+        <SwitchLine title={tr('官方二进制：ENABLE_PROMPT_CACHING_1H=1；模型网关转成 Anthropic 请求给这个成员时：ttl 1h。写入按 2× 基础价（5 分钟是 1.25×），适合经常停下来超过 5 分钟的对话')} on={!!editing.cache1h} onChange={(on) => set({ ...editing, cache1h: on ? true : (null as any) })}>
           {tr('1 小时提示缓存（官方二进制 / 经模型网关；写入 2× 基础价）')}
-        </label>
+        </SwitchLine>
       )}
       {(editing.type === 'anthropic' || editing.type === 'openai') && (
         <label style={row} title={tr('Key 放在哪个请求头里：Authorization: Bearer、x-api-key，或两个都带。默认：Claude 格式对话用 Bearer，测试和模型网关两个都带；OpenAI 格式用 Bearer')}>

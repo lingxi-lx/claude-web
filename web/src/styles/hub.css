@@ -32,6 +32,11 @@
 .hub-setrow { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px dashed var(--hub-line); flex-wrap: wrap; }
 .hub-setrow:first-child { padding-top: 0; }
 .hub-setrow:last-child { border-bottom: 0; padding-bottom: 0; }
+/* a row whose control is a full-width box (a list of IPs, a template): the label above it, the button under it */
+.hub-setrow.hub-setrow-stack { flex-direction: column; align-items: stretch; gap: 8px; }
+.hub-setrow-stack > textarea.input { width: 100%; box-sizing: border-box; font-family: var(--mono); }
+.hub-setrow-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.hub-setlabel .err { color: var(--err); }
 .hub-setlabel { display: flex; flex-direction: column; gap: 3px; min-width: 220px; }
 .hub-setlabel b { font-size: var(--fs-sm); font-weight: 650; }
 .hub-setlabel span { font-size: var(--fs-sm); color: var(--hub-muted); }
@@ -39,11 +44,19 @@
 .hub-edit-modal .gw-detail-head { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--hub-line); }
 .hub-edit-modal .gw-detail-head h3 { margin: 0; font-size: var(--fs-lg); }
 .hub-edit-body { overflow: auto; padding: 16px 18px 20px; }
-.hub-settings .input {
+/* the hub's text box (every page of the hub, not only 设置): `input` / `textarea` / Select with class `input` */
+.hub-page .input {
   height: 32px; min-height: 32px; padding: 0 10px; border: 1px solid var(--hub-line); border-radius: 9px;
   background: var(--surface-0); color: var(--hub-text); font: inherit; font-size: var(--fs-sm);
 }
-.hub-settings .input::placeholder { color: var(--hub-muted); }
+.hub-page .input::placeholder { color: var(--hub-muted); }
+.hub-page .input:focus-visible { outline: 1.5px solid var(--focus-ring); outline-offset: 0; }
+.hub-page .input:disabled { opacity: 0.55; }
+.hub-page textarea.input { height: auto; padding: 7px 10px; line-height: 1.5; resize: vertical; }
+.hub-page input.input[type='number'] { width: 110px; font-variant-numeric: tabular-nums; }
+/* a label above its box (插件市场地址 …) */
+.hub-page label.field { display: flex; flex-direction: column; gap: 5px; font-size: var(--fs-sm); color: var(--hub-muted); }
+.hub-page label.field > .input { width: 100%; box-sizing: border-box; }
 .hub-settings .gateway-card { border: 1px solid var(--hub-line); border-radius: 12px; padding: 12px; }
 .hub-settings .gateway-tab h4 { margin: 4px 0 6px; font-size: var(--fs-sm); font-weight: 650; }
 .hub-muted { color: var(--hub-muted); }
@@ -186,6 +199,10 @@
 .hub-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: left var(--dur-2); }
 .hub-switch.on { background: var(--hub-accent); }
 .hub-switch.on::after { left: 18px; }
+.hub-switch { cursor: pointer; }
+.hub-switch:disabled { opacity: 0.45; cursor: default; }
+/* SwitchLine in the hub: the same dashed rows as .hub-setrow */
+.hub-page label.switch-line { padding: 8px 0; }
 .hub-maskbox { width: 100%; min-height: 70px; padding: 9px 10px; border: 1px solid var(--hub-line); border-radius: 10px; background: var(--surface-2); color: var(--hub-text); font: var(--fs-code)/1.55 var(--mono); resize: vertical; }
 .hub-ph { background: var(--hub-accent-soft); color: var(--hub-accent); border-radius: 4px; padding: 0 3px; font-weight: 600; }
 

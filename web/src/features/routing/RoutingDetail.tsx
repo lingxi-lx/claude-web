@@ -4,6 +4,7 @@ import { useStore } from '@/store';
 import { useGateway } from '@/features/gateway/state';
 import { dlg } from '@/ui/dialog';
 import { Select } from '@/ui/Select';
+import { Switch } from '@/ui/Switch';
 import { tr } from '@/i18n';
 import { ROUTING_MODES, ROUTING_POLICIES, candidateKey, type RoutingCandidate, type RoutingConfig, type RoutingIntent, type RoutingMode, type RoutingPolicy, type RoutingRule, type RoutingStatus } from '@shared';
 import { routingPolicyHint, routingPolicyLabel } from '@/features/models/menu';
@@ -111,18 +112,20 @@ export function RoutingDetail() {
             options={ROUTING_MODES.map((m) => ({ value: m, label: MODE_LABEL[m], description: MODE_HINT[m] }))} />
         </div>
         <div className="gateway-row">
-          <label><input type="checkbox" checked={cfg.failover} onChange={(e) => void save({ failover: e.target.checked })} /> {tr('失败时换下一个候选（只在还没输出、没执行工具之前）')}</label>
+          <span className="grow">{tr('失败时换下一个候选（只在还没输出、没执行工具之前）')}</span>
+          <Switch hub on={cfg.failover} label={tr('失败时换下一个候选（只在还没输出、没执行工具之前）')} onChange={(on) => void save({ failover: on })} />
         </div>
         <div className="gateway-row">
           <span className="grow">{tr('一次请求最多试几个')}</span>
-          <input type="number" min={1} max={5} value={cfg.maxAttempts} style={{ width: 60 }} onChange={(e) => void save({ maxAttempts: Math.max(1, Math.min(5, Number(e.target.value) || 1)) })} />
+          <input className="input" type="number" min={1} max={5} aria-label={tr('一次请求最多试几个')} value={cfg.maxAttempts} onChange={(e) => void save({ maxAttempts: Math.max(1, Math.min(5, Number(e.target.value) || 1)) })} />
         </div>
         <div className="gateway-row">
-          <label><input type="checkbox" checked={cfg.allowPaid} onChange={(e) => void save({ allowPaid: e.target.checked })} /> {tr('允许用付费的候选（免费优先永远不会）')}</label>
+          <span className="grow">{tr('允许用付费的候选（免费优先永远不会）')}</span>
+          <Switch hub on={cfg.allowPaid} label={tr('允许用付费的候选（免费优先永远不会）')} onChange={(on) => void save({ allowPaid: on })} />
         </div>
         <div className="gateway-row">
           <span className="grow">{tr('每天付费预算（美元，0 = 不用付费的）')}</span>
-          <input type="number" min={0} step={0.5} value={cfg.budgetUsd ?? 0} style={{ width: 80 }} onChange={(e) => void save({ budgetUsd: Math.max(0, Number(e.target.value) || 0) })} />
+          <input className="input" type="number" min={0} step={0.5} aria-label={tr('每天付费预算（美元，0 = 不用付费的）')} value={cfg.budgetUsd ?? 0} onChange={(e) => void save({ budgetUsd: Math.max(0, Number(e.target.value) || 0) })} />
           <span className="sub">{tr('今天已用 ${n}', { n: st.spentTodayUsd.toFixed(2) })}</span>
         </div>
         <div className="sub">{tr('今天切换了 {n} 次', { n: st.switchesToday })}</div>
@@ -144,9 +147,9 @@ export function RoutingDetail() {
                 {v?.label ?? c.model}
                 <span className="sub"> · {costLabel(v?.cost ?? 'paid')}{v?.caps.context ? ` · ${Math.round(v.caps.context / 1000)}K` : ''}{v && (v.ok + v.fail) > 0 ? ` · ${tr('成功 {ok}/{all}', { ok: v.ok, all: v.ok + v.fail })}` : ''}{v?.latencyMs !== undefined ? ` · ${v.latencyMs}ms` : ''}{v?.health === 'cooling' ? ` · ${tr('冷却中')}` : v?.health === 'disabled' ? ` · ${tr('已停用')}` : ''}{v?.quota ? ` · ${quotaText(v.quota)}` : ''}</span>
               </span>
-              <label title={tr('允许自动路由使用')}><input type="checkbox" checked={c.allowAuto} onChange={(e) => patchCand(i, { allowAuto: e.target.checked })} /> {tr('允许自动路由使用')}</label>
+              <label className="switch-inline" title={tr('允许自动路由使用')}>{tr('允许自动路由使用')} <Switch hub on={c.allowAuto} onChange={(on) => patchCand(i, { allowAuto: on })} /></label>
               {v?.unpriced && (
-                <label title={tr('不知道它的价格，预算算不出它花了多少；默认不用。勾上后它的花费按 0 计。')}><input type="checkbox" checked={!!c.allowUnpriced} onChange={(e) => patchCand(i, { allowUnpriced: e.target.checked || undefined })} /> {tr('价格未知也用')}</label>
+                <label className="switch-inline" title={tr('不知道它的价格，预算算不出它花了多少；默认不用。勾上后它的花费按 0 计。')}>{tr('价格未知也用')} <Switch hub on={!!c.allowUnpriced} onChange={(on) => patchCand(i, { allowUnpriced: on || undefined })} /></label>
               )}
               <Select value={c.cost ?? ''} onValueChange={(x) => patchCand(i, { cost: (x || undefined) as RoutingCandidate['cost'] })} aria-label={tr('计费')}
                 options={[{ value: '', label: tr('自动判断') }, { value: 'free', label: tr('免费') }, { value: 'subscription', label: tr('订阅') }, { value: 'paid', label: tr('付费') }]} />
@@ -160,14 +163,14 @@ export function RoutingDetail() {
 
       <div className="gateway-card" style={{ marginTop: 10 }}>
         <b>{tr('自定义规则')}</b>
-        <textarea className="input" rows={2} style={{ width: '100%', marginTop: 6 }} defaultValue={cfg.ruleText ?? ''} placeholder={tr('用自己的话写规则（先存着；现在按下面的条件挑）')}
+        <textarea className="input" rows={2} aria-label={tr('自定义规则')} style={{ width: '100%', boxSizing: 'border-box', marginTop: 6 }} defaultValue={cfg.ruleText ?? ''} placeholder={tr('用自己的话写规则（先存着；现在按下面的条件挑）')}
           onBlur={(e) => { if (e.target.value !== (cfg.ruleText ?? '')) void save({ ruleText: e.target.value }); }} />
         {rules.map((r, i) => (
           <div className="gateway-row" key={r.id}>
             <input className="input grow" defaultValue={(r.when.keywords ?? []).join(', ')} placeholder={tr('包含这些词（逗号分隔）')}
               onBlur={(e) => setRules(rules.map((x, k) => (k === i ? { ...x, when: { ...x.when, keywords: e.target.value.split(/[,，]/).map((s) => s.trim()).filter(Boolean) } } : x)))} />
-            <label><input type="checkbox" checked={!!r.when.needsTools} onChange={(e) => setRules(rules.map((x, k) => (k === i ? { ...x, when: { ...x.when, needsTools: e.target.checked || undefined } } : x)))} /> {tr('要用工具')}</label>
-            <label><input type="checkbox" checked={!!r.when.longContext} onChange={(e) => setRules(rules.map((x, k) => (k === i ? { ...x, when: { ...x.when, longContext: e.target.checked || undefined } } : x)))} /> {tr('长上下文')}</label>
+            <label className="switch-inline">{tr('要用工具')} <Switch hub on={!!r.when.needsTools} onChange={(on) => setRules(rules.map((x, k) => (k === i ? { ...x, when: { ...x.when, needsTools: on || undefined } } : x)))} /></label>
+            <label className="switch-inline">{tr('长上下文')} <Switch hub on={!!r.when.longContext} onChange={(on) => setRules(rules.map((x, k) => (k === i ? { ...x, when: { ...x.when, longContext: on || undefined } } : x)))} /></label>
             <Select multiple value={r.prefer} onValueChange={(v) => setRules(rules.map((x, k) => (k === i ? { ...x, prefer: (Array.isArray(v) ? v : [v]).map(String) } : x)))} aria-label={tr('优先用')} placeholder={tr('优先用…')} options={candOptions} />
             <button className="btn sm ghost" onClick={() => setRules(rules.filter((_, k) => k !== i))}>{tr('移除')}</button>
           </div>

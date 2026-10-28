@@ -217,7 +217,7 @@ export function AddAccountWizard({ onClose, kind: fixed, embedded, onAdded }: {
             <label className="field"><span>{tr('名称')}</span><input value={name} onChange={(e) => setName(e.target.value)} placeholder={tr('可留空')} /></label>
             <label className="field">
               <span>{kind === 'gemini' ? tr('Cookie（每行一个）') : kind === 'workbuddy' ? tr('cockpit JSON') : tr('凭据')}</span>
-              <textarea rows={5} value={text} onChange={(e) => setText(e.target.value)} placeholder={placeholder} />
+              <textarea className="field" rows={5} value={text} onChange={(e) => setText(e.target.value)} placeholder={placeholder} />
             </label>
             <input ref={file} type="file" accept=".json,.txt" hidden onChange={(e) => void readFile(e.target.files?.[0])} />
             {kind === 'gemini' && text.trim() && (

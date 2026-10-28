@@ -10,6 +10,7 @@ import { asAsked, dockKind, isEgoScriptRequest } from '@/features/chat/permissio
 import { tr } from '@/i18n';
 import { usePrs } from '@/features/vcs/PrBar';
 import { laneOf, quickAnswer, resolved, type Lane } from './mission-lanes';
+import { SwitchChip } from '@/ui/Switch';
 
 /**
  * Mission Control: every session across workspaces at a glance — what needs you, what is running (with the
@@ -65,8 +66,8 @@ export function MissionPanel() {
       <div className="mission-head">
         <span>{tr('{total} 个活动对话 · {filterCount} 需要你 · {filterCount2} 运行中', { total, filterCount: cards.filter((c) => c.lane === 'attention').length + orchWait.length + remote.filter((s) => s.live === 'waiting').length, filterCount2: cards.filter((c) => c.lane === 'running').length + remote.filter((s) => s.live !== 'waiting').length })}</span>
         <span className="grow" />
-        <label className="muted" style={{ fontSize: 13, display: 'flex', gap: 4, alignItems: 'center' }}><input type="checkbox" checked={showIdle} onChange={(e) => setShowIdle(e.target.checked)} /> {tr('显示空闲')}</label>
-        <label className="muted" style={{ fontSize: 13, display: 'flex', gap: 4, alignItems: 'center' }}><input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> {tr('显示已解决')}</label>
+        <SwitchChip on={showIdle} onChange={setShowIdle}>{tr('显示空闲')}</SwitchChip>
+        <SwitchChip on={showDone} onChange={setShowDone}>{tr('显示已解决')}</SwitchChip>
       </div>
       {!total && !remote.length && !orchWait.length && <div className="empty">{tr('没有活动的对话。侧栏点开一个，或用「恢复」继续。')}</div>}
       <div className="mission-lanes">

@@ -78,6 +78,8 @@ export function RoutesTab() {
                 void save({ ...g, members: next });
               }} options={allOptions} searchable={allOptions.length > 8} aria-label={tr('成员')} />
               <input
+                className="field"
+                aria-label={tr('固定模型（可留空）')}
                 placeholder={tr('固定模型（可留空）')}
                 defaultValue={m.model ?? ''}
                 onBlur={(e) => {

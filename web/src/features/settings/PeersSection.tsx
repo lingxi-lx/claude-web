@@ -7,6 +7,7 @@ import type { PeerInfo, PeerState, RemoteHost } from '@shared';
 import { Icon } from '@/ui/icons';
 import { tr } from '@/i18n';
 import { Select } from '@/ui/Select';
+import { SwitchChip } from '@/ui/Switch';
 
 const STATE: Record<PeerState, { l: string; dot: string; badge: string }> = {
   online: { l: tr('在线'), dot: 'running', badge: 'ok' },
@@ -79,7 +80,7 @@ export function PeersSection() {
               {p.enabled && (p.state === 'offline' || (p.via === 'ssh' && p.state === 'unauthorized')) && <button className="btn sm" disabled={busy === p.id} title={p.via === 'ssh' ? tr('改好 SSH 主机里的令牌后重连（保存主机也会自动重连）') : tr('立即重连')} onClick={() => run(p.id, () => ws.request({ kind: 'peers.retry', id: p.id }))}>{tr('重试')}</button>}
               <button className="btn sm ghost" onClick={() => run(p.id, async () => { const n = (await dlg.prompt(tr('机器名称'), p.name))?.trim(); if (n && n !== p.name) await ws.request({ kind: 'peers.update', id: p.id, patch: { name: n } }); })}>{tr('改名')}</button>
               {/* 常开机器 (stage F1): handed-off conversations and published pages go here; first in the machine picker */}
-              <label className="peer-always" title={tr('这台机器一直开着：可以把对话交给它继续，合上本机也不停')}><input type="checkbox" data-act="always-on" checked={!!p.alwaysOn} disabled={busy === p.id} onChange={(e) => { const on = e.target.checked; void run(p.id, () => ws.request({ kind: 'peers.update', id: p.id, patch: { alwaysOn: on } })); }} /> {tr('常开')}</label>
+              <SwitchChip className="peer-always" title={tr('这台机器一直开着：可以把对话交给它继续，合上本机也不停')} data-act="always-on" on={!!p.alwaysOn} disabled={busy === p.id} onChange={(on) => { void run(p.id, () => ws.request({ kind: 'peers.update', id: p.id, patch: { alwaysOn: on } })); }}>{tr('常开')}</SwitchChip>
               <button className="btn sm ghost" disabled={busy === p.id} onClick={() => run(p.id, () => ws.request({ kind: 'peers.update', id: p.id, patch: { enabled: !p.enabled } }))}>{p.enabled ? tr('停用') : tr('启用')}</button>
               <button className="btn sm ghost danger" onClick={() => run(p.id, async () => { if (await dlg.confirm(tr('移除「{name}」？', { name: p.name }), { message: tr('它的对话不再出现在这里（那台机器上的对话不受影响）。那台机器的「已配对设备」里本机的记录要在那边吊销。'), danger: true, okLabel: tr('移除') })) await ws.request({ kind: 'peers.remove', id: p.id }); })}>{tr('移除')}</button>
             </div>

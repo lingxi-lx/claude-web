@@ -12,6 +12,7 @@ import { anywhereLine, deviceLastLink, lastLinkText, shownIp } from './anywhere'
 import { pairQr, type PairQr } from './pair-qr';
 import { Segmented } from '@/ui/Segmented';
 import { tr, dateLocale } from '@/i18n';
+import { SwitchChip } from '@/ui/Switch';
 
 type QrKind = 'anywhere' | 'lan';
 
@@ -103,8 +104,8 @@ export function RemoteSection() {
     <div className="section">
       <h5>{tr('局域网 / 手机访问')}</h5>
       <div className="row" style={{ alignItems: 'flex-start', gap: 12 }}>
-        <label className="chip"><input type="checkbox" data-id="remote-enabled" checked={st.enabled} disabled={busy} onChange={(e) => set({ enabled: e.target.checked })} /> {tr('允许其它设备访问（监听 0.0.0.0）')}</label>
-        <label className="chip">{tr('端口')} <input className="field" style={{ width: 80 }} value={port} onChange={(e) => setPort(e.target.value)} onBlur={() => { const p = Number(port); if (p && p !== st.port) void set({ port: p }); }} /></label>
+        <SwitchChip data-id="remote-enabled" on={st.enabled} disabled={busy} onChange={(on) => set({ enabled: on })}>{tr('允许其它设备访问（监听 0.0.0.0）')}</SwitchChip>
+        <label className="switch-inline">{tr('端口')} <input className="field" aria-label={tr('端口')} style={{ width: 80 }} value={port} onChange={(e) => setPort(e.target.value)} onBlur={() => { const p = Number(port); if (p && p !== st.port) void set({ port: p }); }} /></label>
         <span className={clsx('badge', st.running ? 'ok' : st.error ? 'err' : '')}>{st.running ? tr('运行中') : st.enabled ? (st.error || tr('未运行')) : tr('关闭')}</span>
       </div>
       <div className="sub" style={{ marginTop: 6 }}>

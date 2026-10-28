@@ -10,6 +10,8 @@ import { EMPTY_FORM, catalogSpec, describeSpec, formFromCatalog, formToSpec, set
 import { MCP_CATALOG } from './McpCatalog';
 import { tr, dateLocale } from '@/i18n';
 import { Select } from '@/ui/Select';
+import { SwitchChip } from '@/ui/Switch';
+import { Segmented } from '@/ui/Segmented';
 
 export const CONFIGURABLE: AgentConfigKind[] = ['codex', 'gemini', 'qwen', 'opencode'];
 const NAMES: Record<AgentConfigKind, string> = { codex: 'Codex', gemini: 'Gemini', qwen: 'Qwen', opencode: 'OpenCode' };
@@ -98,7 +100,7 @@ function McpAddForm({ state, onDone }: { state: AgentConfigState; onDone: () => 
         </>
       )}
       <div className="wide acfg-actions">
-        <label className="chip"><input type="checkbox" checked={overwrite} onChange={(e) => setOverwrite(e.target.checked)} /> {tr('覆盖同名')}</label>
+        <SwitchChip on={overwrite} onChange={setOverwrite}>{tr('覆盖同名')}</SwitchChip>
         <span className="grow" />
         <button className="btn sm ghost" onClick={onDone}>{tr('取消')}</button>
         <button className="btn sm" disabled={busy} onClick={submit}>{busy ? tr('添加中…') : tr('添加')}</button>
@@ -138,8 +140,7 @@ function SyncPanel({ state, cwd, onDone }: { state: AgentConfigState; cwd: strin
     <div className="acfg-form">
       <div className="wide acfg-actions">
         <span className="muted">{tr('来源')}</span>
-        <label className="chip"><input type="radio" name={`src-${state.kind}`} checked={from === 'claude'} onChange={() => setFrom('claude')} /> {tr('Claude 的 MCP')}</label>
-        <label className="chip"><input type="radio" name={`src-${state.kind}`} checked={from === 'catalog'} onChange={() => setFrom('catalog')} /> {tr('常用目录')}</label>
+        <Segmented label={tr('来源')} value={from} onChange={(v) => setFrom(v as typeof from)} options={[{ value: 'claude', label: tr('Claude 的 MCP') }, { value: 'catalog', label: tr('常用目录') }]} />
       </div>
       {from === 'claude' ? (
         <label className="wide">{tr('Claude 的 MCP 服务器')}
@@ -162,7 +163,7 @@ function SyncPanel({ state, cwd, onDone }: { state: AgentConfigState; cwd: strin
         {CONFIGURABLE.map((k) => (
           <label key={k} className="chip"><input type="checkbox" checked={targets.includes(k)} onChange={(e) => setTargets(e.target.checked ? [...targets, k] : targets.filter((x) => x !== k))} /> {NAMES[k]}</label>
         ))}
-        <label className="chip"><input type="checkbox" checked={overwrite} onChange={(e) => setOverwrite(e.target.checked)} /> {tr('覆盖同名')}</label>
+        <SwitchChip on={overwrite} onChange={setOverwrite}>{tr('覆盖同名')}</SwitchChip>
         <span className="grow" />
         <button className="btn sm" disabled={busy || !ready || !targets.length} onClick={run}>{busy ? tr('同步中…') : tr('同步')}</button>
       </div>

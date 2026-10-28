@@ -5,6 +5,7 @@ import { useStore } from '@/store';
 import type { SidecarProxy, UpstreamAccountView } from '@shared';
 import { tr } from '@/i18n';
 import { Select } from '@/ui/Select';
+import { SwitchChip } from '@/ui/Switch';
 
 /** One account's settings: its name, its exit (sidecar accounts) or own proxy, its daily limits, a new credential. */
 export function AccountEditor({ account, onClose, onSaved }: { account: UpstreamAccountView; onClose(): void; onSaved(): void }) {
@@ -59,7 +60,7 @@ export function AccountEditor({ account, onClose, onSaved }: { account: Upstream
               <span>{tr('这个账号的代理（留空保持不变）')}</span>
               <input type="password" value={proxy} onChange={(e) => { setProxy(e.target.value); setClearProxy(false); }} placeholder={account.hasProxy ? tr('已设置代理') : 'http://127.0.0.1:7890 / socks5://…'} />
             </label>
-            {account.hasProxy && <label className="chip"><input type="checkbox" checked={clearProxy} onChange={(e) => { setClearProxy(e.target.checked); if (e.target.checked) setProxy(''); }} /> {tr('清除代理（直连）')}</label>}
+            {account.hasProxy && <SwitchChip on={clearProxy} onChange={(on) => { setClearProxy(on); if (on) setProxy(''); }}>{tr('清除代理（直连）')}</SwitchChip>}
           </>
         )}
         <div className="row">
@@ -68,7 +69,7 @@ export function AccountEditor({ account, onClose, onSaved }: { account: Upstream
         </div>
         <label className="field">
           <span>{tr('新的凭据（留空不换）')}</span>
-          <textarea rows={3} value={credential} onChange={(e) => setCredential(e.target.value)} placeholder={account.kind === 'gemini' ? tr('粘贴新的 cookie') : account.kind === 'workbuddy' ? tr('粘贴新的 cockpit JSON') : tr('粘贴新的令牌或 OAuth JSON')} />
+          <textarea className="field" rows={3} value={credential} onChange={(e) => setCredential(e.target.value)} placeholder={account.kind === 'gemini' ? tr('粘贴新的 cookie') : account.kind === 'workbuddy' ? tr('粘贴新的 cockpit JSON') : tr('粘贴新的令牌或 OAuth JSON')} />
         </label>
         <div className="row"><span className="grow" /><button className="btn sm ghost" onClick={onClose} disabled={busy}>{tr('取消')}</button><button className="btn sm" onClick={() => void save()} disabled={busy}>{busy ? tr('保存中…') : tr('保存')}</button></div>
       </div>

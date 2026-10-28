@@ -712,7 +712,7 @@ function driver() {
       if (subProv) { await srvReq({ kind: 'providers.remove', id: subProv.id }).catch(() => {}); await js('window.__store.getState().loadProviders()'); }
       await sleep(300);
       await click('.welcome .cb .sub-anchor > button.chip');
-      const sm = await waitFor(`!!document.querySelector('.menu.mm [data-id="subagent-same"]')`, 3000) && await js(`(() => { const m = document.querySelector('.menu.mm'); return { label: m.getAttribute('aria-label'), same: m.querySelector('[data-id="subagent-same"]')?.classList.contains('cur'), def: !!m.querySelector('[data-id="subagent-default"] input'), agents: m.querySelectorAll('[data-sec^="agent:"]').length, heads: m.querySelectorAll('[data-sec="favorites"], [data-sec="recent"]').length, words: /effort|ultracode|档案|引擎/i.test(m.innerText) }; })()`);
+      const sm = await waitFor(`!!document.querySelector('.menu.mm [data-id="subagent-same"]')`, 3000) && await js(`(() => { const m = document.querySelector('.menu.mm'); return { label: m.getAttribute('aria-label'), same: m.querySelector('[data-id="subagent-same"]')?.classList.contains('cur'), def: !!m.querySelector('[data-id="subagent-default"] [role="switch"]'), agents: m.querySelectorAll('[data-sec^="agent:"]').length, heads: m.querySelectorAll('[data-sec="favorites"], [data-sec="recent"]').length, words: /effort|ultracode|档案|引擎/i.test(m.innerText) }; })()`);
       check('子代理 menu: 「跟主模型一样」 checked, the default switch, no other agents / favourites / recents, no implementation words', sm && sm.label === '子代理用的模型' && sm.same && sm.def && !sm.agents && !sm.heads && !sm.words, JSON.stringify(sm));
       await shot('subagent-menu');
       check('子代理 menu without error boundary', !(await noBoundary('body')), await noBoundary('body'));
@@ -1044,7 +1044,7 @@ function driver() {
         const netWords = shownText.match(/MQTT|WebRTC|STUN|\bICE\b/gi) ?? [];
         check('手机与其它电脑 by default: no MQTT / WebRTC / STUN / ICE on screen', !netWords.length && !(await js(`!!document.querySelector('.modal.settings .sp-more-body:not([hidden])')`)), JSON.stringify(netWords));
         await click('.modal.settings .sp-more-h');
-        const brokers = await waitFor(`(() => { const l = document.querySelector('.modal.settings [data-id="anywhere-brokers"]'); if (!l) return false; const rows = [...l.querySelectorAll('.aw-row')]; return rows.length === 1 && rows[0].querySelector('input[data-f="name"]')?.value === 'smoke' && /不通/.test(rows[0].textContent) && !!rows[0].querySelector('input[type=checkbox][data-f="relay"]')?.checked; })()`, 8000);
+        const brokers = await waitFor(`(() => { const l = document.querySelector('.modal.settings [data-id="anywhere-brokers"]'); if (!l) return false; const rows = [...l.querySelectorAll('.aw-row')]; return rows.length === 1 && rows[0].querySelector('input[data-f="name"]')?.value === 'smoke' && /不通/.test(rows[0].textContent) && rows[0].querySelector('[data-f="relay"]')?.getAttribute('aria-checked') === 'true'; })()`, 8000);
         const moreParts = await js(`['anywhere-stun', 'anywhere-shell', 'anywhere-recent'].filter((id) => !document.querySelector('.modal.settings [data-id="' + id + '"]'))`);
         check('更多选项: the broker list (名称 · 地址 · 通 / 不通 · 用于转发), STUN, the phone page address, recent connections', brokers && !moreParts.length, JSON.stringify({ brokers, missing: moreParts }));
         await click('.modal.settings [data-id="broker-add"]');

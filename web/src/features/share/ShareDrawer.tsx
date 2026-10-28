@@ -4,6 +4,7 @@ import { useStore } from '@/store';
 import { dlg } from '@/ui/dialog';
 import type { ShareKeyView, ShareQuota, ShareRules, ShareStatus } from '@shared';
 import { tr } from '@/i18n';
+import { SwitchLine } from '@/ui/Switch';
 
 const PERIODS = [
   { k: 'daily', label: () => tr('每天') },
@@ -45,9 +46,7 @@ function RulesEditor({ rules, groups, onSave, onCancel }: { rules: ShareRules; g
         <span className="sub">{tr('同时进行的请求')}</span>
         <input className="input" type="number" min={0} style={{ width: 90 }} value={r.concurrent ?? ''} onChange={(e) => setR((x) => ({ ...x, concurrent: numOr(e.target.value) }))} />
       </div>
-      <label className="sub">
-        <input type="checkbox" checked={!!r.subscription} onChange={(e) => setR((x) => ({ ...x, subscription: e.target.checked }))} /> {tr('智能路由可以用我的订阅账号')}
-      </label>
+      <SwitchLine on={!!r.subscription} onChange={(on) => setR((x) => ({ ...x, subscription: on }))}>{tr('智能路由可以用我的订阅账号')}</SwitchLine>
       <div className="gateway-row">
         <span className="sub">{tr('每天付费额度（美元，留空 = 不用付费的）')}</span>
         <input className="input" type="number" min={0} step="0.5" style={{ width: 90 }} value={r.paidBudgetUsd ?? ''} onChange={(e) => { const n = Number(e.target.value); setR((x) => ({ ...x, paidBudgetUsd: Number.isFinite(n) && n > 0 ? n : undefined })); }} />

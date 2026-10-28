@@ -9,6 +9,7 @@ import { AgentConfigPanel, CONFIGURABLE } from './AgentConfigPanel';
 import { TERMS } from '@/ui/terms';
 import { ProviderSelect } from '@/features/providers/ProviderSelect';
 import { tr } from '@/i18n';
+import { SwitchChip } from '@/ui/Switch';
 
 const PROTO_LABEL: Record<AgentInfo['protocol'], string> = { claude: 'Claude Code', acp: 'ACP', codex: 'app-server' };
 
@@ -83,7 +84,7 @@ function AgentCard({ a, onChange }: { a: AgentInfo; onChange: () => void }) {
           {a.probeError && <div className="sub agent-probe-err" data-probe-error title={a.probeError}>{a.probeError}</div>}
           {!a.installed && a.installNeeds && <div className="sub agent-probe-err">{tr('安装命令要用 {name}：先装好它，点「重新检测」，再点「安装」。', { name: a.installNeeds.name })}</div>}
         </div>
-        {a.kind !== 'claude' && <label className="chip" title={tr('关掉后新对话的选择器里不再出现')}><input type="checkbox" checked={a.enabled} onChange={(e) => save({ enabled: e.target.checked })} /> {tr('启用')}</label>}
+        {a.kind !== 'claude' && <SwitchChip title={tr('关掉后新对话的选择器里不再出现')} on={a.enabled} onChange={(on) => save({ enabled: on })}>{tr('启用')}</SwitchChip>}
         {!a.installed && a.installNeeds && <a className="btn sm" href={a.installNeeds.url} target="_blank" rel="noreferrer" title={a.installNeeds.url}>{tr('下载 {name}', { name: a.installNeeds.name })}</a>}
         {!a.installed && a.install && <button className={clsx('btn sm', a.installNeeds && 'ghost')} onClick={() => runInTerminal(a.install)} title={a.install}>{tr('安装')}</button>}
         {a.installed && a.login && <button className="btn sm ghost" onClick={() => runInTerminal(a.login)} title={a.login}>{tr('登录')}</button>}

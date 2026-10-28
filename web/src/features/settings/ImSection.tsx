@@ -9,6 +9,7 @@ import { Icon } from '@/ui/icons';
 import { MODE_LABEL } from '@/ui/terms';
 import { tr } from '@/i18n';
 import { Select } from '@/ui/Select';
+import { SwitchChip } from '@/ui/Switch';
 
 const MODES = (['default', 'acceptEdits', 'bypassPermissions'] as const).map((m) => [m, MODE_LABEL[m]] as const);
 
@@ -48,7 +49,7 @@ function GatewayCard({ g, def, onChange }: { g: ImGatewayInfo; def: ImKindDef; o
           <div>{g.name} <span className="muted" style={{ fontSize: 12 }}>{def.name}{g.botName ? ` · ${g.botName}` : ''}</span> {!def.inbound && <span className="badge" style={{ marginLeft: 4 }}>{tr('仅通知')}</span>}</div>
           <div className={clsx('sub', g.state === 'error' && 'err')}>{g.state === 'running' ? tr('已连接 · {allowUsersCount} 个授权用户 · {bindingsCount} 个聊天', { allowUsersCount: g.allowUsers.length, bindingsCount: g.bindings.length }) : g.state === 'error' ? g.error : g.state === 'starting' ? tr('连接中…') : tr('已停止')}</div>
         </div>
-        <label className="chip"><input type="checkbox" checked={g.enabled} onChange={(e) => patch({ enabled: e.target.checked })} /> {tr('启用')}</label>
+        <SwitchChip on={g.enabled} onChange={(on) => patch({ enabled: on })}>{tr('启用')}</SwitchChip>
         <button className="btn sm ghost" disabled={busy || g.state !== 'running'} onClick={test}>{tr('测试')}</button>
         <button className="btn sm ghost" onClick={() => setOpen(!open)}>{open ? tr('收起') : tr('配置')}</button>
       </div>
@@ -61,7 +62,7 @@ function GatewayCard({ g, def, onChange }: { g: ImGatewayInfo; def: ImKindDef; o
           <label>{tr('用哪个 Agent')}<Select className="field" value={g.agent} onValueChange={(value) => patch({ agent: String(value) })} aria-label={tr('用哪个 Agent')} options={[{ value: '', label: 'Claude Code' }, ...agents.filter((a) => a.kind !== 'claude' && a.installed && a.enabled).map((a) => ({ value: a.kind, label: a.name }))]} /></label>
           {/* the bot's new conversations: a relay, the account, or whatever a new conversation in the window gets */}
           <label>{tr('用哪个供应商')}<ProviderSelect agent={(g.agent || 'claude') as AgentKind} value={g.providerId ?? ''} onChange={(v) => patch({ providerId: v })} first={{ label: tr('跟新对话一样（{sameAsNew}）', { sameAsNew }), title: tr('和在窗口里开新对话时用的一样') }} own={g.agent ? tr('{agentName} 自己的登录', { agentName }) : tr('Claude 账号')} /></label>
-          <label className="chip" style={{ alignSelf: 'end' }}><input type="checkbox" checked={g.verbose} onChange={(e) => patch({ verbose: e.target.checked })} /> {tr('推送工具调用过程')}</label>
+          <SwitchChip style={{ alignSelf: 'end' }} on={g.verbose} onChange={(on) => patch({ verbose: on })}>{tr('推送工具调用过程')}</SwitchChip>
           <div style={{ gridColumn: '1 / -1' }} className="sub">{def.help}</div>
           <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', gridColumn: '1 / -1' }}>
             <button className="btn sm ghost danger" onClick={async () => { if (await dlg.confirm(tr('删除机器人「{name}」？', { name: g.name }), { danger: true, okLabel: tr('删除') })) await patch(null); }}>{tr('删除')}</button>
@@ -74,7 +75,7 @@ function GatewayCard({ g, def, onChange }: { g: ImGatewayInfo; def: ImKindDef; o
                 <b style={{ fontSize: 13 }}>{tr('授权用户')}</b>
                 <span className="sub">{tr('在 IM 里给机器人发')} <code>{tr('/pair 配对码')}</code> {tr('即可加入')}</span>
                 <span className="grow" />
-                <label className="chip" title={tr('危险：任何能和机器人说话的人都能操作')}><input type="checkbox" checked={g.openAccess} onChange={(e) => patch({ openAccess: e.target.checked })} /> {tr('不限制用户')}</label>
+                <SwitchChip title={tr('危险：任何能和机器人说话的人都能操作')} on={g.openAccess} onChange={(on) => patch({ openAccess: on })}>{tr('不限制用户')}</SwitchChip>
                 <button className="btn sm" onClick={async () => { try { setPair(await ws.request({ kind: 'im.pairCode', id: g.id })); } catch (e: any) { toast(e.message); } }}>{tr('生成配对码')}</button>
               </div>
               {pair && left > 0 && <div style={{ marginTop: 6 }}><span className="pair-code" style={{ fontSize: 22 }}>{pair.code}</span> <span className="sub">{tr('{left}s 后失效 · 发送', { left })} <code>/pair {pair.code}</code></span></div>}

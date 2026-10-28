@@ -6,6 +6,7 @@ import type {
   SyncRemoteStatus, SyncRemoteTestResult,
 } from '@shared';
 import { tr } from '@/i18n';
+import { Select } from '@/ui/Select';
 import { SyncPreviewCard } from './SyncPanel';
 
 const EMPTY: SyncRemoteConfig = {
@@ -111,11 +112,11 @@ export function RemoteSyncPanel() {
           <b>{tr('远程同步')}</b>
           <span className="sub">{tr('把这份备份放到 WebDAV、S3 或 GitHub，另一台电脑拉下来逐项合并。')}</span>
           <span className="grow" />
-          <select className="input" value={form.backend} disabled={busy} onChange={(e) => setForm((f) => ({ ...f, backend: e.target.value as SyncRemoteConfig['backend'] }))}>
+          <Select className="input" aria-label={tr('远程同步')} value={form.backend} disabled={busy} onValueChange={(v) => setForm((f) => ({ ...f, backend: String(v) as SyncRemoteConfig['backend'] }))}>
             <option value="webdav">WebDAV</option>
             <option value="s3">S3</option>
             <option value="github">GitHub</option>
-          </select>
+          </Select>
         </div>
 
         {form.backend === 'webdav' && (

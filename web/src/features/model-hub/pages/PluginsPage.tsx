@@ -275,11 +275,11 @@ export function PluginsPage() {
             <div className="hub-row" style={{ flexWrap: 'wrap', marginBottom: 10 }}>
               <label className="field" style={{ flex: '1 1 320px', margin: 0 }}>
                 <span>{tr('插件市场地址')}</span>
-                <input value={marketUrl} onChange={(e) => setMarketUrl(e.target.value)} placeholder="https://example.com/plugins.json" spellCheck={false} />
+                <input className="input" value={marketUrl} onChange={(e) => setMarketUrl(e.target.value)} placeholder="https://example.com/plugins.json" spellCheck={false} />
               </label>
               <label className="field" style={{ flex: '1 1 220px', margin: 0 }}>
                 <span>{tr('公钥（可选）')}</span>
-                <input value={marketKey} onChange={(e) => setMarketKey(e.target.value)} placeholder={tr('Ed25519 公钥')} spellCheck={false} />
+                <input className="input" value={marketKey} onChange={(e) => setMarketKey(e.target.value)} placeholder={tr('Ed25519 公钥')} spellCheck={false} />
               </label>
             </div>
             <div className="hub-row" style={{ marginBottom: 12, flexWrap: 'wrap' }}>

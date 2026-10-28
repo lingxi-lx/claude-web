@@ -7,6 +7,7 @@ import type { LedgerEntry } from '@shared';
 import { hitRate, hitRates, pickRows, profileName } from './ledger-stats';
 import { tr, dateLocale } from '@/i18n';
 import { Select } from '@/ui/Select';
+import { SwitchChip } from '@/ui/Switch';
 
 /** Traffic ledger: per-call latency / cache / cost table with a bar chart per hour or day, CSV export. */
 export function LedgerView({ sessionId }: { sessionId?: string }) {
@@ -48,7 +49,7 @@ export function LedgerView({ sessionId }: { sessionId?: string }) {
         <Select className="field" value={String(days)} onValueChange={(value) => setDays(Number(value))} aria-label={tr('统计天数')} options={[1, 2, 7, 30, 90].map((d) => ({ value: String(d), label: tr('{d} 天', { d }) }))} />
         <span className="seg mini">{(['calls', 'cost', 'latency', 'tokens'] as const).map((m) => <button key={m} className={metric === m ? 'active' : ''} onClick={() => setMetric(m)}>{{ calls: tr('调用'), cost: tr('费用'), latency: tr('延迟'), tokens: 'token' }[m]}</button>)}</span>
         <span className="seg mini" title={tr('来源')}>{(['all', 'session', 'gateway'] as const).map((k) => <button key={k} className={source === k ? 'active' : ''} title={k === 'all' ? tr('经网关 / 缓存垫片的对话同时有对话行（每轮）和网关行（每次调用）；这里只算对话行，其它客户端的网关行照算') : k === 'gateway' ? tr('每次经模型网关 / 缓存垫片的调用一行') : undefined} onClick={() => setSource(k)}>{{ all: tr('全部'), session: tr('对话'), gateway: tr('网关') }[k]}</button>)}</span>
-        <label className="muted" style={{ fontSize: 13, display: 'flex', gap: 4, alignItems: 'center' }}><input type="checkbox" checked={onlyErr} onChange={(e) => setOnlyErr(e.target.checked)} /> {tr('只看失败')}</label>
+        <SwitchChip on={onlyErr} onChange={setOnlyErr}>{tr('只看失败')}</SwitchChip>
         <span className="grow" />
         <button className="btn sm ghost" onClick={load}>{tr('刷新')}</button>
         <button className="btn sm ghost" onClick={async () => { try { const f = await ws.request<string>({ kind: 'ledger.export', days: Math.max(days, 30) }); toast(tr('已导出 {f}', { f }), true); void ws.request({ kind: 'shell.open', path: f.replace(/[\\/][^\\/]+$/, '') }); } catch (e: any) { toast(e.message); } }}>{tr('导出 CSV')}</button>

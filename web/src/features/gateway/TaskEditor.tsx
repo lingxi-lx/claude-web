@@ -7,6 +7,7 @@ import { useGateway } from './state';
 import { FAMILY_LABEL, FAMILY_TASKS, KIND_LABEL, targetFamily } from './tasks-model';
 import { tr } from '@/i18n';
 import { Select } from '@/ui/Select';
+import { SwitchChip } from '@/ui/Switch';
 
 const ALL_KINDS = Object.keys(KIND_LABEL) as MaintenanceKind[];
 
@@ -96,7 +97,7 @@ export function TaskEditor({ task, onClose, onSaved }: { task?: MaintenanceTask;
             </div>
           </label>
         )}
-        <label className="chip"><input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} /> {tr('启用')}</label>
+        <SwitchChip on={enabled} onChange={(on) => setEnabled(on)}>{tr('启用')}</SwitchChip>
         <div className="row">
           <span className="grow" />
           <button className="btn sm ghost" onClick={onClose} disabled={busy}>{tr('取消')}</button>

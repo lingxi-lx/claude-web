@@ -107,8 +107,8 @@
 .mm-row.mm-same { margin-bottom: 4px; }
 .mm-row.mm-same:hover { background-color: var(--layer-hover); }
 .mm-subdef { flex: none; display: flex; align-items: center; gap: 8px; margin-top: 6px; padding: 6px 8px 0; border-top: var(--hairline) solid var(--edge-subtle); font-size: var(--fs-sm); color: var(--ink-2); cursor: pointer; }
-.mm-subdef input { margin: 0; }
-.mm-subdef:has(input:disabled) { cursor: default; color: var(--ink-4); }
+.mm-subdef .grow { flex: 1; min-width: 0; }
+.mm-subdef:has(button:disabled) { cursor: default; color: var(--ink-4); }
 .cb .sub-anchor > .chip > svg { flex: none; color: var(--ink-3); }
 .cb .sub-anchor > .chip.on > svg { color: var(--accent-text); }
 /* nothing picked: 「子代理」 stays whole (the longer chips around it give way) */

@@ -102,7 +102,7 @@ export function MemoryPanel() {
       </div>
 
       <div className="memory-new">
-        <textarea placeholder={tr('记一条：写清楚「是什么」和「为什么」，几个月后还看得懂。')} value={draft} rows={2} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !imeComposing(e.nativeEvent)) void add(); }} />
+        <textarea className="field" placeholder={tr('记一条：写清楚「是什么」和「为什么」，几个月后还看得懂。')} value={draft} rows={2} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !imeComposing(e.nativeEvent)) void add(); }} />
         <div className="row-inline">
           <Select className="field sm" value={draftKind} onValueChange={(value) => setDraftKind(String(value) as MemoryKind)} aria-label={tr('记忆类型')} options={KINDS.map((k) => ({ value: k.id, label: k.l }))} />
           <Select className="field sm" value={draftScope} onValueChange={(value) => setDraftScope(String(value) as MemoryScope)} aria-label={tr('记忆范围')} title={SCOPES.find((s) => s.id === draftScope)?.hint} options={SCOPES.map((s) => ({ value: s.id, label: s.l, description: s.hint }))} />
@@ -147,7 +147,7 @@ function Row({ m }: { m: MemoryItem }) {
       <span className={clsx('mem-kind', m.kind)} title={k.l}><Icon name={k.ic} size={13} /></span>
       <div className="grow">
         {editing !== null ? (
-          <textarea autoFocus value={editing} rows={3} onChange={(e) => setEditing(e.target.value)} onBlur={save} onKeyDown={(e) => { if (imeComposing(e.nativeEvent)) return; if (e.key === 'Escape') setEditing(null); if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) void save(); }} />
+          <textarea className="field" autoFocus value={editing} rows={3} onChange={(e) => setEditing(e.target.value)} onBlur={save} onKeyDown={(e) => { if (imeComposing(e.nativeEvent)) return; if (e.key === 'Escape') setEditing(null); if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) void save(); }} />
         ) : (
           <div className="t" onDoubleClick={() => setEditing(m.text)} title={tr('双击编辑')}>{m.text}</div>
         )}

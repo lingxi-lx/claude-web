@@ -8,6 +8,7 @@ import { Icon } from '@/ui/icons';
 import { useDropdown } from '@/ui/menus';
 import { imeComposing } from '@/ui/ime';
 import { tr } from '@/i18n';
+import { SwitchChip } from '@/ui/Switch';
 
 const STATUS_LABEL: Record<GitFileStatus['status'], string> = { modified: 'M', added: 'A', deleted: 'D', renamed: 'R', copied: 'C', untracked: 'U', conflict: '!', typechange: 'T' };
 
@@ -199,7 +200,7 @@ export function GitView({ cwd, visible = true }: { cwd: string; visible?: boolea
           <div className="commit-box">
             <textarea className="field" placeholder={amend ? tr('修改上一次提交（留空沿用原信息）') : tr('提交信息（Ctrl+Enter 提交）')} value={msg} onChange={(e) => setMsg(e.target.value)} onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !imeComposing(e.nativeEvent)) void commit(); }} rows={3} />
             <div className="row">
-              <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: 4 }}><input type="checkbox" checked={amend} onChange={(e) => setAmend(e.target.checked)} /> amend</label>
+              <SwitchChip on={amend} onChange={setAmend}>amend</SwitchChip>
               <span className="grow" />
               <button className="btn sm ghost" disabled={!unstaged.length && !untracked.length} onClick={() => run('stage', { kind: 'git.stage', cwd, files: 'all' })}>{tr('全部暂存')}</button>
               <button className="btn sm primary" disabled={!!busy || (!staged.length && !amend)} onClick={commit}>{busy === 'commit' ? tr('提交中…') : tr('提交{v}', { v: staged.length ? ` (${staged.length})` : '' })}</button>

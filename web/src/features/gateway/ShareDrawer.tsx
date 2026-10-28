@@ -7,6 +7,7 @@ import { KeysTab } from './KeysTab';
 import { ShareSettings } from './ShareSettings';
 import { ExternalShareDrawer } from './mounts';
 import { tr } from '@/i18n';
+import { SwitchChip } from '@/ui/Switch';
 
 /**
  * 共享: let other apps on this computer (or the LAN) use these sources through one address and a key. Off by default.
@@ -64,7 +65,7 @@ function ShareLocal() {
               <span className="sub">{tr('打开后，Claude Code、ChatBox、Cline 等应用填上地址和密钥就能用这里的模型。只在这台电脑上，局域网默认关闭。')}</span>
             </span>
             <span className="grow" />
-            <label className="chip"><input type="checkbox" checked={!!status?.enabled} onChange={(e) => void toggle(e.target.checked)} /> {status?.enabled ? tr('已打开') : tr('已关闭')}</label>
+            <SwitchChip on={!!status?.enabled} onChange={(on) => void toggle(on)}>{status?.enabled ? tr('已打开') : tr('已关闭')}</SwitchChip>
           </div>
         </div>
         {status?.enabled && (

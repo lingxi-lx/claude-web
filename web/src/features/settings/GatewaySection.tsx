@@ -7,6 +7,7 @@ import { dlg } from '@/ui/dialog';
 import type { GatewayStatus } from '@shared';
 import { openGateway } from '@/features/gateway/state';
 import { tr } from '@/i18n';
+import { SwitchChip } from '@/ui/Switch';
 
 /**
  * 设置 → 模型网关: the switch, the address and the key, and a way into the section that manages accounts,
@@ -47,7 +48,7 @@ export function GatewaySection() {
   return (
     <div className="section gateway">
       <div className="row" style={{ alignItems: 'center', gap: 12 }}>
-        <label className="chip"><input type="checkbox" checked={st.enabled} disabled={busy} onChange={(e) => void setEnabled(e.target.checked)} /> {tr('启用本机模型网关')}</label>
+        <SwitchChip on={st.enabled} disabled={busy} onChange={(on) => void setEnabled(on)}>{tr('启用本机模型网关')}</SwitchChip>
         <span className={clsx('badge', st.enabled && 'ok')}>{st.enabled ? tr('运行中') : tr('关闭')}</span>
       </div>
       <div className="sub" style={{ marginTop: 6 }}>

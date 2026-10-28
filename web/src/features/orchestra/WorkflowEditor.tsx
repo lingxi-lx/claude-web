@@ -9,6 +9,7 @@ import { nextNodeId, promptVars } from './graph-layout';
 import { agentIcon, agentLabel } from './labels';
 import { tr } from '@/i18n';
 import { Select } from '@/ui/Select';
+import { SwitchChip } from '@/ui/Switch';
 
 export type WorkflowDraft = Omit<Workflow, 'id' | 'createdAt' | 'updatedAt'> & { id?: string };
 
@@ -57,7 +58,7 @@ function NodeCard({ n, all, agents, index, count, onChange, onMove, onRemove }: 
           <label>{tr('工作区')}<Select className="field" value={n.workspace} onValueChange={(value) => onChange({ ...n, workspace: String(value) as 'shared' | 'worktree' })} aria-label={tr('工作区')} options={[{ value: 'shared', label: tr('共享工作目录') }, { value: 'worktree', label: tr('独立副本（worktree），完成后合并') }]} /></label>
           <label>{tr('权限')}<Select className="field" value={n.permissionMode ?? 'default'} onValueChange={(value) => onChange({ ...n, permissionMode: String(value) as PermissionMode })} aria-label={tr('权限')} options={PERM.map((p) => ({ value: p.v, label: p.l }))} /></label>
           <label>{tr('模型（空 = 默认）')}<input className="field" value={n.model ?? ''} onChange={(e) => onChange({ ...n, model: e.target.value || undefined })} /></label>
-          <label className="check"><input type="checkbox" checked={!!n.untilDone} onChange={(e) => onChange({ ...n, untilDone: e.target.checked || undefined })} /> {tr('一直做到完成（目标协议）')}</label>
+          <SwitchChip className="check" on={!!n.untilDone} onChange={(on) => onChange({ ...n, untilDone: on || undefined })}>{tr('一直做到完成（目标协议）')}</SwitchChip>
         </>}
         {n.kind === 'compare' && <>
           <label>{tr('裁判（可选）')}<Select className="field" value={n.judge ?? ''} onValueChange={(value) => onChange({ ...n, judge: (String(value) || undefined) as AgentKind | undefined })} aria-label={tr('裁判（可选）')} options={[{ value: '', label: tr('不用裁判') }, ...agents.map((a) => ({ value: a, label: agentLabel(a) }))]} /></label>

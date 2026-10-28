@@ -12,6 +12,7 @@ import { Icon } from '@/ui/icons';
 import { imeComposing } from '@/ui/ime';
 import { tr } from '@/i18n';
 import { useDialogFocus } from './logic';
+import { SwitchLine } from '@/ui/Switch';
 
 type Target = Pick<SessionSummary, 'sessionId' | 'cwd' | 'title'>;
 const useHandoff = create<{ s: Target | null; back: { sessionId: string; cwd: string } | null }>(() => ({ s: null, back: null }));
@@ -95,10 +96,9 @@ function HandoffDialog({ s }: { s: Target }) {
       )}
       {check?.ok && !!check.untracked?.count && (
         <div className="dialog-msg" data-id="handoff-untracked">
-          <label className="cloud-check">
-            <input type="checkbox" data-act="include-untracked" checked={withNew} onChange={(e) => setWithNew(e.target.checked)} />
+          <SwitchLine className="cloud-check" data-act="include-untracked" on={withNew} onChange={setWithNew}>
             {tr('也带上 {n} 个新文件（Git 还没跟踪的，共 {size}）', { n: check.untracked.count, size: sizeText(check.untracked.bytes) })}
-          </label>
+          </SwitchLine>
           <details>
             <summary>{tr('看看是哪些文件')}</summary>
             <pre className="cloud-diff mono">{check.untracked.files.map((f) => `${f.path}  ${sizeText(f.size)}`).join('\n')}{check.untracked.count > check.untracked.files.length ? `\n…` : ''}</pre>

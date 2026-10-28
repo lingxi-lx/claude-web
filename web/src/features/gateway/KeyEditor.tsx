@@ -6,6 +6,7 @@ import { useGateway } from './state';
 import type { GatewayKeyGroup } from '@shared';
 import { tr } from '@/i18n';
 import { Select } from '@/ui/Select';
+import { SwitchChip } from '@/ui/Switch';
 
 interface Form extends GatewayKeyGroup {
   ipLines: string;
@@ -52,9 +53,9 @@ export function KeyEditor({ group, onClose, onSaved }: { group: GatewayKeyGroup;
           <span>{tr('允许的网关组（不选 = 全部）')}</span>
           <Select multiple value={g.routeGroupIds} onValueChange={(value) => setG({ ...g, routeGroupIds: value as string[] })} aria-label={tr('允许的网关组')} options={routeGroups.map((p) => ({ value: p.id, label: p.name, description: p.id }))} placeholder={g.routeGroupIds.length ? undefined : tr('全部网关组')} />
         </label>
-        <label className="chip"><input type="checkbox" checked={g.allowLan} onChange={(e) => setG({ ...g, allowLan: e.target.checked })} /> {tr('允许局域网使用')}</label>
-        <label className="field"><span>{tr('来源 IP 白名单（每行一个 CIDR；留空 = 只允许本机）')}</span><textarea rows={3} value={g.ipLines} onChange={(e) => setG({ ...g, ipLines: e.target.value })} placeholder={'192.168.1.0/24'} /></label>
-        <label className="field"><span>{tr('模型白名单（每行一个 glob；留空 = 全部）')}</span><textarea rows={3} value={g.allowLines} onChange={(e) => setG({ ...g, allowLines: e.target.value })} placeholder={'claude-*'} /></label>
+        <SwitchChip on={g.allowLan} onChange={(on) => setG({ ...g, allowLan: on })}>{tr('允许局域网使用')}</SwitchChip>
+        <label className="field"><span>{tr('来源 IP 白名单（每行一个 CIDR；留空 = 只允许本机）')}</span><textarea className="field" rows={3} value={g.ipLines} onChange={(e) => setG({ ...g, ipLines: e.target.value })} placeholder={'192.168.1.0/24'} /></label>
+        <label className="field"><span>{tr('模型白名单（每行一个 glob；留空 = 全部）')}</span><textarea className="field" rows={3} value={g.allowLines} onChange={(e) => setG({ ...g, allowLines: e.target.value })} placeholder={'claude-*'} /></label>
         <div className="row">
           <label className="field"><span>{tr('每分钟请求')}</span><input type="number" min={0} value={g.rateLimit?.rpm ?? 0} onChange={(e) => setG({ ...g, rateLimit: { ...g.rateLimit, rpm: Number(e.target.value) || undefined } })} /></label>
           <label className="field"><span>{tr('并发')}</span><input type="number" min={0} value={g.rateLimit?.concurrent ?? 0} onChange={(e) => setG({ ...g, rateLimit: { ...g.rateLimit, concurrent: Number(e.target.value) || undefined } })} /></label>

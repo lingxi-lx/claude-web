@@ -8,6 +8,7 @@ import { ws } from '@/ws/client';
 import { useStore } from '@/store';
 import { tr } from '@/i18n';
 import { Select } from '@/ui/Select';
+import { SwitchLine } from '@/ui/Switch';
 
 export const CATEGORIES: PrivacyCategory[] = ['api_key', 'private_key', 'jwt', 'password', 'email', 'phone', 'id_card', 'bank_card', 'name', 'address', 'custom'];
 
@@ -39,7 +40,7 @@ function ListBox({ label, hint, value, onSave }: { label: string; hint: string; 
     <div className="privacy-list" data-privacy-list>
       <div className="privacy-label">{label}</div>
       <div className="sub">{hint}</div>
-      <textarea rows={3} value={text} spellCheck={false} onChange={(e) => setText(e.target.value)} style={{ width: '100%', fontFamily: 'var(--font-mono, monospace)' }} />
+      <textarea className="field" rows={3} value={text} spellCheck={false} aria-label={label} onChange={(e) => setText(e.target.value)} style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'var(--mono)' }} />
       {dirty && <button className="btn sm" onClick={() => onSave(lines(text))}>{tr('保存')}</button>}
     </div>
   );
@@ -75,10 +76,9 @@ export function PrivacyCenter() {
   const stats = st.stats;
   return (
     <div className="privacy-center" data-privacy-center>
-      <label className="privacy-row" style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 600 }}>
-        <input type="checkbox" checked={s.enabled} onChange={(e) => void set({ enabled: e.target.checked })} />
-        {tr('发给模型前先脱敏')}
-      </label>
+      <SwitchLine className="privacy-row" on={s.enabled} onChange={(on) => void set({ enabled: on })}>
+        <b>{tr('发给模型前先脱敏')}</b>
+      </SwitchLine>
       <div className="sub">
         {tr('对话、Agent 和连接测试发给模型的请求：敏感内容换成占位符（如 {example}）再发，回答里的占位符换回原文。原文只留在本机内存里。开着但处理出错时，请求不会发出。', { example: '{{API_KEY_a1b2c3d4}}' })}
       </div>
@@ -86,10 +86,9 @@ export function PrivacyCenter() {
         {tr('打开以后，已经在跑的对话要重新开始才会经过这里。需要模型看到原文才能做的事（比如用这个 Key 调接口），脱敏后做不了。图片里的文字不处理。')}
       </div>
 
-      <label className="privacy-row" style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' }}>
-        <input type="checkbox" checked={s.skipLocal} onChange={(e) => void set({ skipLocal: e.target.checked })} />
+      <SwitchLine className="privacy-row" on={s.skipLocal} onChange={(on) => void set({ skipLocal: on })}>
         {tr('本机和局域网上的模型不处理')}
-      </label>
+      </SwitchLine>
 
       <div className="privacy-cats" style={{ display: 'grid', gridTemplateColumns: 'auto auto auto', gap: '4px 12px', alignItems: 'center', margin: '8px 0' }}>
         {CATEGORIES.map((c) => (
@@ -109,7 +108,7 @@ export function PrivacyCenter() {
       <div className="privacy-preview" style={{ marginTop: 12 }}>
         <div className="privacy-label">{tr('预览')}</div>
         <div className="sub">{tr('贴一段文字，看模型会收到什么。不保存。')}</div>
-        <textarea rows={4} value={sample} spellCheck={false} onChange={(e) => setSample(e.target.value)} style={{ width: '100%' }} />
+        <textarea className="field" rows={4} value={sample} spellCheck={false} aria-label={tr('预览')} onChange={(e) => setSample(e.target.value)} style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical' }} />
         <button className="btn sm" disabled={!sample.trim()} onClick={() => void runPreview()}>{tr('预览')}</button>
         {preview && (
           <div style={{ marginTop: 6 }}>

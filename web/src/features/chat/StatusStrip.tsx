@@ -11,6 +11,7 @@ import type { Provider } from '@shared';
 import { accountFailed } from './account-fail';
 import { useContextUsage } from '@/features/composer/ContextMeter';
 import { tr } from '@/i18n';
+import { SwitchChip } from '@/ui/Switch';
 
 function useTick(active: boolean, ms = 1000) {
   const [, setN] = useState(0);
@@ -121,10 +122,9 @@ export function StatusStrip({ sessionId }: { sessionId: string }) {
       {rlActive && (
         <span className="chip warn">
           {tr('额度用尽{v}', { v: resetAt ? tr(' · {countdown} 后重置', { countdown: countdown(resetAt) }) : '' })}
-          <label className="inline">
-            <input type="checkbox" checked={!!settings.autoContinueOnReset} onChange={(e) => { void setSetting('autoContinueOnReset', e.target.checked); if (!e.target.checked) disarmAutoContinue(sessionId); }} />
+          <SwitchChip className="inline" on={!!settings.autoContinueOnReset} onChange={(on) => { void setSetting('autoContinueOnReset', on); if (!on) disarmAutoContinue(sessionId); }}>
             {tr('额度恢复后自动继续')}
-          </label>
+          </SwitchChip>
         </span>
       )}
       {armed && <span className="chip"><span className="spinner" /> {tr('{countdown} 后自动继续', { countdown: countdown(armed) })} <button className="link" onClick={() => { disarmAutoContinue(sessionId); useStore.setState({}); }}>{tr('取消')}</button></span>}

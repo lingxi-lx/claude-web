@@ -17,9 +17,9 @@ export function ModelMapEditor({ value, onSave }: { value?: Record<string, strin
       <div className="sub">{tr('模型映射（入口模型 → 出口模型；可用 * 通配）')}</div>
       {draft.map(([k, v], i) => (
         <div className="gateway-row" key={`${i}-${k}`}>
-          <input defaultValue={k} placeholder={tr('入口模型')} aria-label={tr('入口模型')} onBlur={(e) => save(draft.map((r, j) => (j === i ? [e.target.value, r[1]] : r)))} />
+          <input className="field" defaultValue={k} placeholder={tr('入口模型')} aria-label={tr('入口模型')} onBlur={(e) => save(draft.map((r, j) => (j === i ? [e.target.value, r[1]] : r)))} />
           <span className="muted">→</span>
-          <input defaultValue={v} placeholder={tr('出口模型')} aria-label={tr('出口模型')} onBlur={(e) => save(draft.map((r, j) => (j === i ? [r[0], e.target.value] : r)))} />
+          <input className="field" defaultValue={v} placeholder={tr('出口模型')} aria-label={tr('出口模型')} onBlur={(e) => save(draft.map((r, j) => (j === i ? [r[0], e.target.value] : r)))} />
           <button className="btn sm ghost" onClick={() => save(draft.filter((_, j) => j !== i))}>{tr('删除映射')}</button>
         </div>
       ))}

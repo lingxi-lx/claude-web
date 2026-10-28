@@ -8,6 +8,7 @@ import { Icon } from '@/ui/icons';
 import { imeComposing } from '@/ui/ime';
 import { tr } from '@/i18n';
 import { Select } from '@/ui/Select';
+import { SwitchChip } from '@/ui/Switch';
 
 const KEYS: [string, string][] = [['BACK', '4'], ['HOME', '3'], ['RECENTS', '187'], ['POWER', '26'], ['VOL+', '24'], ['VOL−', '25'], ['ENTER', '66']];
 
@@ -47,7 +48,7 @@ export function AndroidPanel({ visible = true }: { visible?: boolean }) {
       <div className="android-head">
         <Select className="field sm" value={serial} onValueChange={(v) => setSerial(String(v))} aria-label={tr('选择设备')} options={[{ value: '', label: tr('选择设备…') }, ...st.devices.map((d) => ({ value: d.serial, label: `${d.model || d.serial} · ${d.emulator ? tr('模拟器') : 'USB'}`, description: d.state !== 'device' ? d.state : d.serial }))]} searchable={st.devices.length > 8} />
         {st.avds.length > 0 && <Select className="field sm" value="" onValueChange={async (value) => { const avd = String(value); if (!avd) return; try { await ws.request({ kind: 'android.startEmulator', avd }); toast(tr('正在启动 {avd}…', { avd }), true); setTimeout(refresh, 8000); } catch (x: any) { toast(x.message); } }} options={[{ value: '', label: tr('启动模拟器…') }, ...st.avds.map((a) => ({ value: a, label: a }))]} aria-label={tr('启动模拟器')} searchable={st.avds.length > 8} />}
-        <label className="chip"><input type="checkbox" checked={live} onChange={(e) => setLive(e.target.checked)} /> {tr('实时')}</label>
+        <SwitchChip on={live} onChange={setLive}>{tr('实时')}</SwitchChip>
         <button className="icon-btn" title={tr('刷新设备')} aria-label={tr('刷新设备')} onClick={refresh}><Icon name="refresh" size={14} /></button>
         <span className="grow" />
         <button className="btn sm ghost" disabled={!serial || busy} onClick={async () => { const p = await dlg.prompt(tr('APK 路径'), ''); if (!p) return; setBusy(true); try { toast((await ws.request<string>({ kind: 'android.install', serial, apk: p })).trim() || tr('已安装'), true); } catch (e: any) { toast(e.message); } finally { setBusy(false); } }}>{tr('安装 APK')}</button>

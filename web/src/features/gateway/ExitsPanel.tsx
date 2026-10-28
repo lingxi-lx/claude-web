@@ -3,6 +3,7 @@ import { ws } from '@/ws/client';
 import { useStore } from '@/store';
 import type { SidecarGuard, SidecarId, SidecarProxy } from '@shared';
 import { tr } from '@/i18n';
+import { SwitchChip } from '@/ui/Switch';
 
 /**
  * 出口（住宅 IP）: the proxy pool a sidecar family routes through. Each row is one exit with its own breaker
@@ -88,22 +89,22 @@ export function ExitsPanel({ id }: { id: SidecarId }) {
               <div className="gateway-row"><b>{tr('防封设置')}</b><span className="sub">{tr('由组件执行，改完立即生效')}</span></div>
               <div className="gateway-row" style={{ gap: 6, flexWrap: 'wrap' }}>
                 <label className="field" style={{ maxWidth: 130 }}><span>{tr('每个出口并发')}</span>
-                  <input type="number" min={0} value={guard.perIpConcurrent} onChange={(e) => void saveGuard({ perIpConcurrent: Number(e.target.value) || 0 })} /></label>
+                  <input className="field" type="number" min={0} value={guard.perIpConcurrent} onChange={(e) => void saveGuard({ perIpConcurrent: Number(e.target.value) || 0 })} /></label>
                 <label className="field" style={{ maxWidth: 130 }}><span>{tr('每分钟请求')}</span>
-                  <input type="number" min={0} value={guard.perIpRpm} onChange={(e) => void saveGuard({ perIpRpm: Number(e.target.value) || 0 })} /></label>
+                  <input className="field" type="number" min={0} value={guard.perIpRpm} onChange={(e) => void saveGuard({ perIpRpm: Number(e.target.value) || 0 })} /></label>
                 <label className="field" style={{ maxWidth: 130 }}><span>{tr('每小时请求')}</span>
-                  <input type="number" min={0} value={guard.perIpRph} onChange={(e) => void saveGuard({ perIpRph: Number(e.target.value) || 0 })} /></label>
+                  <input className="field" type="number" min={0} value={guard.perIpRph} onChange={(e) => void saveGuard({ perIpRph: Number(e.target.value) || 0 })} /></label>
                 <label className="field" style={{ maxWidth: 150 }}><span>{tr('出口熔断冷却（分钟）')}</span>
-                  <input type="number" min={0} value={guard.proxyCooldownMin} onChange={(e) => void saveGuard({ proxyCooldownMin: Number(e.target.value) || 0 })} /></label>
+                  <input className="field" type="number" min={0} value={guard.proxyCooldownMin} onChange={(e) => void saveGuard({ proxyCooldownMin: Number(e.target.value) || 0 })} /></label>
               </div>
-              <label className="chip"><input type="checkbox" checked={guard.fallbackDirect} onChange={(e) => void saveGuard({ fallbackDirect: e.target.checked })} /> {tr('出口全熔断时允许直连（会暴露本机 IP）')}</label>
-              <label className="chip"><input type="checkbox" checked={guard.fallbackAnon} onChange={(e) => void saveGuard({ fallbackAnon: e.target.checked })} /> {tr('cookie 失效时降级成匿名')}</label>
+              <SwitchChip on={guard.fallbackDirect} onChange={(on) => void saveGuard({ fallbackDirect: on })}>{tr('出口全熔断时允许直连（会暴露本机 IP）')}</SwitchChip>
+              <SwitchChip on={guard.fallbackAnon} onChange={(on) => void saveGuard({ fallbackAnon: on })}>{tr('cookie 失效时降级成匿名')}</SwitchChip>
               <div style={{ marginTop: 8 }}>
-                <label className="chip"><input type="checkbox" checked={guard.multiTurn} onChange={(e) => void saveGuard({ multiTurn: e.target.checked })} /> {tr('多轮续接（后续轮次只发新增内容；历史会留在 Google 账号里。首轮必须低于 128KB，否则这条不生效）')}</label>
+                <SwitchChip on={guard.multiTurn} onChange={(on) => void saveGuard({ multiTurn: on })}>{tr('多轮续接（后续轮次只发新增内容；历史会留在 Google 账号里。首轮必须低于 128KB，否则这条不生效）')}</SwitchChip>
               </div>
               <label className="field" style={{ maxWidth: 220, marginTop: 6 }}>
                 <span>{tr('超过这个字节数就转成附件上传（0 = 从不转）')}</span>
-                <input type="number" min={0} value={guard.maxPromptBytes} onChange={(e) => void saveGuard({ maxPromptBytes: Number(e.target.value) || 0 })} />
+                <input className="field" type="number" min={0} value={guard.maxPromptBytes} onChange={(e) => void saveGuard({ maxPromptBytes: Number(e.target.value) || 0 })} />
               </label>
               <div className="sub" style={{ padding: '4px 2px 0' }}>{tr('组件默认 128000。超过就先上传附件再回答；实测上传本身约 2 秒，真正慢的是模型读这份超长内容并思考，而且 16 万字节以上会超过上游可读上限、末尾被截断（工具格式说明正好在末尾）。调大不是提速办法，优先用精简工具集把首轮压到 128KB 以下。')}</div>
               <div className="sub" style={{ padding: '4px 2px 0' }}>{tr('0 = 不限。默认每个出口并发 5、每分钟 30、每小时 80；出口连续失败熔断后 120 分钟放回。')}</div>

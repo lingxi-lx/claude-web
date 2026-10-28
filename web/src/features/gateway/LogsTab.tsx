@@ -5,6 +5,7 @@ import { useGateway } from './state';
 import { useStore } from '@/store';
 import { dlg } from '@/ui/dialog';
 import { tr } from '@/i18n';
+import { SwitchChip } from '@/ui/Switch';
 
 /** 活动: the whitelisted audit lines (`names`: only the lines of these members — one source's). No prompts or bodies. */
 export function LogsTab({ names }: { names?: string[] }) {
@@ -31,7 +32,7 @@ export function LogsTab({ names }: { names?: string[] }) {
   return (
     <div className="gateway-tab">
       <div className="gateway-row">
-        <label className="chip"><input type="checkbox" checked={onlyErrors} onChange={(e) => setOnlyErrors(e.target.checked)} /> {tr('只看错误')}</label>
+        <SwitchChip on={onlyErrors} onChange={(on) => setOnlyErrors(on)}>{tr('只看错误')}</SwitchChip>
         <span className="grow" />
         {!names && <button className="btn sm ghost" onClick={() => void exportAll()}>{tr('导出')}</button>}
         {!names && <button className="btn sm ghost danger" onClick={() => void clear()}>{tr('清空')}</button>}
