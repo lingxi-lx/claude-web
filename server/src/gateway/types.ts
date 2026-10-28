@@ -37,6 +37,16 @@ export type GatewayTarget = Provider & {
   degraded?: boolean;
   /** resolved from the account store (the state key is `a:<id>`, not the group member's ref) */
   account?: boolean;
+  /**
+   * The wire protocol of a provider-login account. `type` stays the profile-shaped value (openai / anthropic /
+   * gemini) so menus and existing code keep working; this is what the target actually speaks (`responses` is
+   * OpenAI's Responses API, which Codex accounts require).
+   */
+  protocol?: GatewayProtocol;
+  /** Extra headers a provider account needs (Copilot's editor identity; Codex's originator). Never auth headers. */
+  headers?: Record<string, string>;
+  /** Vendor path override when it does not serve /v1/chat/completions or /v1/responses (Copilot / Codex). */
+  chatPath?: string;
 };
 
 export interface GatewayGroup {
@@ -161,8 +171,14 @@ export interface GatewayKey {
 export interface ShareQuota { requests?: number; tokens?: number }
 /** What a share key may use, beyond its key group: a subset of route groups and models, concurrency, quotas. */
 export interface ShareRules {
-  /** route group ids (sources) — empty / absent = whatever the key group allows */
+  /** route group ids — empty / absent = none (a share key reaches only the groups ticked for it) */
   routeGroupIds?: string[];
+  /** 智能路由 sources it may use (`p:<id>` / `a:<id>` / `u:<id>`, or a full candidate key) — empty / absent = all */
+  sources?: string[];
+  /** may 智能路由 pick the owner's subscription accounts (account logins) for it — default no */
+  subscription?: boolean;
+  /** USD a day it may spend on paid sources through 智能路由 — unset / 0 = paid sources never */
+  paidBudgetUsd?: number;
   /** model ids / `*` globs — empty / absent = whatever the key group allows */
   models?: string[];
   concurrent?: number;

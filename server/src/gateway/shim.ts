@@ -40,7 +40,7 @@ import { SseParser } from './sse.js';
 import type { IrEvent, IrUsage } from './ir.js';
 import { CACHE_KEY_MAX, SseLines, addMissing, affinityHeaders, dropEmptyReasoning, fixChatUsage, forcesTool, insertTopLevelField, isParamRejection, mentionsCacheKey, mentionsEffort, refusesForcedTool, thinkingOff } from './cache.js';
 import { UpstreamError, decoded, errorHeaders, passthroughHeaders, readText, responseHeaders, sendUpstream, waitDrain, withTimeout, type UpstreamResponse } from './upstream.js';
-import { PrivacyBlocked, type PrivacyService } from '../privacy/service.js';
+import { privacyErrorStatus, type PrivacyService } from '../privacy/service.js';
 import { tr } from '../i18n/index.js';
 
 export const SHIM_PREFIX = '/gateway/~p/';
@@ -177,7 +177,7 @@ export class CacheShim {
           guard.done();
         }
       } catch (e: any) {
-        return this.fail(res, e instanceof PrivacyBlocked ? 403 : 500, e?.message ?? String(e));
+        return this.fail(res, privacyErrorStatus(e), e?.message ?? String(e));
       }
     }
     // the affinity headers name the conversation the way its body does: Codex sends its own prompt_cache_key (the

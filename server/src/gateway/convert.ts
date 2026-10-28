@@ -8,7 +8,7 @@ import * as C from './openai-chat.js';
 import * as R from './openai-responses.js';
 import * as G from './gemini.js';
 
-export type Outbound = 'anthropic' | 'openai' | 'gemini';
+export type Outbound = 'anthropic' | 'openai' | 'gemini' | 'responses';
 
 export const DEFAULT_BASE: Record<ProviderType, string> = {
   anthropic: 'https://api.anthropic.com',
@@ -31,7 +31,11 @@ export const isPassthrough = (inbound: GatewayProtocol, outbound: Outbound) => i
 
 /** The translation directions the spec asks for; everything else is rejected with a clear 400. */
 // gemini>openai: a Gemini conversation's subagents on an OpenAI-format model (the split route, 2026-10-18)
-export const TRANSLATIONS = new Set(['anthropic>openai', 'anthropic>gemini', 'openai>anthropic', 'responses>anthropic', 'gemini>anthropic', 'openai>gemini', 'gemini>openai']);
+// *>responses: a Codex account only speaks the Responses API (2026-10-28)
+export const TRANSLATIONS = new Set([
+  'anthropic>openai', 'anthropic>gemini', 'openai>anthropic', 'responses>anthropic', 'gemini>anthropic',
+  'openai>gemini', 'gemini>openai', 'anthropic>responses', 'openai>responses', 'gemini>responses',
+]);
 export const supported = (inbound: GatewayProtocol, outbound: Outbound) => isPassthrough(inbound, outbound) || TRANSLATIONS.has(`${inbound}>${outbound}`);
 
 export const PROTOCOL_LABEL: Record<GatewayProtocol, string> = { anthropic: 'Anthropic Messages', openai: 'OpenAI Chat Completions', responses: 'OpenAI Responses', gemini: 'Gemini' };
@@ -58,17 +62,18 @@ export function parseInbound(inbound: GatewayProtocol, body: any, ctx: InboundCt
 }
 
 /** Per-member prompt-cache choices for a translated request (see anthropic.ts / openai-chat.ts). */
-export type OutboundOpts = A.AnthropicRenderOpts & C.ChatRenderOpts;
+export type OutboundOpts = A.AnthropicRenderOpts & C.ChatRenderOpts & R.ResponsesRenderOpts;
 
 /** Outbound request path (relative to the member base) + JSON body. */
 export function buildOutbound(outbound: Outbound, r: IrRequest, opts: OutboundOpts = {}): { path: string; body: any } {
   if (outbound === 'anthropic') return { path: '/v1/messages', body: A.renderRequest(r, opts) };
   if (outbound === 'openai') return { path: '/v1/chat/completions', body: C.renderRequest(r, opts) };
+  if (outbound === 'responses') return { path: '/v1/responses', body: R.renderRequest(r, opts) };
   return { path: G.upstreamPath(r.model, r.stream), body: G.renderRequest(r) };
 }
 
 export function parseOutboundResponse(outbound: Outbound, j: any, model: string): IrResponse {
-  return outbound === 'anthropic' ? A.parseResponse(j) : outbound === 'openai' ? C.parseResponse(j) : G.parseResponse(j, model);
+  return outbound === 'anthropic' ? A.parseResponse(j) : outbound === 'openai' ? C.parseResponse(j) : outbound === 'responses' ? R.parseResponse(j) : G.parseResponse(j, model);
 }
 
 export function renderInboundResponse(inbound: GatewayProtocol, r: IrResponse, model: string, customTools: Set<string>): any {
@@ -79,7 +84,10 @@ export function renderInboundResponse(inbound: GatewayProtocol, r: IrResponse, m
 }
 
 export function outboundStreamParser(outbound: Outbound, model: string): StreamParser {
-  return outbound === 'anthropic' ? new A.AnthropicStreamParser() : outbound === 'openai' ? new C.ChatStreamParser() : new G.GeminiStreamParser(model);
+  return outbound === 'anthropic' ? new A.AnthropicStreamParser()
+    : outbound === 'openai' ? new C.ChatStreamParser()
+      : outbound === 'responses' ? new R.ResponsesStreamParser()
+        : new G.GeminiStreamParser(model);
 }
 
 export function inboundStreamRenderer(inbound: GatewayProtocol, model: string, opts: { includeUsage: boolean; customTools: Set<string> }): StreamRenderer {

@@ -2,6 +2,7 @@
 import { claudeVersion } from '../models/catalog.js';
 import { newId, safeJson, mergeAlternating, effortOf, effortOfBudget, type IrEvent, type IrMessage, type IrPart, type IrRequest, type IrResponse, type IrStop, type IrTool, type IrUsage, type StreamParser, type StreamRenderer } from './ir.js';
 import { sse } from './sse.js';
+import { anthropicError } from './compat/errors.js';
 import { stripBillingHeader } from './cache.js';
 import { tr } from '../i18n/index.js';
 
@@ -152,9 +153,9 @@ export function renderResponse(r: IrResponse, model: string): any {
   };
 }
 
-const ERR_TYPE = (status: number) => status === 400 ? 'invalid_request_error' : status === 401 ? 'authentication_error' : status === 403 ? 'permission_error' : status === 404 ? 'not_found_error' : status === 413 ? 'request_too_large' : status === 429 ? 'rate_limit_error' : status === 529 ? 'overloaded_error' : 'api_error';
+/** The error envelope lives in the compatibility layer (one table for every surface). */
 export function renderError(status: number, message: string): any {
-  return { type: 'error', error: { type: ERR_TYPE(status), message } };
+  return anthropicError(status, message);
 }
 export function errorMessage(j: any): string | undefined {
   return j?.error?.message ?? (typeof j?.error === 'string' ? j.error : undefined) ?? j?.message;
@@ -274,7 +275,7 @@ export class AnthropicStreamRenderer implements StreamRenderer {
       }
       case 'error':
         this.finished = true;
-        return sse({ type: 'error', error: { type: ERR_TYPE(e.status ?? 500), message: e.message } }, 'error');
+        return sse(anthropicError(e.status ?? 500, e.message), 'error');
     }
     return '';
   }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildOutbound, inboundStreamRenderer, joinUrl, outboundStreamParser, parseInbound, parseOutboundResponse, renderInboundResponse, sniffUsage, supported } from './convert.js';
 import { SseParser } from './sse.js';
-import { collect, type IrEvent } from './ir.js';
+import { collect, type IrEvent, type IrRequest } from './ir.js';
 import { sanitizeSchema } from './gemini.js';
 import { affinityHeaders, cacheKeyOf } from './cache.js';
 
@@ -500,5 +500,38 @@ describe('thinking strength across formats (2026-10-26: every model gets it)', (
     expect(claude.output_config).toEqual({ effort: 'max' });
     expect(claude.thinking).toBeUndefined(); // a translated history has no signed thinking blocks
     expect(buildOutbound('anthropic', ir('claude-3-7-sonnet', 'high')).body.output_config).toBeUndefined();
+  });
+});
+
+describe('openai responses as an outbound member (Codex accounts, 2026-10-28)', () => {
+  const ir: IrRequest = {
+    model: 'gpt-5.1-codex',
+    system: 'be terse',
+    messages: [{ role: 'user', parts: [{ type: 'text', text: 'hi' }] }],
+    stream: false,
+    maxTokens: 32,
+  };
+
+  it('renders /v1/responses and parses its answer back into IR', () => {
+    const out = buildOutbound('responses', ir);
+    expect(out.path).toBe('/v1/responses');
+    expect(out.body).toMatchObject({
+      model: 'gpt-5.1-codex',
+      instructions: 'be terse',
+      input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hi' }] }],
+      max_output_tokens: 32,
+      store: false,
+      stream: false,
+    });
+    expect(parseOutboundResponse('responses', {
+      id: 'resp_1', status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: 'hello' }] }],
+    }, 'gpt-5.1-codex').parts).toEqual([{ type: 'text', text: 'hello' }]);
+  });
+
+  it('is a supported translation direction from every inbound protocol', () => {
+    expect(supported('anthropic', 'responses')).toBe(true);
+    expect(supported('openai', 'responses')).toBe(true);
+    expect(supported('gemini', 'responses')).toBe(true);
+    expect(supported('responses', 'responses')).toBe(true);
   });
 });

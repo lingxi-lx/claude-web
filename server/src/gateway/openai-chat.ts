@@ -1,6 +1,7 @@
 // OpenAI Chat Completions ⇄ IR. Shapes per platform.openai.com (chat/completions, chat.completion.chunk).
 import { newId, safeJson, effortOf, type IrEvent, type IrMessage, type IrPart, type IrRequest, type IrResponse, type IrStop, type IrTool, type IrUsage, type StreamParser, type StreamRenderer } from './ir.js';
 import { sse } from './sse.js';
+import { openaiError } from './compat/errors.js';
 import { CACHE_KEY_MAX } from './cache.js';
 import { tr } from '../i18n/index.js';
 
@@ -183,9 +184,9 @@ export function renderResponse(r: IrResponse, model: string): any {
   };
 }
 
-const ERR_TYPE = (status: number) => status === 401 ? 'authentication_error' : status === 403 ? 'permission_error' : status === 404 ? 'not_found_error' : status === 429 ? 'rate_limit_error' : status < 500 ? 'invalid_request_error' : 'server_error';
+/** The error envelope lives in the compatibility layer (one table for every surface). */
 export function renderError(status: number, message: string): any {
-  return { error: { message, type: ERR_TYPE(status), code: status } };
+  return openaiError(status, message);
 }
 
 /** Chat Completions upstream SSE → IR. Tool calls are assumed sequential by index (as OpenAI streams them). */

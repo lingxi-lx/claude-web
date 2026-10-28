@@ -165,6 +165,15 @@ describe('passthrough', () => {
   });
 });
 
+describe('routing config', () => {
+  it('a candidate weight survives saving (clamped, junk dropped)', async () => {
+    const g = await gw.upsertGroup({ id: 'w', name: 'W', strategy: 'failover', members: [{ providerId: 'a' }, { providerId: 'b' }], routing: { candidates: [{ providerId: 'a', model: 'm1', weight: 3 }, { providerId: 'b', model: 'm2', weight: 99999 }, { providerId: 'b', model: 'm3', weight: 'x' }] } as any });
+    const cs = (g.routing as any).candidates;
+    expect(cs.map((c: any) => c.weight)).toEqual([3, 1000, undefined]);
+    await gw.removeGroup('w');
+  });
+});
+
 describe('failover', () => {
   it('500 → next member; the failed one cools down and is skipped next time', async () => {
     A.handler.fn = (_q, res) => res.writeHead(529, { 'content-type': 'application/json' }).end('{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}');
@@ -706,6 +715,91 @@ describe('account members', () => {
   });
 });
 
+describe('provider login members', () => {
+  it('routes a Codex account to its /responses path with the Responses protocol and vendor headers', async () => {
+    const up = await fake();
+    const seen: Hit[] = [];
+    up.handler.fn = (q, res, body) => {
+      seen.push({ rawHeaders: q.rawHeaders, headers: q.headers, body, url: q.url ?? '' });
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
+        id: 'resp_1', object: 'response', status: 'completed', model: 'gpt-5.1-codex',
+        output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'codex-ok' }] }],
+        usage: { input_tokens: 2, output_tokens: 1 },
+      }));
+    };
+    const g2 = new GatewayService({
+      meta, member: () => null,
+      resolveMember: async () => [{
+        id: 'acct_codex', name: 'Codex', type: 'openai', protocol: 'responses', baseUrl: up.url,
+        apiKey: 'codex-token', createdAt: 0, chatPath: '/responses', headers: { originator: 'codex_cli_rs' }, account: true,
+      }],
+      firstByteMs: 400, nonStreamMs: 3000,
+    });
+    const s = http.createServer((q, r) => { if (!g2.handle(q, r, new URL(q.url ?? '/', 'http://x'))) r.writeHead(418).end(); });
+    await new Promise<void>((r) => s.listen(0, '127.0.0.1', () => r()));
+    g2.port = (s.address() as any).port;
+    await g2.setEnabled(true);
+    await g2.upsertGroup({ id: 'acct', name: 'Acct', strategy: 'failover', members: [{ accountId: 'acct_codex' }] });
+    try {
+      const r = await call('/gateway/acct/v1/chat/completions', {
+        model: 'gpt-5.1-codex', messages: [{ role: 'user', content: 'hi' }], max_tokens: 8,
+      }, { 'x-api-key': g2.revealKey() }, `http://127.0.0.1:${g2.port}`);
+      expect(r.status).toBe(200);
+      expect(JSON.parse(r.text).choices[0].message.content).toBe('codex-ok');
+      expect(seen[0].url).toBe('/responses');
+      expect(seen[0].headers.authorization).toBe('Bearer codex-token');
+      expect(seen[0].headers.originator).toBe('codex_cli_rs');
+      const body = JSON.parse(seen[0].body);
+      expect(body).toMatchObject({ model: 'gpt-5.1-codex', max_output_tokens: 8, store: false });
+      expect(body.input).toHaveLength(1);
+      expect(body.messages).toBeUndefined(); // it must not be a chat-completions body
+    } finally {
+      s.closeAllConnections();
+      s.close();
+      await up.close();
+    }
+  });
+
+  it('routes a Copilot account to /chat/completions and keeps its vendor headers', async () => {
+    const up = await fake();
+    const seen: Hit[] = [];
+    up.handler.fn = (q, res, body) => {
+      seen.push({ rawHeaders: q.rawHeaders, headers: q.headers, body, url: q.url ?? '' });
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
+        id: 'chatcmpl-1', object: 'chat.completion', model: 'gpt-4o',
+        choices: [{ index: 0, message: { role: 'assistant', content: 'copilot-ok' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      }));
+    };
+    const g2 = new GatewayService({
+      meta, member: () => null,
+      resolveMember: async () => [{
+        id: 'acct_cop', name: 'Copilot', type: 'openai', protocol: 'openai', baseUrl: up.url,
+        apiKey: 'cop-token', createdAt: 0, chatPath: '/chat/completions', headers: { 'editor-version': 'Neovim/0.6.1' }, account: true,
+      }],
+      firstByteMs: 400, nonStreamMs: 3000,
+    });
+    const s = http.createServer((q, r) => { if (!g2.handle(q, r, new URL(q.url ?? '/', 'http://x'))) r.writeHead(418).end(); });
+    await new Promise<void>((r) => s.listen(0, '127.0.0.1', () => r()));
+    g2.port = (s.address() as any).port;
+    await g2.setEnabled(true);
+    await g2.upsertGroup({ id: 'acct', name: 'Acct', strategy: 'failover', members: [{ accountId: 'acct_cop' }] });
+    try {
+      const r = await call('/gateway/acct/v1/chat/completions', {
+        model: 'gpt-4o', messages: [{ role: 'user', content: 'hi' }], max_tokens: 8,
+      }, { 'x-api-key': g2.revealKey() }, `http://127.0.0.1:${g2.port}`);
+      expect(r.status).toBe(200);
+      expect(seen[0].url).toBe('/chat/completions');
+      expect(seen[0].headers.authorization).toBe('Bearer cop-token');
+      expect(seen[0].headers['editor-version']).toBe('Neovim/0.6.1');
+    } finally {
+      s.closeAllConnections();
+      s.close();
+      await up.close();
+    }
+  });
+});
+
 describe('root routes and key groups', () => {
   it('serves /v1 directly and resolves group/model', async () => {
     A.handler.fn = anthropicOk('root');
@@ -911,5 +1005,42 @@ describe('audit of refused requests', () => {
       s.close();
       await g.stop();
     }
+  });
+});
+
+describe('compatibility layer and reasoning signatures', () => {
+  it('answers a CORS preflight before auth, echoing only a listed origin', async () => {
+    const r = await fetch(`${base}/main/v1/messages`, { method: 'OPTIONS', headers: { origin: 'https://evil.example', 'access-control-request-method': 'POST' } });
+    expect(r.status).toBe(204);
+    expect(r.headers.get('access-control-allow-origin')).toBeNull();
+    expect(A.hits).toHaveLength(0);
+  });
+
+  it('the model list carries both SDKs\' fields', async () => {
+    const r = await fetch(`${base}/mixed/v1/models`, { headers: { 'x-api-key': key } });
+    const j = await r.json() as any;
+    expect(j).toMatchObject({ object: 'list', has_more: false, first_id: 'gpt-4.1' });
+    expect(j.data[0]).toMatchObject({ id: 'gpt-4.1', object: 'model', type: 'model', display_name: 'gpt-4.1' });
+  });
+
+  it('a pass-through history with another provider\'s thinking reaches Claude without it', async () => {
+    const body = {
+      model: 'claude-sonnet-4-5', max_tokens: 8,
+      messages: [
+        { role: 'user', content: 'hi' },
+        { role: 'assistant', content: [{ type: 'thinking', thinking: 'from gemini', signature: '' }, { type: 'text', text: 'hello' }] },
+        { role: 'user', content: 'again' },
+      ],
+    };
+    const r = await call('/main/v1/messages', body);
+    expect(r.status).toBe(200);
+    const sent = JSON.parse(A.hits[0].body);
+    expect(sent.messages[1].content).toEqual([{ type: 'text', text: 'hello' }]);
+  });
+
+  it('a history with nothing to clean passes byte for byte', async () => {
+    const raw = '{"model":"claude-sonnet-4-5", "max_tokens":8,"messages":[{"role":"user","content":"thinking about it"}]}';
+    await call('/main/v1/messages', raw);
+    expect(A.hits[0].body).toBe(raw);
   });
 });

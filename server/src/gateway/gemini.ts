@@ -1,6 +1,7 @@
 // Gemini generateContent / streamGenerateContent ⇄ IR. Shapes per ai.google.dev (v1beta, camelCase JSON).
 import { newId, linkToolNames, mergeAlternating, resultText, effortOf, effortOfBudget, EFFORT_BUDGET, type IrEvent, type IrMessage, type IrPart, type IrRequest, type IrResponse, type IrStop, type IrTool, type IrUsage, type StreamParser, type StreamRenderer } from './ir.js';
 import { sse } from './sse.js';
+import { geminiError } from './compat/errors.js';
 import { tr } from '../i18n/index.js';
 
 /**
@@ -170,9 +171,9 @@ export function renderResponse(r: IrResponse, model: string): any {
   return { candidates: [{ content: { role: 'model', parts: parts.length ? parts : [{ text: '' }] }, finishReason: STOP_OUT[r.stop], index: 0 }], usageMetadata: usageOut(r.usage), modelVersion: model, responseId: r.id };
 }
 
-const STATUS = (s: number) => s === 400 ? 'INVALID_ARGUMENT' : s === 401 ? 'UNAUTHENTICATED' : s === 403 ? 'PERMISSION_DENIED' : s === 404 ? 'NOT_FOUND' : s === 429 ? 'RESOURCE_EXHAUSTED' : s === 503 || s === 529 ? 'UNAVAILABLE' : 'INTERNAL';
+/** The error envelope lives in the compatibility layer (one table for every surface). */
 export function renderError(status: number, message: string): any {
-  return { error: { code: status, message, status: STATUS(status) } };
+  return geminiError(status, message);
 }
 
 /** Gemini upstream SSE (each event is a whole GenerateContentResponse chunk) → IR. */

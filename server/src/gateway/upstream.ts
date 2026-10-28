@@ -103,7 +103,7 @@ const AUTH = new Set(['authorization', 'x-api-key', 'x-goog-api-key', 'api-key',
  * hop-by-hop, our own gateway credential and cookies; the member's credential goes in the same
  * style the client used (x-api-key vs Bearer), so the upstream sees what a direct call would send.
  */
-export function passthroughHeaders(raw: string[], outbound: 'anthropic' | 'openai' | 'gemini', key: string): Record<string, string> {
+export function passthroughHeaders(raw: string[], outbound: 'anthropic' | 'openai' | 'gemini' | 'responses', key: string): Record<string, string> {
   const pairs: [string, string][] = [];
   for (let i = 0; i + 1 < raw.length; i += 2) pairs.push([raw[i], raw[i + 1]]);
   // RFC 9110 §7.6.1: fields named in Connection are hop-by-hop too
@@ -192,13 +192,27 @@ export function errorHeaders(h: http.IncomingHttpHeaders | undefined): Record<st
 }
 
 /** Headers for a translated request (a different vendor than the client spoke to: nothing to preserve). */
-export function translatedHeaders(outbound: 'anthropic' | 'openai' | 'gemini', key: string, stream: boolean, userAgent?: string, authStyle?: AuthStyle): Record<string, string> {
+export function translatedHeaders(outbound: 'anthropic' | 'openai' | 'gemini' | 'responses', key: string, stream: boolean, userAgent?: string, authStyle?: AuthStyle): Record<string, string> {
   const h: Record<string, string> = { 'content-type': 'application/json', accept: stream ? 'text/event-stream' : 'application/json', 'accept-encoding': 'identity', 'user-agent': userAgent || 'claude-web-gateway/1' };
   // the member's authStyle when it has one; unset = both headers to Anthropic, Bearer to OpenAI (what this always sent)
   if (outbound === 'anthropic') { Object.assign(h, authHeaders(authStyle, key, 'both')); h['anthropic-version'] = '2023-06-01'; }
   else if (outbound === 'gemini') h['x-goog-api-key'] = key;
   else Object.assign(h, authHeaders(authStyle, key, 'bearer'));
   return h;
+}
+
+/**
+ * Extra request headers a provider account needs. They never replace the credential: authorization / x-api-key /
+ * x-goog-api-key / host / length stay the gateway's. Header names are matched case-insensitively.
+ */
+export function applyExtraHeaders(headers: Record<string, string>, extra?: Record<string, string>): void {
+  if (!extra) return;
+  const have = new Set(Object.keys(headers).map((k) => k.toLowerCase()));
+  for (const [name, value] of Object.entries(extra)) {
+    const lower = name.toLowerCase();
+    if (!value || have.has(lower) || /^(authorization|x-api-key|x-goog-api-key|host|content-length)$/.test(lower)) continue;
+    headers[name] = value;
+  }
 }
 
 /** Response headers we copy back to the client on passthrough. */
