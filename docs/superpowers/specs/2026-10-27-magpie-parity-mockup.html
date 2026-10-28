@@ -1,0 +1,749 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>claude-web · 模型中枢 UI 设计稿</title>
+<style>
+  :root{
+    --bg:#f6f7f8; --card:#fff; --card-2:#fafafb; --text:#17181a; --muted:#8a8f98;
+    --line:#eceef0; --accent:#22c55e; --accent-2:#16a34a; --accent-soft:#e9f8ef;
+    --warn:#f59e0b; --warn-soft:#fef3c7; --danger:#ef4444; --danger-soft:#fee2e2;
+    --info:#3b82f6; --info-soft:#e8f1ff;
+    --shadow:0 1px 2px rgba(16,24,40,.04),0 1px 3px rgba(16,24,40,.06);
+    --shadow-2:0 8px 24px rgba(16,24,40,.08),0 2px 6px rgba(16,24,40,.05);
+    --radius:16px; --radius-sm:10px;
+    --c1:#16a34a; --c2:#3b82f6; --c3:#f59e0b; --c4:#8b5cf6; --c5:#ec4899; --c6:#14b8a6; --c7:#64748b;
+  }
+  html[data-theme="dark"]{
+    --bg:#0b0c0e; --card:#141619; --card-2:#1a1d21; --text:#f2f3f5; --muted:#9ba1aa;
+    --line:#24272c; --accent:#34d399; --accent-2:#10b981; --accent-soft:#0f2a1d;
+    --warn:#fbbf24; --warn-soft:#2b210b; --danger:#f87171; --danger-soft:#2b1212;
+    --info:#60a5fa; --info-soft:#101d31;
+    --shadow:0 1px 2px rgba(0,0,0,.4); --shadow-2:0 10px 30px rgba(0,0,0,.45);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--text);font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;-webkit-font-smoothing:antialiased}
+  button{font:inherit;color:inherit}
+  .app{display:flex;height:100vh;overflow:hidden}
+  /* ---------- rail ---------- */
+  .rail{width:64px;flex:0 0 64px;display:flex;flex-direction:column;align-items:center;padding:12px 0 10px;border-right:1px solid var(--line);background:var(--bg)}
+  .lights{display:flex;gap:6px;margin:2px 0 18px}
+  .lights i{width:11px;height:11px;border-radius:50%;display:block}
+  .lights i:nth-child(1){background:#ff5f57}.lights i:nth-child(2){background:#febc2e}.lights i:nth-child(3){background:#28c840}
+  .nav{display:flex;flex-direction:column;gap:4px;width:100%;align-items:center}
+  .nav button{width:44px;height:40px;border:0;background:transparent;border-radius:11px;display:grid;place-items:center;cursor:pointer;color:var(--muted);position:relative}
+  .nav button:hover{background:var(--card);color:var(--text);box-shadow:var(--shadow)}
+  .nav button.on{background:var(--card);color:var(--text);box-shadow:var(--shadow)}
+  .nav button.on::before{content:"";position:absolute;left:-10px;top:9px;bottom:9px;width:2px;border-radius:2px;background:var(--accent)}
+  .nav button svg{width:19px;height:19px}
+  .nav .tip{position:absolute;left:52px;top:50%;transform:translateY(-50%);background:var(--text);color:var(--bg);padding:4px 8px;border-radius:7px;font-size:11px;white-space:nowrap;opacity:0;pointer-events:none;transition:.12s;z-index:50}
+  .nav button:hover .tip{opacity:1}
+  .rail .grow{flex:1}
+  /* ---------- main ---------- */
+  .main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .topbar{height:56px;flex:0 0 56px;display:flex;align-items:center;gap:12px;padding:0 22px;border-bottom:1px solid var(--line);background:var(--bg)}
+  .topbar h1{font-size:17px;margin:0;font-weight:650;letter-spacing:.1px}
+  .topbar .sub{color:var(--muted);font-size:12px;margin-left:2px}
+  .topbar .spacer{flex:1}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent-2);font-size:11px;font-weight:600}
+  html[data-theme="dark"] .pill{color:var(--accent)}
+  .dot{width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block}
+  .iconbtn{width:32px;height:32px;border:1px solid var(--line);background:var(--card);border-radius:9px;display:grid;place-items:center;cursor:pointer;color:var(--muted)}
+  .iconbtn:hover{color:var(--text);box-shadow:var(--shadow)}
+  .content{flex:1;overflow:auto;padding:20px 22px 26px}
+  .page{display:none;max-width:1440px;margin:0 auto}
+  .page.on{display:block}
+  .statusbar{height:30px;flex:0 0 30px;display:flex;align-items:center;gap:18px;padding:0 22px;border-top:1px solid var(--line);color:var(--muted);font-size:11px;background:var(--bg)}
+  .statusbar b{color:var(--text);font-weight:600}
+  /* ---------- primitives ---------- */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+  .card .hd{display:flex;align-items:center;gap:10px;padding:14px 16px 0}
+  .card .hd h3{margin:0;font-size:13px;font-weight:650}
+  .card .hd .spacer{flex:1}
+  .card .bd{padding:14px 16px 16px}
+  .muted{color:var(--muted)}
+  .small{font-size:11px}
+  .num{font-variant-numeric:tabular-nums}
+  .btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--card);padding:7px 12px;border-radius:9px;cursor:pointer;font-size:12px;font-weight:550;box-shadow:var(--shadow)}
+  .btn:hover{box-shadow:var(--shadow-2)}
+  .btn.primary{background:var(--accent);border-color:transparent;color:#fff}
+  html[data-theme="dark"] .btn.primary{color:#06210f}
+  .btn.ghost{box-shadow:none;background:transparent}
+  .btn.sm{padding:5px 9px;font-size:11px}
+  .chip{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;background:var(--card-2);border:1px solid var(--line);font-size:10.5px;color:var(--muted)}
+  .chip.green{background:var(--accent-soft);border-color:transparent;color:var(--accent-2)}
+  .chip.warn{background:var(--warn-soft);border-color:transparent;color:#a16207}
+  .chip.danger{background:var(--danger-soft);border-color:transparent;color:#b91c1c}
+  .chip.info{background:var(--info-soft);border-color:transparent;color:#1d4ed8}
+  .row{display:flex;align-items:center;gap:10px}
+  .grid{display:grid;gap:14px}
+  .kpis{grid-template-columns:repeat(4,1fr)}
+  .kpi{padding:16px 18px}
+  .kpi .label{font-size:11px;color:var(--muted);margin-bottom:6px}
+  .kpi .value{font-size:28px;font-weight:680;letter-spacing:-.6px;font-variant-numeric:tabular-nums}
+  .kpi .foot{font-size:11px;color:var(--muted);margin-top:4px}
+  .split{display:grid;grid-template-columns:1.65fr 1fr;gap:14px}
+  .split3{display:grid;grid-template-columns:1.5fr 1fr;gap:14px}
+  .trends{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .trend{border:1px solid var(--line);background:var(--card-2);border-radius:12px;padding:10px 12px;position:relative;overflow:hidden}
+  .trend .t,.trend .v,.trend .d{position:relative;z-index:1}
+  .trend .t{font-size:10.5px;color:var(--muted)}
+  .trend .v{font-size:18px;font-weight:660;margin-top:2px;font-variant-numeric:tabular-nums}
+  .trend .d{font-size:10.5px;font-weight:600}
+  .trend svg{position:absolute;right:6px;bottom:4px;width:56px;height:22px;opacity:.28}
+  .up{color:var(--accent-2)}.down{color:var(--danger)}
+  html[data-theme="dark"] .up{color:var(--accent)}
+  .intel{display:flex;flex-direction:column}
+  .intel .it{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px dashed var(--line)}
+  .intel .it:last-child{border-bottom:0}
+  .intel .ic{width:26px;height:26px;border-radius:8px;background:var(--card-2);display:grid;place-items:center;font-size:12px;border:1px solid var(--line)}
+  .intel .k{font-size:11.5px;color:var(--muted);flex:1}
+  .intel .v{font-size:11.5px;font-weight:600}
+  .table{width:100%;border-collapse:collapse}
+  .table th{font-size:10px;letter-spacing:.6px;color:var(--muted);text-align:left;font-weight:600;padding:8px 6px;border-bottom:1px solid var(--line)}
+  .table td{padding:9px 6px;border-bottom:1px solid var(--line);font-size:11.5px}
+  .table tr:last-child td{border-bottom:0}
+  .bar{height:5px;border-radius:999px;background:var(--line);overflow:hidden}
+  .bar i{display:block;height:100%;border-radius:999px;background:var(--accent)}
+  /* ---------- sources ---------- */
+  .sources{display:grid;grid-template-columns:190px 1fr;gap:16px}
+  .filters{display:flex;flex-direction:column;gap:2px;padding:6px}
+  .filters button{display:flex;align-items:center;gap:8px;border:0;background:transparent;padding:8px 10px;border-radius:9px;cursor:pointer;color:var(--muted);font-size:12px;text-align:left}
+  .filters button:hover{background:var(--card-2);color:var(--text)}
+  .filters button.on{background:var(--card);color:var(--text);box-shadow:var(--shadow);font-weight:600}
+  .filters .n{margin-left:auto;font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .pgrid{display:flex;flex-wrap:wrap;gap:12px;position:relative;z-index:1}
+  .provider{padding:14px;cursor:pointer;transition:.12s;position:relative;z-index:1;box-shadow:none;flex:1 1 238px;max-width:calc(25% - 9px)}
+  .provider:hover{box-shadow:var(--shadow-2);transform:translateY(-1px)}
+  .provider.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),var(--shadow)}
+  .provider .top{display:flex;align-items:center;gap:10px}
+  .logo{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;color:#fff;font-weight:700;font-size:13px;flex:0 0 30px}
+  .provider h4{margin:0;font-size:13px;font-weight:650}
+  .provider .meta{font-size:10.5px;color:var(--muted);margin-top:1px}
+  .provider .more{position:absolute;right:10px;top:10px;opacity:0}
+  .provider:hover .more{opacity:1}
+  .provider .status{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--muted);margin-top:12px}
+  .provider .quota{margin-top:9px}
+  .provider .quota .l{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-bottom:4px}
+  .provider .foot{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:9px}
+  /* ---------- routing ---------- */
+  .routing{display:grid;grid-template-columns:250px 1fr;gap:14px}
+  .groups{display:flex;flex-direction:column;gap:2px;padding:6px}
+  .groups button{display:flex;align-items:center;gap:8px;border:0;background:transparent;padding:9px 10px;border-radius:9px;cursor:pointer;text-align:left;color:var(--muted)}
+  .groups button.on{background:var(--card);color:var(--text);box-shadow:var(--shadow);font-weight:600}
+  .groups .mode{margin-left:auto;font-size:10px}
+  .stage{position:relative;height:250px;background:
+    radial-gradient(circle at 20% 50%,rgba(34,197,94,.06),transparent 40%),
+    radial-gradient(circle at 80% 50%,rgba(59,130,246,.06),transparent 40%),var(--card-2);
+    border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .stage svg{position:absolute;inset:0;width:100%;height:100%}
+  .node{position:absolute;transform:translate(-50%,-50%);background:var(--card);border:1px solid var(--line);border-radius:12px;padding:9px 12px;box-shadow:var(--shadow);min-width:110px;text-align:center}
+  .node .nt{font-size:10px;color:var(--muted)}
+  .node .nv{font-size:12px;font-weight:650;margin-top:1px}
+  .node.hot{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),var(--shadow-2)}
+  .fly{position:absolute;width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px rgba(34,197,94,.18);transform:translate(-50%,-50%);opacity:0}
+  .rules{display:flex;flex-direction:column}
+  .rule{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px dashed var(--line)}
+  .rule:last-child{border-bottom:0}
+  .rule .no{width:20px;height:20px;border-radius:6px;background:var(--card-2);border:1px solid var(--line);display:grid;place-items:center;font-size:10px;color:var(--muted)}
+  .rule .when{display:flex;gap:6px;flex-wrap:wrap;flex:1}
+  .rule .to{font-size:11.5px;font-weight:600;white-space:nowrap}
+  /* ---------- usage ---------- */
+  .quotas{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .quota{padding:13px}
+  .quota .name{font-size:12px;font-weight:650;display:flex;align-items:center;gap:6px}
+  .quota .w{margin-top:9px}
+  .quota .w .l{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-bottom:3px}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--card)}
+  .seg button{border:0;background:transparent;padding:6px 10px;font-size:11px;cursor:pointer;color:var(--muted)}
+  .seg button.on{background:var(--card-2);color:var(--text);font-weight:600}
+  /* ---------- privacy ---------- */
+  .privacy{display:grid;grid-template-columns:1.15fr .85fr;gap:14px}
+  .switch{width:38px;height:22px;border-radius:999px;background:var(--line);border:0;position:relative;cursor:pointer;flex:0 0 38px;transition:.15s}
+  .switch::after{content:"";position:absolute;width:18px;height:18px;border-radius:50%;background:#fff;top:2px;left:2px;transition:.15s;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+  .switch.on{background:var(--accent)}
+  .switch.on::after{left:18px}
+  .setrow{display:flex;align-items:flex-start;gap:12px;padding:11px 0;border-bottom:1px dashed var(--line)}
+  .setrow:last-child{border-bottom:0}
+  .setrow .tx{flex:1}
+  .setrow .tx b{font-size:12px;font-weight:600;display:block}
+  .setrow .tx span{font-size:10.5px;color:var(--muted);display:block;margin-top:2px}
+  .maskbox{width:100%;min-height:74px;border:1px solid var(--line);background:var(--card-2);border-radius:10px;padding:10px;font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--text);resize:vertical}
+  .ph{background:var(--accent-soft);color:var(--accent-2);border-radius:4px;padding:0 3px;font-weight:600}
+  html[data-theme="dark"] .ph{color:var(--accent)}
+  /* ---------- plugins ---------- */
+  .plugs{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+  .plug{padding:14px;display:flex;flex-direction:column;gap:10px}
+  .plug .top{display:flex;align-items:center;gap:10px}
+  .plug h4{margin:0;font-size:12.5px}
+  .plug p{margin:0;font-size:11px;color:var(--muted);min-height:30px}
+  .plug .foot{display:flex;align-items:center;gap:8px}
+  /* ---------- modal ---------- */
+  .backdrop{position:fixed;inset:0;background:rgba(15,18,22,.42);display:grid;place-items:center;z-index:100;backdrop-filter:blur(2px)}
+  .backdrop.hidden{display:none}
+  .modal{width:min(720px,92vw);max-height:86vh;overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:0 30px 80px rgba(0,0,0,.28);padding:20px}
+  .modal h2{margin:0 0 4px;font-size:16px}
+  .modal .sub{color:var(--muted);font-size:11.5px;margin-bottom:16px}
+  .methods{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .method{border:1px solid var(--line);background:var(--card-2);border-radius:12px;padding:12px;cursor:pointer;text-align:left}
+  .method:hover,.method.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  .method b{display:block;font-size:12px}
+  .method span{font-size:10.5px;color:var(--muted)}
+  .vendors{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .vendor{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 11px;font-size:11px;cursor:pointer}
+  .vendor:hover{border-color:var(--accent)}
+  .vendor.on{background:var(--accent-soft);border-color:transparent;color:var(--accent-2);font-weight:600}
+  .modal .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+  /* ---------- command palette ---------- */
+  .palette{position:fixed;left:50%;top:18%;transform:translateX(-50%);width:min(560px,92vw);background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.3);z-index:120;overflow:hidden}
+  .palette.hidden{display:none}
+  .palette input{width:100%;border:0;border-bottom:1px solid var(--line);background:transparent;padding:14px 16px;font:14px inherit;color:var(--text);outline:none}
+  .palette .items{max-height:300px;overflow:auto;padding:6px}
+  .palette .items button{width:100%;display:flex;gap:10px;align-items:center;border:0;background:transparent;padding:9px 10px;border-radius:8px;cursor:pointer;text-align:left;font-size:12px}
+  .palette .items button:hover{background:var(--card-2)}
+  @media (max-width:1180px){.kpis{grid-template-columns:repeat(2,1fr)}.split,.split3,.privacy{grid-template-columns:1fr}.quotas{grid-template-columns:repeat(2,1fr)}}
+  @media (max-width:900px){.sources,.routing{grid-template-columns:1fr}.filters{flex-direction:row;overflow:auto}.rail{width:52px;flex-basis:52px}.content{padding:14px}.methods{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="lights"><i></i><i></i><i></i></div>
+    <div class="nav" id="nav"></div>
+    <div class="grow"></div>
+    <div class="nav">
+      <button title="命令面板" onclick="openPalette()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg><span class="tip">命令面板 ⌘K</span></button>
+      <button title="切换主题" onclick="toggleTheme()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/><circle cx="12" cy="12" r="4"/></svg><span class="tip">浅色 / 深色</span></button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <h1 id="pageTitle">概览</h1>
+      <span class="sub" id="pageSub">所有来源、账号与路由的实时状态</span>
+      <div class="spacer"></div>
+      <span class="pill"><span class="dot"></span>网关运行中</span>
+      <span class="chip" id="ver">v2026.10.27</span>
+      <button class="iconbtn" title="刷新" onclick="pulse(this)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
+      <button class="iconbtn" title="更多"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>
+    </header>
+
+    <div class="content">
+      <!-- ================= OVERVIEW ================= -->
+      <section class="page on" id="page-overview">
+        <div class="grid kpis" style="margin-bottom:14px">
+          <div class="card kpi"><div class="label">总请求</div><div class="value">136,214</div><div class="foot">全部时间</div></div>
+          <div class="card kpi"><div class="label">今日</div><div class="value">704</div><div class="foot">比昨天 <span class="up">↑ 221.8%</span></div></div>
+          <div class="card kpi"><div class="label">成功率</div><div class="value">100.0%</div><div class="foot">今日 · 错误 0</div></div>
+          <div class="card kpi"><div class="label">平均延迟</div><div class="value">196<span style="font-size:16px;font-weight:600">ms</span></div><div class="foot">首字 82ms · 输出 41 tok/s</div></div>
+        </div>
+
+        <div class="split" style="margin-bottom:14px">
+          <div class="card">
+            <div class="hd"><h3>最近请求</h3><span class="spacer"></span>
+              <span class="chip green"><span class="dot"></span>总请求</span><span class="chip">失败</span>
+              <button class="btn sm ghost">近 30 天 ▾</button>
+            </div>
+            <div class="bd">
+              <img id="pageRecentSvg" src="chart-recent.svg" alt="" style="display:block;width:100%;height:132px" />
+              <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:12px;padding-top:12px;border-top:1px dashed var(--line)">
+                <div><div class="small muted">今日用量</div><div style="font-size:15px;font-weight:650;margin-top:2px">31.8万 <span class="muted" style="font-size:11px;font-weight:500">tokens · $2.73</span></div></div>
+                <img src="chart-mini.svg" alt="" style="display:block;width:150px;height:36px" />
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="hd"><h3>今日趋势</h3><span class="spacer"></span><span class="chip">对比昨天</span></div>
+            <div class="bd"><div class="trends" id="trends"></div></div>
+          </div>
+        </div>
+
+        <div class="split" style="margin-bottom:14px">
+          <div class="card">
+            <div class="hd"><h3>网关请求</h3><span class="spacer"></span><span class="chip green">2xx 600</span><span class="chip">4xx 0</span><span class="chip">5xx 0</span><span class="chip">总计 704</span></div>
+            <div class="bd">
+              <img src="chart-gateway.svg" alt="" style="display:block;width:100%;height:120px" />
+              <div class="row small muted" style="justify-content:space-between;margin-top:8px"><span>最近 300 秒</span><span>峰值 250 req/min</span></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="hd"><h3>网关情报</h3><span class="spacer"></span><button class="btn sm ghost" onclick="go('settings')">设置</button></div>
+            <div class="bd intel" id="intel"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="hd"><h3>模型排行</h3><span class="spacer"></span><span class="chip">今日</span></div>
+          <div class="bd">
+            <table class="table">
+              <thead><tr><th style="width:44%">MODEL</th><th>TOKENS</th><th style="width:60%">占比</th></tr></thead>
+              <tbody id="modelRank"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= SOURCES ================= -->
+      <section class="page" id="page-sources">
+        <div class="row" style="margin-bottom:14px">
+          <button class="btn primary" onclick="openAdd()">＋ 添加上游</button>
+          <button class="btn" onclick="toast('已读取 Claude Code / Codex 的配置（只读）')">导入…</button>
+          <button class="btn ghost" onclick="toast('正在刷新 19 个来源的模型与额度…')">刷新全部</button>
+          <span class="spacer" style="flex:1"></span>
+          <span class="small muted">19 个来源 · 12 个可用 · 3 个冷却</span>
+        </div>
+        <div class="sources">
+          <div class="card filters" id="filters"></div>
+          <div class="pgrid" id="providers"></div>
+        </div>
+      </section>
+
+      <!-- ================= ROUTING ================= -->
+      <section class="page" id="page-routing">
+        <div class="row" style="margin-bottom:14px">
+          <button class="btn primary" onclick="toast('新建路由组')">＋ 新建组</button>
+          <button class="btn" onclick="toast('已重新读取所有账号额度')">刷新额度</button>
+          <span style="flex:1"></span>
+          <span class="small muted">7 种路由方式 · 5 种会话保持 · 规则按顺序生效</span>
+        </div>
+        <div class="routing">
+          <div class="card filters" id="groups" style="padding:8px"></div>
+          <div class="grid" style="gap:14px">
+            <div class="card">
+              <div class="hd"><h3>实时舞台</h3><span class="spacer"></span><span class="chip green" id="stageChip">等待请求</span>
+                <button class="btn sm" onclick="simulate()">模拟一轮</button>
+              </div>
+              <div class="bd">
+                <div class="stage" id="stage">
+                  <svg id="wires"></svg>
+                  <div class="node" id="n-agent" style="left:12%;top:50%"><div class="nt">Agent</div><div class="nv">Claude Code</div></div>
+                  <div class="node" id="n-group" style="left:40%;top:50%"><div class="nt">路由组</div><div class="nv">Coder</div></div>
+                  <div class="node" id="n-a" style="left:76%;top:24%"><div class="nt">主模型</div><div class="nv">Kimi K2.5</div></div>
+                  <div class="node" id="n-b" style="left:76%;top:50%"><div class="nt">备用</div><div class="nv">DeepSeek V4 Pro</div></div>
+                  <div class="node" id="n-c" style="left:76%;top:76%"><div class="nt">备用</div><div class="nv">GLM-5.3</div></div>
+                  <div class="fly" id="fly"></div>
+                </div>
+                <div class="row small muted" style="margin-top:10px"><span id="stageWhy">点「模拟一轮」看这一轮为什么去了这个模型</span></div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="hd"><h3>规则 · Coder</h3><span class="spacer"></span><span class="chip">意图判断模型 Groq / Llama 3.1 8B</span><button class="btn sm" onclick="toast('添加规则')">＋ 添加规则</button></div>
+              <div class="bd rules" id="rules"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= USAGE ================= -->
+      <section class="page" id="page-usage">
+        <div class="row" style="margin-bottom:14px">
+          <div class="seg" id="range"><button class="on">今天</button><button>7 天</button><button>30 天</button><button>全部</button></div>
+          <span style="flex:1"></span>
+          <button class="btn" onclick="toast('已导出 CSV（不含正文）')">导出</button>
+        </div>
+        <div class="quotas" style="margin-bottom:14px" id="quotaCards"></div>
+        <div class="split3" style="margin-bottom:14px">
+          <div class="card">
+            <div class="hd"><h3>Token 与费用</h3><span class="spacer"></span><span class="chip green">缓存命中 0.1%</span><span class="chip">$2.73</span></div>
+            <div class="bd"><img src="chart-usage.svg" alt="" style="display:block;width:100%;height:150px" />
+              <div class="row small muted" style="justify-content:space-between;margin-top:8px"><span>总 Token 108.5 万</span><span>输入 96.2 万 · 输出 12.3 万</span></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="hd"><h3>按 Agent</h3></div>
+            <div class="bd" id="agentSplit"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="hd"><h3>请求</h3><span class="spacer"></span><span class="chip">最近 704 条</span></div>
+          <div class="bd">
+            <table class="table">
+              <thead><tr><th>时间</th><th>Agent</th><th>模型</th><th>Token</th><th>费用</th><th>延迟</th><th>状态</th></tr></thead>
+              <tbody id="reqRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= PRIVACY ================= -->
+      <section class="page" id="page-privacy">
+        <div class="row" style="margin-bottom:14px">
+          <span class="pill"><span class="dot"></span>脱敏已开启</span>
+          <span class="small muted">改动从下一个请求生效，不用重启</span>
+          <span style="flex:1"></span>
+          <button class="btn sm ghost" onclick="toast('已全部开启')">全部开启</button>
+          <button class="btn sm ghost" onclick="toast('已全部关闭')">全部关闭</button>
+        </div>
+        <div class="privacy">
+          <div class="card">
+            <div class="hd"><h3>要遮什么</h3></div>
+            <div class="bd" id="privacyRows"></div>
+          </div>
+          <div class="grid" style="gap:14px">
+            <div class="card">
+              <div class="hd"><h3>试一试</h3><span class="spacer"></span><span class="chip">不会保存</span></div>
+              <div class="bd">
+                <textarea class="maskbox" id="maskIn">Deploy Nightjar with OPENAI_API_KEY=sk-proj-8fK2mQx7Lp4Rt9Vw3Yz6Ab1Cd, then mail li.wei@acme-corp.cn or call 13800138000.</textarea>
+                <div class="row" style="margin-top:8px"><button class="btn primary sm" onclick="runMask()">试一试</button><span class="small muted">展示厂商实际会收到的文本</span></div>
+                <div class="maskbox" id="maskOut" style="margin-top:10px;min-height:74px"></div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="hd"><h3>脱敏记录</h3><span class="spacer"></span><span class="chip">最近 30 天</span></div>
+              <div class="bd">
+                <table class="table"><thead><tr><th>类型</th><th>次数</th><th>最近</th><th>供应商</th></tr></thead>
+                <tbody id="maskRows"></tbody></table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= PLUGINS ================= -->
+      <section class="page" id="page-plugins">
+        <div class="row" style="margin-bottom:14px">
+          <div class="seg" id="plugTabs"><button class="on">内置</button><button>市场</button><button>已安装</button></div>
+          <span style="flex:1"></span>
+          <button class="btn" onclick="toast('安装插件：输入 npm 包名或 git 地址')">安装…</button>
+        </div>
+        <div class="plugs" id="plugs"></div>
+      </section>
+
+      <!-- ================= AGENTS ================= -->
+      <section class="page" id="page-agents">
+        <div class="row" style="margin-bottom:14px">
+          <button class="btn primary" onclick="toast('正在重新扫描本机 Agent…')">重新扫描</button>
+          <button class="btn" onclick="toast('已保存为方案「工作」')">保存当前为方案</button>
+          <span style="flex:1"></span>
+          <span class="small muted">配置只改它自己的键，断开时还原</span>
+        </div>
+        <div class="card" style="margin-bottom:14px">
+          <div class="hd"><h3>Agent</h3></div>
+          <div class="bd" id="agentRows"></div>
+        </div>
+        <div class="card">
+          <div class="hd"><h3>方案</h3></div>
+          <div class="bd" id="presets"></div>
+        </div>
+      </section>
+
+      <!-- ================= SETTINGS ================= -->
+      <section class="page" id="page-settings">
+        <div class="card">
+          <div class="hd"><h3>设置</h3><span class="spacer"></span><span class="chip">修改即保存</span></div>
+          <div class="bd" id="settingsRows"></div>
+        </div>
+      </section>
+    </div>
+
+    <footer class="statusbar">
+      <span>上游 <b>19</b> 个 · 可用 <b>12</b></span>
+      <span>对话 <b>3</b></span>
+      <span>API 密钥 <b>6</b></span>
+      <span style="flex:1"></span>
+      <span id="clock"></span>
+      <span>localhost:3425</span>
+    </footer>
+  </div>
+</div>
+
+<div class="backdrop hidden" id="addModal">
+  <div class="modal">
+    <h2>添加上游</h2>
+    <div class="sub">登录订阅、粘贴密钥、选本机模型，或填任意兼容地址。只需要做一次。</div>
+    <div class="methods" id="methods"></div>
+    <div class="vendors" id="vendors"></div>
+    <div class="actions"><button class="btn ghost" onclick="closeAdd()">取消</button><button class="btn primary" onclick="closeAdd();toast('已开始登录，完成后账号会自动出现')">继续</button></div>
+  </div>
+</div>
+
+<div class="palette hidden" id="palette">
+  <input id="paletteInput" placeholder="搜索页面、上游、模型或动作…" oninput="renderPalette()" />
+  <div class="items" id="paletteItems"></div>
+</div>
+
+<script>
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const PAGES=[
+  {id:'overview',name:'概览',sub:'所有来源、账号与路由的实时状态',icon:'M3 12h4l3-7 4 14 3-7h4'},
+  {id:'sources',name:'上游',sub:'来源、账号、模型与额度',icon:'M4 6h16M4 12h16M4 18h10'},
+  {id:'routing',name:'路由',sub:'这一轮为什么去了这个模型',icon:'M4 7h6a4 4 0 0 1 4 4v2a4 4 0 0 0 4 4h2M4 17h4l3-3M14 7h6'},
+  {id:'usage',name:'用量',sub:'Token、缓存、费用与额度',icon:'M4 20V10M10 20V4M16 20v-7M22 20H2'},
+  {id:'privacy',name:'隐私',sub:'厂商能看到什么，留在这台电脑上',icon:'M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z'},
+  {id:'plugins',name:'插件',sub:'供应商、中间件、工具与页面',icon:'M9 3v3M15 3v3M6 6h12v5a6 6 0 0 1-12 0zM12 17v4'},
+  {id:'agents',name:'接入',sub:'哪个 Agent 用哪个模型',icon:'M12 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM4 21c0-4 4-6 8-6s8 2 8 6'},
+  {id:'settings',name:'设置',sub:'系统行为与更新',icon:'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 0 0-1.7-1L14.5 3h-5l-.4 2.6a7 7 0 0 0-1.7 1l-2.3-1-2 3.4L5 11a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 1.7 1l.4 2.6h5l.4-2.6a7 7 0 0 0 1.7-1l2.3 1 2-3.4-2-1.5c.1-.3.1-.7.1-1z'}
+];
+let current='overview';
+function renderNav(){
+  $('#nav').innerHTML=PAGES.map(p=>`<button data-p="${p.id}" class="${p.id===current?'on':''}" onclick="go('${p.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="${p.icon}"/></svg><span class="tip">${p.name}</span></button>`).join('');
+}
+function go(id){
+  current=id; const p=PAGES.find(x=>x.id===id);
+  try{history.replaceState(null,'','#'+id)}catch(e){}
+  $$('.page').forEach(e=>e.classList.toggle('on',e.id==='page-'+id));
+  $$('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.p===id));
+  $('#pageTitle').textContent=p.name; $('#pageSub').textContent=p.sub;
+  $('.content').scrollTop=0;
+  if(id==='overview') drawCharts();
+  if(id==='sources') renderSources();
+  if(id==='routing'){renderGroups();renderRules();setTimeout(drawWires,0)}
+  if(id==='usage') renderUsage();
+  if(id==='privacy') renderPrivacy();
+  if(id==='plugins') renderPlugs();
+  if(id==='agents') renderAgents();
+  if(id==='settings') renderSettings();
+}
+function toggleTheme(){const h=document.documentElement;h.dataset.theme=h.dataset.theme==='dark'?'light':'dark';drawCharts();drawWires();}
+function pulse(b){b.animate([{transform:'rotate(0)'},{transform:'rotate(360deg)'}],{duration:500});toast('已刷新');}
+
+/* ---------- svg helpers ---------- */
+function area(el,data,color,{fill=true,height=null}={}){
+  const w=el.clientWidth||600,h=height||el.clientHeight||120,pad=6;
+  const max=Math.max(...data),min=Math.min(...data),span=max-min||1;
+  const pts=data.map((v,i)=>[pad+i*(w-pad*2)/(data.length-1),h-pad-(v-min)/span*(h-pad*2)]);
+  const d=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+  const id='g'+Math.random().toString(36).slice(2,7);
+  el.innerHTML=`<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="display:block;width:${w}px;height:${h}px">
+    <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${color}" stop-opacity=".28"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>
+    ${fill?`<path d="${d} L ${pts[pts.length-1][0]} ${h} L ${pts[0][0]} ${h} Z" fill="url(#${id})"/>`:''}
+    <path d="${d}" fill="none" stroke="${color}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+  </svg>`;
+}
+function bars(el,data,color){
+  const w=el.clientWidth||600,h=el.clientHeight||120,pad=4,gap=2;
+  const max=Math.max(...data); const bw=(w-pad*2-gap*(data.length-1))/data.length;
+  el.innerHTML=`<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="display:block;width:${w}px;height:${h}px">${data.map((v,i)=>{const bh=Math.max(2,(v/max)*(h-pad*2));return `<rect x="${pad+i*(bw+gap)}" y="${h-pad-bh}" width="${bw}" height="${bh}" rx="1.5" fill="${color}" opacity="${i===data.length-1?1:.75}"/>`}).join('')}</svg>`;
+}
+const series=(n,base,amp)=>Array.from({length:n},(_,i)=>Math.max(1,base+Math.sin(i*.55)*amp+Math.sin(i*1.7)*amp*.35+Math.random()*amp*.4));
+function drawCharts(){ /* 图表使用静态 SVG 与图片，保证首屏即绘制 */ }
+/* ---------- overview data ---------- */
+function renderOverview(){
+  const trends=[
+    ['请求','704','↑ 221.8%','up'],['成功率','100.0%','↑ 3.4%','up'],['缓存命中','0.1%','↑ 0.0%','up'],
+    ['延迟','196ms','↓ 5.0%','up'],['总 Token','108.5万','↑ 1.9%','up'],['错误数','0','↓ 100%','up']
+  ];
+  $('#trends').innerHTML=trends.map(([t,v,d,cls])=>`<div class="trend"><div class="t">${t}</div><div class="v num">${v}</div><div class="d ${cls}">${d}</div><svg viewBox="0 0 78 30" preserveAspectRatio="none"><path d="M0 26 C12 20 20 24 30 16 S50 10 58 14 S70 6 78 8" fill="none" stroke="var(--c1)" stroke-width="1.4"/></svg></div>`).join('');
+  const intel=[
+    ['◉','本机 API','● 运行中 · :8188'],['⇄','网关 API','● 运行中 · :1234'],
+    ['▦','内置插件','14 个'],['◔','本地账号','1 个'],
+    ['⌘','运行时','Node 24 · PID 21007'],['#','当前端口','3425']
+  ];
+  $('#intel').innerHTML=intel.map(([i,k,v])=>`<div class="it"><div class="ic">${i}</div><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+  const rank=[['Claude Opus 4.7','704','100.0%',100],['GPT-5.5 Codex','0','0.0%',0],['DeepSeek V4 Pro','0','0.0%',0]];
+  $('#modelRank').innerHTML=rank.map(([m,t,p,w])=>`<tr><td><b>${m}</b></td><td class="num">${t}</td><td><div class="row"><span class="small muted" style="width:42px">${p}</span><div class="bar" style="flex:1"><i style="width:${w}%"></i></div></div></td></tr>`).join('');
+  drawCharts();
+}
+/* ---------- sources ---------- */
+const PROVIDERS=[
+  {n:'Codex',k:'订阅',c:'#0f172a',a:'2 个账号',s:'5h 62% · 周 31%',st:'ok',m:'5 个模型'},
+  {n:'Gemini',k:'订阅',c:'#4285f4',a:'已登录',s:'周 12%',st:'ok',m:'6 个模型'},
+  {n:'Kimi',k:'订阅',c:'#111827',a:'未登录',s:'',st:'off',m:'4 个模型'},
+  {n:'Grok',k:'订阅',c:'#000000',a:'1 个账号',s:'周 48%',st:'ok',m:'3 个模型'},
+  {n:'Copilot',k:'订阅',c:'#6e40c9',a:'1 个账号',s:'月 8%',st:'ok',m:'8 个模型'},
+  {n:'Qoder',k:'订阅',c:'#16a34a',a:'今天已签到',s:'积分 2,400',st:'ok',m:'2 个模型'},
+  {n:'Trae',k:'订阅',c:'#2563eb',a:'今天已签到',s:'积分 800',st:'ok',m:'2 个模型'},
+  {n:'WorkBuddy',k:'订阅',c:'#f59e0b',a:'积分 12,400',s:'',st:'ok',m:'3 个模型'},
+  {n:'DeepSeek',k:'API Key',c:'#4d6bfe',a:'可用',s:'余额 ¥42.10',st:'ok',m:'4 个模型'},
+  {n:'OpenAI',k:'API Key',c:'#10a37f',a:'可用',s:'按量计费',st:'ok',m:'9 个模型'},
+  {n:'Anthropic',k:'API Key',c:'#d97757',a:'冷却中',s:'14:32 重置',st:'warn',m:'5 个模型'},
+  {n:'OpenRouter',k:'API Key',c:'#6366f1',a:'可用',s:'余额 $18.20',st:'ok',m:'120 个模型'},
+  {n:'Ollama',k:'本机',c:'#334155',a:'3 个模型',s:'127.0.0.1:11434',st:'ok',m:'3 个模型'},
+  {n:'LM Studio',k:'本机',c:'#0ea5e9',a:'未启动',s:'',st:'off',m:'—'},
+  {n:'我的中转',k:'自定义',c:'#8b5cf6',a:'可用',s:'OpenAI 兼容',st:'ok',m:'12 个模型'},
+  {n:'office（远程）',k:'远程',c:'#14b8a6',a:'连接正常',s:'192.168.1.20:3425',st:'ok',m:'7 个模型'}
+];
+const FILTERS=[['全部',16],['订阅',8],['API Key',4],['本机',2],['自定义',1],['远程',1]];
+let filter='全部';
+function renderSources(){
+  $('#filters').innerHTML=FILTERS.map(([n,c])=>`<button class="${filter===n?'on':''}" onclick="filter='${n}';renderSources()"><span>${n}</span><span class="n">${c}</span></button>`).join('')
+    +`<button style="margin-top:8px;color:var(--muted)" onclick="toast('新建分类')">＋ 新建分类</button>`;
+  const list=PROVIDERS.filter(p=>filter==='全部'||p.k===filter);
+  $('#providers').innerHTML=list.map((p,i)=>`
+    <div class="card provider" onclick="this.classList.toggle('sel');toast('${p.n}：打开详情抽屉（设计稿）')">
+      <button class="iconbtn more" style="width:24px;height:24px;border:0;background:transparent;box-shadow:none" onclick="event.stopPropagation();toast('刷新 / 编辑 / 停用 / 移除')">⋯</button>
+      <div class="top"><div class="logo" style="background:${p.c}">${p.n.slice(0,1)}</div><div><h4>${p.n}</h4><div class="meta">${p.k}</div></div></div>
+      <div class="status"><span class="dot" style="color:${p.st==='ok'?'var(--accent)':p.st==='warn'?'var(--warn)':'var(--muted)'}"></span>${p.a}</div>
+      ${p.s?`<div class="quota"><div class="l"><span>${p.s}</span><span>${p.st==='warn'?'冷却':'正常'}</span></div><div class="bar"><i style="width:${p.st==='warn'?88:42}%;background:${p.st==='warn'?'var(--warn)':'var(--accent)'}"></i></div></div>`:''}
+      <div class="foot"><span>${p.m}</span><span>${p.st==='ok'?'● 健康':'○ 待处理'}</span></div>
+    </div>`).join('');
+}
+/* ---------- routing ---------- */
+const GROUPS=[['Coder','智能','on'],['Fast','顺序',''],['Opus anywhere','权重',''],['auto/claude-opus-4.7','自动',''],['Kimi only','顺序','']];
+function renderGroups(){
+  $('#groups').innerHTML=GROUPS.map(([n,m,on])=>`<button class="${on}" onclick="$$('#groups button').forEach(b=>b.classList.remove('on'));this.classList.add('on')"><span>${n}</span><span class="mode chip">${m}</span></button>`).join('')
+    +`<button style="margin-top:8px;color:var(--muted)" onclick="toast('新建路由组')">＋ 新建组</button>`;
+}
+const RULES=[
+  [['tokens ≥ 150k'],'kimi/kimi-k2.5'],
+  [['意图「一个简单问题」'],'deepseek/deepseek-v4-flash'],
+  [['意图「写或修测试」'],'deepseek/deepseek-v4-pro'],
+  [['压缩上下文'],'deepseek/deepseek-v4-flash'],
+  [['文件夹 ~/work/acme'],'claude/claude-opus-5-5']
+];
+function renderRules(){
+  $('#rules').innerHTML=RULES.map(([w,t],i)=>`<div class="rule"><div class="no">${i+1}</div><div class="when">${w.map(x=>`<span class="chip">${x}</span>`).join('')}</div><div class="to">→ ${t}</div><button class="iconbtn" style="width:24px;height:24px;border:0;box-shadow:none" onclick="toast('设定推理强度 / 暂停 / 删除')">⋯</button></div>`).join('');
+  setTimeout(drawWires,0);
+}
+function drawWires(){
+  const s=$('#stage'); if(!s) return; const r=s.getBoundingClientRect();
+  const pts=['n-agent','n-group','n-a','n-b','n-c'].map(id=>{const e=$('#'+id).getBoundingClientRect();return [e.left+e.width/2-r.left,e.top+e.height/2-r.top]});
+  const [a,g,ma,mb,mc]=pts;
+  const line=(p,q,hot)=>`<path d="M${p[0]} ${p[1]} C ${(p[0]+q[0])/2} ${p[1]}, ${(p[0]+q[0])/2} ${q[1]}, ${q[0]} ${q[1]}" fill="none" stroke="${hot?'var(--accent)':'var(--line)'}" stroke-width="${hot?2:1.2}" ${hot?'':'stroke-dasharray="4 4"'}/>`;
+  $('#wires').setAttribute('viewBox',`0 0 ${r.width} ${r.height}`);
+  $('#wires').innerHTML=line(a,g,true)+line(g,ma,true)+line(g,mb,false)+line(g,mc,false);
+}
+let flying=false;
+function simulate(){
+  if(flying) return; flying=true;
+  const s=$('#stage'),r=s.getBoundingClientRect(),fly=$('#fly');
+  const p1=$('#n-agent').getBoundingClientRect(),p2=$('#n-group').getBoundingClientRect(),p3=$('#n-a').getBoundingClientRect();
+  const pts=[[p1.left+p1.width/2-r.left,p1.top+p1.height/2-r.top],[p2.left+p2.width/2-r.left,p2.top+p2.height/2-r.top],[p3.left+p3.width/2-r.left,p3.top+p3.height/2-r.top]];
+  const dur=1400,start=performance.now();
+  $('#stageChip').textContent='路由中…'; $('#stageWhy').textContent='第 12 轮开始：tokens 2 万，意图「写或修测试」→ 判断模型 323ms → 规则 3 命中';
+  const step=t=>{
+    const k=Math.min(1,(t-start)/dur);
+    const seg=k<.45?0:1, local=k<.45?k/.45:(k-.45)/.55;
+    const A=pts[seg],B=pts[seg+1];
+    fly.style.left=(A[0]+(B[0]-A[0])*local)+'px'; fly.style.top=(A[1]+(B[1]-A[1])*local)+'px'; fly.style.opacity=1;
+    if(k<1) requestAnimationFrame(step); else {
+      fly.style.opacity=0; $('#n-a').classList.add('hot'); $('#stageChip').textContent='Kimi K2.5 正在回答';
+      $('#stageWhy').textContent='第 12 轮 · 规则 3 命中 · 这一轮一直留在 Kimi K2.5 · 备用 DeepSeek V4 Pro';
+      setTimeout(()=>{flying=false;},400);
+    }
+  };
+  requestAnimationFrame(step);
+}
+/* ---------- usage ---------- */
+function renderUsage(){
+  const qs=[['Codex · work','5h',62,'2h 18m 后重置','周',31,'3d 4h'],['Claude · me','5h',40,'3h 02m 后重置','周',12,'5d 1h'],['Copilot · pro','月',8,'21d 后重置','',0,''],['WorkBuddy','积分',62,'12,400 / 20,000','',0,'']];
+  $('#quotaCards').innerHTML=qs.map(([n,w1,p1,r1,w2,p2,r2])=>`<div class="card quota"><div class="name"><span class="dot" style="color:var(--accent)"></span>${n}</div>
+    <div class="w"><div class="l"><span>${w1} 窗口</span><span>${p1}%</span></div><div class="bar"><i style="width:${p1}%"></i></div><div class="l" style="margin-top:4px"><span>${r1}</span></div></div>
+    ${w2?`<div class="w"><div class="l"><span>${w2} 窗口</span><span>${p2}%</span></div><div class="bar"><i style="width:${p2}%"></i></div><div class="l" style="margin-top:4px"><span>${r2} 后重置</span></div></div>`:''}
+  </div>`).join('');
+  const agents=[['Claude Code',62,'#16a34a'],['Codex',31,'#3b82f6'],['其它',7,'#94a3b8']];
+  $('#agentSplit').innerHTML=agents.map(([n,p,c])=>`<div style="margin-bottom:12px"><div class="l row" style="justify-content:space-between;font-size:11px;margin-bottom:4px"><span>${n}</span><span class="muted">${p}%</span></div><div class="bar"><i style="width:${p}%;background:${c}"></i></div></div>`).join('');
+  const rows=[
+    ['14:32','Claude Code','claude/opus-4.7','12.4k','$0.18','1.2s','200','shield 3'],
+    ['14:31','Codex','codex/gpt-5.5','8.1k','$0.06','0.9s','200',''],
+    ['14:30','Claude Code','group/coder','6.2k','$0.03','0.7s','200','shield 1'],
+    ['14:28','Codex','deepseek/deepseek-v4-pro','4.8k','$0.01','0.6s','200',''],
+    ['14:26','Claude Code','kimi/kimi-k2.5','9.9k','$0.02','1.8s','200','']
+  ];
+  $('#reqRows').innerHTML=rows.map(r=>`<tr><td class="num muted">${r[0]}</td><td>${r[1]}</td><td><b>${r[2]}</b></td><td class="num">${r[3]}</td><td class="num">${r[4]}</td><td class="num">${r[5]}</td><td><span class="chip green">${r[6]}</span>${r[7]?` <span class="chip">${r[7].replace('shield','🛡')}</span>`:''}</td></tr>`).join('');
+  drawCharts();
+}
+/* ---------- privacy ---------- */
+let privacyOn={key:true,personal:true,home:false,host:false,ip:false,model:false};
+function renderPrivacy(){
+  const rows=[
+    ['key','脱敏密钥','API Key、私钥、Token、密码、JWT、.env 字段'],
+    ['personal','脱敏个人信息','邮箱、手机、身份证、银行卡、SSN、护照'],
+    ['home','主目录里的用户名','例如 C:\\Users\\YPY'],
+    ['host','用户名@主机名','例如 ypy@macbook'],
+    ['ip','公网 IP 地址','例如 203.0.113.5'],
+    ['model','用本地模型查找','人名、地址、密码；AstrLink Guard 39MB']
+  ];
+  $('#privacyRows').innerHTML=rows.map(([k,t,d])=>`<div class="setrow"><div class="tx"><b>${t}</b><span>${d}</span></div><button class="switch ${privacyOn[k]?'on':''}" onclick="privacyOn['${k}']=!privacyOn['${k}'];renderPrivacy()"></button></div>`).join('')
+    +`<div class="setrow"><div class="tx"><b>发现敏感值时</b><span>遮罩 / 提醒 / 拦截</span></div><span class="chip green">遮罩</span></div>`;
+  $('#maskRows').innerHTML=[['API_KEY',128,'14:32','DeepSeek'],['EMAIL',42,'14:30','OpenAI'],['PHONE',17,'14:28','DeepSeek'],['ID_CARD',3,'13:02','Anthropic']].map(r=>`<tr><td><b>${r[0]}</b></td><td class="num">${r[1]}</td><td class="num muted">${r[2]}</td><td>${r[3]}</td></tr>`).join('');
+}
+function runMask(){
+  let s=$('#maskIn').value;
+  const map=[];
+  const put=(v,t)=>{const key='{{'+t+'_'+Math.random().toString(36).slice(2,10)+'}}';map.push([v,key]);return key};
+  s=s.replace(/sk-[A-Za-z0-9_-]{12,}/g,v=>put(v,'API_KEY'));
+  s=s.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}/gi,v=>put(v,'EMAIL'));
+  s=s.replace(/1[3-9]\d{9}/g,v=>put(v,'PHONE'));
+  s=s.replace(/Nightjar/gi,v=>put(v,'TERM'));
+  let out=s;
+  map.forEach(([v,k])=>{out=out.split(k).join(`<span class="ph">${k}</span>`)});
+  $('#maskOut').innerHTML=out||'（没有命中）';
+}
+/* ---------- plugins ---------- */
+const PLUGS=[
+  ['隐私遮盖','redact','●','把密钥、PII、自定义词换成占位符，再在回复里还原。','内置',true],
+  ['网关日志','gateway','▤','记录每次调用的模型、账号、延迟与路由轨迹。','内置',true],
+  ['用量统计','usage','▥','按 Agent / 模型 / 供应商统计 token 与费用。','内置',true],
+  ['路由','routing','⇄','路由组、规则、意图判断与实时舞台。','内置',true],
+  ['会话','sessions','▦','列出本机 Agent 的会话并按项目归档。','内置',true],
+  ['OTLP','otel','◎','把请求 span 导出到 Langfuse 或任意收集器。','内置',false],
+  ['X Search','magpie-x-search','𝕏','给 Agent 增加联网搜索工具。','市场',false],
+  ['Claude Auth','opencode-claude-auth','C','用 Claude 订阅作为供应商。','市场',false],
+  ['See Image','opencode-see-image','◉','让纯文本模型也能读图片。','市场',false]
+];
+function renderPlugs(){
+  $('#plugs').innerHTML=PLUGS.map(([n,id,i,d,src,on])=>`<div class="card plug">
+    <div class="top"><div class="logo" style="background:var(--card-2);color:var(--text);border:1px solid var(--line)">${i}</div><div><h4>${n}</h4><div class="meta small muted">${id} · ${src}</div></div></div>
+    <p>${d}</p><div class="foot"><span class="chip">${src}</span><span style="flex:1"></span><button class="switch ${on?'on':''}" onclick="this.classList.toggle('on');toast('${n}：'+(this.classList.contains('on')?'已启用':'已停用'))"></button></div>
+  </div>`).join('');
+}
+/* ---------- agents ---------- */
+function renderAgents(){
+  const rows=[['Claude Code','● 已接入','claude/claude-opus-4.7','high','~/.claude/settings.json'],['Codex','● 已接入','codex/gpt-5.5','medium','~/.codex/config.toml'],['Gemini CLI','○ 未安装','—','',''],['OpenCode','● 已接入','group/coder','auto','~/.config/opencode/opencode.json'],['Cursor CLI','○ 未安装','—','','']];
+  $('#agentRows').innerHTML=rows.map(([n,s,m,e,p])=>`<div class="setrow"><div class="tx"><b>${n}</b><span>${s} ${p?'· '+p:''}</span></div><span class="chip ${s.includes('已接入')?'green':''}">${m}</span>${e?`<span class="chip">${e}</span>`:''}<button class="btn sm">${s.includes('已接入')?'改模型':'接入'}</button></div>`).join('');
+  $('#presets').innerHTML=[['工作 · 全部用强模型','✓ 当前','Claude Opus 4.7 · GPT-5.5 · Kimi K2.5'],['省钱 · 简单问题走 Flash','','DeepSeek V4 Flash · GLM-5.3 Flash']].map(([n,c,d])=>`<div class="setrow"><div class="tx"><b>${n}</b><span>${d}</span></div><span class="chip ${c?'green':''}">${c||'应用'}</span><button class="btn sm">${c?'编辑':'应用'}</button></div>`).join('');
+}
+/* ---------- settings ---------- */
+function renderSettings(){
+  const rows=[
+    ['外观','跟随系统','浅色 / 深色 / 跟随系统'],['语言','简体中文','界面语言'],
+    ['文字大小','13px','紧凑 / 默认 / 大'],['色盲模式','关闭','图表使用 Okabe–Ito 调色板'],
+    ['开机启动','开启','登录时启动'],['托盘点击','打开概览','单击托盘图标的行为'],
+    ['轻量模式','关闭','减少动画与背景效果'],['防止休眠','关闭','网关运行时阻止系统睡眠'],
+    ['监听地址','127.0.0.1','局域网共享时改为 0.0.0.0'],['端口','3425','网关端口'],
+    ['局域网共享','关闭','其他电脑可用网关密钥访问'],['代理','跟随系统','HTTP / SOCKS5'],
+    ['意图判断超时','8 秒','1–60 秒'],['请求存档','关闭','本地最多 1 GiB'],
+    ['计入用户数','关闭','默认不发送'],['分享使用统计','关闭','默认不发送'],
+    ['OTLP 导出','关闭','只发到你指定的收集器'],['更新渠道','稳定版','稳定 / 预览'],
+    ['版本','v2026.10.27','已是最新']
+  ];
+  $('#settingsRows').innerHTML=rows.map(([n,v,d])=>`<div class="setrow"><div class="tx"><b>${n}</b><span>${d}</span></div><span class="chip">${v}</span><button class="iconbtn" style="width:24px;height:24px;border:0;box-shadow:none">›</button></div>`).join('');
+}
+/* ---------- add modal ---------- */
+const METHODS=[['订阅登录','Claude 之外的 21 家','◉'],['API Key','12 个厂商预设','⌘'],['本机','Ollama / LM Studio','▣'],['自定义','任意兼容 URL','↗'],['远程','另一台 magpie','⇄'],['导入','Claude Code / Codex / CPA','⤓']];
+const VENDORS=['Codex','Gemini','Antigravity','Kimi','Grok','Devin','Copilot','Kiro','Cline','Qoder','Trae','WorkBuddy','ZCode','Factory','Kilo','MiMo','OpenCode','更多…'];
+function openAdd(){
+  $('#methods').innerHTML=METHODS.map(([n,d,i],x)=>`<button class="method ${x===0?'on':''}" onclick="$$('#methods .method').forEach(m=>m.classList.remove('on'));this.classList.add('on')"><b>${i} ${n}</b><span>${d}</span></button>`).join('');
+  $('#vendors').innerHTML=VENDORS.map((v,i)=>`<button class="vendor ${i===0?'on':''}" onclick="$$('#vendors .vendor').forEach(m=>m.classList.remove('on'));this.classList.add('on')">${v}</button>`).join('');
+  $('#addModal').classList.remove('hidden');
+}
+function closeAdd(){$('#addModal').classList.add('hidden')}
+/* ---------- palette ---------- */
+function openPalette(){$('#palette').classList.remove('hidden');$('#paletteInput').value='';renderPalette();$('#paletteInput').focus()}
+function renderPalette(){
+  const q=$('#paletteInput').value.trim().toLowerCase();
+  const items=[...PAGES.map(p=>({t:p.name,d:p.sub,go:()=>go(p.id)})),
+    {t:'添加 Codex 账号',d:'订阅登录',go:()=>{go('sources');openAdd()}},
+    {t:'开启脱敏',d:'隐私',go:()=>go('privacy')},
+    {t:'新建路由组',d:'路由',go:()=>go('routing')},
+    {t:'切换主题',d:'外观',go:toggleTheme}].filter(x=>!q||x.t.toLowerCase().includes(q)||x.d.toLowerCase().includes(q));
+  $('#paletteItems').innerHTML=items.map((x,i)=>`<button data-i="${i}">${x.t}<span style="flex:1"></span><span class="muted small">${x.d}</span></button>`).join('');
+  $$('#paletteItems button').forEach((b,i)=>b.onclick=()=>{items[i].go();$('#palette').classList.add('hidden')});
+}
+document.addEventListener('keydown',e=>{
+  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openPalette()}
+  if(e.key==='Escape'){$('#palette').classList.add('hidden');closeAdd()}
+});
+$('#palette').addEventListener('click',e=>{if(e.target.id==='palette')$('#palette').classList.add('hidden')});
+$('#addModal').addEventListener('click',e=>{if(e.target.id==='addModal')closeAdd()});
+/* ---------- toast ---------- */
+let toastTimer;
+function toast(msg){
+  let t=$('#toast');
+  if(!t){t=document.createElement('div');t.id='toast';t.style.cssText='position:fixed;left:50%;bottom:44px;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:9px 14px;border-radius:10px;font-size:12px;box-shadow:var(--shadow-2);z-index:200;transition:.18s;opacity:0';document.body.appendChild(t)}
+  t.textContent=msg;t.style.opacity='1';clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.style.opacity='0',1800);
+}
+/* ---------- boot ---------- */
+function tick(){const d=new Date();$('#clock').textContent=d.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})}
+try{
+  renderNav();renderOverview();renderSources();renderGroups();renderRules();renderUsage();renderPrivacy();renderPlugs();renderAgents();renderSettings();runMask();tick();setInterval(tick,30000);
+  const initial=location.hash.slice(1); if(PAGES.some(p=>p.id===initial)) go(initial);
+}catch(e){console.error(e)}
+window.addEventListener('resize',()=>{drawCharts();drawWires()});
+setTimeout(drawCharts,60); setTimeout(drawWires,80);
+</script>
+</body>
+</html>

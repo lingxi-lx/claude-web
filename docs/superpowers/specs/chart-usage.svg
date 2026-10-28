@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="150" viewBox="0 0 600 150" preserveAspectRatio="none">
+<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#16a34a" stop-opacity=".25"/><stop offset="1" stop-color="#16a34a" stop-opacity="0"/></linearGradient></defs>
+<path d="M6 118 L26 96 L46 104 L66 76 L86 88 L106 62 L126 74 L146 52 L166 66 L186 44 L206 58 L226 36 L246 50 L266 30 L286 44 L306 26 L326 40 L346 22 L366 36 L386 18 L406 32 L426 20 L446 34 L466 16 L486 30 L506 14 L526 28 L546 18 L566 24 L586 12 L594 16 L594 150 L6 150 Z" fill="url(#g)"/>
+<path d="M6 118 L26 96 L46 104 L66 76 L86 88 L106 62 L126 74 L146 52 L166 66 L186 44 L206 58 L226 36 L246 50 L266 30 L286 44 L306 26 L326 40 L346 22 L366 36 L386 18 L406 32 L426 20 L446 34 L466 16 L486 30 L506 14 L526 28 L546 18 L566 24 L586 12 L594 16" fill="none" stroke="#16a34a" stroke-width="1.8"/>
+</svg>

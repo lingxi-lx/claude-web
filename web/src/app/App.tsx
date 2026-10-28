@@ -40,7 +40,7 @@ import { Rail } from '@/features/rail/Rail';
 import { RAIL_WIDTH } from '@/features/rail/rail-model';
 import { AutomationSide } from '@/features/automation/AutomationSide';
 import { ExtensionsSide } from '@/features/extensions/ExtensionsSide';
-import { GatewaySide } from '@/features/gateway/GatewaySide';
+import { ModelHubSide } from '@/features/model-hub/ModelHubSide';
 import { installChecklist } from '@/features/home/checklist-sync';
 import { installAccountDefault } from '@/features/models/account-default';
 import { installSettingsClose } from '@/features/settings/close-on-nav';
@@ -88,7 +88,7 @@ function SidebarColumn() {
       <div className="sb-sect" data-section="chat" hidden={section !== 'chat'}><ErrorBoundary area={tr('侧栏')}><Sidebar onNew={() => runCommand('new')} /></ErrorBoundary></div>
       {seen.includes('background') && <div className="sb-sect" data-section="background" hidden={section !== 'background'}><ErrorBoundary area={tr('侧栏 · 后台')}><BackgroundSide /></ErrorBoundary></div>}
       {seen.includes('automation') && <div className="sb-sect" data-section="automation" hidden={section !== 'automation'}><ErrorBoundary area={tr('侧栏 · 自动化')}><AutomationSide /></ErrorBoundary></div>}
-      {seen.includes('gateway') && <div className="sb-sect" data-section="gateway" hidden={section !== 'gateway'}><ErrorBoundary area={tr('侧栏 · 网关')}><GatewaySide /></ErrorBoundary></div>}
+      {seen.includes('gateway') && <div className="sb-sect" data-section="gateway" hidden={section !== 'gateway'}><ErrorBoundary area={tr('侧栏 · 模型')}><ModelHubSide /></ErrorBoundary></div>}
       {seen.includes('extensions') && <div className="sb-sect" data-section="extensions" hidden={section !== 'extensions'}><ErrorBoundary area={tr('侧栏 · 扩展')}><ExtensionsSide /></ErrorBoundary></div>}
       <div
         className="resizer right"

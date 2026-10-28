@@ -1,0 +1,1041 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>claude-web 模型中枢 · 架构图集（33 张）</title>
+<style>
+:root{--bg:#f6f7f8;--card:#fff;--text:#17181a;--muted:#8a8f98;--line:#e6e8eb;--accent:#16a34a}
+html[data-theme=dark]{--bg:#0b0c0e;--card:#141619;--text:#f2f3f5;--muted:#9ba1aa;--line:#24272c;--accent:#34d399}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:13px/1.5 -apple-system,"Segoe UI","PingFang SC",sans-serif;display:flex}
+aside{width:280px;height:100vh;position:sticky;top:0;overflow:auto;border-right:1px solid var(--line);padding:18px 12px;background:var(--bg)}
+aside h1{font-size:15px;margin:0 8px 4px}aside p{font-size:11px;color:var(--muted);margin:0 8px 14px}
+aside a{display:block;padding:6px 8px;border-radius:7px;color:var(--muted);text-decoration:none;font-size:11.5px;line-height:1.35}
+aside a:hover{background:var(--card);color:var(--text)}
+main{flex:1;min-width:0;padding:24px 28px 80px;max-width:1400px}
+section{margin:0 0 34px;padding:18px;background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.cap{display:flex;align-items:baseline;gap:10px;margin-bottom:14px}
+.cap span{font-size:11px;color:var(--accent);font-weight:700;font-variant-numeric:tabular-nums}
+.cap h2{font-size:14px;margin:0;font-weight:650}
+.cap em{font-size:10px;color:var(--muted);font-style:normal;margin-left:auto;border:1px solid var(--line);padding:2px 7px;border-radius:999px}
+pre.mermaid{margin:0;text-align:center;overflow:auto;background:transparent}
+button{position:fixed;right:18px;top:16px;z-index:9;border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:9px;padding:7px 11px;cursor:pointer;font-size:11px}
+@media(max-width:900px){aside{display:none}main{padding:14px}section{padding:12px}}
+</style></head><body>
+<aside><h1>架构图集</h1><p>33 张 Mermaid 图 · 来自 2026-10-27 设计稿</p><a href="#d1" data-i="1">01 · 3.1 功能地图</a>
+<a href="#d2" data-i="2">02 · 4.1 一级页面</a>
+<a href="#d3" data-i="3">03 · 7.1 首次启动</a>
+<a href="#d4" data-i="4">04 · 7.2 添加订阅账号</a>
+<a href="#d5" data-i="5">05 · 7.3 给 Agent 选模型</a>
+<a href="#d6" data-i="6">06 · 7.4 一轮请求</a>
+<a href="#d7" data-i="7">07 · 7.5 意图路由</a>
+<a href="#d8" data-i="8">08 · 7.6 隐私脱敏</a>
+<a href="#d9" data-i="9">09 · 7.7 插件安装</a>
+<a href="#d10" data-i="10">10 · 7.8 远程共享</a>
+<a href="#d11" data-i="11">11 · 7.9 同步 / 恢复</a>
+<a href="#d12" data-i="12">12 · 7.10 一次操控任务</a>
+<a href="#d13" data-i="13">13 · 7.11 授权与接管</a>
+<a href="#d14" data-i="14">14 · 8.1 系统上下文</a>
+<a href="#d15" data-i="15">15 · 8.2 容器架构</a>
+<a href="#d16" data-i="16">16 · 8.3 服务端模块</a>
+<a href="#d17" data-i="17">17 · 8.4 前端模块</a>
+<a href="#d18" data-i="18">18 · 8.5 领域模型</a>
+<a href="#d19" data-i="19">19 · 8.6 核心类型</a>
+<a href="#d20" data-i="20">20 · 8.7 请求生命周期</a>
+<a href="#d21" data-i="21">21 · 8.8 翻译与流式</a>
+<a href="#d22" data-i="22">22 · 8.9 账号状态机</a>
+<a href="#d23" data-i="23">23 · 8.10 路由决策</a>
+<a href="#d24" data-i="24">24 · 8.11 隐私管线</a>
+<a href="#d25" data-i="25">25 · 8.12 插件运行时</a>
+<a href="#d26" data-i="26">26 · 8.13 存储</a>
+<a href="#d27" data-i="27">27 · 8.15 安全边界</a>
+<a href="#d28" data-i="28">28 · 8.16 部署形态</a>
+<a href="#d29" data-i="29">29 · 8.17 可观测性</a>
+<a href="#d30" data-i="30">30 · 8.19 操控运行时</a>
+<a href="#d31" data-i="31">31 · 8.19 操控运行时 · 数据模型</a>
+<a href="#d32" data-i="32">32 · 10.1 依赖关系</a>
+<a href="#d33" data-i="33">33 · 10.2 甘特</a></aside>
+<main><section id="d1"><div class="cap"><span>01</span><h2>3.1 功能地图</h2><em>mindmap</em></div><pre class="mermaid">mindmap
+  root((claude-web 模型中枢))
+    上游
+      订阅登录
+        Codex
+        Gemini
+        Antigravity
+        Kimi
+        Grok
+        Devin
+        Copilot
+        Kiro
+        Cline
+        Qoder
+        Trae
+        WorkBuddy
+        ZCode
+        Factory
+        Kilo
+        MiMo
+        OpenCode 插件账号
+      密钥厂商
+        Anthropic
+        OpenAI
+        Gemini API
+        DeepSeek
+        Kimi
+        GLM
+        MiniMax
+        Qwen
+        Mistral
+        Groq
+        xAI
+        Azure
+        Vertex
+      本机
+        Ollama
+        LM Studio
+        MLX
+      自定义
+        OpenAI 兼容
+        Anthropic 兼容
+        Gemini 兼容
+      远程
+        Remote Magpie
+        Sub2API
+        CPA 实例
+    账号
+      多账号
+      额度窗口
+      刷新
+      签到
+      冷却
+      导入
+    模型
+      目录
+      能力
+      上下文
+      价格
+      暴露开关
+    路由
+      路由组
+      智能排序
+      顺序
+      轮流
+      最少使用
+      重置前用完
+      权重
+      速度优先
+      会话保持
+      规则
+        长度
+        图片
+        推理
+        意图
+        压缩
+        文件夹
+        时段
+        Agent
+      嵌套组
+      实时可观测
+    网关
+      协议矩阵
+      端点
+      密钥
+      限流
+      并发
+      请求存档
+    用量
+      订阅额度
+      token
+      缓存
+      费用
+      上下文
+      会话
+      导出
+    隐私
+      脱敏
+      提醒
+      拦截
+      自定义词
+      本地模型
+      记录
+      OTLP
+    插件
+      供应商插件
+      网关中间件
+      工具
+      页面
+      面板
+      市场
+    接入
+      Agent 检测
+      选模型
+      方案
+      漂移
+      WSL
+      导入
+    同步
+      WebDAV
+      S3
+      GitHub
+      加密
+      锁
+    远程
+      局域网共享
+      网关密钥
+      额度
+      模型范围
+    操控
+      浏览器
+        打开 / 读取 / 查找
+        点击 / 输入 / 按键 / 滚动
+        控制台 / 网络 / 结构
+        接管 / 光标
+      桌面
+        观察 / 查找 / 动作
+        任务 / 等待 / 看
+        授权 / 前台复核
+      感知
+        UIA / DOM / AX
+        截图 / 区域 / 差分
+      视觉
+        seer / 缓存
+        analyze_image
+</pre></section>
+<section id="d2"><div class="cap"><span>02</span><h2>4.1 一级页面</h2><em>flowchart</em></div><pre class="mermaid">flowchart LR
+  Rail["左侧图标栏"] --> O["概览"]
+  Rail --> S["上游"]
+  Rail --> R["路由"]
+  Rail --> C["对话"]
+  Rail --> H["操控"]
+  Rail --> U["用量"]
+  Rail --> P["隐私"]
+  Rail --> X["插件"]
+  Rail --> A["接入"]
+  Rail --> G["设置"]
+  S --> S1["全部"]
+  S --> S2["订阅"]
+  S --> S3["API Key"]
+  S --> S4["本机"]
+  S --> S5["自定义"]
+  S --> S6["远程"]
+  O --> O1["健康 / KPI / 趋势 / 排行"]
+  R --> R1["路由组"]
+  R --> R2["规则"]
+  R --> R3["实时舞台"]
+  U --> U1["额度"]
+  U --> U2["请求"]
+  U --> U3["会话"]
+  U --> U4["上下文"]
+  P --> P1["开关"]
+  P --> P2["试一试"]
+  P --> P3["记录"]
+  P --> P4["OTLP"]
+  X --> X1["内置"]
+  X --> X2["市场"]
+  X --> X3["插件页面"]
+  H --> H1["浏览器"]
+  H --> H2["桌面"]
+  H --> H3["会话与接管"]
+  H --> H4["应用授权"]
+  H --> H5["动作记录"]
+</pre></section>
+<section id="d3"><div class="cap"><span>03</span><h2>7.1 首次启动</h2><em>sequenceDiagram</em></div><pre class="mermaid">sequenceDiagram
+  autonumber
+  participant U as 用户
+  participant App as claude-web
+  participant Scan as 本机扫描
+  participant W as 上游向导
+  U->>App: 首次打开
+  App->>Scan: 扫描已安装 Agent / 已有登录
+  Scan-->>App: 找到 Claude Code、Codex、Ollama
+  App-->>U: 欢迎页：检测到 3 个可接入来源
+  U->>W: 选择一个来源
+  W-->>U: 登录 / 填 Key / 确认本机
+  U->>App: 完成
+  App->>App: 写配置、建默认路由组、打开概览
+</pre></section>
+<section id="d4"><div class="cap"><span>04</span><h2>7.2 添加订阅账号</h2><em>sequenceDiagram</em></div><pre class="mermaid">sequenceDiagram
+  autonumber
+  participant U as 用户
+  participant UI as 上游页
+  participant S as 服务端
+  participant B as 浏览器
+  participant P as 厂商
+  U->>UI: 添加 → 订阅 → Codex
+  UI->>S: begin_login(codex)
+  S->>S: 生成 PKCE + state
+  S-->>UI: 授权 URL
+  UI->>B: 打开授权 URL
+  B->>P: 登录并授权
+  P-->>S: 回调 code（127.0.0.1:随机端口）
+  S->>P: 换 token
+  P-->>S: access + refresh
+  S->>S: 加密保存账号
+  S-->>UI: account.created
+  UI-->>U: 账号出现，立即刷新额度
+</pre></section>
+<section id="d5"><div class="cap"><span>05</span><h2>7.3 给 Agent 选模型</h2><em>sequenceDiagram</em></div><pre class="mermaid">sequenceDiagram
+  autonumber
+  participant U as 用户
+  participant A as 接入页
+  participant S as 服务端
+  participant F as Agent 配置文件
+  U->>A: 点 Codex 的「改模型」
+  A->>S: 列出可用模型（含路由组）
+  S-->>A: provider/model + 能力 + 上下文
+  U->>A: 选 group/coder
+  A->>S: wire(agent=codex, model=group/coder)
+  S->>F: 备份原值 → 写入网关地址 + key + 模型
+  S-->>A: 已接入
+  A-->>U: 提示「新会话生效」
+</pre></section>
+<section id="d6"><div class="cap"><span>06</span><h2>7.4 一轮请求</h2><em>sequenceDiagram</em></div><pre class="mermaid">sequenceDiagram
+  autonumber
+  participant Ag as Agent
+  participant GW as 网关
+  participant RT as 路由
+  participant PV as 隐私
+  participant TR as 翻译
+  participant UP as 上游
+  participant LG as 用量
+  Ag->>GW: POST /v1/messages（带 session）
+  GW->>RT: 识别轮次 / 选组 / 应用规则
+  RT->>RT: 意图判断（仅本轮第一次）
+  RT-->>GW: 主模型 + 备用顺序
+  GW->>PV: 脱敏（失败则 503）
+  PV-->>GW: 占位符正文 + 映射
+  GW->>TR: 转成上游协议
+  TR->>UP: 流式请求
+  UP-->>TR: SSE / JSON
+  TR-->>GW: 统一事件流
+  GW->>PV: 还原占位符（文本 / 工具参数）
+  PV-->>GW: 真实值
+  GW-->>Ag: 流式回复
+  GW->>LG: 记录 token / 费用 / 延迟 / 路由轨迹
+</pre></section>
+<section id="d7"><div class="cap"><span>07</span><h2>7.5 意图路由</h2><em>flowchart</em></div><pre class="mermaid">flowchart TD
+  A["新请求到达"] --> B{"是这一轮的第一条用户消息？"}
+  B -- 否 --> C["沿用本轮已选模型"]
+  B -- 是 --> D["按顺序收集候选规则（不含意图）"]
+  D --> E{"遇到第一条不带意图且条件满足的规则？"}
+  E -- 是 --> F["直接命中，不问判断模型"]
+  E -- 否 --> G{"收集到意图？"}
+  G -- 否 --> H["按组原本顺序"]
+  G -- 是 --> I["调用判断模型（超时 8s）"]
+  I --> J{"回答是 1..n？"}
+  J -- 是 --> K["第一条匹配该意图的规则生效"]
+  J -- 0 / 超时 / 报错 --> H
+  K --> L["命中模型排第一，其余按原顺序做备用"]
+  L --> M["记住本轮决定（会话级，24h）"]
+  H --> M
+  C --> N["工具往返沿用"]
+</pre></section>
+<section id="d8"><div class="cap"><span>08</span><h2>7.6 隐私脱敏</h2><em>sequenceDiagram</em></div><pre class="mermaid">sequenceDiagram
+  autonumber
+  participant Ag as Agent
+  participant GW as 网关
+  participant D as 检测器
+  participant M as 映射表（内存）
+  participant UP as 上游
+  Ag->>GW: 请求正文
+  GW->>D: 规则 + 自定义词 + 本地模型
+  D-->>GW: 命中列表（类型、值、位置）
+  GW->>GW: 按动作决定：遮罩 / 提醒 / 拦截
+  alt 拦截
+    GW-->>Ag: 400（不发送，消息不含原值）
+  else 遮罩
+    GW->>M: 生成稳定占位符（类型 + 8 位哈希）
+    M-->>GW: {{TYPE_hash}}
+    GW->>UP: 占位符正文
+    UP-->>GW: 流式回复（可能含占位符）
+    GW->>M: 还原（文本 + 工具参数）
+    GW-->>Ag: 真实值
+    GW->>GW: 记录类型/长度/前缀（30 天）
+  end
+</pre></section>
+<section id="d9"><div class="cap"><span>09</span><h2>7.7 插件安装</h2><em>sequenceDiagram</em></div><pre class="mermaid">sequenceDiagram
+  autonumber
+  participant U as 用户
+  participant M as 市场
+  participant P as 插件宿主
+  participant S as 服务端
+  U->>M: 安装 plugin-x
+  M->>S: 下载 npm 包 / git 仓库
+  S->>S: 校验版本与权限
+  S->>P: 加载模块
+  P-->>S: 注册 hooks（auth / middleware / tools / page）
+  S-->>U: 安装完成，显示权限清单
+  U->>P: 启用
+  P-->>U: 页面/供应商/工具出现
+</pre></section>
+<section id="d10"><div class="cap"><span>10</span><h2>7.8 远程共享</h2><em>sequenceDiagram</em></div><pre class="mermaid">sequenceDiagram
+  autonumber
+  participant Lap as 笔记本
+  participant Desk as 台式机（主）
+  participant P as 供应商
+  Lap->>Desk: GET /v1/models（Bearer sk-magpie-key-…）
+  Desk->>Desk: 校验密钥、额度、模型范围
+  Desk->>P: 用主机的账号请求
+  P-->>Desk: 流
+  Desk-->>Lap: 原样转发（不二次翻译）
+  Desk->>Desk: 记在密钥名下 + 应答账号
+</pre></section>
+<section id="d11"><div class="cap"><span>11</span><h2>7.9 同步 / 恢复</h2><em>flowchart</em></div><pre class="mermaid">flowchart LR
+  A["本地状态"] --> B["打包 + 加密（scrypt + AES-GCM）"]
+  B --> C{"目标"}
+  C -- WebDAV --> D["PUT + If-Match"]
+  C -- S3 --> E["SigV4 PUT"]
+  C -- GitHub --> F["Git Data API"]
+  D --> G["锁文件 + 版本号"]
+  E --> G
+  F --> G
+  G --> H["另一台机器拉取 → 解密 → 合并"]
+  H --> I["冲突：按 updatedAt + 字段级合并"]
+</pre></section>
+<section id="d12"><div class="cap"><span>12</span><h2>7.10 一次操控任务</h2><em>sequenceDiagram</em></div><pre class="mermaid">sequenceDiagram
+  autonumber
+  participant M as 主模型
+  participant T as computer_task / browser_task
+  participant U as UIA / DOM
+  participant S as 输入
+  participant V as 视觉（仅兜底）
+  M->>T: 一次提交：打开记事本 → 输入 → 保存
+  T->>U: 查控件（编辑器、菜单、保存按钮）
+  U-->>T: ref + bounds + 可用的模式
+  T->>S: Invoke 保存 / Value 写文本（不走鼠标）
+  S-->>T: ok
+  T->>U: 等「另存为」窗口出现
+  U-->>T: 出现
+  T->>S: Value 填文件名 + Invoke 保存
+  T->>U: 等窗口消失 / 校验标题
+  alt 控件树里没有（画布、游戏、远程桌面）
+    T->>V: 只对这一块截图问「保存按钮在哪」
+    V-->>T: 坐标 + 文本
+    T->>S: 点击坐标
+  end
+  T-->>M: 一张结果截图 + 每步结果
+</pre></section>
+<section id="d13"><div class="cap"><span>13</span><h2>7.11 授权与接管</h2><em>sequenceDiagram</em></div><pre class="mermaid">sequenceDiagram
+  autonumber
+  participant Ag as Agent
+  participant C as computer / browser
+  participant UI as 操控页 / 权限卡
+  participant U as 用户
+  Ag->>C: request_access(apps, reason)
+  C->>UI: 权限卡（应用列表 + 理由 + 还会做什么）
+  UI->>U: 允许 / 不允许
+  U-->>UI: 允许
+  UI-->>C: grant(apps, clipboard?, systemKeys?)
+  C-->>Ag: 已授权；之后每次输入都核对前台窗口
+  Note over U,C: 用户点「接管」
+  UI->>C: takeover(session)
+  C->>C: 中止正在跑的任务（含拖动）
+  C-->>Ag: 用户接管了操控，输入被拒
+  U-->>UI: 交还
+  UI->>C: giveback(session)
+  C-->>Ag: 可以继续
+</pre></section>
+<section id="d14"><div class="cap"><span>14</span><h2>8.1 系统上下文</h2><em>flowchart</em></div><pre class="mermaid">flowchart LR
+  U["用户"] --> App["claude-web 桌面 / 手机"]
+  App --> Agents["本机 Agent · Claude Code / Codex / Gemini CLI / OpenCode …"]
+  Agents -->|"OpenAI / Anthropic / Gemini / WS"| GW["本地网关"]
+  GW --> Providers["云端供应商"]
+  GW --> Local["本机模型 · Ollama / LM Studio / MLX"]
+  GW --> Remote["远程 Magpie / CPA 实例"]
+  GW --> Plugin["插件宿主"]
+  Plugin --> NPM["npm / GitHub"]
+  App --> Sync["WebDAV / S3 / GitHub"]
+  App --> OTLP["OTLP 收集器"]
+  App --> Browser["内置浏览器 / ego lite"]
+  App --> Computer["操控 · 浏览器 / 桌面"]
+  Computer --> LocalApps["本机应用 / 桌面"]
+  Computer --> Vision["视觉 seer"]
+</pre></section>
+<section id="d15"><div class="cap"><span>15</span><h2>8.2 容器架构</h2><em>flowchart</em></div><pre class="mermaid">flowchart TB
+  subgraph Desktop["桌面壳（Electron）"]
+    Shell["主进程 / 托盘 / 窗口 / 自动更新"]
+    Web["React 渲染层"]
+  end
+  subgraph Server["Node 服务端（单进程）"]
+    WS["WS / HTTP 入口"]
+    GW["网关核心"]
+    CH["上游与账号"]
+    RT["路由"]
+    PV["隐私"]
+    PL["插件宿主（Bun/Node）"]
+    SY["同步"]
+    US["用量与账本"]
+    AG["Agent 接入"]
+    EN["运行时 / 会话"]
+    CT["操控：UIA / 截图 / 输入 / 授权 / 计划"]
+    VS["视觉 seer + 缓存"]
+  end
+  subgraph Native["Native helper（可选）"]
+    TLS["TLS 指纹 / HTTP2 头序"]
+  end
+  subgraph Storage["本地存储"]
+    Meta["meta.json"]
+    Sec["secrets（加密）"]
+    DB["usage.db / memory.db"]
+    Files["请求存档 / 脱敏记录"]
+  end
+  Web <-->|"WS /ws"| WS
+  WS --> GW
+  GW --> CH
+  GW --> RT
+  GW --> PV
+  GW --> PL
+  GW --> US
+  GW --> TLS
+  CH --> EN
+  WS --> CT
+  CT --> VS
+  CT --> Meta
+  CT --> Files
+  AG --> Meta
+  PV --> Files
+  US --> DB
+  SY --> Meta
+  PL --> NPM["npm / GitHub"]
+</pre></section>
+<section id="d16"><div class="cap"><span>16</span><h2>8.3 服务端模块</h2><em>flowchart</em></div><pre class="mermaid">flowchart TB
+  subgraph Entry["入口"]
+    HTTP["http.ts"]
+    WSS["ws/"]
+  end
+  subgraph Gateway["gateway/"]
+    EP["endpoints：chat / responses / messages / gemini / images / videos / speech / ws"]
+    CV["convert/：5×5 协议矩阵"]
+    SG["signature.ts"]
+    RC["replay-cache.ts"]
+    SSE["sse.ts / split.ts"]
+    FAIL["failover.ts"]
+  end
+  subgraph Sources["channels/"]
+    PROV["providers/*：每家一个描述"]
+    AUTH["auth/*：loopback / device / paste / local"]
+    QUOTA["quota/*：窗口 / 签到 / 429 学习"]
+    CAT["catalog/*：模型 / 能力 / 价格"]
+  end
+  subgraph Routing["routing/"]
+    GRP["groups.ts"]
+    RULE["rules.ts"]
+    CLS["classifier.ts"]
+    SEL["selectors/*"]
+    TRACE["decisions.ts"]
+  end
+  subgraph Privacy["privacy/"]
+    DET["detect.ts"]
+    PIPE["pipeline.ts"]
+    REC["records.ts"]
+    RELAY["relay.ts"]
+  end
+  subgraph Plugins["plugins/"]
+    HOST["host.ts"]
+    HOOKS["hooks.ts"]
+    TOOLS["tools.ts"]
+    UI["pages.ts"]
+    MARKET["market.ts"]
+  end
+  subgraph Control["computer/ + vision/"]
+    UIA["uia/：UIA 树 / 模式 / ref"]
+    SCR["screen/：窗口截图 / 区域 / 差分"]
+    INP["input/：SendInput / 按键 / 剪贴板"]
+    GRT["grants/：授权 / 前台复核 / 自我排除"]
+    PLN["planner/：多步 / 等待 / 校验"]
+    VIS["vision/：seer + LRU 缓存"]
+    MCPT["tools.ts：observe / find / act / task / wait / look"]
+  end
+  subgraph Platform["平台"]
+    AGENT["agent-config/ + agents/"]
+    USAGE["usage/ + ledger"]
+    SYNC["sync/"]
+    SHARE["share/"]
+    FED["federation/"]
+    RUNTIME["runtime/"]
+    SEC["secrets/"]
+  end
+  HTTP --> Gateway
+  WSS --> Gateway
+  Gateway --> Sources
+  Gateway --> Routing
+  Gateway --> Privacy
+  Gateway --> Plugins
+  Gateway --> Platform
+  HTTP --> Control
+  Control --> Platform
+</pre></section>
+<section id="d17"><div class="cap"><span>17</span><h2>8.4 前端模块</h2><em>flowchart</em></div><pre class="mermaid">flowchart LR
+  subgraph Shell["壳"]
+    Rail["features/rail"]
+    Sections["features/sections"]
+    Palette["features/palette"]
+    Theme["themes + appearance"]
+  end
+  subgraph Pages["页面"]
+    OV["features/gateway/overview"]
+    SRC["features/gateway/sources"]
+    ROUTE["features/gateway/routing"]
+    USAGE["features/gateway/usage"]
+    PRIV["features/privacy"]
+    PLUG["features/plugins"]
+    WIRE["features/agents（接入）"]
+    CHAT["features/chat"]
+    CTRL["features/computer（操控页）"]
+    SET["features/settings"]
+  end
+  subgraph Core["核心"]
+    Store["store/index.ts"]
+    Reducer["model/conversation.ts"]
+    IPC["ws client"]
+    I18n["i18n"]
+    UI["ui/dialog + composer/Popover + useAnchoredMenu"]
+  end
+  Rail --> Pages
+  Pages --> Store
+  Store --> Reducer
+  Pages --> IPC
+  Pages --> UI
+  Pages --> I18n
+</pre></section>
+<section id="d18"><div class="cap"><span>18</span><h2>8.5 领域模型</h2><em>erDiagram</em></div><pre class="mermaid">erDiagram
+  PROVIDER ||--o{ ACCOUNT : has
+  PROVIDER ||--o{ MODEL : offers
+  PROVIDER ||--o{ GATEWAY_KEY : scoped
+  ACCOUNT ||--o{ QUOTA_WINDOW : reports
+  MODEL }o--o{ GROUP_MEMBER : in
+  GROUP ||--o{ GROUP_MEMBER : contains
+  GROUP ||--o{ RULE : has
+  GROUP ||--o{ DECISION : produces
+  AGENT ||--o{ BINDING : wired
+  BINDING }o--|| MODEL : uses
+  REQUEST }o--|| MODEL : routed
+  REQUEST ||--o{ MASK_RECORD : masks
+  REQUEST ||--o| USAGE_RECORD : bills
+  PLUGIN ||--o{ PLUGIN_PAGE : registers
+  SYNC_TARGET ||--o{ SNAPSHOT : stores
+  PEER ||--o{ PROVIDER : remote
+
+  PROVIDER {
+    string id PK
+    string kind
+    string name
+    json endpoints
+    json auth
+    bool enabled
+  }
+  ACCOUNT {
+    string id PK
+    string providerId FK
+    string label
+    string status
+    datetime cooldownUntil
+  }
+  MODEL {
+    string id PK
+    string providerId FK
+    string upstreamId
+    int contextWindow
+    json capabilities
+    json pricing
+  }
+  GROUP {
+    string id PK
+    string routing
+    string stay
+    string classifier
+  }
+  RULE {
+    string id PK
+    int order
+    json when
+    string use
+  }
+  REQUEST {
+    string id PK
+    string agent
+    string model
+    string account
+    int status
+    int latencyMs
+  }
+  MASK_RECORD {
+    string id PK
+    string requestId FK
+    string type
+    int length
+    string prefix
+  }
+</pre></section>
+<section id="d19"><div class="cap"><span>19</span><h2>8.6 核心类型</h2><em>classDiagram</em></div><pre class="mermaid">classDiagram
+  class Provider {
+    +string id
+    +ProviderKind kind
+    +EndpointSet endpoints
+    +AuthSpec auth
+    +ModelSpec[] models
+    +bool enabled
+  }
+  class Account {
+    +string id
+    +string providerId
+    +AccountStatus status
+    +QuotaWindow[] windows
+    +refresh()
+    +checkin()
+  }
+  class Model {
+    +string id
+    +string providerId
+    +string upstreamId
+    +Capabilities caps
+    +Pricing pricing
+  }
+  class RoutingGroup {
+    +string id
+    +RoutingMode mode
+    +StayMode stay
+    +Member[] members
+    +Rule[] rules
+    +string classifier
+    +decide(request) Decision
+  }
+  class Rule {
+    +int order
+    +When when
+    +string use
+    +string useEffort
+  }
+  class Decision {
+    +string groupId
+    +string modelId
+    +string accountId
+    +string reason
+    +TraceStep[] trace
+  }
+  class GatewayKey {
+    +string id
+    +Limit daily
+    +Limit weekly
+    +Limit monthly
+    +string[] models
+  }
+  class Plugin {
+    +string id
+    +string version
+    +Hook[] hooks
+    +Permission[] permissions
+  }
+  Provider "1" --> "*" Account
+  Provider "1" --> "*" Model
+  RoutingGroup "1" --> "*" Rule
+  RoutingGroup "1" --> "*" Model
+  RoutingGroup --> Decision
+  Plugin --> Provider : contributes
+</pre></section>
+<section id="d20"><div class="cap"><span>20</span><h2>8.7 请求生命周期</h2><em>sequenceDiagram</em></div><pre class="mermaid">sequenceDiagram
+  autonumber
+  participant A as Agent
+  participant E as 入口
+  participant K as 网关密钥
+  participant R as 路由
+  participant Q as 额度
+  participant P as 隐私
+  participant T as 翻译
+  participant U as 上游
+  participant L as 账本
+  A->>E: 请求
+  E->>K: 认证 + 限额 + 模型范围
+  K-->>E: 通过 / 403
+  E->>R: 选组 / 规则 / 会话保持
+  R->>Q: 过滤冷却 / 无额度 / 不可用账号
+  Q-->>R: 候选顺序
+  R-->>E: 主模型 + 备用
+  E->>P: 脱敏
+  P-->>E: 占位符 / 503
+  E->>T: 协议转换
+  T->>U: 请求
+  U-->>T: 流
+  T-->>E: 统一事件
+  E->>P: 还原
+  P-->>E: 真实值
+  E-->>A: 流
+  E->>L: 记账 + 轨迹
+</pre></section>
+<section id="d21"><div class="cap"><span>21</span><h2>8.8 翻译与流式</h2><em>flowchart</em></div><pre class="mermaid">flowchart LR
+  A["入口协议"] --> B["统一 IR"]
+  B --> C["目标协议"]
+  C --> D["上游"]
+  D --> E["上游事件"]
+  E --> F["统一事件"]
+  F --> G["入口协议事件"]
+  G --> H["SSE / JSON / WS"]
+  subgraph 细节
+    I["签名校验 / 清洗"]
+    J["thinking 回放缓存"]
+    K["tool call 增量合并"]
+    L["usage 归一"]
+  end
+  B --- I
+  F --- J
+  F --- K
+  F --- L
+</pre></section>
+<section id="d22"><div class="cap"><span>22</span><h2>8.9 账号状态机</h2><em>stateDiagram-v2</em></div><pre class="mermaid">stateDiagram-v2
+  [*] --> LoggedOut
+  LoggedOut --> LoggingIn: begin_login
+  LoggingIn --> Active: token 成功
+  LoggingIn --> LoggedOut: 取消 / 失败
+  Active --> Refreshing: 距过期少于 5 分钟
+  Refreshing --> Active: refresh 成功
+  Refreshing --> Expired: refresh 失败
+  Active --> Cooling: 429 / 额度耗尽
+  Cooling --> Active: 冷却结束 / 重置
+  Active --> Expired: 401 / 撤销
+  Expired --> LoggingIn: 重新登录
+  Active --> Disabled: 用户停用
+  Disabled --> Active: 启用
+</pre></section>
+<section id="d23"><div class="cap"><span>23</span><h2>8.10 路由决策</h2><em>flowchart</em></div><pre class="mermaid">flowchart TD
+  A["请求"] --> B["识别 Agent / 会话 / 轮次"]
+  B --> C{"是否新一轮？"}
+  C -- 否 --> D["沿用本轮决定"]
+  C -- 是 --> E["取组 + 成员 + 规则"]
+  E --> F["过滤不可用账号（冷却/额度/模型）"]
+  F --> G["按路由方式排序"]
+  G --> H["应用规则（从上到下）"]
+  H --> I{"规则含意图？"}
+  I -- 是 --> J["调用判断模型"]
+  J --> K["命中规则模型排第一"]
+  I -- 否 --> L["按排序"]
+  K --> M["生成 Decision + Trace"]
+  L --> M
+  M --> N["请求"]
+  N --> O{"失败？"}
+  O -- 是 --> P["下一个成员（同轮保持接手者）"]
+  O -- 否 --> Q["完成"]
+  P --> N
+</pre></section>
+<section id="d24"><div class="cap"><span>24</span><h2>8.11 隐私管线</h2><em>flowchart</em></div><pre class="mermaid">flowchart LR
+  A["请求"] --> B["规则检测"]
+  B --> C["自定义词"]
+  C --> D["本地模型（可选）"]
+  D --> E{"动作"}
+  E -- 遮罩 --> F["占位符"]
+  E -- 提醒 --> G["原样 + 徽标"]
+  E -- 拦截 --> H["400 / 不发送"]
+  F --> I["上游"]
+  I --> J["回复"]
+  J --> K["还原"]
+  K --> L["Agent"]
+  F --> M["记录（类型/长度/前缀）"]
+  G --> M
+  H --> M
+</pre></section>
+<section id="d25"><div class="cap"><span>25</span><h2>8.12 插件运行时</h2><em>flowchart</em></div><pre class="mermaid">flowchart TB
+  subgraph Host["插件宿主"]
+    Loader["加载器（npm / git / 文件夹）"]
+    Sandbox["沙箱（权限 / 网络 / 文件）"]
+    Registry["注册表"]
+  end
+  subgraph Points["扩展点"]
+    AUTH["供应商 auth / models / usage / refresh / checkin"]
+    MW["网关中间件（请求 / 回复 / 流）"]
+    TOOL["工具（MCP）"]
+    PAGE["页面 / 面板（slot）"]
+    HOOK["异步请求钩子"]
+    BUDGET["预算 / 限流"]
+  end
+  Loader --> Sandbox --> Registry
+  Registry --> AUTH
+  Registry --> MW
+  Registry --> TOOL
+  Registry --> PAGE
+  Registry --> HOOK
+  Registry --> BUDGET
+  MW --> GW["网关"]
+  AUTH --> CH["上游"]
+  TOOL --> AG["Agent"]
+  PAGE --> UI["React 壳"]
+</pre></section>
+<section id="d26"><div class="cap"><span>26</span><h2>8.13 存储</h2><em>flowchart</em></div><pre class="mermaid">flowchart LR
+  subgraph meta["meta.json"]
+    M1["settings"]
+    M2["providers（无密钥）"]
+    M3["groups / rules"]
+    M4["bindings"]
+    M5["plugins"]
+  end
+  subgraph secrets["secrets（加密）"]
+    S1["账号 token / refresh"]
+    S2["API keys"]
+    S3["网关密钥"]
+    S4["同步口令"]
+  end
+  subgraph db["SQLite"]
+    D1["usage.db"]
+    D2["memory.db"]
+    D3["requests（可选）"]
+  end
+  subgraph files["文件"]
+    F1["request-archive/"]
+    F2["masking/"]
+    F3["backups/"]
+    F4["plugins/"]
+  end
+</pre></section>
+<section id="d27"><div class="cap"><span>27</span><h2>8.15 安全边界</h2><em>flowchart</em></div><pre class="mermaid">flowchart TB
+  subgraph Trust["高信任"]
+    UI["渲染层"]
+    SRV["服务端"]
+    SEC["secrets"]
+  end
+  subgraph Medium["中信任"]
+    PL["插件（沙箱）"]
+    NAT["native helper"]
+  end
+  subgraph Low["低信任"]
+    WEB["外部网页（内置浏览器）"]
+    AG["Agent 输出"]
+    UP["上游响应"]
+  end
+  UI --> SRV
+  SRV --> SEC
+  SRV --> PL
+  SRV --> NAT
+  WEB -->|"site gate / 权限卡"| SRV
+  AG -->|"工具权限"| SRV
+  UP -->|"解析 / 校验"| SRV
+</pre></section>
+<section id="d28"><div class="cap"><span>28</span><h2>8.16 部署形态</h2><em>flowchart</em></div><pre class="mermaid">flowchart LR
+  A["桌面版 · Electron + 服务端 + 托盘"] --> B["本机 Agent"]
+  C["无头模式 · serve"] --> B
+  D["Docker · NAS / 服务器"] --> E["局域网 / VPN 客户端"]
+  E --> C
+  F["手机壳"] --> G["远程 / WebRTC"]
+  G --> A
+</pre></section>
+<section id="d29"><div class="cap"><span>29</span><h2>8.17 可观测性</h2><em>flowchart</em></div><pre class="mermaid">flowchart LR
+  GW["网关"] --> L["账本 usage.db"]
+  GW --> R["请求记录（内存 10 条 + 存档）"]
+  GW --> O["OTLP span"]
+  L --> U["用量页"]
+  R --> U
+  O --> C["Langfuse / 收集器"]
+  GW --> T["路由轨迹"]
+  T --> RT["路由页"]
+  CT["操控"] --> AL["动作审计（时间 / 动作 / 目标 / 结果 / 耗时）"]
+  AL --> CTRL["操控页"]
+</pre></section>
+<section id="d30"><div class="cap"><span>30</span><h2>8.19 操控运行时</h2><em>flowchart</em></div><pre class="mermaid">flowchart TB
+  subgraph Tools["MCP 工具"]
+    C["computer_observe / find / act / task / wait / look"]
+    B["browser_observe / act / task"]
+  end
+  subgraph Desktop["桌面（Windows 先行）"]
+    U["uia：UIA 树、模式、ref"]
+    S["screen：窗口截图、区域、差分"]
+    I["input：SendInput、按键、剪贴板"]
+    G["grants：授权、前台复核、自我排除"]
+    P["planner：多步、等待、校验"]
+  end
+  subgraph Browser["浏览器"]
+    CDP["CDP：AX 树、ref、console / network"]
+  end
+  V["vision：seer 模型 + LRU 缓存"]
+  C --> U
+  C --> S
+  C --> I
+  C --> G
+  C --> P
+  C --> V
+  B --> CDP
+  S --> V
+</pre></section>
+<section id="d31"><div class="cap"><span>31</span><h2>8.19 操控运行时 · 数据模型</h2><em>erDiagram</em></div><pre class="mermaid">erDiagram
+  COMPUTER_SESSION ||--o{ ACTION : logs
+  COMPUTER_SESSION ||--o{ GRANT : grants
+  GRANT }o--|| APP : targets
+  COMPUTER_SESSION {
+    string id PK
+    string conversationId
+    string mode
+    string app
+    string status
+    datetime startedAt
+  }
+  GRANT {
+    string id PK
+    string sessionId FK
+    string appName
+    bool clipboardRead
+    bool clipboardWrite
+    bool systemKeyCombos
+  }
+  ACTION {
+    string id PK
+    string sessionId FK
+    string kind
+    string target
+    string result
+    int latencyMs
+    datetime at
+  }
+  APP {
+    string name PK
+    string proc
+    string exe
+  }
+</pre></section>
+<section id="d32"><div class="cap"><span>32</span><h2>10.1 依赖关系</h2><em>flowchart</em></div><pre class="mermaid">flowchart LR
+  P0["P0 设计系统 + 外壳 + 兼容层"] --> P1["P1 协议矩阵 + 端点"]
+  P1 --> P2["P2 上游与账号"]
+  P2 --> P3["P3 路由组 + 规则 + 意图"]
+  P1 --> P4["P4 用量 + 额度 + 上下文"]
+  P2 --> P4
+  P2 --> P5["P5 隐私 + OTLP"]
+  P0 --> P6["P6 操控（浏览器 + 桌面）"]
+  P1 --> P6
+  P5 --> P6
+  P1 --> P7["P7 插件运行时"]
+  P2 --> P8["P8 接入 + 方案 + 导入"]
+  P4 --> P9["P9 同步 + 远程"]
+  P3 --> P10["P10 工程细节 + 全量验收"]
+  P6 --> P10
+  P7 --> P10
+  P8 --> P10
+  P9 --> P10
+</pre></section>
+<section id="d33"><div class="cap"><span>33</span><h2>10.2 甘特</h2><em>gantt</em></div><pre class="mermaid">gantt
+  title claude-web 模型中枢实施计划
+  dateFormat  YYYY-MM-DD
+  axisFormat  %m-%d
+  section 基础
+  P0 设计系统 + 外壳 + 兼容层 :a1, 2026-10-28, 10d
+  P1 协议矩阵 + 端点           :a2, after a1, 18d
+  section 来源
+  P2 上游与账号                :b1, after a2, 24d
+  P8 接入 + 方案 + 导入        :b2, after b1, 10d
+  section 智能
+  P3 路由 + 意图 + 可观测      :c1, after b1, 14d
+  P4 用量 + 额度 + 上下文      :c2, after b1, 12d
+  section 安全与扩展
+  P5 隐私 + OTLP               :d1, after c2, 10d
+  P6 操控 + 评测                :d2, after d1, 14d
+  P7 插件运行时 + 市场         :d3, after a2, 16d
+  P9 同步 + 远程               :d4, after c2, 8d
+  section 收尾
+  P10 工程细节 + 全量验收      :e1, after d2, 14d
+</pre></section></main>
+<button onclick="const h=document.documentElement;h.dataset.theme=h.dataset.theme==='dark'?'light':'dark'">浅色 / 深色</button>
+<script src="../../../node_modules/mermaid/dist/mermaid.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js'"></script>
+<script>
+function boot(){ if(!window.mermaid){setTimeout(boot,120);return;} mermaid.initialize({startOnLoad:true,theme:document.documentElement.dataset.theme==='dark'?'dark':'base',securityLevel:'loose',flowchart:{curve:'basis'},themeVariables:{fontFamily:'-apple-system,Segoe UI,PingFang SC,sans-serif',primaryColor:'#e9f8ef',primaryTextColor:'#17181a',lineColor:'#94a3b8'}}); }
+window.addEventListener('load',boot);
+window.addEventListener('load', async()=>{
+  await new Promise(r=>setTimeout(r,800));
+  const out=[];
+  for(const el of document.querySelectorAll('pre.mermaid')){
+    const id=el.closest('section').id;
+    try{ await mermaid.parse(el.textContent); }catch(e){ out.push(id+' :: '+(e.message||e)); }
+  }
+  const d=document.createElement('pre'); d.id='errs'; d.style.whiteSpace='pre-wrap'; d.textContent=out.join('
+---
+'); document.body.appendChild(d);
+});
+</script></body></html>

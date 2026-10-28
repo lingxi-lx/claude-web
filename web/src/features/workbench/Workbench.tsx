@@ -6,7 +6,7 @@ import { ErrorBoundary } from '@/ui/ErrorBoundary';
 import { AutomationPage } from '@/features/automation/AutomationPage';
 import { useAutomation } from '@/features/automation/state';
 import { useExtensions } from '@/features/extensions/state';
-import { useGateway } from '@/features/gateway/state';
+import { useHub } from '@/features/model-hub/state';
 import { useBackground } from '@/features/background/state';
 import { usePageOpen } from '@/features/sections';
 import { GroupBar } from './GroupBar';
@@ -18,7 +18,7 @@ import { tr } from '@/i18n';
 // 后台 too: the office and the graph are not in the app's first file
 const BackgroundPage = lazy(() => import('@/features/background/BackgroundPage').then((m) => ({ default: m.BackgroundPage })));
 const ExtensionsPage = lazy(() => import('@/features/extensions/ExtensionsPage').then((m) => ({ default: m.ExtensionsPage })));
-const GatewayPage = lazy(() => import('@/features/gateway/GatewayPage').then((m) => ({ default: m.GatewayPage })));
+const ModelHubPage = lazy(() => import('@/features/model-hub/ModelHubPage').then((m) => ({ default: m.ModelHubPage })));
 
 /**
  * Center column: the pane tree of the active group, plus the group bar when there is more than one group or the
@@ -36,7 +36,7 @@ export function Workbench() {
   const autoOpen = usePageOpen();
   const autoSeen = useAutomation((s) => s.seen.length > 0);
   const extSeen = useExtensions((s) => s.seen.length > 0);
-  const gwSeen = useGateway((s) => s.seen);
+  const hubSeen = useHub((s) => s.seen.length > 0);
   const bgSeen = useBackground((s) => s.seen);
   // a phone never gets the group bar / tab strips / rail (spec §5.11): its one row is the conversation header
   const vis = chromeVisibility(layout, { workbench, mobile });
@@ -48,7 +48,7 @@ export function Workbench() {
         {bgSeen && <ErrorBoundary area={tr('后台')}><Suspense fallback={null}><BackgroundPage /></Suspense></ErrorBoundary>}
         {autoSeen && <ErrorBoundary area={tr('自动化')}><AutomationPage /></ErrorBoundary>}
         {extSeen && <ErrorBoundary area={tr('扩展')}><Suspense fallback={null}><ExtensionsPage /></Suspense></ErrorBoundary>}
-        {gwSeen && <ErrorBoundary area={tr('网关')}><Suspense fallback={null}><GatewayPage /></Suspense></ErrorBoundary>}
+        {hubSeen && <ErrorBoundary area={tr('模型')}><Suspense fallback={null}><ModelHubPage /></Suspense></ErrorBoundary>}
       </div>
       <ConnectionBanner />
     </div>

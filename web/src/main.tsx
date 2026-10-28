@@ -19,6 +19,7 @@ import './styles/cafe.css';
 import './styles/corners.css';
 import './styles/gateway.css';
 import './styles/gateway-sources.css';
+import './styles/hub.css';
 import { loadEnglish } from '@/i18n';
 
 // The page's first paint: theme, the desktop flag, the styles above. Nothing reached from this file calls `tr()` —
