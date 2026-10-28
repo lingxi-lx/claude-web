@@ -150,6 +150,19 @@ describe('approval covers the code', () => {
     await expect(svc.enable('p1')).rejects.toThrow();
   }, 20_000);
 
+  it('a change the watcher saw first is reported as skipped too (not silent)', async () => {
+    const root = await mkPlugin({ 'plugin.json': manifest(), 'index.js': 'exports.requestBefore = async (p) => ({ ...p, v: 1 });', 'lib.js': '// helper' });
+    svc = new PluginService({ meta: fakeMeta(), dir: root, isolation: 'permission' });
+    await svc.init();
+    await svc.enable('p1', true);
+    await fs.writeFile(path.join(root, 'p', 'lib.js'), '// changed', 'utf8');
+    for (let i = 0; i < 50 && svc.list().plugins[0].approved; i++) await new Promise((r) => setTimeout(r, 100));
+    expect(svc.list().plugins[0].approved).toBe(false);
+    const skipped: string[] = [];
+    expect(await svc.runHook('request-before', { a: 1 }, (id) => skipped.push(id))).toEqual({ a: 1 });
+    expect(skipped).toEqual(['p1']);
+  }, 20_000);
+
   it('code added while the process is running never runs unapproved (the running process is stopped)', async () => {
     const lazy = "exports.requestBefore = async (p) => { let l = null; try { l = require('./lazy.js'); } catch {} return { ...p, lazy: l }; };";
     const root = await mkPlugin({ 'plugin.json': manifest(), 'index.js': lazy });

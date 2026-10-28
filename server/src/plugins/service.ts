@@ -325,7 +325,16 @@ export class PluginService {
   async runHook<T>(hook: Exclude<PluginHook, 'source-provider'>, payload: T, onSkip?: (pluginId: string, why: 'too-large' | 'timeout' | 'error') => void): Promise<T> {
     let cur = payload;
     for (const e of this.executables) {
-      if (!this.runnable(e) || !e.manifest.hooks.includes(hook)) continue;
+      if (!this.runnable(e) || !e.manifest.hooks.includes(hook)) {
+        // approved once, enabled, but its code changed since (seen by the watcher before this call): reported like a
+        // spawn refused for the same reason, so it does not depend on which noticed first
+        const m = e.manifest;
+        if (m && this.enabled(m.id) && m.hooks.includes(hook) && this.state()[m.id]?.approvedHash && !this.approved(e)) {
+          e.error = tr('插件的代码变了，要重新确认');
+          try { onSkip?.(m.id, 'error'); } catch { /* the caller's problem */ }
+        }
+        continue;
+      }
       const m = e.manifest;
       try {
         const out = await e.runner.call<T | null>(hook, cur);
