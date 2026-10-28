@@ -5,8 +5,23 @@ import { useGateway } from '@/features/gateway/state';
 import { dlg } from '@/ui/dialog';
 import { Select } from '@/ui/Select';
 import { tr } from '@/i18n';
-import { ROUTING_POLICIES, candidateKey, type RoutingCandidate, type RoutingConfig, type RoutingPolicy, type RoutingRule, type RoutingStatus } from '@shared';
+import { ROUTING_MODES, ROUTING_POLICIES, candidateKey, type RoutingCandidate, type RoutingConfig, type RoutingIntent, type RoutingMode, type RoutingPolicy, type RoutingRule, type RoutingStatus } from '@shared';
 import { routingPolicyHint, routingPolicyLabel } from '@/features/models/menu';
+import { DecisionTraceView, quotaText } from './DecisionTraceView';
+
+/** 排序方式: the selectors (server routing/selectors.ts) next to the strategy's scores. */
+const MODE_LABEL: Record<RoutingMode, string> = {
+  smart: tr('智能打分'), order: tr('按顺序'), rotate: tr('轮流'), usage: tr('最少使用'), pace: tr('重置前用完'), weight: tr('按权重'), fast: tr('速度优先'),
+};
+const MODE_HINT: Record<RoutingMode, string> = {
+  smart: tr('按策略给每个候选打分（成功率、速度、能力、剩余额度、优先级）'),
+  order: tr('总是按列表顺序'),
+  rotate: tr('每次请求换下一个'),
+  usage: tr('用得最少的先上'),
+  pace: tr('额度快重置却还剩很多的先用'),
+  weight: tr('按剩余额度随机挑，剩得多的更常被选'),
+  fast: tr('首字最快的先上'),
+};
 
 const costLabel = (c: 'free' | 'subscription' | 'paid') => (c === 'free' ? tr('免费') : c === 'subscription' ? tr('订阅') : tr('付费'));
 
@@ -76,6 +91,10 @@ export function RoutingDetail() {
   const rules = cfg.rules ?? [];
   const setRules = (r: RoutingRule[]) => void save({ rules: r });
   const candOptions = cfg.candidates.map((c) => ({ value: candidateKey(c), label: st.candidates.find((x) => x.key === candidateKey(c))?.label ?? c.model }));
+  // the judge is asked directly on its provider's endpoint: only provider candidates can judge
+  const judgeOptions = cfg.candidates.filter((c) => c.providerId).map((c) => ({ value: candidateKey(c), label: st.candidates.find((x) => x.key === candidateKey(c))?.label ?? c.model }));
+  const intents = cfg.intents ?? [];
+  const setIntents = (l: RoutingIntent[]) => void save({ intents: l });
 
   return (
     <div className="routing-detail">
@@ -86,6 +105,11 @@ export function RoutingDetail() {
             options={ROUTING_POLICIES.map((p) => ({ value: p, label: routingPolicyLabel(p), description: routingPolicyHint(p) }))} />
         </div>
         <div className="sub">{tr('对话的模型菜单里「智能路由」下的每一项就是一个策略。')}</div>
+        <div className="gateway-row">
+          <span className="grow">{tr('排序方式')}</span>
+          <Select value={cfg.mode ?? 'smart'} onValueChange={(v) => void save({ mode: v as RoutingMode })} aria-label={tr('排序方式')}
+            options={ROUTING_MODES.map((m) => ({ value: m, label: MODE_LABEL[m], description: MODE_HINT[m] }))} />
+        </div>
         <div className="gateway-row">
           <label><input type="checkbox" checked={cfg.failover} onChange={(e) => void save({ failover: e.target.checked })} /> {tr('失败时换下一个候选（只在还没输出、没执行工具之前）')}</label>
         </div>
@@ -118,7 +142,7 @@ export function RoutingDetail() {
               <span className="sub">{i + 1}</span>
               <span className="grow">
                 {v?.label ?? c.model}
-                <span className="sub"> · {costLabel(v?.cost ?? 'paid')}{v?.caps.context ? ` · ${Math.round(v.caps.context / 1000)}K` : ''}{v && (v.ok + v.fail) > 0 ? ` · ${tr('成功 {ok}/{all}', { ok: v.ok, all: v.ok + v.fail })}` : ''}{v?.latencyMs !== undefined ? ` · ${v.latencyMs}ms` : ''}{v?.health === 'cooling' ? ` · ${tr('冷却中')}` : v?.health === 'disabled' ? ` · ${tr('已停用')}` : ''}</span>
+                <span className="sub"> · {costLabel(v?.cost ?? 'paid')}{v?.caps.context ? ` · ${Math.round(v.caps.context / 1000)}K` : ''}{v && (v.ok + v.fail) > 0 ? ` · ${tr('成功 {ok}/{all}', { ok: v.ok, all: v.ok + v.fail })}` : ''}{v?.latencyMs !== undefined ? ` · ${v.latencyMs}ms` : ''}{v?.health === 'cooling' ? ` · ${tr('冷却中')}` : v?.health === 'disabled' ? ` · ${tr('已停用')}` : ''}{v?.quota ? ` · ${quotaText(v.quota)}` : ''}</span>
               </span>
               <label title={tr('允许自动路由使用')}><input type="checkbox" checked={c.allowAuto} onChange={(e) => patchCand(i, { allowAuto: e.target.checked })} /> {tr('允许自动路由使用')}</label>
               {v?.unpriced && (
@@ -149,6 +173,22 @@ export function RoutingDetail() {
           </div>
         ))}
         <button className="btn sm" style={{ marginTop: 6 }} onClick={() => setRules([...rules, { id: `r${Date.now().toString(36)}`, when: {}, prefer: [] }])}>{tr('添加规则')}</button>
+
+        <div className="gateway-row" style={{ marginTop: 10 }}>
+          <b className="grow">{tr('意图判断')}</b>
+          <Select value={cfg.intentJudge ?? ''} onValueChange={(v) => void save({ intentJudge: v ? String(v) : '' })} aria-label={tr('判断用的模型')}
+            options={[{ value: '', label: tr('不判断') }, ...judgeOptions]} />
+        </div>
+        <div className="sub">{tr('「自定义」策略下，一轮的第一句话先交给一个小模型判断属于哪个意图，再把那个意图的候选排到最前；上面的条件规则命中时不判断。')}</div>
+        {intents.map((it, i) => (
+          <div className="gateway-row" key={i}>
+            <input className="input grow" defaultValue={it.label} placeholder={tr('意图（比如：写代码、翻译）')}
+              onBlur={(e) => { const label = e.target.value.trim(); if (label !== it.label) setIntents(intents.map((x, k) => (k === i ? { ...x, label } : x))); }} />
+            <Select multiple value={it.prefer} onValueChange={(v) => setIntents(intents.map((x, k) => (k === i ? { ...x, prefer: (Array.isArray(v) ? v : [v]).map(String) } : x)))} aria-label={tr('优先用')} placeholder={tr('优先用…')} options={candOptions} />
+            <button className="btn sm ghost" onClick={() => setIntents(intents.filter((_, k) => k !== i))}>{tr('移除')}</button>
+          </div>
+        ))}
+        <button className="btn sm" style={{ marginTop: 6 }} onClick={() => setIntents([...intents, { label: '', prefer: [] }])}>{tr('添加意图')}</button>
       </div>
 
       <div className="gateway-card" style={{ marginTop: 10 }}>
@@ -161,12 +201,7 @@ export function RoutingDetail() {
               {routingPolicyLabel(d.policy)} → {d.chosen ? d.chosen.label : tr('没有结果')}
               {d.switched ? ` · ${tr('换过候选')}` : ''}{!d.ok ? ` · ${tr('失败')}` : ''}
             </summary>
-            <div className="sub">{d.reason}</div>
-            <div className="sub">{tr('需要')}：{[d.needs.tools && tr('工具'), d.needs.images && tr('图片'), d.needs.thinking && tr('思考'), `~${Math.round(d.needs.tokens / 1000)}K`].filter(Boolean).join(' · ')}</div>
-            <ul>
-              {d.candidates.map((c) => <li key={c.key}>{c.label} {c.excluded ? <span className="sub">— {c.excluded}</span> : <span className="sub">— {c.score}</span>}</li>)}
-            </ul>
-            {d.attempts.length > 0 && <ol>{d.attempts.map((a, k) => <li key={k}>{a.label} · {a.status || '—'} · {a.outcome}</li>)}</ol>}
+            <DecisionTraceView d={d} />
           </details>
         ))}
       </div>

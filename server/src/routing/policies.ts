@@ -7,15 +7,20 @@ export interface CandidateNumbers {
   success?: number;
   /** typical time to first byte, ms */
   latencyMs?: number;
+  /** share of the source's quota still left, 0–1 (from its rate-limit headers; undefined = it never said) */
+  remaining?: number;
 }
 
-type Weights = { free: number; success: number; speed: number; cap: number; prio: number };
+type Weights = { free: number; success: number; speed: number; cap: number; prio: number; quota: number };
+// `quota`: the share of quota a source still has — free sources run out first, so it weighs most under 免费优先
 const WEIGHTS: Record<Exclude<RoutingPolicy, 'custom'>, Weights> = {
-  auto: { free: 0.2, success: 0.25, speed: 0.15, cap: 0.2, prio: 0.2 },
-  free: { free: 0, success: 0.3, speed: 0.2, cap: 0.2, prio: 0.3 },
-  performance: { free: 0, success: 0.35, speed: 0.4, cap: 0.15, prio: 0.1 },
-  capability: { free: 0.1, success: 0.2, speed: 0, cap: 0.55, prio: 0.15 },
+  auto: { free: 0.2, success: 0.25, speed: 0.15, cap: 0.2, prio: 0.2, quota: 0.15 },
+  free: { free: 0, success: 0.3, speed: 0.2, cap: 0.2, prio: 0.3, quota: 0.25 },
+  performance: { free: 0, success: 0.35, speed: 0.4, cap: 0.15, prio: 0.1, quota: 0.1 },
+  capability: { free: 0.1, success: 0.2, speed: 0, cap: 0.55, prio: 0.15, quota: 0.05 },
 };
+/** an unknown quota scores like a source with most of it left (not full: a known-full one is a safer bet) */
+const UNKNOWN_QUOTA = 0.7;
 
 /** A rough 0–1 for what the model can do: window, thinking, pictures, and its tier by name. */
 export function capabilityScore(e: Eligible): number {
@@ -33,7 +38,8 @@ export function scoreOf(policy: RoutingPolicy, e: Eligible, n: CandidateNumbers,
   const success = n.success ?? 0.8;
   const speed = n.latencyMs === undefined ? 0.5 : 1 / (1 + n.latencyMs / 3000);
   const prio = total <= 1 ? 1 : 1 - e.index / total;
-  return w.free * free + w.success * success + w.speed * speed + w.cap * capabilityScore(e) + w.prio * prio;
+  const quota = n.remaining === undefined || !Number.isFinite(n.remaining) ? UNKNOWN_QUOTA : Math.min(1, Math.max(0, n.remaining));
+  return w.free * free + w.success * success + w.speed * speed + w.cap * capabilityScore(e) + w.prio * prio + w.quota * quota;
 }
 
 /** Whether a custom rule applies to this request. `text` = the latest user words. */

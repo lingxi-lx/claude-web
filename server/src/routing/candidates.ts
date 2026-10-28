@@ -9,6 +9,7 @@ import type { CostClass, RoutingCandidate, RoutingCaps, RoutingConfig, RoutingNe
 import { candidateKey } from './types.js';
 import { tr } from '../i18n/index.js';
 import { isClaudeModel } from '../usage/pricing.js';
+import { modelAllowed } from '../upstreams/routing.js';
 
 /** Past this share of a window the request does not fit (the answer needs room too). */
 const FIT = 0.9;
@@ -72,6 +73,40 @@ export const candidateLabel = (c: RoutingCandidate, look: CandidateLookup): stri
 /** paid with no price the budget can use: none set on the candidate, and not a Claude model (list price) */
 export const unpriced = (c: RoutingCandidate): boolean => !c.price && !isClaudeModel(c.model);
 
+/**
+ * What the gateway key that sent the request may reach (spec §7.4: routing is no way around a key's permissions).
+ * Absent = the owner's own traffic (no extra limits).
+ */
+export interface RouteAccess {
+  /** the key group's model lists: the candidate's model must pass them (not just the virtual `smart-*` name) */
+  modelAllowlist?: string[];
+  modelDeny?: string[];
+  /** subscription accounts (account logins) — false for share keys unless the key opts in */
+  subscription?: boolean;
+  /** paid candidates: false = never; else this key's own daily USD budget and what it spent today */
+  paid?: false | { budgetUsd: number; spentTodayUsd: number };
+  /** source refs (`p:<id>` / `a:<id>` / `u:<id>`) or candidate keys this key may use; absent / empty = all */
+  sources?: string[];
+}
+
+/** `p:id` / `a:id` / `u:id` of a candidate key (`p:id#model`). */
+export const sourceOfKey = (key: string): string => key.slice(0, key.indexOf('#') < 0 ? key.length : key.indexOf('#'));
+
+/** Why the key may not use this candidate, or null. */
+export function accessDenied(access: RouteAccess | undefined, c: RoutingCandidate, key: string, cost: CostClass): string | null {
+  if (!access) return null;
+  if (access.sources?.length && !access.sources.includes(key) && !access.sources.includes(sourceOfKey(key))) return tr('这个密钥不能用这个来源');
+  if (!modelAllowed(c.model, access.modelAllowlist, access.modelDeny)) return tr('这个密钥不能用模型 {model}', { model: c.model });
+  if (cost === 'subscription' && access.subscription === false) return tr('共享密钥不能用订阅账号');
+  if (cost === 'paid' && access.paid !== undefined) {
+    if (access.paid === false) return tr('这个密钥没有付费额度');
+    // the key's own budget cannot hold what an unpriced one spends (the owner's allowUnpriced is not the key's)
+    if (unpriced(c)) return tr('不知道价格，预算算不出它的花费');
+    if (access.paid.spentTodayUsd >= access.paid.budgetUsd) return tr('这个密钥今天的付费额度用完了');
+  }
+  return null;
+}
+
 export interface Eligible { c: RoutingCandidate; key: string; label: string; cost: CostClass; caps: RoutingCaps; index: number }
 export interface Filtered { ok: Eligible[]; out: { c: RoutingCandidate; key: string; label: string; cost: CostClass; caps: RoutingCaps; why: string }[] }
 
@@ -87,6 +122,8 @@ export function filterCandidates(o: {
   /** why the source cannot be used right now (missing, cooling, disabled); null = usable */
   unusable(c: RoutingCandidate, key: string): string | null;
   spentTodayUsd: number;
+  /** the calling key's limits (share keys): checked on every candidate */
+  access?: RouteAccess;
 }): Filtered {
   const res: Filtered = { ok: [], out: [] };
   o.config.candidates.forEach((c, index) => {
@@ -96,6 +133,8 @@ export function filterCandidates(o: {
     const caps = capsOf(c, o.look);
     const why = ((): string | null => {
       if (!c.allowAuto) return tr('没有允许自动路由使用');
+      const denied = accessDenied(o.access, c, key, cost);
+      if (denied) return denied;
       const u = o.unusable(c, key);
       if (u) return u;
       if (o.needs.tools && caps.tools === false) return tr('不支持工具');

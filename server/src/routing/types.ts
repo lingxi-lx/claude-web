@@ -56,6 +56,23 @@ export interface RoutingCandidate {
    * is never used under one — unless the user ticks this (its spend then counts as $0).
    */
   allowUnpriced?: boolean;
+  /** 权重 mode: relative weight (unset = by the quota it has left; 0 = never picked by weight) */
+  weight?: number;
+}
+
+/**
+ * How the eligible candidates are ordered: `smart` = the strategy's scores (policies.ts); the rest are the plain
+ * selectors in selectors.ts (configured order, round-robin, least used, use-before-reset, weighted, fastest).
+ */
+export type RoutingMode = 'smart' | 'order' | 'rotate' | 'usage' | 'pace' | 'weight' | 'fast';
+export const ROUTING_MODES: RoutingMode[] = ['smart', 'order', 'rotate', 'usage', 'pace', 'weight', 'fast'];
+
+/** 意图判断 (spec 2026-10-27 §7.5): one intent the judge model may answer, and the candidates it puts first. */
+export interface RoutingIntent {
+  /** the intent in the user's words (what the judge model reads) */
+  label: string;
+  /** candidate keys (`candidateKey`) */
+  prefer: string[];
 }
 
 /** A structured custom rule: when every given condition holds, the preferred candidates go first (in that order). */
@@ -81,6 +98,12 @@ export interface RoutingConfig {
   /** 自定义: the user's own words (kept; no model reads them yet — `classifyHook` is where one would) */
   ruleText?: string;
   rules?: RoutingRule[];
+  /** how eligible candidates are ordered (unset = smart) */
+  mode?: RoutingMode;
+  /** 意图判断: intents for the judge model (自定义 only; a matching structured rule wins and skips the call) */
+  intents?: RoutingIntent[];
+  /** the candidate key of the judge model (a provider candidate); unset = no intent call */
+  intentJudge?: string;
 }
 
 export const DEFAULT_ROUTING: RoutingConfig = { policy: 'auto', candidates: [], failover: true, maxAttempts: 3, allowPaid: false };
@@ -109,9 +132,38 @@ export interface RoutingCandidateView {
   excluded?: string;
   /** paid with no known price: the budget cannot see what it spends (see RoutingCandidate.allowUnpriced) */
   unpriced?: boolean;
+  /** what the upstream's headers / 429s said about its quota (absent = never said) */
+  quota?: RoutingQuotaView;
 }
 
+/** A source's quota as seen in its answers: share left 0–1, when the tightest window refills, a 429 cooldown. */
+export interface RoutingQuotaView { remaining?: number; resetAt?: number; cooldownUntil?: number; last429At?: number }
+
 export interface RoutingAttempt { key: string; label: string; status: number; outcome: 'done' | 'final' | 'switch' | 'broken' | 'aborted' }
+
+/** A decision's replay step (§8.10 "生成 Decision + Trace"; §6.5 回放: 第 N 轮 · 规则命中 · 判断模型 323ms). */
+export type RoutingTraceStage =
+  | 'group'
+  | 'filter'
+  | 'rank'
+  | 'rule'
+  | 'classifier'
+  | 'order'
+  | 'affinity'
+  | 'attempt'
+  | 'finish';
+
+export type RoutingTraceData = Record<string, string | number | boolean>;
+
+export interface RoutingTraceStep {
+  /** ms since the decision started (never negative) */
+  at: number;
+  stage: RoutingTraceStage;
+  /** what happened, in the interface language (the caller passes a tr() string) */
+  text: string;
+  /** small structured details (keys, counts, durations) for the replay UI */
+  data?: RoutingTraceData;
+}
 
 /** One routing decision: what was considered, what was picked and why, and what happened. */
 export interface RoutingDecision {
@@ -125,6 +177,8 @@ export interface RoutingDecision {
   reason: string;
   chosen?: { key: string; label: string; model: string };
   attempts: RoutingAttempt[];
+  /** ordered replay steps (§8.10); optional so old logs / other callers stay valid */
+  trace?: RoutingTraceStep[];
   ok: boolean;
   /** the answer came from another candidate than the one first chosen */
   switched: boolean;

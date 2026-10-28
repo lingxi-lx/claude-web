@@ -102,3 +102,52 @@ describe('Router.plan', () => {
     expect(plan(r, ir([{ role: 'user', parts: [{ type: 'text', text: 'x' }] }]), { candidates: [paidPriced], allowPaid: true, budgetUsd: 1 }).order).toEqual([]);
   });
 });
+
+describe('the calling key limits what routing may pick (S1, §7.4)', () => {
+  const all = cfg({ candidates: [free, local, sub, paidPriced, paidUnpriced], allowPaid: true, budgetUsd: 100 });
+  const pick = (access: Parameters<typeof filterCandidates>[0]['access'], spent = 0) =>
+    filterCandidates({ config: all, policy: 'auto', needs, look, unusable: () => null, spentTodayUsd: spent, access }).ok.map((e) => e.c);
+
+  it('a candidate whose model fails the key model allow-list is out (not just the virtual smart-* name)', () => {
+    expect(pick({ modelAllowlist: ['qwen*', 'smart-*'] })).toEqual([local]);
+    expect(pick({ modelDeny: ['gpt-*'] })).not.toContain(paidPriced);
+  });
+
+  it('a share key gets no subscription accounts and no paid sources by default', () => {
+    expect(pick({ subscription: false, paid: false })).toEqual([free, local]);
+    expect(pick({ subscription: true, paid: false })).toEqual([free, local, sub]);
+  });
+
+  it('paid only against the key own budget — never an unpriced one, never past it — and the owner budget still holds', () => {
+    expect(pick({ paid: { budgetUsd: 2, spentTodayUsd: 0 } })).toContain(paidPriced);
+    expect(pick({ paid: { budgetUsd: 2, spentTodayUsd: 0 } })).not.toContain(paidUnpriced);
+    expect(pick({ paid: { budgetUsd: 2, spentTodayUsd: 2 } })).not.toContain(paidPriced);
+    expect(pick({ paid: { budgetUsd: 2, spentTodayUsd: 0 } }, 100)).not.toContain(paidPriced);
+  });
+
+  it('a per-key source list keeps only those sources', () => {
+    expect(pick({ sources: ['p:local'] })).toEqual([local]);
+    expect(pick({ sources: ['p:or#deepseek/deepseek-r1:free'] })).toEqual([free]);
+  });
+
+  it('Router.plan applies the access and the answer is charged as this request spend', () => {
+    const r = new Router();
+    const req = ir([{ role: 'user', parts: [{ type: 'text', text: 'x' }] }]);
+    const p = r.plan({ groupId: 'g', config: cfg({ candidates: [sub, paidPriced], allowPaid: true, budgetUsd: 100 }), model: 'smart-auto', ir: req, json: {}, look, unusable: () => null, access: { subscription: false, paid: { budgetUsd: 5, spentTodayUsd: 0 } } });
+    expect(p.order.map((e) => e.c)).toEqual([paidPriced]);
+    expect(p.decision.candidates.find((c) => c.excluded)?.excluded).toMatch(/订阅/);
+    r.attempt(p, p.order[0], { status: 200, kind: 'done', usage: { input: 500_000, output: 0 } });
+    expect(p.spentUsd).toBe(1);
+  });
+
+  it('planAsync applies it too, and the trace says why each candidate was left out', async () => {
+    const r = new Router();
+    const req = ir([{ role: 'user', parts: [{ type: 'text', text: 'x' }] }]);
+    const p = await r.planAsync({ groupId: 'g', config: cfg({ candidates: [free, sub, paidPriced], allowPaid: true, budgetUsd: 100, mode: 'order' }), model: 'smart-auto', ir: req, json: {}, look, unusable: () => null, access: { subscription: false, paid: false } });
+    expect(p.order.map((e) => e.c)).toEqual([free]);
+    r.finish(p);
+    const filtered = (p.decision.trace ?? []).filter((s) => s.stage === 'filter').map((s) => s.text).join('\n');
+    expect(filtered).toMatch(/订阅/);
+    expect(filtered).toMatch(/付费额度/);
+  });
+});
