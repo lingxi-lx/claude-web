@@ -90,7 +90,7 @@ describe.runIf(!!permissionFlag() && !process.versions.electron)('a real child u
       runner.stop();
       await gone;
     }
-  }, 20_000);
+  }, 45_000); // above the runner's own 10 s start + 10 s call limits: a loaded machine fails with its reason, not a test timeout
 
   // macOS: os.tmpdir() is /var/folders/…, a symlink to /private/var/folders/…; Node's permission model compares
   // resolved paths, so allow-paths given only through the link denied the plugin its own entry file (it exited 1)
@@ -111,7 +111,7 @@ describe.runIf(!!permissionFlag() && !process.versions.electron)('a real child u
       await gone;
       fs.rmSync(link, { recursive: false, force: true });
     }
-  }, 20_000);
+  }, 45_000);
 });
 
 describe('withResolved', () => {
