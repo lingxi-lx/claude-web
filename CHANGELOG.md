@@ -4,6 +4,21 @@
 
 Every version's changes are recorded here; installers are on the [Releases](https://github.com/ypyik0669/claude-web/releases) page. Versions follow [semantic versioning](https://semver.org/).
 
+## [0.4.3] — 2026-10-28
+
+### Added
+
+- **The privacy page's local model downloads completely inside the app.** One button, 「下载运行库和模型」, fetches the model and the onnxruntime runtime it needs (about 154 MB, each file checked against its published hash) into the app's data folder. No terminal, no `npm i`, no restart. 「删除模型和运行库」 removes both.
+- **Client fingerprint can be set per account**, not only per provider (模型 → 设置 → 客户端指纹).
+
+### Fixed
+
+- **Choosing a project folder works from any browser** ([#12](https://github.com/ypyik0669/claude-web/issues/12)). On Linux without zenity or a display, and from a browser on another computer, 「打开文件夹」 did nothing. When the system's folder dialog can't be shown, the app now opens its own folder browser: it lists the folders on the computer running Claude Web, lets you go up, type a path, show hidden folders, and make a new folder. On Linux, kdialog is tried when zenity is missing.
+- **Settings and dialogs no longer show the system's own controls.** Dropdowns, checkboxes and text boxes that rendered as plain Windows widgets (模型 → 设置, sharing and LAN, sync, routing rules, plugins, the provider editor, several settings sections and dialogs) now use the app's own dropdowns, switches and fields; the LAN IP allow-list is laid out properly.
+- **Menus near the top of the window can be clicked everywhere.** The top rows of a sidebar conversation's right-click menu sat over the window's drag strip and did nothing; every menu, list and dialog is now exempt from it.
+- **Menus no longer open under the window's minimise / maximise / close buttons.** The conversation header's ⋯ menu could open behind them; menus near the top right now open below them.
+- **A share key with nothing ticked is told so plainly** (403 「这个密钥还没有可用的网关组」) instead of "name a group" with an empty list.
+
 ## [0.4.2] — 2026-10-28
 
 This release turns the 上游 (upstream) page into a full model hub: one place for every model source — free ones, subscriptions, relays — with smart routing across them, privacy masking on the way out, plugins, sync and sharing. The techniques that CLIProxyAPI and Magpie use are now built into Claude Web itself, and both programs ship inside the installer for the logins only they can do.
