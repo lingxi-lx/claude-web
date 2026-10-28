@@ -67,3 +67,22 @@ describe('spotOrigin: where a sidebar menu scales in from (UI refresh §4.5)', (
     expect(spotOrigin(a, spot, { w: 180, h: 2000 })).toBe('166px 407px'); // anchor centre y 415 − 8
   });
 });
+
+describe('placeFixed: never under the desktop window buttons', () => {
+  const caption = { left: 1760, top: 0, right: 1920, bottom: 40 };
+  const view = { vw: 1920, vh: 1080 };
+  it('a menu that would sit under the buttons moves below them; one beside them stays', () => {
+    // the conversation header's ⋯ at the top right: right-aligned, pinned near the top
+    const a = { left: 1880, top: 8, right: 1910, bottom: 30 };
+    const spot = placeFixed(a, { w: 320, h: 1100 }, view, { caption });
+    expect(spot.top).toBe(44);
+    expect(spot.maxHeight).toBe(1080 - 44 - 8);
+    // a sidebar menu on the left is not near the buttons
+    const left = placeFixed({ left: 70, top: 8, right: 340, bottom: 30 }, { w: 300, h: 1100 }, view, { caption, align: 'left' });
+    expect(left.top).toBe(8);
+  });
+  it('no caption box (browser, macOS): unchanged', () => {
+    const a = { left: 1880, top: 8, right: 1910, bottom: 30 };
+    expect(placeFixed(a, { w: 320, h: 1100 }, view, { caption: null })).toEqual(placeFixed(a, { w: 320, h: 1100 }, view));
+  });
+});

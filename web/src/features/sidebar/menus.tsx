@@ -7,6 +7,7 @@ import { byPointer } from '@/ui/input-intent';
 import { MENU_OUT_MS } from '@/ui/menu-motion';
 import { ActionSheet, useSheetMenu } from '@/ui/ActionSheet';
 import { placeFixed, spotOrigin } from './place';
+import { captionBox } from '@/ui/caption';
 
 /** On a phone the sidebar is a drawer over the page: after an action it gets out of the way of what the action did. */
 export const closeDrawer = () => { if (useStore.getState().mobile) useStore.setState({ sidebarOpen: false }); };
@@ -42,7 +43,7 @@ export function useAnchoredMenu(ref: React.RefObject<HTMLElement | null>, onClos
       Object.assign(el.style, { position: 'fixed', right: 'auto', bottom: 'auto', maxHeight: '', overflowY: '', overscrollBehavior: '' });
       const a = anchor.getBoundingClientRect(), size = { w: el.offsetWidth, h: el.scrollHeight };
       const side = anchor.closest('.sidebar')?.getBoundingClientRect();
-      const spot = placeFixed(a, size, { vw: window.innerWidth, vh: window.innerHeight }, { ...opts.current, ...(side && opts.current.side !== 'right' ? { minLeft: Math.max(8, Math.round(side.left) + 4) } : {}) });
+      const spot = placeFixed(a, size, { vw: window.innerWidth, vh: window.innerHeight }, { ...opts.current, caption: captionBox(), ...(side && opts.current.side !== 'right' ? { minLeft: Math.max(8, Math.round(side.left) + 4) } : {}) });
       el.style.left = `${spot.left}px`;
       el.style.top = `${spot.top}px`;
       if (spot.maxHeight) Object.assign(el.style, { maxHeight: `${spot.maxHeight}px`, overflowY: 'auto', overscrollBehavior: 'contain' });

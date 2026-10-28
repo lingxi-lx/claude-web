@@ -1,6 +1,8 @@
 // Where a sidebar menu goes: fixed to the viewport next to its anchor, so the scrolling list, the sidebar's
 // overflow and a pane edge never clip it. Pure; `useAnchoredMenu` (menus.tsx) measures and applies it.
 
+import { clearOfCaption, type CaptionBox } from '@/ui/caption';
+
 export interface AnchorRect { left: number; top: number; right: number; bottom: number }
 export interface MenuSpot { left: number; top: number; maxHeight?: number }
 
@@ -18,7 +20,16 @@ const SIDE_GAP = 8;
  * `side: 'right'`: beside the anchor instead (the icon rail's menus) — its top edge level with the anchor's, or its
  * bottom edge with `prefer: 'up'` (a menu at the foot of the rail).
  */
-export function placeFixed(a: AnchorRect, size: { w: number; h: number }, view: { vw: number; vh: number }, o: { align?: 'left' | 'right'; prefer?: 'down' | 'up'; side?: 'right'; minLeft?: number } = {}): MenuSpot {
+export function placeFixed(a: AnchorRect, size: { w: number; h: number }, view: { vw: number; vh: number }, o: { align?: 'left' | 'right'; prefer?: 'down' | 'up'; side?: 'right'; minLeft?: number; caption?: CaptionBox | null } = {}): MenuSpot {
+  const spot = placeRaw(a, size, view, o);
+  // never under the desktop window's own buttons (they are drawn over the page: those rows could not be clicked)
+  const top = clearOfCaption(spot.left, spot.top, size.w, o.caption ?? null);
+  if (top === spot.top) return spot;
+  const room = view.vh - top - EDGE;
+  return size.h > room ? { left: spot.left, top, maxHeight: room } : { left: spot.left, top };
+}
+
+function placeRaw(a: AnchorRect, size: { w: number; h: number }, view: { vw: number; vh: number }, o: { align?: 'left' | 'right'; prefer?: 'down' | 'up'; side?: 'right'; minLeft?: number }): MenuSpot {
   const { w, h } = size, { vw, vh } = view;
   if (o.side === 'right') {
     const sx = Math.max(EDGE, Math.min(a.right + SIDE_GAP, vw - w - EDGE));

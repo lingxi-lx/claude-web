@@ -25,7 +25,8 @@ import { Toasts } from '@/ui/Toasts';
 import { SourcePickerLazy } from '@/features/recording/SourcePickerLazy';
 import { RecordingIndicator } from '@/features/recording/RecordingIndicator';
 import { chromeVisibility, workbenchOn } from '@/model/layout';
-import { captionHeightAt, captionRow } from '@/features/workbench/tab-row';
+import { captionHeight, captionHeightAt, captionRow, captionWidth } from '@/features/workbench/tab-row';
+import { setCaptionSize } from '@/ui/caption';
 import { installZoom, useZoom } from '@/ui/zoom';
 import { MOBILE_QUERY, drawerYields } from '@/ui/viewport';
 import { installAutomation } from '@/features/automation/state';
@@ -215,7 +216,10 @@ export function App() {
       const cs = getComputedStyle(document.documentElement);
       const linux = document.documentElement.classList.contains('linux');
       const px = (name: string) => parseFloat(cs.getPropertyValue(name));
-      const height = captionHeightAt(zoom, capRow, { gap: linux ? 0 : px('--shell-gap'), head: px('--h-head'), bar: px('--h-bar') });
+      const dims = { gap: linux ? 0 : px('--shell-gap'), head: px('--h-head'), bar: px('--h-bar') };
+      const height = captionHeightAt(zoom, capRow, dims);
+      // menus keep clear of the buttons (ui/caption.ts) — not on macOS, whose traffic lights are on the left
+      setCaptionSize(document.documentElement.classList.contains('mac') ? null : { w: captionWidth(zoom), h: captionHeight(capRow, dims) });
       d.setTitleBarColors(cs.getPropertyValue('--bg-1').trim(), cs.getPropertyValue('--fg-1').trim(), linux ? cs.getPropertyValue(sideSurface ? '--bg-1' : '--bg').trim() : '#00000000', height);
     }, 0);
     return () => clearTimeout(t);

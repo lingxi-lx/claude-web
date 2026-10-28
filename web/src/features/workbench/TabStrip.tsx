@@ -9,6 +9,7 @@ import { Icon, type IconName } from '@/ui/icons';
 import { MIME_TILE, hasType, tilePayload } from './dnd';
 import { SidebarReveal } from './pane-edge';
 import { tr } from '@/i18n';
+import { captionBox } from '@/ui/caption';
 
 export function tileTitle(t: Tile, sessions: { sessionId: string; title: string }[]): { icon: IconName; text: string } {
   const icon = iconFor(t);
@@ -52,7 +53,7 @@ export function TabStrip({ pane, groupId, index, zoomed, single, lead, workbench
     if (!menu || !el || !anchor) return;
     const place = () => {
       el.style.maxHeight = '';
-      const spot = placeFixed(anchor.getBoundingClientRect(), { w: el.offsetWidth, h: el.scrollHeight }, { vw: window.innerWidth, vh: window.innerHeight }, { align: 'left' });
+      const spot = placeFixed(anchor.getBoundingClientRect(), { w: el.offsetWidth, h: el.scrollHeight }, { vw: window.innerWidth, vh: window.innerHeight }, { align: 'left', caption: captionBox() });
       el.style.left = `${spot.left}px`;
       el.style.top = `${spot.top}px`;
       el.style.maxHeight = spot.maxHeight ? `${spot.maxHeight}px` : '';
