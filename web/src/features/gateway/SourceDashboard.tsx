@@ -19,8 +19,10 @@ const FAMILY_ICON: Partial<Record<SourceSummary['kind'], IconName>> = { 'claude-
 /** How many models a source has: its own list, or what its accounts / pools reported. */
 export function sourceModelIds(s: SourceSummary, accounts: UpstreamAccountView[], poolIds: string[], poolModels: Record<string, string[]> | undefined): string[] {
   if (s.models.length) return s.models.map((m) => m.id);
-  if (!s.upstreamKind) return [];
-  return familyModels(accountsOf(s, accounts).map((a) => a.id), poolIds, poolModels);
+  const mine = accountsOf(s, accounts);
+  const own = mine.flatMap((a) => a.models ?? []);
+  if (!s.upstreamKind && !s.providerId) return [...new Set(own)];
+  return [...new Set([...own, ...familyModels(mine.map((a) => a.id), poolIds, poolModels)])];
 }
 
 const resetText = (t?: number) => (t ? tr('{time} 重置', { time: new Date(t).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'numeric', day: 'numeric' }) }) : '');

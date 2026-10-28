@@ -6,6 +6,7 @@ import { Icon } from '@/ui/icons';
 import { useGateway } from './state';
 import { AccountRow } from './AccountRow';
 import { AddAccountWizard } from './AddAccountWizard';
+import { ProviderLoginWizard } from './ProviderLoginWizard';
 import { AccountEditor } from './AccountEditor';
 import type { UpstreamAccountView, UpstreamGroup, UpstreamKind } from '@shared';
 import { ModelMapEditor } from './ModelMapEditor';
@@ -14,7 +15,7 @@ import { tr } from '@/i18n';
 import { canSignIn, forgetGeminiLogin, signInGemini } from './gemini-login';
 import { Select } from '@/ui/Select';
 
-const KINDS: UpstreamKind[] = ['claude', 'gemini', 'workbuddy'];
+const KINDS: UpstreamKind[] = ['claude', 'gemini', 'workbuddy', 'provider'];
 
 const POOL_STRATEGY: Record<UpstreamGroup['strategy'], string> = {
   failover: tr('按顺序故障转移'),
@@ -38,6 +39,7 @@ export function AccountsTab({ kind }: { kind?: UpstreamKind }) {
   const status = useGateway((s) => s.status);
   const toast = useStore((s) => s.toast);
   const [add, setAdd] = useState(false);
+  const [login, setLogin] = useState(false);
   const [editing, setEditing] = useState<UpstreamAccountView | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const reload = () => useGateway.getState().load().catch(() => {});
@@ -107,6 +109,7 @@ export function AccountsTab({ kind }: { kind?: UpstreamKind }) {
       <div className="gateway-row">
         <span className="grow">{tr('账号（{n}）', { n: accounts.length })}</span>
         {!kind && <span className="sub">{KINDS.map((k) => `${FAMILY_LABEL[k]} ${accounts.filter((a) => a.kind === k).length}`).join(' · ')}</span>}
+        {!kind && <button className="btn sm ghost" onClick={() => setLogin(true)}>{tr('第三方登录')}</button>}
         <button className="btn sm" onClick={() => setAdd(true)}>{tr('添加账号')}</button>
       </div>
       {accounts.length === 0 && <div className="empty">{tr('还没有账号。点「添加账号」登录一个。')}</div>}
@@ -181,6 +184,7 @@ export function AccountsTab({ kind }: { kind?: UpstreamKind }) {
         </div>
       ))}
       {add && <AddAccountWizard kind={kind} onClose={() => { setAdd(false); void reload(); }} />}
+      {login && <ProviderLoginWizard onClose={() => { setLogin(false); void reload(); }} />}
       {editing && <AccountEditor account={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void reload(); }} />}
     </div>
   );

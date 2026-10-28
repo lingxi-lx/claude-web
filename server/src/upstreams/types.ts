@@ -1,7 +1,11 @@
 // 账号池 (embedded gateway, phase A): one upstream login of any family, and the pools they are grouped into.
 // Shared with the web client through protocol.ts.
+import type { ProviderLoginInfo } from './oauth-registry.js';
+export type { ProviderLoginInfo } from './oauth-registry.js';
+export type { LoginSessionView, LoginSessionState } from './provider-login.js';
 
-export type UpstreamKind = 'claude' | 'gemini' | 'workbuddy';
+/** `provider` = a generic provider login (codex / copilot / opencode …); its providerId says which registry entry. */
+export type UpstreamKind = 'claude' | 'gemini' | 'workbuddy' | 'provider';
 export type SidecarId = 'gemini' | 'workbuddy';
 
 export interface QuotaWindow {
@@ -23,6 +27,8 @@ export interface QuotaSnapshot {
 export interface UpstreamAccount {
   id: string;
   kind: UpstreamKind;
+  /** kind 'provider': which provider-login registry entry this account came from */
+  providerId?: string;
   name: string;
   enabled: boolean;
   /** enc:…; the plaintext is a JSON envelope (see normalizeCredential) */
@@ -35,6 +41,8 @@ export interface UpstreamAccount {
   maxConcurrent?: number;
   dailyRequestLimit?: number;
   identity?: { email?: string; plan?: string; org?: string; expiresAt?: number };
+  /** the models the last probe listed (provider accounts; the gateway menu reads this) */
+  models?: string[];
   source: 'oauth' | 'paste' | 'file' | 'qr' | 'desktop';
   createdAt: number;
   updatedAt: number;
@@ -55,6 +63,8 @@ export interface UpstreamAccount {
 
 export interface UpstreamAccountInput {
   kind: UpstreamKind;
+  /** kind 'provider': registry id (codex / copilot / anthropic / …) */
+  providerId?: string;
   name?: string;
   credential: unknown;
   credentialKind?: UpstreamAccount['credentialKind'];
@@ -105,6 +115,8 @@ export interface UpstreamStatus {
   groups: UpstreamGroup[];
   /** one line per family: can it be used yet (Claude now; Gemini / WorkBuddy need a sidecar) */
   families: { kind: UpstreamKind; ready: boolean; detail?: string }[];
+  /** every provider-login definition the add wizard can offer (available or with an honest reason) */
+  logins?: ProviderLoginInfo[];
   /** the Gemini / WorkBuddy processes: installed, running, port */
   sidecars?: SidecarStatus[];
   /** things the user should look at (a family with no healthy account, stopped accounts) */
@@ -253,6 +265,10 @@ export type TaskRequest =
 
 export type UpstreamRequest =
   | { kind: 'upstreams.status' }
+  | { kind: 'upstreams.login.providers' }
+  | { kind: 'upstreams.login.begin'; providerId: string; mode?: 'oauth' | 'device' | 'paste' | 'local'; credential?: string; name?: string }
+  | { kind: 'upstreams.login.status'; loginId: string }
+  | { kind: 'upstreams.login.cancel'; loginId: string }
   | { kind: 'upstreams.sidecars.status' }
   | { kind: 'upstreams.sidecars.install'; id: SidecarId }
   | { kind: 'upstreams.sidecars.start'; id: SidecarId }

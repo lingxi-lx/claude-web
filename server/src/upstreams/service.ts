@@ -13,6 +13,7 @@ import { GeminiAdapter } from './gemini.js';
 import { WorkBuddyAdapter } from './workbuddy.js';
 import { maskProxyUrl, normalizeAccountProxy } from './proxy.js';
 import { probeExit, startExitTunnel, type ExitTunnel } from './exit-tunnel.js';
+import { ProviderLoginService, refreshProviderCredential, type ProviderLoginBegin } from './provider-login.js';
 import type { SidecarDriver, SidecarReadOptions } from './drivers.js';
 import type {
   LoginTunnel,
@@ -45,6 +46,10 @@ export interface UpstreamDeps {
   workbuddy?: SidecarDriver;
   /** where a Claude login's requests go (tests point it at a fake) */
   claudeBase?: string;
+  /** fetch used by provider logins / provider probes (tests pass a fake; never real in unit tests) */
+  providerFetch?: typeof fetch;
+  /** where local-credential readers look (tests pass a temp home) */
+  home?: string;
   now?: () => number;
 }
 
@@ -59,6 +64,8 @@ export class UpstreamService extends EventEmitter {
   readonly store: AccountStore;
   readonly affinity = new AffinityTable();
   readonly sidecars: SidecarManager;
+  readonly logins: ProviderLoginService;
+  private providerFetch: typeof fetch;
   private claude: ClaudeAdapter;
   private gemini: SidecarDriver;
   private workbuddy: SidecarDriver;
@@ -86,6 +93,13 @@ export class UpstreamService extends EventEmitter {
     this.sidecars = deps.sidecars ?? new SidecarManager();
     this.gemini = deps.gemini ?? new GeminiAdapter(this.sidecars);
     this.workbuddy = deps.workbuddy ?? new WorkBuddyAdapter(this.sidecars);
+    this.providerFetch = deps.providerFetch ?? fetch;
+    this.logins = new ProviderLoginService({
+      accounts: { add: (input) => this.add(input) },
+      fetch: this.providerFetch,
+      home: deps.home,
+      now: deps.now,
+    });
     this.sidecars.on('changed', () => this.emit('changed'));
     this.sidecars.on('crash', (id: SidecarId, detail: string) => this.emit('crash', id, detail));
   }
@@ -112,6 +126,7 @@ export class UpstreamService extends EventEmitter {
         this.familyLine('gemini', sidecar.get('gemini')),
         this.familyLine('workbuddy', sidecar.get('workbuddy')),
       ],
+      logins: this.logins.providers(),
       sidecars: [...sidecar.values()],
       warnings,
     };
@@ -136,8 +151,20 @@ export class UpstreamService extends EventEmitter {
   }
 
   async add(input: UpstreamAccountInput): Promise<{ account: UpstreamAccountView; duplicate: boolean; id: string }> {
+    if (input.kind === 'provider') return this.addProvider(input);
     if (input.kind !== 'claude') return this.addSidecar(input);
     const { account, duplicate } = await this.store.add(input);
+    if (!duplicate && input.probe !== false) await this.probe(account.id);
+    await this.ensureDefaultGroup(account.id);
+    this.emit('changed');
+    return { account: this.view(this.store.get(account.id)!), duplicate, id: account.id };
+  }
+
+  /** A generic provider login (codex / copilot / an imported OpenCode entry): local credential, gateway target. */
+  private async addProvider(input: UpstreamAccountInput): Promise<{ account: UpstreamAccountView; duplicate: boolean; id: string }> {
+    if (!input.providerId?.trim()) throw new Error(tr('第三方登录账号缺少 providerId'));
+    if (input.proxy && !normalizeAccountProxy(input.proxy)) throw new Error(tr('代理地址需要 http(s):// 或 socks5://'));
+    const { account, duplicate } = await this.store.add({ ...input, probe: false });
     if (!duplicate && input.probe !== false) await this.probe(account.id);
     await this.ensureDefaultGroup(account.id);
     this.emit('changed');
@@ -309,6 +336,32 @@ export class UpstreamService extends EventEmitter {
   async probe(id: string): Promise<UpstreamAccountView> {
     const a = this.store.get(id);
     if (!a) throw new Error(tr('没有这个账号'));
+    if (a.kind === 'provider') {
+      try {
+        let r = await this.probeProvider(a);
+        if (r.health === 'expired') {
+          // Codex / Copilot tokens expire; refresh silently before telling the user to sign in again
+          const credential = JSON.parse(await this.store.revealCredential(a));
+          const refreshed = await refreshProviderCredential(this.providerFetch, a.providerId ?? String(credential.providerId ?? ''), credential, this.now())
+            .catch(() => null);
+          if (refreshed) {
+            await this.store.update(id, { credential: refreshed, credentialKind: refreshed.kind === 'oauth' ? 'oauth' : 'token' });
+            r = await this.probeProvider(this.store.get(id)!);
+          }
+        }
+        await this.store.setHealth(id, {
+          health: r.health,
+          lastError: r.error,
+          ...(r.cooldownUntil ? { cooldownUntil: r.cooldownUntil } : {}),
+          ...(r.health === 'ok' ? { lastOkAt: this.now() } : {}),
+          ...(r.models ? { models: r.models } : {}),
+        });
+      } catch (e: any) {
+        await this.store.setHealth(id, { health: 'error', lastError: e?.message ?? String(e) });
+      }
+      this.emit('changed');
+      return this.view(this.store.get(id)!);
+    }
     if (a.kind !== 'claude') {
       const driver = this.driver(a.kind)!;
       try {
@@ -352,6 +405,54 @@ export class UpstreamService extends EventEmitter {
   async reset(id: string): Promise<void> {
     await this.store.setHealth(id, { health: 'unknown', cooldownUntil: undefined, lastError: undefined });
     this.emit('changed');
+  }
+
+  /**
+   * A provider account's health: one model-list request with the same credential/headers the gateway will use.
+   * It never sends a prompt (no tokens spent) and never logs the credential.
+   */
+  private async probeProvider(a: UpstreamAccount): Promise<{ health: UpstreamAccount['health']; models?: string[]; error?: string; cooldownUntil?: number }> {
+    let c: any;
+    try { c = JSON.parse(await this.store.revealCredential(a)); } catch { return { health: 'error', error: tr('凭据无法读取') }; }
+    const token = c.token ?? c.accessToken;
+    if (typeof token !== 'string' || !token) return { health: 'error', error: tr('凭据里没有令牌') };
+    const base = String(c.baseUrl ?? '').replace(/\/+$/, '');
+    if (!base) return { health: 'error', error: tr('没有接口地址') };
+    const protocol = String(c.protocol ?? '');
+    // vendor-root bases (Copilot / Codex) list /models directly; a plain OpenAI / Anthropic base needs its version
+    const versioned = /\/v\d+[a-z]*$/i.test(base);
+    const url = c.chatPath || versioned
+      ? `${base}/models`
+      : protocol === 'gemini' ? `${base}/v1beta/models`
+        : `${base}/v1/models`;
+    const headers: Record<string, string> = { accept: 'application/json', ...(c.headers ?? {}) };
+    if (c.accountId) headers['chatgpt-account-id'] = String(c.accountId);
+    if (protocol === 'gemini') headers['x-goog-api-key'] = token;
+    else if (protocol === 'anthropic') {
+      headers['anthropic-version'] = '2023-06-01';
+      if (c.authStyle === 'bearer') headers.authorization = `Bearer ${token}`;
+      else if (c.authStyle === 'x-api-key') headers['x-api-key'] = token;
+      else { headers.authorization = `Bearer ${token}`; headers['x-api-key'] = token; }
+    } else if (c.authStyle === 'x-api-key') headers['x-api-key'] = token;
+    else headers.authorization = `Bearer ${token}`;
+    let res: Response;
+    try {
+      res = await this.providerFetch(url, { headers, signal: AbortSignal.timeout(20_000) });
+    } catch (e: any) {
+      return { health: 'error', error: tr('连接失败：{message}', { message: e?.message ?? String(e) }) };
+    }
+    const text = await res.text().catch(() => '');
+    if (res.status === 401 || res.status === 403) return { health: 'expired', error: `HTTP ${res.status} ${text.slice(0, 160)}`.trim() };
+    if (res.status === 429) {
+      const retry = Number(res.headers.get('retry-after') ?? '');
+      return { health: 'cooling', error: `HTTP 429 ${text.slice(0, 160)}`.trim(), cooldownUntil: this.now() + (Number.isFinite(retry) && retry > 0 ? retry * 1000 : 60_000) };
+    }
+    if (!res.ok) return { health: 'error', error: `HTTP ${res.status} ${text.slice(0, 160)}`.trim() };
+    let j: any = null;
+    try { j = JSON.parse(text); } catch { /* a model list is optional: a 200 still proves the login */ }
+    const raw: any[] = Array.isArray(j?.data) ? j.data : Array.isArray(j?.models) ? j.models : Array.isArray(j) ? j : [];
+    const models = raw.map((m: any) => String(m?.id ?? m?.slug ?? m?.name ?? m)).filter((x) => !!x && x !== 'undefined');
+    return { health: 'ok', ...(models.length ? { models: [...new Set(models)] } : {}) };
   }
 
   /** a gateway request failed on this account: keep the account row's health in step with the member state */
@@ -485,6 +586,39 @@ export class UpstreamService extends EventEmitter {
     const sidecarModels = new Map<UpstreamKind, string[]>(this.familyModelsCache);
     const knownElsewhere = !!model && [...sidecarModels.values()].some((list) => list.includes(model));
     for (const a of accounts) {
+      if (a.kind === 'provider') {
+        // a probed provider list only serves the models it names (a group's modelMap may have changed the model)
+        if (model && a.models?.length && !a.models.includes(model)) continue;
+        let c: any;
+        try { c = JSON.parse(await this.store.revealCredential(a)); } catch { continue; }
+        const token = c.token ?? c.accessToken;
+        if (typeof token !== 'string' || !token) continue;
+        const protocol = ['anthropic', 'openai', 'responses', 'gemini'].includes(String(c.protocol)) ? String(c.protocol) : 'openai';
+        const type: 'anthropic' | 'openai' | 'gemini' = protocol === 'anthropic' ? 'anthropic' : protocol === 'gemini' ? 'gemini' : 'openai';
+        const proxy = await this.store.revealProxy(a).catch(() => undefined);
+        const headers = {
+          ...(c.headers ?? {}),
+          ...(c.accountId ? { 'chatgpt-account-id': String(c.accountId) } : {}),
+        };
+        out.push({
+          id: a.id,
+          name: a.name,
+          type,
+          baseUrl: String(c.baseUrl ?? ''),
+          apiKey: token,
+          createdAt: 0,
+          protocol: protocol as 'anthropic' | 'openai' | 'responses' | 'gemini',
+          ...(c.authStyle ? { authStyle: c.authStyle } : {}),
+          ...(Object.keys(headers).length ? { headers } : {}),
+          ...(c.chatPath ? { chatPath: c.chatPath } : {}),
+          ...(a.kind === 'provider' && protocol === 'anthropic' && c.kind === 'oauth' ? { auth: 'oauth' as const, forceTranslate: true } : {}),
+          ...(model ? { model } : {}),
+          ...(proxy ? { proxy } : {}),
+          ...(a.cooldownUntil && a.cooldownUntil > this.now() ? { degraded: true } : {}),
+          account: true,
+        });
+        continue;
+      }
       if (a.kind === 'claude') {
         if (knownElsewhere) continue;
         const credential = JSON.parse(await this.store.revealCredential(a));
@@ -698,6 +832,8 @@ export class UpstreamService extends EventEmitter {
   }
 
   familyModels(kind: UpstreamKind): string[] {
+    // provider accounts each have their own model list (an account row), not one per family
+    if (kind === 'provider') return [];
     const known = this.familyModelsCache.get(kind) ?? [];
     // The list a sidecar reports depends on the login: without a usable account it answers only the anonymous
     // models (2), after a sign-in it answers the subscription's full set. So it goes stale — refresh on a TTL,
@@ -738,6 +874,34 @@ export class UpstreamService extends EventEmitter {
     if (kind === 'workbuddy') return ['checkin', 'keepalive', 'growth', 'travel', 'lottery', 'activity', 'quota-refresh', 'account-check'];
     return ['account-check', 'quota-refresh'];
   }
+
+  /**
+   * The models a gateway member brings to the menu: a provider account has its own probed list; a provider pool is
+   * the union of its members; every other family reports one list per sidecar.
+   */
+  modelsForMember(m: { accountId?: string; upstreamGroupId?: string }): string[] {
+    if (m.accountId) {
+      const a = this.store.get(m.accountId);
+      if (!a) return [];
+      return a.kind === 'provider' ? (a.models ?? []) : this.familyModels(a.kind);
+    }
+    if (m.upstreamGroupId) {
+      const g = this.groups().find((x) => x.id === m.upstreamGroupId);
+      if (!g) return [];
+      if (g.kind !== 'provider') return this.familyModels(g.kind);
+      const out = new Set<string>();
+      for (const id of g.members) for (const model of this.store.get(id)?.models ?? []) out.add(model);
+      return [...out];
+    }
+    return [];
+  }
+
+  // ---- generic provider logins (upstreams.login.*) ----
+
+  loginProviders() { return this.logins.providers(); }
+  loginBegin(input: ProviderLoginBegin) { return this.logins.begin(input); }
+  loginStatus(id: string) { return this.logins.status(id); }
+  loginCancel(id: string) { return this.logins.cancel(id); }
 
   // ---- sidecar management (phase B/C) ----
 

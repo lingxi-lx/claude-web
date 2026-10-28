@@ -85,6 +85,39 @@ describe('AccountStore', () => {
     expect(n.credentialKind).toBe('oauth');
     expect(JSON.parse(n.credential)).toMatchObject({ kind: 'oauth', accessToken: 'at', refreshToken: 'rt', expiresAt: 123 });
   });
+
+  it('normalizes a pasted provider token with the registry defaults', () => {
+    const n = normalizeCredential('provider', 'cop-token', 'token', 'copilot');
+    expect(n.credentialKind).toBe('token');
+    expect(JSON.parse(n.credential)).toMatchObject({
+      kind: 'token', providerId: 'copilot', protocol: 'openai',
+      baseUrl: 'https://api.githubcopilot.com', chatPath: '/chat/completions', token: 'cop-token',
+    });
+  });
+
+  it('keeps an explicit provider envelope and strips credential-overriding headers', () => {
+    const n = normalizeCredential('provider', {
+      kind: 'oauth', providerId: 'codex', protocol: 'responses', baseUrl: 'https://chatgpt.com/backend-api/codex',
+      accessToken: 'at', refreshToken: 'rt', expiresAt: 99,
+      headers: { originator: 'codex_cli_rs', authorization: 'stolen', 'X-Api-Key': 'stolen' },
+    }, 'oauth', 'codex');
+    expect(n.credentialKind).toBe('oauth');
+    expect(JSON.parse(n.credential)).toMatchObject({
+      kind: 'oauth', providerId: 'codex', protocol: 'responses', accessToken: 'at', refreshToken: 'rt', expiresAt: 99,
+      headers: { originator: 'codex_cli_rs' },
+    });
+  });
+
+  it('dedupes provider accounts by provider + credential, not across providers', async () => {
+    const { store } = await make();
+    const a = await store.add({ kind: 'provider', providerId: 'copilot', credential: 'same', credentialKind: 'token' });
+    const b = await store.add({ kind: 'provider', providerId: 'copilot', credential: 'same', credentialKind: 'token' });
+    const c = await store.add({ kind: 'provider', providerId: 'codex', credential: 'same', credentialKind: 'token' });
+    expect(b.duplicate).toBe(true);
+    expect(c.duplicate).toBe(false);
+    expect(store.list()).toHaveLength(2);
+    expect(a.account.providerId).toBe('copilot');
+  });
 });
 
 describe('account proxy', () => {

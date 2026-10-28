@@ -46,7 +46,10 @@ export function SourceDetail({ source }: { source: SourceSummary }) {
     () => (provider ? [provider.name] : [...mine.map((a) => a.name), ...myPools.map((p) => p.name)]),
     [provider, mine, myPools],
   );
-  const familyList = kind ? familyModels(mine.map((a) => a.id), myPools.map((p) => p.id), status?.poolModels) : [];
+  const familyList = [...new Set([
+    ...mine.flatMap((a) => a.models ?? []),
+    ...(kind ? familyModels(mine.map((a) => a.id), myPools.map((p) => p.id), status?.poolModels) : []),
+  ])];
   const lastError = mine.find((a) => a.lastError)?.lastError ?? sidecar?.detail;
   const q = kind ? quotaLeft(mine) : undefined;
   const h = HEALTH_TEXT[source.health];

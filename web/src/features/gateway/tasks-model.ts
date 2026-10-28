@@ -18,12 +18,14 @@ export const FAMILY_TASKS: Record<UpstreamKind, MaintenanceKind[]> = {
   claude: ['account-check', 'quota-refresh'],
   gemini: ['keepalive', 'account-check'],
   workbuddy: ['checkin', 'keepalive', 'growth', 'travel', 'lottery', 'activity', 'quota-refresh', 'account-check'],
+  provider: ['account-check', 'quota-refresh'],
 };
 
 export const FAMILY_LABEL: Record<UpstreamKind, string> = {
   claude: 'Claude',
   gemini: tr('Gemini 网页'),
   workbuddy: 'WorkBuddy',
+  provider: tr('第三方登录'),
 };
 
 export const kindLabel = (k: MaintenanceKind): string => KIND_LABEL[k] ?? k;

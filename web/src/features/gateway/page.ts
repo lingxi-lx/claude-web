@@ -47,9 +47,11 @@ export function filterCounts(list: SourceSummary[]): Record<SourceFilter, number
   return out;
 }
 
-/** The accounts behind a subscription source (by family). */
+/** The accounts behind a subscription source (by family), or a descriptor source's provider logins. */
 export const accountsOf = (s: SourceSummary, accounts: UpstreamAccountView[]): UpstreamAccountView[] =>
-  s.upstreamKind ? accounts.filter((a) => a.kind === s.upstreamKind) : [];
+  s.upstreamKind ? accounts.filter((a) => a.kind === s.upstreamKind)
+    : s.providerId ? accounts.filter((a) => a.providerId === s.providerId)
+      : [];
 
 /**
  * The tightest known quota left (in %) over some accounts — undefined when nothing is known (never a made-up number),

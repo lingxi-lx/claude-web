@@ -6,6 +6,7 @@ import type { SecretService } from '../secrets/service.js';
 import type { GatewayKey, GatewayKeyGroup, GatewayKeyStatus, ShareRules } from '../gateway/types.js';
 import { tr } from '../i18n/index.js';
 import { globMatch, modelAllowed } from './routing.js';
+import type { RouteAccess } from '../routing/candidates.js';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const thisMonth = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -29,16 +30,24 @@ export function currentPeriod(k: GatewayKey): NonNullable<GatewayKey['period']> 
   return p;
 }
 
+/** The key group share keys (远程共享) live in. */
+export const SHARE_GROUP = 'share';
+
 /**
  * The rules a share key actually runs under: its group's, narrowed by the key's own (never widened).
  * Route groups intersect (the group's empty list = all); models must pass both lists; concurrency takes the lower.
+ * A key in the share group reaches no route group until some are ticked for it (S1: an empty list there is
+ * "nothing", never "every group" — else a key made with nothing ticked could call 智能路由 on everything).
  */
 export function effectiveGroup(g: GatewayKeyGroup, share?: ShareRules): GatewayKeyGroup {
-  if (!share) return g;
+  const shareGroup = g.id === SHARE_GROUP;
+  if (!share && !shareGroup) return g;
+  share ??= {};
   let routeGroupIds = g.routeGroupIds;
   if (share.routeGroupIds?.length) routeGroupIds = g.routeGroupIds.length ? share.routeGroupIds.filter((id) => g.routeGroupIds.includes(id)) : share.routeGroupIds;
+  else if (shareGroup) routeGroupIds = [];
   // a narrowing that leaves nothing must stay nothing, not fall back to "all"
-  if (share.routeGroupIds?.length && !routeGroupIds.length) routeGroupIds = ['~none~'];
+  if ((share.routeGroupIds?.length || shareGroup) && !routeGroupIds.length) routeGroupIds = ['~none~'];
   let modelAllowlist = g.modelAllowlist;
   if (share.models?.length) {
     modelAllowlist = g.modelAllowlist?.length
@@ -49,6 +58,22 @@ export function effectiveGroup(g: GatewayKeyGroup, share?: ShareRules): GatewayK
   const conc = [g.rateLimit?.concurrent, share.concurrent].filter((n): n is number => !!n && n > 0);
   const rateLimit = conc.length ? { ...g.rateLimit, concurrent: Math.min(...conc) } : g.rateLimit;
   return { ...g, routeGroupIds, ...(modelAllowlist ? { modelAllowlist } : {}), ...(rateLimit ? { rateLimit } : {}) };
+}
+
+/**
+ * What 智能路由 may pick for this key (spec §7.4): the key group's model lists always; for share keys also no
+ * subscription accounts unless the key opts in, paid sources only against the key's own daily budget (never the
+ * owner's), and only the sources listed for it.
+ */
+export function routeAccess(key: GatewayKey, group: GatewayKeyGroup): RouteAccess {
+  const access: RouteAccess = { modelAllowlist: group.modelAllowlist, modelDeny: group.modelDeny };
+  if (key.keyGroupId !== SHARE_GROUP && !key.share) return access;
+  const sh = key.share ?? {};
+  const spent = key.stats.day === today() ? key.stats.costUsd : 0;
+  access.subscription = !!sh.subscription;
+  access.paid = sh.paidBudgetUsd && sh.paidBudgetUsd > 0 ? { budgetUsd: sh.paidBudgetUsd, spentTodayUsd: spent } : false;
+  if (sh.sources?.length) access.sources = sh.sources;
+  return access;
 }
 
 export function newKeyParts(): { plaintext: string; prefix: string; hash: string; salt: string } {

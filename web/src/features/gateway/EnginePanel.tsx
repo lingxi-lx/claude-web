@@ -5,6 +5,7 @@ import { dlg } from '@/ui/dialog';
 import { Icon } from '@/ui/icons';
 import type { EngineId, EngineStatus, EngineStep, Provider } from '@shared';
 import { useGateway } from './state';
+import { EngineLoginDialog } from './EngineLoginDialog';
 import { tr } from '@/i18n';
 
 /** Each step of a long install / start, in words. */
@@ -43,6 +44,7 @@ export function EnginePanel({ id, onReady }: { id: EngineId; onReady?(p: Provide
   const step = useGateway((s) => s.engineStep[id]);
   const error = useGateway((s) => s.engineError[id]);
   const [busy, setBusy] = useState<string | null>(null);
+  const [login, setLogin] = useState(false);
 
   if (!e) return <div className="sub">{tr('正在读取…')}</div>;
 
@@ -82,7 +84,7 @@ export function EnginePanel({ id, onReady }: { id: EngineId; onReady?(p: Provide
   return (
     <div className="gw-engine" data-engine={id}>
       <div className="gw-kv"><span className="muted">{tr('状态')}</span><span>{engineStateText(e)}</span></div>
-      {e.installed && e.version && <div className="gw-kv"><span className="muted">{tr('版本')}</span><span>{e.version}{e.verified === 'release' ? ` · ${tr('已按发布的校验值核对')}` : e.verified === 'recorded' ? ` · ${tr('已核对首次安装时记下的校验值')}` : ''}</span></div>}
+      {e.installed && e.version && <div className="gw-kv"><span className="muted">{tr('版本')}</span><span>{e.version}{e.bundled ? ` · ${tr('随应用附带')}` : e.verified === 'release' ? ` · ${tr('已按发布的校验值核对')}` : e.verified === 'recorded' ? ` · ${tr('已核对首次安装时记下的校验值')}` : ''}</span></div>}
       {e.platform && !e.installed && <div className="gw-kv"><span className="muted">{tr('来自')}</span><span>{e.repo}</span></div>}
       {doing && <div className="gw-engine-step" role="status"><Icon name="refresh" size={12} /> {doing}</div>}
       {error && <div className="gw-warn" role="alert"><Icon name="alert" size={13} /><span>{error}</span></div>}
@@ -101,15 +103,20 @@ export function EnginePanel({ id, onReady }: { id: EngineId; onReady?(p: Provide
         {e.running && e.mode !== 'connected' && (
           <button className="btn sm ghost" disabled={!!busy} onClick={() => void run('stop', {})}>{tr('停止')}</button>
         )}
+        {e.installed && e.mode !== 'connected' && (
+          <button className="btn sm" disabled={!!busy} onClick={() => setLogin(true)}>{tr('登录账号')}</button>
+        )}
         <span className="grow" />
         {e.installed && e.mode !== 'connected' && (
           <>
             <button className="btn sm ghost" disabled={!!busy} onClick={() => void run('upgrade', {})}>{tr('更新')}</button>
             {e.previousVersion && <button className="btn sm ghost" disabled={!!busy} onClick={() => void run('rollback', {})}>{tr('回到 {version}', { version: e.previousVersion })}</button>}
-            <button className="btn sm ghost danger" disabled={!!busy} onClick={() => void uninstall()}>{tr('卸载')}</button>
+            {/* the bundled build is part of the app, not something this page can remove */}
+            {!e.bundled && <button className="btn sm ghost danger" disabled={!!busy} onClick={() => void uninstall()}>{tr('卸载')}</button>}
           </>
         )}
       </div>
+      {login && <EngineLoginDialog engine={id} onClose={() => setLogin(false)} onDone={() => void useGateway.getState().loadEngines()} />}
     </div>
   );
 }

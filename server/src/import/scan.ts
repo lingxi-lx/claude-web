@@ -6,6 +6,8 @@ import { parse as parseJsonc } from 'jsonc-parser';
 import { parse as parseToml } from 'smol-toml';
 import { parse as parseYaml } from 'yaml';
 import type { ProviderType } from '../protocol.js';
+import { readCpa } from './cpa.js';
+import { preferredEndpoint, readMagpieProviders } from './magpie.js';
 
 /**
  * 从其它工具导入 (2026-10-17 user request: 「Hermes 的配置迁移到你的项目」, and Mirasim, and every other IDE / agent):
@@ -16,7 +18,8 @@ import type { ProviderType } from '../protocol.js';
 
 export type SourceId =
   | 'hermes' | 'cc-switch' | 'codex' | 'opencode' | 'gemini' | 'qwen' | 'cursor' | 'windsurf' | 'kiro' | 'claude-desktop'
-  | 'vscode' | 'cline' | 'roo' | 'continue' | 'zed' | 'goose' | 'ollama' | 'mirasim' | 'cherry-studio';
+  | 'vscode' | 'cline' | 'roo' | 'continue' | 'zed' | 'goose' | 'ollama' | 'mirasim' | 'cherry-studio'
+  | 'cliproxyapi' | 'magpie';
 
 export interface FoundProvider {
   kind: 'provider';
@@ -57,6 +60,10 @@ const json = (p: string): any => { const t = read(p); if (t === null) return nul
 const yaml = (p: string): any => { const t = read(p); if (t === null) return null; try { const v = parseYaml(t); return v && typeof v === 'object' ? v : null; } catch { return null; } };
 const toml = (p: string): any => { const t = read(p); if (t === null) return null; try { return parseToml(t); } catch { return null; } };
 const exists = (p: string) => { try { fs.accessSync(p); return true; } catch { return false; } };
+const firstExisting = (paths: string[]): string | null => paths.find((p) => exists(p)) ?? null;
+/** CPA / Magpie speak one of these four; the provider list knows three (Vertex goes through OpenAI-compatible). */
+const providerTypeOf = (protocol: string): FoundProvider['type'] =>
+  protocol === 'anthropic' ? 'anthropic' : protocol === 'gemini' ? 'gemini' : 'openai';
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
 const strs = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
 const record = (v: unknown): Record<string, string> => {
@@ -326,6 +333,57 @@ const SOURCES: Record<SourceId, Scan> = {
       const models = ((await r.json()) as any)?.models?.map((m: any) => str(m?.name)).filter(Boolean) ?? [];
       if (models.length) out.push({ kind: 'provider', key: 'ollama:provider:local', from: 'ollama', name: 'Ollama', type: 'openai', baseUrl: `${base}/v1`, apiKey: 'ollama', models, defaultModel: models[0] });
     } catch { /* not running */ }
+  },
+  /** CLIProxyAPI: config.yaml's provider groups (one provider row per key) */
+  cliproxyapi: async (w, out) => {
+    const dirs = [
+      str(w.env.CLIPROXYAPI_HOME), str(w.env.CLI_PROXY_API_HOME),
+      path.join(w.home, '.cli-proxy-api'), path.join(w.home, '.cliproxyapi'),
+      path.join(w.home, '.config', 'cliproxyapi'), path.join(w.appData, 'CLIProxyAPI'),
+    ].filter(Boolean);
+    const config = firstExisting(dirs.map((d) => path.join(d, 'config.yaml')));
+    if (!config) return;
+    let cpa;
+    try { cpa = await readCpa(config, { home: w.home }); } catch { return; }
+    for (const p of cpa.providers) {
+      if (!p.baseUrl) continue;
+      p.apiKeys.forEach((apiKey, i) => {
+        if (!apiKey) return;
+        const name = p.apiKeys.length > 1 ? `${p.name} #${i + 1}` : p.name;
+        out.push({
+          kind: 'provider', key: `cliproxyapi:provider:${p.id}:${i}`, from: 'cliproxyapi', name,
+          type: providerTypeOf(p.protocol), baseUrl: p.baseUrl, apiKey,
+          ...(p.models.length ? { models: p.models, defaultModel: p.models[0] } : {}),
+        });
+      });
+    }
+  },
+  /** Magpie: providers.json (one provider row per enabled key, on its preferred endpoint) */
+  magpie: async (w, out) => {
+    const roots = [
+      str(w.env.MAGPIE_HOME),
+      path.join(w.appData, 'Magpie'), path.join(w.appData, 'magpie'),
+      path.join(w.home, 'Library', 'Application Support', 'Magpie'),
+      path.join(w.home, '.config', 'magpie'), path.join(w.home, '.magpie'),
+    ].filter(Boolean);
+    const file = firstExisting(roots.map((d) => path.join(d, 'providers.json')));
+    if (!file) return;
+    let m;
+    try { m = await readMagpieProviders(file); } catch { return; }
+    for (const p of m.providers) {
+      if (p.off) continue;
+      const ep = preferredEndpoint(p);
+      if (!ep) continue;
+      p.apiKeys.forEach((apiKey, i) => {
+        if (!apiKey) return;
+        const name = p.apiKeys.length > 1 ? `${p.name} #${i + 1}` : p.name;
+        out.push({
+          kind: 'provider', key: `magpie:provider:${p.id}:${i}`, from: 'magpie', name,
+          type: providerTypeOf(ep.protocol), baseUrl: ep.baseUrl, apiKey,
+          ...(p.models.length ? { models: p.models, defaultModel: p.models[0] } : {}),
+        });
+      });
+    }
   },
   /** Mirasim keeps its settings encrypted in a browser database: there, but not readable as files */
   mirasim: (w, _out, unreadable) => { if (exists(path.join(w.appData, '@mirasim', 'desktop'))) unreadable.push({ from: 'mirasim', reason: 'encrypted' }); },

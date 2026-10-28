@@ -91,6 +91,58 @@ describe('a fresh setup', () => {
   });
 });
 
+describe('provider login accounts', () => {
+  it('resolves a Copilot account to an OpenAI gateway target with its vendor path and headers', async () => {
+    const { svc } = await make();
+    const { account } = await svc.add({
+      kind: 'provider', providerId: 'copilot', name: 'Copilot', probe: false,
+      credential: {
+        kind: 'token', providerId: 'copilot', protocol: 'openai', baseUrl: 'https://api.githubcopilot.com',
+        token: 'cop-token', headers: { 'editor-version': 'Neovim/0.6.1' }, chatPath: '/chat/completions',
+      },
+      credentialKind: 'token',
+    });
+    const [t] = await svc.resolveMembers({ accountId: account.id }, 'gpt-4o');
+    expect(t).toMatchObject({
+      id: account.id, type: 'openai', protocol: 'openai', baseUrl: 'https://api.githubcopilot.com',
+      apiKey: 'cop-token', chatPath: '/chat/completions', headers: { 'editor-version': 'Neovim/0.6.1' }, account: true,
+    });
+    await svc.store.setHealth(account.id, { models: ['gpt-4o', 'claude-sonnet-4.5'] });
+    expect(svc.modelsForMember({ accountId: account.id })).toEqual(['gpt-4o', 'claude-sonnet-4.5']);
+  });
+
+  it('keeps a Codex account on the Responses protocol and its backend path', async () => {
+    const { svc } = await make();
+    const { account } = await svc.add({
+      kind: 'provider', providerId: 'codex', name: 'Codex', probe: false,
+      credential: {
+        kind: 'oauth', providerId: 'codex', protocol: 'responses', baseUrl: 'https://chatgpt.com/backend-api/codex',
+        accessToken: 'at', refreshToken: 'rt', headers: { originator: 'codex_cli_rs' }, chatPath: '/responses',
+      },
+      credentialKind: 'oauth',
+    });
+    const [t] = await svc.resolveMembers({ accountId: account.id }, 'gpt-5.1-codex');
+    expect(t).toMatchObject({ type: 'openai', protocol: 'responses', chatPath: '/responses', apiKey: 'at' });
+    expect(t.auth).toBeUndefined(); // not an Anthropic OAuth login
+  });
+
+  it('uses a provider pool’s union of models', async () => {
+    const { svc } = await make();
+    const a = (await svc.add({ kind: 'provider', providerId: 'copilot', probe: false, credential: {
+      kind: 'token', providerId: 'copilot', protocol: 'openai', baseUrl: 'https://api.githubcopilot.com', token: 'a',
+    } })).account;
+    const b = (await svc.add({ kind: 'provider', providerId: 'codex', probe: false, credential: {
+      kind: 'oauth', providerId: 'codex', protocol: 'responses', baseUrl: 'https://chatgpt.com/backend-api/codex', accessToken: 'b',
+    } })).account;
+    await svc.store.setHealth(a.id, { models: ['gpt-4o'] });
+    await svc.store.setHealth(b.id, { models: ['gpt-5.1-codex'] });
+    const g = await svc.upsertGroup({ kind: 'provider', name: 'Logins', strategy: 'failover', members: [a.id, b.id] });
+    expect(svc.modelsForMember({ upstreamGroupId: g.id }).sort()).toEqual(['gpt-4o', 'gpt-5.1-codex']);
+    const targets = await svc.resolveMembers({ upstreamGroupId: g.id }, 'gpt-4o');
+    expect(targets.map((t) => t.id)).toEqual([a.id]);
+  });
+});
+
 describe('account concurrency', () => {
   it('gives out maxConcurrent slots and takes them back', async () => {
     const { svc } = await make();

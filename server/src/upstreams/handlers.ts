@@ -9,6 +9,10 @@ export const isUpstreamRequest = (req: { kind: string }): req is UpstreamRequest
 export async function handleUpstreamRequest(svc: UpstreamService, tasks: MaintenanceScheduler, req: UpstreamRequest): Promise<unknown> {
   switch (req.kind) {
     case 'upstreams.status': return svc.status();
+    case 'upstreams.login.providers': return svc.loginProviders();
+    case 'upstreams.login.begin': return svc.loginBegin({ providerId: req.providerId, mode: req.mode, credential: req.credential, name: req.name });
+    case 'upstreams.login.status': return svc.loginStatus(req.loginId);
+    case 'upstreams.login.cancel': await svc.loginCancel(req.loginId); return null;
     case 'upstreams.sidecars.status': return svc.sidecarStatus();
     case 'upstreams.sidecars.install': return svc.installSidecar(req.id);
     case 'upstreams.sidecars.start': return svc.startSidecar(req.id);
