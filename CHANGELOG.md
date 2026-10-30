@@ -4,6 +4,18 @@
 
 Every version's changes are recorded here; installers are on the [Releases](https://github.com/ypyik0669/claude-web/releases) page. Versions follow [semantic versioning](https://semver.org/).
 
+## [0.4.4] — 2026-10-30
+
+### Added
+
+- **Every installed MCP server can be edited.** Connectors has a pencil on each connected server, and Settings → MCP has 「编辑」: change the command, its arguments and environment variables, or the URL and headers of an HTTP / SSE server. The server is saved back where it was (every project, the project's `.mcp.json`, or this project on this computer). Values that look like keys show as dots and stay as they are unless you change them, and they keep their value when you rename the variable. If a save fails, the old configuration is put back.
+- **Importing finds MCP servers in more apps**: Pencil, Trae / Trae CN, Antigravity, LM Studio, VS Code Insiders and VSCodium. Cline and Roo Code are found in every VS Code-style editor, not only VS Code.
+
+### Fixed
+
+- **Pencil's MCP server can be imported in a form that keeps working.** The Pencil extension writes its server into other tools with a path inside a versioned extension folder, which disappears when the extension updates. Import now reads the copy Pencil keeps in `~/.pencil/mcp/`, which has no version in its path.
+- **Import marks servers whose program is gone** with 「程序不在了」 and leaves them unticked, instead of importing a server that cannot start.
+
 ## [0.4.3] — 2026-10-28
 
 ### Added

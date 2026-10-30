@@ -4,6 +4,18 @@
 
 每个版本的变化都记在这里；安装包在 [Releases](https://github.com/ypyik0669/claude-web/releases) 下载。版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.4.4] — 2026-10-30
+
+### 新增
+
+- **已装的 MCP 都能编辑了。** 连接器里每个已连接的服务器有一个铅笔按钮，设置 → MCP 里有「编辑」：可以改命令、参数和环境变量，HTTP / SSE 的服务器可以改地址和请求头。保存时写回它原来的位置（所有项目、项目的 `.mcp.json`、或只在这台电脑的这个项目）。像密钥的值显示成圆点，不改就保持原样；给变量改名时值也跟着走。保存失败会把原来的配置恢复回去。
+- **导入能找到更多应用里的 MCP**：Pencil、Trae / Trae CN、Antigravity、LM Studio、VS Code Insiders、VSCodium。Cline 和 Roo Code 在所有 VS Code 系的编辑器里都能找到，不只是 VS Code。
+
+### 修复
+
+- **Pencil 的 MCP 能导入成一直可用的样子。** Pencil 插件写进其它工具的路径在带版本号的插件目录里，插件一升级就没了。导入现在读 Pencil 放在 `~/.pencil/mcp/` 里、路径不带版本号的那一份。
+- **导入会标出程序已经不在的 MCP**：写「程序不在了」、默认不勾，不再把启动不了的服务器导进来。
+
 ## [0.4.3] — 2026-10-28
 
 ### 新增
