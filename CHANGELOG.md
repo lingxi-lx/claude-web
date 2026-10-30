@@ -4,7 +4,7 @@
 
 Every version's changes are recorded here; installers are on the [Releases](https://github.com/ypyik0669/claude-web/releases) page. Versions follow [semantic versioning](https://semver.org/).
 
-## [0.4.4] — 2026-10-30
+## [0.4.5] — 2026-10-30
 
 ### Added
 
@@ -13,6 +13,7 @@ Every version's changes are recorded here; installers are on the [Releases](http
 
 ### Fixed
 
+- **Conversation names no longer turn into the latest message.** A renamed conversation could show its most recent message as its name — while chatting and after a restart — once the conversation grew long, and a conversation that was never renamed kept changing its name to whatever was said last. Names are now read from the whole conversation: your own name first, then the name Claude Code gave it, then the first question. Never the latest message.
 - **Pencil's MCP server can be imported in a form that keeps working.** The Pencil extension writes its server into other tools with a path inside a versioned extension folder, which disappears when the extension updates. Import now reads the copy Pencil keeps in `~/.pencil/mcp/`, which has no version in its path.
 - **Import marks servers whose program is gone** with 「程序不在了」 and leaves them unticked, instead of importing a server that cannot start.
 
