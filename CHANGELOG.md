@@ -4,10 +4,12 @@
 
 Every version's changes are recorded here; installers are on the [Releases](https://github.com/ypyik0669/claude-web/releases) page. Versions follow [semantic versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.4.6] — 2026-10-30
 
 ### Fixed
 
+- **Switching a conversation to a relay and back no longer breaks it with "Invalid `signature` in `thinking` block".** A relay signs Claude's thinking its own way, and the account's API refuses those signatures; the automatic repair only removed unsigned thinking, so 重试 kept failing. Switching back now removes the thinking that other providers wrote (your account's own stays), and if the API still refuses a signature, every thinking block is removed so the retry goes through.
+- **Workflow agents show the subagent model they really run on.** With a subagent model picked (for example DeepSeek under a GPT main model), the agents of a workflow / 深度编排 already ran on it, but their cards said the main model. Running and finished runs now show the real one.
 - **"EMFILE: too many open files" after the app has been running for a while.** Reading the first line of a conversation record left the file open each time; after about 8,000 of these Windows refused to open any file, so saving a provider (and anything else) failed. The file is now always closed. Restarting the app clears it on older versions.
 
 ## [0.4.5] — 2026-10-30
