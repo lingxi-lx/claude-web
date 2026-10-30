@@ -8,6 +8,7 @@ import { findClaudeTranscript } from '../runtime/transcript-file.js';
 import { createBgState, mergeWorkflowProgress } from './registry.js';
 import type { BgRunSummary, BgStatus, BgTask } from './types.js';
 import { tr } from '../i18n/index.js';
+import { unalias } from '../models/subagent.js';
 
 /** The official binary names a run `wf_xxxxxxxx-xxx`; our engine uses its task id, `w` + 8 characters. */
 const RUN_ID = /^w[\w-]{1,80}$/;
@@ -88,7 +89,32 @@ export function runError(error: unknown, status: unknown): string | undefined {
 
 export async function readRun(dir: string, runId: string): Promise<BgTask | null> {
   if (!RUN_ID.test(runId)) return null;
-  try { return taskFromRun(await readJson(path.join(dir, 'workflows', `${runId}.json`)), runId); } catch { return null; }
+  let t: BgTask;
+  try { t = taskFromRun(await readJson(path.join(dir, 'workflows', `${runId}.json`)), runId); } catch { return null; }
+  // the run file says `model ?? the main model` for each agent, whatever it really ran on (a subagent model the user
+  // picked is forced over it): what the agent's own transcript recorded is what was asked for
+  await Promise.all(t.agents.map(async (a) => {
+    if (!a.agentId || !AGENT_ID.test(a.agentId)) return;
+    const f = await findAgentFile(dir, a.agentId);
+    const m = f ? await firstModel(f) : null;
+    if (m) a.model = m;
+  }));
+  return t;
+}
+
+/** The model of a transcript's first assistant message (the alias of the split route turned back into the real name). */
+export async function firstModel(file: string, maxBytes = 1 << 20): Promise<string | null> {
+  let fh: Awaited<ReturnType<typeof fs.open>> | undefined;
+  try {
+    fh = await fs.open(file, 'r');
+    const buf = Buffer.alloc(Math.min(maxBytes, (await fh.stat()).size));
+    const { bytesRead } = await fh.read(buf, 0, buf.length, 0);
+    for (const line of buf.toString('utf8', 0, bytesRead).split('\n')) {
+      if (!line.includes('"assistant"')) continue;
+      try { const e = JSON.parse(line); if (e?.type === 'assistant' && typeof e.message?.model === 'string') return unalias(e.message.model); } catch { /* a line cut at the end */ }
+    }
+  } catch { /* unreadable */ } finally { await fh?.close(); }
+  return null;
 }
 
 /** Where a sub-agent's transcript is: beside the others, or in one of the workflow runs' folders. */

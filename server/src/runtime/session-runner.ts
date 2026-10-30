@@ -196,7 +196,7 @@ export class SessionRunner extends EventEmitter {
   private respawnPending = false;
   /** the next start takes empty blocks out of the transcript first (dropEmptyBlocks): set by that 400 and by a model switch */
   private repairEmptyBlocks = false;
-  /** …and unsigned thinking with them: the API refused a signature */
+  /** …and every thinking block with them: the API refused a signature */
   private repairUnsigned = false;
   /** the CLI's running totals (`total_cost_usd` / `modelUsage` are cumulative per process): each result is turned into its own turn's share */
   private totals: RunningTotals = { cost: 0, models: {} };
@@ -211,6 +211,8 @@ export class SessionRunner extends EventEmitter {
   private ultracodeFirst = false;
   /** the model subagents run on ('' = the main model): `CLAUDE_CODE_SUBAGENT_MODEL`, read once at start */
   private subagent = '';
+  /** the model this process's subagents really run on (forced by the variable; real name, not the alias), '' = none */
+  private subRuns = '';
   /** 思考用的语言 of this conversation (SessionMeta.thinkingLanguage: '' = the setting) */
   private ownThinkingLanguage = '';
   /** the thinking-language section the running process was started with ('' = none) */
@@ -444,8 +446,11 @@ export class SessionRunner extends EventEmitter {
       // to a Claude model: another vendor's unsigned thinking too (「Invalid `signature` in `thinking` block」 — when
       // the API said so, whatever the model is called)
       const unsigned = this.repairUnsigned || this.toClaude(startModel);
+      // the API refused a signature: a signed block it does not accept (another provider's, a relay's) — whose cannot
+      // be told from here, so every thinking block goes; only the unsigned ones went before, and 重试 failed the same way
+      const allThinking = this.repairUnsigned;
       this.repairUnsigned = false;
-      if (dropEmptyBlocks(file, { unsigned })) console.warn(`[runner] ${resumeId}: blocks the next model refuses taken out of the transcript`);
+      if (dropEmptyBlocks(file, { unsigned, allThinking })) console.warn(`[runner] ${resumeId}: blocks the next model refuses taken out of the transcript`);
     }
     if (engine.kind === 'claude' && resumeId && !extra.forkSession) repairLeaf(file, resumeId);
     const saved = engine.kind === 'claude' && resumeId ? lastCostState(file, resumeId) : null;
@@ -502,6 +507,7 @@ export class SessionRunner extends EventEmitter {
     // Opus; a user's relay showed claude-sonnet-5). On the official binary a 1M Claude gets its `[1m]` like the main model
     const sub = splitAlias ?? (sameSub ? this.engineModel(engine.kind, sameSub) : undefined);
     if (sub) { fenv.CLAUDE_CODE_SUBAGENT_MODEL = sub; fenv.CLAUDE_CODE_SUBAGENT_MODEL_FORCE = '1'; }
+    this.subRuns = sub ? unalias(sub) : '';
     // 下一句提示: the `promptSuggestions` option alone did not bring one on the official binary (2026-10-16, a real
     // two-turn conversation); with the CLI's own switch it did
     if (promptSuggestionsOn && !('CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION' in fenv) && process.env.CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION === undefined) fenv.CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION = '1';
@@ -768,6 +774,11 @@ export class SessionRunner extends EventEmitter {
       };
       this.emit('info', this.info);
       if (!busy) this.setState('idle');
+    }
+    // a workflow's agents: the engine reports `model ?? the main model`, but runs them on CLAUDE_CODE_SUBAGENT_MODEL
+    // (forced) — the cards said routego/gpt-6.1-sol while DeepSeek answered (2026-10-30 user report 「子代理没按我设置的来」)
+    if (this.subRuns && m.type === 'system' && Array.isArray((m as any).workflow_progress)) {
+      for (const e of (m as any).workflow_progress) if (e?.type === 'workflow_agent' && typeof e.model === 'string') e.model = this.subRuns;
     }
     this.trackBackground(m);
     // a subagent through the split route: the engine names its messages after the alias it asked with

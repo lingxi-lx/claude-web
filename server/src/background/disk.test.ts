@@ -79,6 +79,19 @@ describe('background on disk', () => {
     expect(await readRun(dir, 'wf_missing')).toBeNull();
   });
 
+  // 2026-10-30: the run file says the main model for every agent; the picked subagent model is what really answered
+  it('an agent\'s model is what its own transcript asked for (the split route\'s alias as the real name)', async () => {
+    expect((await readRun(dir, 'wf_974df824-3c8'))!.agents[0].model).toBe('claude-opus-5[1m]'); // no model in its transcript: the file's
+    const id = 'a9000000000000001';
+    writeFileSync(path.join(dir, 'workflows', 'wsubmodel1.json'), JSON.stringify(run({ runId: 'wsubmodel1', taskId: 'wsubmodel1', workflowProgress: [{ type: 'workflow_agent', index: 1, label: 'impl', state: 'done', agentId: id, model: 'routego/gpt-6.1-sol' }] })));
+    mkdirSync(path.join(dir, 'subagents', 'workflows', 'wsubmodel1'), { recursive: true });
+    writeFileSync(path.join(dir, 'subagents', 'workflows', 'wsubmodel1', `agent-${id}.jsonl`), [
+      JSON.stringify({ type: 'user', message: { role: 'user', content: 'go' } }),
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', model: 'cw-sub/deepseek-v4.1-flash', content: [{ type: 'text', text: 'ok' }] } }),
+    ].join('\n'));
+    expect((await readRun(dir, 'wsubmodel1'))!.agents[0].model).toBe('deepseek-v4.1-flash');
+  });
+
   it('reads a workflow agent or a plain sub-agent transcript', async () => {
     const msgs = await readAgentTranscript(dir, 'a43605c938e2c3f74') as any[];
     expect(msgs.map((m) => [m.type, m.message.content[0].text, m.parent_tool_use_id, m.session_id])).toEqual([['user', 'go', null, SID], ['assistant', 'done', null, SID]]);

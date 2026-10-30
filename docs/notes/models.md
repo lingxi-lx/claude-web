@@ -164,3 +164,14 @@
 - 只有系统提示那一段不够，照参考插件加了**每轮提醒**（2026-10-20，2026-10-22 已撤）：SDK 钩子 `UserPromptSubmit` / `PostToolUse` 返回 `additionalContext`，引擎把它作为 system reminder 放进最新一条消息，对话里不显示，也不动缓存前缀。
 - 假上游抓包（`cw-real/fake-upstream.cjs`）确认请求里有 `# Thinking language` 段和 `[Thinking language]` 提醒。
 - 真机：DeepSeek V4.1（aizhongzhuan，OpenAI 格式）设日语 → 三段思考全是日语；设简体中文 + 中文提问 → 中文。**Claude（Opus 5.5，账号）不照做**：连用户消息里直接写「思考过程必须全部用简体中文」都还是英文——Claude 显示的思考是官方的摘要（`thinking.display: summarized`），语言我们管不了。设置里的说明写了这一点。
+
+## 工作流里的代理显示成主模型（2026-10-30 用户报告：「子代理没有按我设置的来，还是用的主代理模型」）
+
+- 用户：主模型 Magpie（Anthropic 格式）上的 routego/gpt-6.1-sol，子代理选 DeepSeek V4.1 Flash，深度编排。工作流卡片和悬停都写 routego/gpt-6.1-sol。
+- 查下来**请求是对的**：`.probe/wf-sub.mjs`（照 `ws-phase28.mjs` 的假上游，主轮调 Workflow 工具，脚本里一个 `agent()`）——工作流代理的请求是
+  子代理模型、带另一家的 key。引擎 `claudeCodeBackend.ts` 真跑走 `runAgent → getAgentModel`（`CLAUDE_CODE_SUBAGENT_MODEL` 优先），但进度里报的是
+  `params.model ?? mainLoopModel`，所以**显示错**。
+- 修法（不发引擎）：runner 记下这个进程真正给子代理的模型（`subRuns`，别名换回真名），收到 `workflow_progress` 时把每个 `workflow_agent.model` 换成它
+  （`trackBackground` 之前，聊天里的运行卡和后台页都用这一份）；跑完的 run 文件（引擎自己写的，同样是主模型）在 `disk.ts readRun` 里按每个代理自己 transcript
+  第一条助手消息的 model 改（`firstModel`）。运行行「routego/gpt-6.1-sol · 任务输出」是主对话自己在等 TaskOutput，那是对的。
+- 测试：`session-runner.test.ts`「a workflow's agents are reported on the subagent model」、`disk.test.ts`「an agent's model is what its own transcript asked for」。

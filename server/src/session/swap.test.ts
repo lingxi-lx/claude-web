@@ -461,3 +461,12 @@ describe('per-session swap lock', () => {
     await expect(withSessionLock('x', async () => 'ok')).resolves.toBe('ok');
   });
 });
+
+describe('providerAt: who ran the conversation at a moment (whose thinking signatures those are)', () => {
+  it('before the first switch: where it came from; after each: where it went; the account is undefined', async () => {
+    const { providerAt } = await import('./swap.js');
+    const at = providerAt([{ t: 300, providerId: undefined, fromProviderId: 'relay' }, { t: 100, providerId: 'relay', fromProviderId: 'claude' }]);
+    expect([at(50), at(100), at(200), at(300), at(400)]).toEqual([undefined, 'relay', 'relay', undefined, undefined]);
+    expect(providerAt([])(1)).toBeUndefined();
+  });
+});

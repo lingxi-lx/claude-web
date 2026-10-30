@@ -161,7 +161,7 @@ export function openOnProvider<T>(
     }
     const from = d.meta.sessionMeta(sid).providerId;
     if (normProvider(to) === normProvider(from)) return hooks.open(params);
-    cleanForAnotherProvider(d, sid, to, params.model);
+    await cleanForAnotherProvider(d, sid, to, params.model);
     const out = await hooks.open(params);
     await d.canonical.ensure(sid, params.cwd); // a CLI conversation that never ran here has no mirror yet
     await recordProviderSwitch(d, sid, from, to, nameOf(to));
@@ -175,8 +175,27 @@ export function openOnProvider<T>(
  * (DeepSeek's blank unsigned thinking → Claude's 400, 2026-10-19; see dropEmptyBlocks). Called under the session lock
  * with no process of ours on the file.
  */
-function cleanForAnotherProvider(d: Pick<SwapDeps, 'meta'>, sessionId: string, providerId: string | undefined, model: string | undefined) {
-  if (dropEmptyBlocks(findClaudeTranscript(sessionId), { unsigned: goesToClaude(d, providerId, model) })) console.warn(`[swap] ${sessionId}: blocks the next provider refuses taken out of the transcript`);
+async function cleanForAnotherProvider(d: Pick<SwapDeps, 'meta' | 'canonical'>, sessionId: string, providerId: string | undefined, model: string | undefined) {
+  const toClaude = goesToClaude(d, providerId, model);
+  // a thinking signature is only good where it was issued: what another provider signed goes (the account's own stays)
+  const switches = toClaude ? await d.canonical.providerSwitches(sessionId).catch(() => []) : [];
+  const at = providerAt(switches);
+  const target = normProvider(providerId);
+  const foreign = switches.length ? (ts: number) => Number.isFinite(ts) && at(ts) !== target : undefined;
+  if (dropEmptyBlocks(findClaudeTranscript(sessionId), { unsigned: toClaude, foreign })) console.warn(`[swap] ${sessionId}: blocks the next provider refuses taken out of the transcript`);
+}
+
+/**
+ * Which provider (undefined = the account) the conversation ran on at a moment, from its recorded switches: before the
+ * first, the one that switch came from; after each, the one it went to.
+ */
+export function providerAt(switches: readonly { t: number; providerId?: string; fromProviderId?: string }[]): (ts: number) => string | undefined {
+  const list = [...switches].sort((a, b) => a.t - b.t);
+  return (ts) => {
+    let cur = normProvider(list[0]?.fromProviderId);
+    for (const s of list) { if (s.t > ts) break; cur = normProvider(s.providerId); }
+    return cur;
+  };
 }
 
 /**
@@ -222,7 +241,7 @@ async function swapProviderNow(d: Pick<SwapDeps, 'pool' | 'meta' | 'canonical'>,
     // not running: the conversation's own agent (a closed Codex conversation reopened as Claude before)
     agent: prev?.agent ?? (await (d as Partial<SwapDeps>).transcripts?.head(sessionId).catch(() => null))?.agent ?? 'claude',
   };
-  if (changed && params.agent === 'claude') cleanForAnotherProvider(d, sessionId, params.providerId, params.model);
+  if (changed && params.agent === 'claude') await cleanForAnotherProvider(d, sessionId, params.providerId, params.model);
   let r = d.pool.open(params);
   // something reopened it in the gap on the provider still on record (IM / schedules / goals open through the pool, not
   // under this lock): that process is not the switch — replace it, so the record below is what really runs

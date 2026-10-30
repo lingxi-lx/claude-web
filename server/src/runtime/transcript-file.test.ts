@@ -238,4 +238,33 @@ describe('dropEmptyBlocks: a picture sent alone left an empty text block that ma
     expect(dropEmptyBlocks(file, { unsigned: true })).toBe(0);
     fs.rmSync(dir, { recursive: true, force: true });
   });
+
+  // 2026-10-30: a relay's 「claude-opus-5.5」 signs its thinking its own way; back on the account every turn was
+  // 「Invalid `signature` in `thinking` block」 and 重试 did nothing (signed, so `unsigned` kept them)
+  it('`foreign`: the thinking of messages another provider wrote goes, the target\'s own stays; `allThinking`: all of it', async () => {
+    const { dropEmptyBlocks } = await import('./transcript-file.js');
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cw-foreign-'));
+    const file = path.join(dir, 's.jsonl');
+    const use = { type: 'tool_use', id: 't1', name: 'Read', input: {} };
+    const mine = { type: 'thinking', thinking: 'official', signature: 'CAQSrgkKEAgT' };
+    const relay = { type: 'thinking', thinking: 'relay', signature: 'EsADCkYIBxgC' };
+    const lines = [
+      { type: 'assistant', timestamp: '2026-10-30T01:00:00Z', message: { role: 'assistant', model: 'claude-opus-5-5', content: [mine, use] } },
+      { type: 'assistant', timestamp: '2026-10-30T02:00:00Z', message: { role: 'assistant', model: 'claude-opus-5.5', content: [relay, { type: 'redacted_thinking', data: 'x' }, use] } },
+      { type: 'user', timestamp: '2026-10-30T02:30:00Z', message: { role: 'user', content: [{ type: 'text', text: 'go on' }] } },
+    ].map((o) => JSON.stringify(o));
+    fs.writeFileSync(file, lines.join('\n'));
+    const relayFrom = Date.parse('2026-10-30T01:30:00Z');
+    expect(dropEmptyBlocks(file, { unsigned: true, foreign: (ts) => ts >= relayFrom })).toBe(1);
+    let out = fs.readFileSync(file, 'utf8').split('\n').map((l) => JSON.parse(l).message.content);
+    expect(out).toEqual([[mine, use], [use], [{ type: 'text', text: 'go on' }]]);
+    expect(dropEmptyBlocks(file, { allThinking: true })).toBe(1);
+    out = fs.readFileSync(file, 'utf8').split('\n').map((l) => JSON.parse(l).message.content);
+    expect(out[0]).toEqual([use]);
+    expect(dropEmptyBlocks(file, { allThinking: true })).toBe(0);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 });

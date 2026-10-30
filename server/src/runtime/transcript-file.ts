@@ -228,9 +228,22 @@ const emptyBlock = (b: any) =>
  */
 const unsignedThinking = (b: any) => b?.type === 'thinking' && !b.signature;
 
+const anyThinking = (b: any) => b?.type === 'thinking' || b?.type === 'redacted_thinking';
+
 /** a `"text"` / `"thinking"` field of only whitespace, as JSON writes it (a newline is `\n` in the file) */
 const BLANK_FIELD = /"(?:text|thinking)":"(?:\s|\\[nrt])*"/;
 const THINKING = /"type":"thinking"/;
+const REDACTED = /"type":"redacted_thinking"/;
+
+/**
+ * `unsigned`: the history goes to a Claude model — unsigned thinking goes too.
+ * `foreign(ts)`: a signature is only good where it was issued — a relay's 「claude-opus-5.5」 signs its thinking its own
+ * way, and the account's API refuses those (2026-10-30 user report: switched to a relay and back, then every turn
+ * 「Invalid `signature` in `thinking` block」, and 重试 did nothing — they were signed, so `unsigned` kept them). Every
+ * thinking block of an assistant message written at `ts` goes when this says another provider wrote it.
+ * `allThinking`: the API refused a signature and we cannot tell whose: every thinking block goes (the retry then works).
+ */
+export interface DropOpts { unsigned?: boolean; foreign?: (ts: number) => boolean; allThinking?: boolean }
 
 /**
  * Takes empty blocks out of a transcript's messages, for good: the engine sends its history again each time, so one
@@ -244,7 +257,7 @@ const THINKING = /"type":"thinking"/;
  * `unsigned`: the history goes to a Claude model — unsigned thinking goes too (the reasoning another vendor's model
  * showed is no longer in the history; Claude never saw it anyway).
  */
-export function dropEmptyBlocks(file: string | null, opts: { unsigned?: boolean } = {}): number {
+export function dropEmptyBlocks(file: string | null, opts: DropOpts = {}): number {
   if (!file) return 0;
   let text: string;
   let before: { size: number; mtimeMs: number };
@@ -253,16 +266,19 @@ export function dropEmptyBlocks(file: string | null, opts: { unsigned?: boolean 
     if (before.size > 512 * 1024 * 1024) return 0;
     text = readFileSync(file, 'utf8');
   } catch { return 0; }
-  const maybe = (s: string) => BLANK_FIELD.test(s) || (!!opts.unsigned && THINKING.test(s));
-  const drop = (b: any) => emptyBlock(b) || (!!opts.unsigned && unsignedThinking(b));
-  if (!maybe(text)) return 0;
+  const signed = !!opts.allThinking || !!opts.foreign;
+  const maybe = (s: string) => BLANK_FIELD.test(s) || ((!!opts.unsigned || signed) && (THINKING.test(s) || REDACTED.test(s)));
   let changed = 0;
   const lines = text.split('\n').map((line) => {
     if (!maybe(line)) return line;
     let e: any;
     try { e = JSON.parse(line); } catch { return line; }
     const c = e?.message?.content;
-    if ((e?.type !== 'user' && e?.type !== 'assistant') || !Array.isArray(c) || !c.some(drop)) return line;
+    if ((e?.type !== 'user' && e?.type !== 'assistant') || !Array.isArray(c)) return line;
+    // every thinking block of this message: the API said a signature is bad, or another provider signed it
+    const allOfIt = e.type === 'assistant' && (!!opts.allThinking || (!!opts.foreign && opts.foreign(Date.parse(e.timestamp))));
+    const drop = (b: any) => emptyBlock(b) || (!!opts.unsigned && unsignedThinking(b)) || (allOfIt && anyThinking(b));
+    if (!c.some(drop)) return line;
     const kept = c.filter((b: any) => !drop(b));
     e.message.content = kept.length ? kept : [{ type: 'text', text: '…' }];
     changed++;

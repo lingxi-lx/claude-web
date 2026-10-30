@@ -58,3 +58,14 @@
   之后不带模式的重开（IM、定时任务、目标、重启后别的窗口）就退回 `ui.defaultMode`——每步询问打开的会以完全放开回来。
   现在 `pool.open` 收到调用方说的模式（不是分叉）就当场记下。恢复已有对话时显式给了和记录不同的模式、而进程在 init 前就失败的，记录也已经换成新模式（之后不带模式的重开用新模式，不再回到旧记录）。测试：`pool.test.ts`「opened as … a reopen without a mode keeps it」五组对称情况；
   前端 `store.test.ts` / `reopen.test.ts` 锁住「显式 default 不是没设」。
+
+## 换到中转再换回账号：每一轮都 Invalid `signature`，重试也没用（2026-10-30 用户截图）
+
+- 对话在账号上跑 Opus，切到中转 aizhongzhuan.cc（它回的模型名是 `claude-opus-5.5`），再切回「Claude 账号」：每轮 400
+  ``messages.27.content.0: Invalid `signature` in `thinking` block``，提示「已经自动去掉了：点重试」，重试还是同一个错。
+- 原因：中转的思考块**有签名**，只是它自己的格式（解 base64 后开头不是官方的 `08 04 12`），官方验不过。上面那条的 `unsigned` 只去掉**没签名**的，
+  这些全留着——自动修复什么都没改。签名只在签发它的地方有效，同名模型、不同供应商也不行。
+- 修法：① `swap.ts` 换到 Claude 时（`cleanForAnotherProvider`）按 canonical 里记的供应商切换（`providerSwitches` → `providerAt`）判断每条助手消息是
+  哪个供应商写的，**不是目标供应商写的**消息里的思考块（含 `redacted_thinking`）全去掉，目标自己的留着（`dropEmptyBlocks` 的 `foreign`）；
+  ② runner 收到这个 400（认不出是谁签的）→ `allThinking`：历史里的思考块全去掉，重试一定通。代价：被去掉那几轮的思考过程不在历史里了。
+- 真数据（这台机器的那个对话的副本）：123 个官方签名的留下，6 个中转的去掉。测试：`transcript-file.test.ts` 的 `foreign` / `allThinking`、`swap.test.ts` 的 `providerAt`。

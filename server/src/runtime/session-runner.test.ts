@@ -2108,6 +2108,34 @@ describe('the subagents model (the composer 子代理 chip)', () => {
     }
   });
 
+  // 2026-10-30 user report: the workflow cards said the main model (routego/gpt-6.1-sol) while the picked DeepSeek ran
+  it('a workflow\'s agents are reported on the subagent model they really run on; without a pick, as the engine says', async () => {
+    eng.kind = 'ccb';
+    try {
+      queries.length = 0;
+      const p = { id: 'p1', name: 'relay', type: 'openai', baseUrl: 'https://relay.invalid', apiKey: 'k', models: ['gpt-big', 'gpt-mini'] } as any;
+      const progress = () => ({ type: 'system', subtype: 'task_progress', task_id: 'w1', session_id: 'wf-1', uuid: `p${Math.random()}`, workflow_progress: [{ type: 'workflow_phase', index: 1, title: 'x' }, { type: 'workflow_agent', index: 1, label: 'impl', model: 'gpt-big', state: 'progress' }] });
+      const seen: any[] = [];
+      const r = new SessionRunner({ sessionId: 'wf-1', cwd: '/x', model: 'gpt-big', subagentModel: 'gpt-mini' } as any, p);
+      r.on('message', (m: any) => { if (m.workflow_progress) seen.push(m.workflow_progress[1].model); });
+      await tick();
+      queries[0].push(progress());
+      await tick();
+      expect(seen).toEqual(['gpt-mini']);
+      await r.close();
+      const plain = new SessionRunner({ sessionId: 'wf-2', cwd: '/x', model: 'gpt-big' } as any, p);
+      const seen2: any[] = [];
+      plain.on('message', (m: any) => { if (m.workflow_progress) seen2.push(m.workflow_progress[1].model); });
+      await tick();
+      queries.at(-1)!.push(progress());
+      await tick();
+      expect(seen2).toEqual(['gpt-big']);
+      await plain.close();
+    } finally {
+      eng.kind = 'claude';
+    }
+  });
+
   it('the official binary: a Claude with a 1M window gets its [1m], like the main model', async () => {
     queries.length = 0;
     const p = { id: 'p2', name: 'relay', type: 'anthropic', runtime: 'claude', baseUrl: 'https://relay.invalid', apiKey: 'k', models: ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-4-5-20251001'] } as any;
