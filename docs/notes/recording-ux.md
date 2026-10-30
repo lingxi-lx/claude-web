@@ -102,6 +102,13 @@
 - **改了名过一会又变回去**：CLI 进程把标题记在内存里，`reAppendSessionMetadata` 时只从文件尾部一段里刷新——改名那一行被一长轮挤出这一段后，
   就把旧标题写回去。官方二进制有 `rename_session` 控制请求（`Query.renameSession`）；我们的引擎没有：hub 的 `renameKept` 把新名字记在
   `SessionMeta.pendingTitle`，列表显示它，进程结束后再写一次。
+- **对话名变成了对话里最后一句话（2026-10-30 用户报告，重启也一样）**：另一个原因，和上一条无关。SDK 的 `listSessions` /
+  `getSessionInfo` 只读头尾各 64 KB，标题取 `customTitle || aiTitle || lastPrompt || summary || firstPrompt`——改名那一行被后面的长轮挤出尾部
+  64 KB 后，名字就退成**最后一句话**（本机 71 个改过名的对话里 3 个已经这样，「网站设计」显示成「/model」）；没改过名、也没有 AI 标题的对话，
+  名字也会随最后一句话一直变。修法（`sessions/titles.ts`）：自己读整个 transcript 里**最后一条** `custom-title` / `ai-title`，按文件记
+  「读到哪了」只读追加的部分（文件变短就从头读），记录存在 `<数据目录>/session-titles.json`；没读过的文件在后台读一遍（本机 254 个文件、
+  4.8 GB 的目录约 8 秒），读完再通知列表刷新。名字的顺序（`rowTitle`）：改的名 → AI 标题 → 第一句话，**不用最后一句话**。`list()` 和
+  `info()`（分叉起名也走它）都用它。`pendingTitle` 仍然最优先（hub 里）。验证：`titles.test.ts`；`.probe` 脚本对真目录：三个对话的名字回来了。
 - **Mirasim 里看不到这边的对话 / 列表里少对话**：SDK 的 `listSessions` 只读每个 transcript 头尾各 64 KB；第一句很长（贴了截图——base64
   在开头写两遍：queue-operation 行和 user 行）、尾部又没有标题类的行（`custom-title` / `ai-title` / `summary` / `last-prompt`，CLI 正常
   退出才写，进程被杀就没有）的对话，**整个不列出来**（实测）。我们的列表另外扫目录补上（`sessions/unlisted.ts`，按大小 + mtime 缓存）；进程

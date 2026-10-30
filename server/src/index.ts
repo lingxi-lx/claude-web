@@ -528,7 +528,7 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   // 在外面也能用: bridges phones' links to the remote-access listener above (never to this main one)
   const anywhere = new AnywhereService(meta, remote);
   const tunnels = new TunnelManager();
-  const sessionsSvc = new SessionService();
+  const sessionsSvc = new SessionService(path.join(dataDir(), 'session-titles.json'));
   const im = new ImService(meta, secrets, pool, sessionsSvc);
   const gitSvc = new GitService();
   const terminal = new TerminalService();

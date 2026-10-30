@@ -6,7 +6,8 @@ import fs from 'node:fs/promises';
 import type { SessionSummary } from '../protocol.js';
 import { watchTree, type TreeWatcher } from '../runtime/watch-tree.js';
 import { findClaudeTranscript, hasClaudeTranscript, transcriptRoots } from '../runtime/transcript-file.js';
-import { closeSync, openSync, readFileSync, readSync } from 'node:fs';
+import { closeSync, openSync, readFileSync, readSync, readdirSync, type Dirent } from 'node:fs';
+import { TranscriptTitles, type Titles } from './titles.js';
 import { BRIEFING_HEAD } from '../session/handoff.js';
 import { tr } from '../i18n/index.js';
 import { summaryFromFile, unlistedTranscripts } from './unlisted.js';
@@ -59,6 +60,28 @@ export function cwdFromTranscript(file: string | null, maxBytes = 16 * 1024 * 10
   return '';
 }
 
+/** A row's name once the whole transcript was read: a rename, the AI title, the first prompt (not a briefing). */
+export function rowTitle(r: Pick<SessionSummary, 'sessionId' | 'title' | 'firstPrompt'>, t: Titles): string {
+  if (t.custom) return t.custom;
+  if (t.ai) return cleanTitle(t.ai) || r.title;
+  const first = cleanTitle(r.firstPrompt);
+  return first && !first.startsWith(BRIEFING_HEAD) ? first : r.title;
+}
+
+/** `<projects>/<dir>/<id>.jsonl` by id. */
+function transcriptFiles(root: string): Map<string, string> {
+  const out = new Map<string, string>();
+  let dirs: Dirent[] = [];
+  try { dirs = readdirSync(root, { withFileTypes: true }); } catch { return out; }
+  for (const d of dirs) {
+    if (!d.isDirectory()) continue;
+    let files: string[] = [];
+    try { files = readdirSync(path.join(root, d.name)); } catch { continue; }
+    for (const f of files) if (f.endsWith('.jsonl')) out.set(f.slice(0, -6), path.join(root, d.name, f));
+  }
+  return out;
+}
+
 function toSummary(s: SDKSessionInfo): SessionSummary {
   return {
     sessionId: s.sessionId,
@@ -102,8 +125,11 @@ export class SessionService extends EventEmitter {
   private cacheLimit = 0;
   private gen = 0;
 
-  constructor() {
+  private titles: TranscriptTitles;
+
+  constructor(titlesCache?: string) {
     super();
+    this.titles = new TranscriptTitles(titlesCache);
     // one recursive handle for the whole tree (see watchTree) — only a project dir, a transcript or a session dir
     // directly in it counts (not sub-agent logs, tool results, memory)
     this.watcher = watchTree(projectsDir, (rel) => {
@@ -149,10 +175,44 @@ export class SessionService extends EventEmitter {
       }
     }
     const out = [...all.map(toSummary), ...extra].sort((a, b) => b.lastModified - a.lastModified);
+    this.applyTitles(out);
     // a write landed while we were scanning: this result may predate it, so don't pin it as the cache
     if (gen === this.gen) { this.cache = out; this.cacheLimit = fetchLimit; }
     return out.slice(0, limit);
   }
+
+  /**
+   * Every row's name from the whole transcript (titles.ts): a rename, else the AI title, else the first prompt — never
+   * the latest prompt the SDK falls back to. Files read before are brought up to date here (only what was appended);
+   * files never read are read in the background, then the list is told it changed.
+   */
+  private applyTitles(rows: SessionSummary[]) {
+    const files = transcriptFiles(projectsDir);
+    for (const r of rows) {
+      const file = files.get(r.sessionId);
+      if (!file) continue;
+      const t = this.titles.known(file) ? this.titles.update(file) : undefined;
+      if (t) r.title = rowTitle(r, t);
+    }
+    const unread = this.titles.unread([...files.values()]).filter((f) => !this.tried.has(f));
+    for (const f of unread) this.tried.add(f);
+    if (unread.length && !this.reading) {
+      this.reading = true;
+      void (async () => {
+        try {
+          for (const f of unread) {
+            this.titles.update(f);
+            await new Promise((ok) => setImmediate(ok));
+          }
+          this.titles.flush();
+        } finally { this.reading = false; }
+        this.bump();
+      })();
+    }
+  }
+  private reading = false;
+  /** files the background read already took on (one that cannot be read is not tried on every list) */
+  private tried = new Set<string>();
 
   async projects(): Promise<{ cwd: string; slug: string; count: number; lastModified: number }[]> {
     const sessions = await this.list(5000);
@@ -169,7 +229,11 @@ export class SessionService extends EventEmitter {
 
   async info(sessionId: string) {
     const s = await getSessionInfo(sessionId);
-    return s ? toSummary(s) : undefined;
+    if (!s) return undefined;
+    const row = toSummary(s);
+    const file = findClaudeTranscript(sessionId);
+    if (file) row.title = rowTitle(row, this.titles.update(file) ?? {});
+    return row;
   }
 
   async transcript(sessionId: string) {
@@ -199,7 +263,8 @@ export class SessionService extends EventEmitter {
   /** Copy a transcript into a new session (optionally only up to a message), returning the new id. */
   async fork(sessionId: string, upToMessageId?: string): Promise<string> {
     const info = await getSessionInfo(sessionId);
-    const r = await forkSession(sessionId, { dir: info?.cwd, upToMessageId, title: info ? forkTitle(listTitle(info)) : undefined });
+    const named = info && (await this.info(sessionId));
+    const r = await forkSession(sessionId, { dir: info?.cwd, upToMessageId, title: named ? forkTitle(named.title) : undefined });
     this.bump();
     return r.sessionId;
   }
