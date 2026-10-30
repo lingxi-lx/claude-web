@@ -4,6 +4,12 @@
 
 每个版本的变化都记在这里；安装包在 [Releases](https://github.com/ypyik0669/claude-web/releases) 下载。版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [未发布]
+
+### 修复
+
+- **应用开久了出现「EMFILE: too many open files」。** 每次读对话记录的第一行都会漏开一个文件，累计约 8000 次后 Windows 拒绝再打开任何文件，添加供应商等保存操作全部失败。现在每次都会关闭文件。旧版本重启应用即可恢复。
+
 ## [0.4.5] — 2026-10-30
 
 ### 新增

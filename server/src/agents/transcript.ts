@@ -4,6 +4,7 @@ import readline from 'node:readline';
 import path from 'node:path';
 import { dataDir } from '../files/service.js';
 import { hasClaudeTranscript } from '../runtime/transcript-file.js';
+import { firstLine } from '../runtime/first-line.js';
 import type { AgentKind, SessionSummary } from '../protocol.js';
 import { tr } from '../i18n/index.js';
 
@@ -124,8 +125,9 @@ export class AgentTranscripts {
 
 async function headOf(file: string): Promise<Head | null> {
   try {
-    const rl = readline.createInterface({ input: createReadStream(file, 'utf8'), crlfDelay: Infinity });
-    for await (const line of rl) { rl.close(); const h = JSON.parse(line); return h?.type === 'cw.meta' ? h : null; }
-  } catch { /* missing */ }
-  return null;
+    const line = await firstLine(file);
+    if (!line) return null;
+    const h = JSON.parse(line);
+    return h?.type === 'cw.meta' ? h : null;
+  } catch { return null; }
 }

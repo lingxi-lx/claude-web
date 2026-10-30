@@ -4,6 +4,12 @@
 
 Every version's changes are recorded here; installers are on the [Releases](https://github.com/ypyik0669/claude-web/releases) page. Versions follow [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **"EMFILE: too many open files" after the app has been running for a while.** Reading the first line of a conversation record left the file open each time; after about 8,000 of these Windows refused to open any file, so saving a provider (and anything else) failed. The file is now always closed. Restarting the app clears it on older versions.
+
 ## [0.4.5] — 2026-10-30
 
 ### Added

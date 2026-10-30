@@ -3,6 +3,7 @@ import { createReadStream } from 'node:fs';
 import readline from 'node:readline';
 import path from 'node:path';
 import { dataDir } from '../files/service.js';
+import { firstLine } from '../runtime/first-line.js';
 import type { AgentKind } from '../protocol.js';
 import { tr } from '../i18n/index.js';
 
@@ -232,14 +233,11 @@ export class CanonicalLog {
 
   async head(sessionId: string): Promise<Head | null> {
     try {
-      const rl = readline.createInterface({ input: createReadStream(this.file(sessionId), 'utf8'), crlfDelay: Infinity });
-      for await (const line of rl) {
-        rl.close();
-        const h = JSON.parse(line);
-        return h?.type === 'cw.canonical' ? h : null;
-      }
-    } catch { /* missing */ }
-    return null;
+      const line = await firstLine(this.file(sessionId));
+      if (!line) return null;
+      const h = JSON.parse(line);
+      return h?.type === 'cw.canonical' ? h : null;
+    } catch { return null; }
   }
 
   async remove(sessionId: string) {
