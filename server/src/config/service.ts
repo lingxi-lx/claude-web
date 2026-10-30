@@ -5,6 +5,8 @@ import { claudeDir } from '../sessions/service.js';
 import { userAnthropicEnv } from '../runtime/user-env.js';
 import { Memo } from '../runtime/memo.js';
 import { warmUp, warmupSpec } from './mcp-warm.js';
+import { findMcp, maskMcp, unmaskMcp } from './mcp-edit.js';
+import { tr } from '../i18n/index.js';
 
 /** A relay's host (`api.example.com`), or 'API Key' when only a key is set (the CLI then talks to Anthropic itself). */
 export function relayName(base: string | undefined): string {
@@ -133,6 +135,40 @@ export class ConfigService {
   }
   async mcpRemove(name: string, scope?: string, cwd?: string) {
     return runClaudeCli(['mcp', 'remove', name, ...(scope ? ['-s', scope] : [])], { cwd }).finally(forgetMcpList);
+  }
+
+  private async mcpFind(name: string, cwd?: string) {
+    const userCfg = (await readJson(path.join(claudeDir, '.claude.json'))) ?? (await readJson(path.join(path.dirname(claudeDir), '.claude.json')));
+    const projectCfg = cwd ? await readJson(path.join(cwd, '.mcp.json')) : null;
+    return findMcp(name, userCfg, projectCfg, cwd);
+  }
+  /** One server's stored config for the edit form (credentials masked); null = a plugin's, not editable here. */
+  async mcpGet(name: string, cwd?: string) {
+    const f = await this.mcpFind(name, cwd);
+    return f ? { scope: f.scope, config: maskMcp(f.config) } : null;
+  }
+  /**
+   * Save an edited server in the scope it is in: `claude mcp add-json` refuses an existing name, so remove then add;
+   * if the add fails the old config is put back, and the error is the answer.
+   */
+  async mcpUpdate(name: string, json: string, cwd?: string, from?: Record<string, string>) {
+    const f = await this.mcpFind(name, cwd);
+    if (!f) throw new Error(tr('找不到 MCP「{name}」的配置（插件带的 MCP 不能在这里改）', { name }));
+    let next: Record<string, any>;
+    try { next = JSON.parse(json); } catch { throw new Error(tr('配置不是有效的 JSON')); }
+    if (!next || typeof next !== 'object' || Array.isArray(next)) throw new Error(tr('配置不是有效的 JSON'));
+    let full: string;
+    try { full = JSON.stringify(unmaskMcp(next, f.config, from)); } catch (e: any) {
+      throw new Error(tr('「{key}」的值还是圆点，但原来没有存这个值：请填上真正的值', { key: String(e?.message ?? '').split(':')[0] }));
+    }
+    const rm = await this.mcpRemove(name, f.scope, cwd);
+    if (rm.code) throw new Error(rm.stderr || rm.stdout || `claude mcp remove: ${rm.code}`);
+    const add = await this.mcpAdd(name, full, f.scope, cwd);
+    if (add.code) {
+      await this.mcpAdd(name, JSON.stringify(f.config), f.scope, cwd);
+      throw new Error(add.stderr || add.stdout || `claude mcp add-json: ${add.code}`);
+    }
+    return { scope: f.scope };
   }
 
   /**

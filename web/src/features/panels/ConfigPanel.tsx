@@ -9,6 +9,7 @@ import { EnvEditor } from '@/features/settings/EnvEditor';
 import { ModelPicker, pickedOf, withPicked } from '@/features/settings/ModelPicker';
 import { connectModel } from '@/features/providers/ConnectModel';
 import { ImportDialog } from '@/features/providers/ImportDialog';
+import { McpEditDialog } from '@/features/extensions/McpEditDialog';
 import { REGION_BLOCKED, REGION_RE } from '@/features/providers/quick';
 import { contextWindowFor, contextWindowSource } from '../../../../server/src/models/context-window';
 import { tr } from '@/i18n';
@@ -149,6 +150,7 @@ export function Mcp() {
   const active = useScopedSession();
   const { data, err, reload } = useReq<{ servers: any[]; userServers: any; projectServers: any; stderr?: string }>({ kind: 'config.mcp' });
   const [out, setOut] = useState<any>(null);
+  const [editing, setEditing] = useState<string | null>(null);
   useMcpChanged(reload);
   const live = active?.info?.mcpServers;
   const run = async (req: any) => { try { setOut(await ws.request(req)); } catch (e: any) { setOut({ code: 1, stdout: '', stderr: e.message }); } mcpChanged(); };
@@ -172,11 +174,13 @@ export function Mcp() {
           <div key={s.name} className="row">
             <span className={clsx('dot', /Connected/.test(s.status) ? 'idle' : 'error')} />
             <div className="grow"><div>{s.name}</div><div className="sub">{s.target} · {s.status}</div></div>
+            <button className="btn sm" data-act="edit" onClick={() => setEditing(s.name)}>{tr('编辑')}</button>
             <button className="btn sm danger" onClick={async () => { if (await dlg.confirm(tr('移除 MCP {name}?', { name: s.name }), { danger: true })) void run({ kind: 'config.mcp.remove', name: s.name }); }}>{tr('移除')}</button>
           </div>
         ))}
         {data && !data.servers.length && <div className="empty">{tr('没有配置 MCP server')}</div>}
       </div>
+      {editing && <McpEditDialog name={editing} cwd={active?.cwd} onClose={() => setEditing(null)} />}
       <Cmd r={out} />
     </>
   );

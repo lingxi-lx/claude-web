@@ -193,7 +193,13 @@ html.desktop.mac .app.has-rail .sb-top, html.desktop.mac .app.has-rail .sect-top
 .cx-rm { color: var(--ink-4); opacity: 0; transition: opacity var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
 .cx-row:hover .cx-rm, .cx-rm:focus-visible { opacity: 1; }
 .cx-rm:hover { color: var(--err); background: var(--layer-hover); }
+.cx-rm[data-act="edit"]:hover { color: var(--ink-1); }
 @media (hover: none) { .cx-rm { opacity: 1; } }
+.mcp-edit { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 64px); overflow: auto; }
+.mcp-edit-row { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+.mcp-edit-l { font-size: 12px; color: var(--ink-3); }
+.mcp-edit-pairs { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; align-items: flex-start; }
+.mcp-edit-pair { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) auto; gap: 6px; width: 100%; align-items: center; }
 .cx-st { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--ink-3); font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cx-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-4); }
 .cx-st.ok .cx-dot { background: var(--ok); }

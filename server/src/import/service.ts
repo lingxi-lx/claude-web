@@ -1,5 +1,7 @@
 import type { ImportItem, ImportResult, ImportScan, Provider } from '../protocol.js';
-import { scanAll, type Found, type FoundProvider, type ScanResult } from './scan.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { scanAll, type Found, type FoundProvider, type McpConfig, type ScanResult } from './scan.js';
 
 export interface ImportDeps {
   providers: {
@@ -13,6 +15,12 @@ export interface ImportDeps {
     add(name: string, json: string): Promise<{ code: number; stderr?: string }>;
   };
   scan?: () => Promise<ScanResult>;
+}
+
+/** A command given as a full path (not `npx`, not a name looked up on PATH) whose file is gone. */
+export function commandMissing(c: McpConfig): boolean {
+  if (!('command' in c) || !path.isAbsolute(c.command)) return false;
+  return !fs.existsSync(c.command);
 }
 
 const detail = (f: Found) => (f.kind === 'provider' ? f.baseUrl : 'command' in f.config ? [f.config.command, ...(f.config.args ?? [])].join(' ') : f.config.url);
@@ -34,6 +42,7 @@ export class ImportService {
       detail: detail(f).slice(0, 300),
       ...(f.kind === 'provider' ? { type: f.type, hasKey: !!f.apiKey, models: f.models?.length ?? 0 } : {}),
       already: f.kind === 'provider' ? this.deps.providers.hasSame(f.type, f.baseUrl, f.apiKey) : names.has(f.name),
+      ...(f.kind === 'mcp' && commandMissing(f.config) ? { missing: true } : {}),
     }));
     return { items, unreadable: r.unreadable, scanned: r.scanned };
   }

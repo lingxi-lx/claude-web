@@ -85,6 +85,13 @@ function seedHome(home) {
   // the smoke asserts Chinese texts: the interface language is pinned (scripts/i18n-smoke.cjs looks at the English one)
   fs.mkdirSync(path.join(home, '.claude-web'), { recursive: true });
   fs.writeFileSync(path.join(home, '.claude-web', 'meta.json'), JSON.stringify({ version: 1, settings: { 'ui.language': 'zh', 'ui.sidebarFolded': false, 'ui.welcomeLayout': 'inbox' } }));
+  // 连接器 → 编辑: one user-scope MCP server with a credential and a plain variable; 导入: a Pencil copy and a
+  // Gemini entry pointing at an extension folder that is gone
+  fs.writeFileSync(path.join(home, '.claude.json'), JSON.stringify({ mcpServers: { 'smoke-edit': { type: 'stdio', command: 'smoke-old.exe', args: ['--mcp'], env: { SMOKE_API_KEY: 'smoke-secret-1', SMOKE_HOME: 'D:/old' } } } }));
+  fs.mkdirSync(path.join(home, '.pencil', 'mcp', 'antigravity', 'out'), { recursive: true });
+  fs.writeFileSync(path.join(home, '.pencil', 'mcp', 'antigravity', 'out', process.platform === 'win32' ? 'mcp-server-windows-x64.exe' : `mcp-server-${process.platform === 'darwin' ? 'darwin' : 'linux'}-${process.arch}`), '');
+  fs.mkdirSync(path.join(home, '.gemini'), { recursive: true });
+  fs.writeFileSync(path.join(home, '.gemini', 'settings.json'), JSON.stringify({ mcpServers: { 'smoke-gone': { command: path.join(home, 'gone-ext-0.1', 'mcp.exe'), args: ['--app', 'x'] } } }));
   const repo = path.join(home, 'repo');
   fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
   fs.writeFileSync(path.join(repo, 'README.md'), '# smoke repo\n');
@@ -3082,6 +3089,32 @@ function driver() {
         const centred = await js(`(() => { const p = document.querySelector('.ext-page').getBoundingClientRect(); const h = document.querySelector('.ext-page .over-head-in').getBoundingClientRect(); const b = document.querySelector('.ext-page .ext-body[data-body="connectors"] > *').getBoundingClientRect(); return { head: Math.round((h.left + h.right) / 2 - (p.left + p.right) / 2), body: Math.round((b.left + b.right) / 2 - (p.left + p.right) / 2), same: Math.abs(h.left - b.left) <= 1 && Math.abs(h.right - b.right) <= 1 }; })()`);
         check('…its column sits in the middle of the card, the title row over the same edges', Math.abs(centred.head) <= 1 && Math.abs(centred.body) <= 6 && centred.same, JSON.stringify(centred));
         await shot('extensions-connectors');
+        // 连接器 → 编辑 (2026-10-30): the seeded smoke-edit server; the credential comes masked, a renamed masked row
+        // keeps its value, the edited variable and command land in ~/.claude.json
+        if (E.SMOKE_DATA && E.SMOKE_READONLY !== '1') {
+          const home = path.dirname(E.SMOKE_DATA);
+          const rowSel = `.ext-page .cx-row[data-name="smoke-edit"]`;
+          const rowUp = await waitFor(`!!document.querySelector('${rowSel} [data-act="edit"]')`, 90_000);
+          await js(`document.querySelector('${rowSel} [data-act="edit"]')?.click()`);
+          const formUp = await waitFor(`!!document.querySelector('.mcp-edit [data-field="command"]')`, 10_000);
+          const form = await js(`(() => { const d = document.querySelector('.mcp-edit'); const pairs = [...d.querySelectorAll('.mcp-edit-pair')].map((p) => [...p.querySelectorAll('input')].map((i) => i.value)); return { cmd: d.querySelector('[data-field="command"]').value, args: d.querySelector('[data-field="args"]').value, pairs, leak: /smoke-secret/.test(d.innerHTML) }; })()`);
+          check('连接器 → 编辑 opens the server\'s form: command, args, env with the credential masked (its value not in the page)', rowUp && formUp && form.cmd === 'smoke-old.exe' && form.args === '--mcp' && JSON.stringify(form.pairs) === JSON.stringify([['SMOKE_API_KEY', '••••••'], ['SMOKE_HOME', 'D:/old']]) && !form.leak, JSON.stringify(form));
+          await shot('connector-edit');
+          await js(`(() => { const set = (el, v) => { Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value').set.call(el, v); el.dispatchEvent(new Event('input', { bubbles: true })); }; const d = document.querySelector('.mcp-edit'); set(d.querySelector('[data-field="command"]'), 'C:/Pencil/new.exe'); const rows = d.querySelectorAll('.mcp-edit-pair'); set(rows[0].querySelectorAll('input')[0], 'SMOKE_RENAMED_KEY'); set(rows[1].querySelectorAll('input')[1], 'E:/new'); })()`);
+          await js(`[...document.querySelectorAll('.mcp-edit .actions .btn')].find((b) => b.classList.contains('primary'))?.click()`);
+          const closed = await waitFor(`!document.querySelector('.mcp-edit')`, 60_000);
+          let saved = null;
+          try { saved = JSON.parse(fs.readFileSync(path.join(home, '.claude.json'), 'utf8')).mcpServers?.['smoke-edit']; } catch { /* checked below */ }
+          check('…保存 writes it back: the new command and variable, the renamed credential keeps its value, no mask on disk', closed && saved?.command === 'C:/Pencil/new.exe' && saved?.env?.SMOKE_RENAMED_KEY === 'smoke-secret-1' && saved?.env?.SMOKE_HOME === 'E:/new' && !('SMOKE_API_KEY' in (saved?.env ?? {})) && !JSON.stringify(saved).includes('••'), JSON.stringify(saved));
+          // 从其它工具导入: the Pencil copy ticked, the gone one tagged and not ticked
+          await js(`document.querySelector('.ext-page [data-act="import"]')?.click()`);
+          const impUp = await waitFor(`!!document.querySelector('.import-dialog .imp-group[data-from="pencil"]')`, 20_000);
+          const imp = await js(`(() => { const row = (from) => document.querySelector('.import-dialog .imp-group[data-from="' + from + '"] .imp-row'); const p = row('pencil'), g = row('gemini'); return { pencil: p && { on: p.querySelector('input').checked, name: p.querySelector('.nm').textContent }, gone: g && { on: g.querySelector('input').checked, tag: g.querySelector('.tag.warn')?.textContent } }; })()`);
+          check('导入: Pencil\'s own copy is found and ticked; a server whose program is gone is tagged 程序不在了 and not ticked', impUp && imp.pencil?.on === true && imp.pencil?.name === 'pencil' && imp.gone?.on === false && imp.gone?.tag === '程序不在了', JSON.stringify(imp));
+          await shot('connector-import');
+          await js(`(() => { const d = document.querySelector('.import-dialog'); d?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); })()`);
+          await waitFor(`!document.querySelector('.import-dialog')`, 3000);
+        }
         await js(`(() => { const i = document.querySelector('.ext-page .cx-search input'); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(i, 'github'); i.dispatchEvent(new Event('input', { bubbles: true })); })()`);
         const narrowed = await waitFor(`(() => { const n = document.querySelectorAll('.ext-page .ext-body[data-body="connectors"] .cx-grid .cx-row').length; return n >= 1 && n <= 4; })()`, 3000);
         check('…searching narrows the directory', narrowed, String(await js(`document.querySelectorAll('.ext-page .ext-body[data-body="connectors"] .cx-grid .cx-row').length`)));

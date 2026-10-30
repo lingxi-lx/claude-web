@@ -26,6 +26,11 @@
 
 只写了地址的（Cursor、Claude Desktop）路径以 `/sse` 结尾就按 SSE 导入，写了 `type` / `transport` 的照写的。MCP 的各种写法统一成 `{command,args,env}` 或 `{type:'http'|'sse',url,headers}`（`mcpOf`），`disabled:true` / `enabled:false` 的不要。
 
+2026-10-30（用户报告：装了 Pencil 桌面应用，连接器只认出 VS Code 插件那份）：
+- 加了 VS Code Insiders、VSCodium、Trae / Trae CN、Antigravity（`~/.gemini/antigravity/mcp_config.json` + 它的 User 目录）、LM Studio（`~/.lmstudio/mcp.json`）；Cline / Roo 在 `editorUsers()` 列的每个 VS Code 系编辑器的 globalStorage 里都找。
+- **Pencil**：它的插件把 MCP 写进 Codex / Gemini / Claude Code / Kiro 等的配置，命令指向插件目录里**带版本号**的 exe（`…/highagency.pencildev-0.6.49-universal/out/mcp-server-windows-x64.exe --app antigravity`），插件一升级旧目录就没了——本机实测这些路径全都不在了。Pencil 另外在 `~/.pencil/mcp/<app>/out/mcp-server-<os>-<arch>` 留一份不带版本的，`pencil` 来源读这个（参数 `--app <app>`，有几份就叫 `pencil-<app>`）。这是从本机目录推出来的布局，不是 Pencil 的文档。
+- 命令是绝对路径、文件却不在的 MCP 标 `missing`，导入框写「程序不在了」，默认不勾（`commandMissing`）。已经导进来的可以在连接器里编辑（见「配置中心 / 自动化 / 打磨」的「编辑已装的 MCP」）。
+
 ## 测试
 
 - `server/src/import/scan.test.ts`：临时 HOME 里按各工具的格式造文件（Hermes yaml + .env、cc-switch 的 SQLite（检查原文件字节不变）、Codex toml + 环境变量 key、OpenCode、Cursor 带注释的 JSONC、Claude Desktop、Zed、Mirasim / Cherry 的目录），以及 ImportService：scan 里没有 key、已有的跳过、失败的带原因、扫描后消失的报 gone。

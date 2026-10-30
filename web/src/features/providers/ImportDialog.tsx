@@ -12,12 +12,13 @@ const TOOL: Record<string, string> = {
   cursor: 'Cursor', windsurf: 'Windsurf', kiro: 'Kiro', 'claude-desktop': 'Claude Desktop', vscode: 'VS Code', cline: 'Cline', roo: 'Roo Code',
   continue: 'Continue', zed: 'Zed', goose: 'Goose', ollama: 'Ollama', mirasim: 'Mirasim', 'cherry-studio': 'Cherry Studio',
   cliproxyapi: 'CLIProxyAPI', magpie: 'Magpie',
+  'vscode-insiders': 'VS Code Insiders', vscodium: 'VSCodium', trae: 'Trae', antigravity: 'Antigravity', lmstudio: 'LM Studio', pencil: 'Pencil',
 };
 export const toolName = (id: string) => TOOL[id] ?? id;
 
-/** Which items start ticked: everything this app does not have yet, of the kind the dialog was opened for. */
+/** Which items start ticked: everything this app does not have yet, of the kind the dialog was opened for — not a server whose program is gone. */
 export function initialPicks(items: ImportItem[], only?: ImportItem['kind']): Set<string> {
-  return new Set(items.filter((i) => !i.already && (!only || i.kind === only)).map((i) => i.key));
+  return new Set(items.filter((i) => !i.already && !i.missing && (!only || i.kind === only)).map((i) => i.key));
 }
 
 /**
@@ -57,7 +58,7 @@ export function ImportDialog({ only, onClose }: { only?: ImportItem['kind']; onC
     <div className="modal-bg dialog-bg" onMouseDown={(e) => e.target === e.currentTarget && onClose()} onKeyDown={(e) => { if (e.key === 'Escape' && !imeComposing(e.nativeEvent)) { e.stopPropagation(); onClose(); } }}>
       <div className="modal import-dialog" role="dialog" aria-modal="true" aria-label={tr('从其它工具导入')}>
         <h3>{tr('从其它工具导入')}</h3>
-        <p className="sub">{tr('读取这台电脑上其它工具（Hermes、CC Switch、Codex、OpenCode、Cursor、Claude Desktop、VS Code、CLIProxyAPI、Magpie…）里配好的供应商和 MCP 服务器。只读它们的文件，不改动；密钥只在本机。')}</p>
+        <p className="sub">{tr('读取这台电脑上其它工具（Hermes、CC Switch、Codex、OpenCode、Cursor、Claude Desktop、VS Code、Trae、Pencil、CLIProxyAPI、Magpie…）里配好的供应商和 MCP 服务器。只读它们的文件，不改动；密钥只在本机。')}</p>
         {err && <div className="imp-err">{err}</div>}
         {!scan && !err && <div className="imp-wait"><span className="spin" aria-hidden /> {tr('正在查找…')}</div>}
         {scan && !done && (
@@ -74,7 +75,7 @@ export function ImportDialog({ only, onClose }: { only?: ImportItem['kind']; onC
                       <span className="nm">{it.name}</span>
                       <span className="kd">{it.kind === 'provider' ? tr('供应商') : 'MCP'}</span>
                       <span className="dt">{it.detail}</span>
-                      {it.already ? <span className="tag">{tr('已有')}</span> : it.kind === 'provider' && it.models ? <span className="tag">{tr('{n} 个模型', { n: it.models })}</span> : null}
+                      {it.already ? <span className="tag">{tr('已有')}</span> : it.missing ? <span className="tag warn" title={tr('配置里的程序已经不在这个位置了（多半是插件升级后换了目录），导进来也连不上')}>{tr('程序不在了')}</span> : it.kind === 'provider' && it.models ? <span className="tag">{tr('{n} 个模型', { n: it.models })}</span> : null}
                     </label>
                   ))}
                 </section>

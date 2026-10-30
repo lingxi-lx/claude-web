@@ -188,6 +188,8 @@ export interface ImportItem {
   models?: number;
   /** this app has it already (same endpoint and key / an MCP server of that name) */
   already: boolean;
+  /** an MCP server whose command is a full path to a file that is not there (an updated extension's old folder) */
+  missing?: boolean;
 }
 export interface ImportScan { items: ImportItem[]; unreadable: { from: string; reason: 'encrypted' | 'browser-db' }[]; scanned: string[] }
 export interface ImportResult { providers: string[]; mcp: string[]; skipped: string[]; failed: { key: string; error: string }[] }
@@ -634,6 +636,9 @@ export type ClientRequest =
   | { kind: 'config.mcp' }
   | { kind: 'config.mcp.add'; name: string; json: string; scope: 'user' | 'project' | 'local'; cwd?: string }
   | { kind: 'config.mcp.remove'; name: string; scope?: string; cwd?: string }
+  | { kind: 'config.mcp.get'; name: string; cwd?: string }
+  /** from: a row's key → the key it had when the form opened (so a masked value follows a renamed row) */
+  | { kind: 'config.mcp.update'; name: string; json: string; cwd?: string; from?: Record<string, string> }
   | { kind: 'config.auth'; force?: boolean }
   | { kind: 'config.settings.read'; scope: 'user' | 'project' | 'local'; cwd?: string }
   | { kind: 'config.settings.write'; scope: 'user' | 'project' | 'local'; cwd?: string; json: string }

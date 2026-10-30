@@ -1010,6 +1010,10 @@ export class Hub {
         return s.config.mcpAddWarm(req.name, req.json, req.scope, req.cwd);
       case 'config.mcp.remove':
         return s.config.mcpRemove(req.name, req.scope, req.cwd);
+      case 'config.mcp.get':
+        return s.config.mcpGet(req.name, req.cwd);
+      case 'config.mcp.update':
+        return s.config.mcpUpdate(req.name, req.json, req.cwd, req.from);
       case 'config.auth':
         return s.config.auth(req.force);
       case 'config.settings.read':

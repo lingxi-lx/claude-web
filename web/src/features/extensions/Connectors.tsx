@@ -10,6 +10,7 @@ import { imeComposing } from '@/ui/ime';
 import { mcpChanged, useMcpChanged } from '@/features/panels/ConfigPanel';
 import { MCP_CATALOG } from '@/features/settings/mcp-catalog';
 import { connectorLook } from './brands';
+import { McpEditDialog } from './McpEditDialog';
 import { addedMessage, connectorNeeds, connectorStatus, downloadsOnFirstStart, filterCatalog, type Configured } from './connectors-model';
 import { tr } from '@/i18n';
 import { Select } from '@/ui/Select';
@@ -52,6 +53,7 @@ export function Connectors() {
   const [health, setHealth] = useState<Record<string, McpHealth> | null>(null);
   const [hBusy, setHBusy] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
 
   const reload = () => ws.request<{ servers: Configured[] }>({ kind: 'config.mcp' })
     .then((r) => { setConfigured(r.servers ?? []); setErr(''); })
@@ -118,6 +120,7 @@ export function Connectors() {
         <button type="button" className="btn sm" data-act="import" onClick={() => setImporting(true)} title={tr('把 Cursor、Claude Desktop、VS Code、Codex、Hermes 等工具里配好的 MCP 服务器拿过来（加给所有项目）')}>{tr('从其它工具导入…')}</button>
       </div>
       {importing && <ImportDialog only="mcp" onClose={() => { setImporting(false); void reload(); }} />}
+      {editing && <McpEditDialog name={editing} cwd={cwd} onClose={() => setEditing(null)} />}
 
       {configured && configured.length > 0 && (
         <section className="cx-sec" data-id="connected">
@@ -137,6 +140,7 @@ export function Connectors() {
                     <span className="cx-n">{MCP_CATALOG.find((c) => c.id === s.name)?.name ?? s.name}</span>
                     <span className={clsx('cx-st', st.tone)}><span className="cx-dot" />{st.text}</span>
                   </span>
+                  <button className="icon-btn cx-rm" data-act="edit" title={tr('编辑')} aria-label={tr('编辑 {name}', { name: s.name })} onClick={() => setEditing(s.name)}><Icon name="edit" size={15} /></button>
                   <button className="icon-btn cx-rm" disabled={busy === s.name} title={tr('移除')} aria-label={tr('移除 {name}', { name: s.name })} onClick={() => void remove(s.name)}><Icon name="trash" size={15} /></button>
                 </div>
               );

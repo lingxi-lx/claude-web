@@ -2496,6 +2496,7 @@ html.desktop.mac .app.no-sidebar .workbench:not(.gb) .over-head { padding-left: 
 .import-dialog .imp-row .kd { flex: none; font-size: var(--fs-meta); color: var(--ink-4); }
 .import-dialog .imp-row .dt { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: var(--fs-meta); color: var(--ink-4); }
 .import-dialog .imp-row .tag { flex: none; font-size: var(--fs-meta); padding: 1px 7px; border-radius: var(--r-pill); background: var(--surface-2); color: var(--ink-3); }
+.import-dialog .imp-row .tag.warn { background: var(--warn-soft); color: var(--warn); }
 .import-dialog .imp-note { margin-top: var(--sp-3); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); background: var(--surface-1); color: var(--ink-3); font-size: var(--fs-meta); line-height: var(--lh-base); }
 .import-dialog :is(.imp-wait, .imp-empty) { display: flex; align-items: center; gap: 8px; padding: var(--sp-4) 0; color: var(--ink-3); }
 .import-dialog .imp-wait .spin { width: 12px; height: 12px; border-radius: 50%; border: 1.6px solid var(--edge-default); border-top-color: var(--ink-2); animation: spin 0.9s linear infinite; }

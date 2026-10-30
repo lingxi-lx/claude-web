@@ -19,7 +19,8 @@ import { preferredEndpoint, readMagpieProviders } from './magpie.js';
 export type SourceId =
   | 'hermes' | 'cc-switch' | 'codex' | 'opencode' | 'gemini' | 'qwen' | 'cursor' | 'windsurf' | 'kiro' | 'claude-desktop'
   | 'vscode' | 'cline' | 'roo' | 'continue' | 'zed' | 'goose' | 'ollama' | 'mirasim' | 'cherry-studio'
-  | 'cliproxyapi' | 'magpie';
+  | 'cliproxyapi' | 'magpie'
+  | 'vscode-insiders' | 'vscodium' | 'trae' | 'antigravity' | 'lmstudio' | 'pencil';
 
 export interface FoundProvider {
   kind: 'provider';
@@ -46,7 +47,7 @@ export interface Unreadable { from: SourceId; reason: 'encrypted' | 'browser-db'
 
 export interface ScanResult { found: Found[]; unreadable: Unreadable[]; scanned: SourceId[] }
 
-export interface Where { home: string; appData: string; env: NodeJS.ProcessEnv; platform: NodeJS.Platform }
+export interface Where { home: string; appData: string; env: NodeJS.ProcessEnv; platform: NodeJS.Platform; arch?: string }
 
 export function where(env: NodeJS.ProcessEnv = process.env, platform = process.platform, home = os.homedir()): Where {
   const appData = platform === 'win32' ? env.APPDATA ?? path.join(home, 'AppData', 'Roaming') : platform === 'darwin' ? path.join(home, 'Library', 'Application Support') : env.XDG_CONFIG_HOME ?? path.join(home, '.config');
@@ -170,6 +171,16 @@ function fromCodexToml(from: SourceId, conf: any, authKey: string, env: NodeJS.P
   return out;
 }
 
+/** A VS Code-style `User` folder: mcp.json (`servers`) and the older settings.json `mcp.servers`. */
+function vscodeUser(from: SourceId, user: string, out: Found[]) {
+  mcpMap(from, json(path.join(user, 'mcp.json'))?.servers, out);
+  const s = json(path.join(user, 'settings.json'));
+  mcpMap(from, s?.['mcp']?.servers ?? s?.['mcp.servers'], out);
+}
+/** Every VS Code-style editor's `User` folder (extensions like Cline keep their settings in its globalStorage). */
+const editorUsers = (w: Where) =>
+  ['Code', 'Code - Insiders', 'VSCodium', 'Cursor', 'Windsurf', 'Trae', 'Trae CN', 'Antigravity', 'Kiro'].map((d) => path.join(w.appData, d, 'User'));
+
 // ---------------------------------------------------------------------------------------------------- sources
 
 type Scan = (w: Where, out: Found[], unreadable: Unreadable[]) => void | Promise<void>;
@@ -288,14 +299,41 @@ const SOURCES: Record<SourceId, Scan> = {
   kiro: (w, out) => mcpMap('kiro', json(path.join(w.home, '.kiro', 'settings', 'mcp.json'))?.mcpServers, out),
   'claude-desktop': (w, out) => mcpMap('claude-desktop', json(path.join(w.appData, 'Claude', 'claude_desktop_config.json'))?.mcpServers, out),
   /** VS Code: the user's mcp.json (`servers`) and the older settings.json `mcp.servers` */
-  vscode: (w, out) => {
-    const user = path.join(w.appData, 'Code', 'User');
-    mcpMap('vscode', json(path.join(user, 'mcp.json'))?.servers, out);
-    const s = json(path.join(user, 'settings.json'));
-    mcpMap('vscode', s?.['mcp']?.servers ?? s?.['mcp.servers'], out);
+  vscode: (w, out) => vscodeUser('vscode', path.join(w.appData, 'Code', 'User'), out),
+  'vscode-insiders': (w, out) => vscodeUser('vscode-insiders', path.join(w.appData, 'Code - Insiders', 'User'), out),
+  vscodium: (w, out) => vscodeUser('vscodium', path.join(w.appData, 'VSCodium', 'User'), out),
+  trae: (w, out) => { for (const d of ['Trae', 'Trae CN']) vscodeUser('trae', path.join(w.appData, d, 'User'), out); },
+  /** Antigravity (Google): its own mcp_config.json, and the VS Code-style User folder */
+  antigravity: (w, out) => {
+    mcpMap('antigravity', json(path.join(w.home, '.gemini', 'antigravity', 'mcp_config.json'))?.mcpServers, out);
+    vscodeUser('antigravity', path.join(w.appData, 'Antigravity', 'User'), out);
   },
-  cline: (w, out) => mcpMap('cline', json(path.join(w.appData, 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'settings', 'cline_mcp_settings.json'))?.mcpServers, out),
-  roo: (w, out) => mcpMap('roo', json(path.join(w.appData, 'Code', 'User', 'globalStorage', 'rooveterinaryinc.roo-cline', 'settings', 'mcp_settings.json'))?.mcpServers, out),
+  /** Cline / Roo Code: in VS Code and in every fork they can be installed into */
+  cline: (w, out) => { for (const u of editorUsers(w)) mcpMap('cline', json(path.join(u, 'globalStorage', 'saoudrizwan.claude-dev', 'settings', 'cline_mcp_settings.json'))?.mcpServers, out); },
+  roo: (w, out) => { for (const u of editorUsers(w)) mcpMap('roo', json(path.join(u, 'globalStorage', 'rooveterinaryinc.roo-cline', 'settings', 'mcp_settings.json'))?.mcpServers, out); },
+  lmstudio: (w, out) => mcpMap('lmstudio', json(path.join(w.home, '.lmstudio', 'mcp.json'))?.mcpServers, out),
+  /**
+   * Pencil (pencil.dev) keeps a copy of its MCP server per host app in ~/.pencil/mcp/<app>/out/ — unlike the
+   * entries its extension writes into other tools, the path has no version in it, so it survives an update.
+   */
+  pencil: (w, out) => {
+    const root = path.join(w.home, '.pencil', 'mcp');
+    let apps: string[] = [];
+    try { apps = fs.readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort(); } catch { return; }
+    const os_ = w.platform === 'win32' ? 'windows' : w.platform === 'darwin' ? 'darwin' : 'linux';
+    const arch = w.arch ?? process.arch;
+    const found: { app: string; exe: string }[] = [];
+    for (const app of apps) {
+      const dir = path.join(root, app, 'out');
+      let files: string[] = [];
+      try { files = fs.readdirSync(dir).filter((f) => f.startsWith(`mcp-server-${os_}-`) && (w.platform !== 'win32' || f.endsWith('.exe'))).sort(); } catch { continue; }
+      const exe = files.find((f) => f.startsWith(`mcp-server-${os_}-${arch}`)) ?? files[0];
+      if (exe) found.push({ app, exe: path.join(dir, exe) });
+    }
+    for (const { app, exe } of found) {
+      out.push({ kind: 'mcp', key: `pencil:mcp:${app}`, from: 'pencil', name: found.length > 1 ? `pencil-${app}` : 'pencil', config: { command: exe, args: ['--app', app] } });
+    }
+  },
   /** Continue: config.yaml / config.json — `models` (provider, apiKey, apiBase) and `mcpServers` */
   continue: (w, out) => {
     const dir = path.join(w.home, '.continue');

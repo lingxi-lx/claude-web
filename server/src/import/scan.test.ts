@@ -4,7 +4,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { mcpOf, parseDotenv, scanAll, type FoundMcp, type FoundProvider } from './scan.js';
-import { ImportService, sameBase } from './service.js';
+import { ImportService, commandMissing, sameBase } from './service.js';
 
 const dirs: string[] = [];
 afterEach(() => { for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true }); });
@@ -103,6 +103,52 @@ describe('what other tools have, read from their own files', () => {
     expect(mcp(r, 'claude-desktop').map((m) => m.name)).toEqual(['memory']);
     expect(mcp(r, 'zed').map((m) => m.config)).toEqual([{ command: 'npx', args: ['-y', 'ctx7'] }]);
     expect(r.unreadable).toEqual([{ from: 'mirasim', reason: 'encrypted' }, { from: 'cherry-studio', reason: 'browser-db' }]);
+  });
+
+  it('Pencil’s own copies, VS Code forks, Cline inside a fork, Antigravity, LM Studio', async () => {
+    const h = home();
+    const A = path.join(h, 'AppData');
+    put(path.join(h, '.pencil', 'mcp', 'antigravity', 'out', 'mcp-server-windows-x64.exe'), '');
+    put(path.join(h, '.pencil', 'mcp', 'desktop', 'out', 'mcp-server-windows-x64.exe'), '');
+    put(path.join(h, '.pencil', 'mcp', 'desktop', 'out', 'mcp-server-darwin-arm64'), '');
+    fs.mkdirSync(path.join(h, '.pencil', 'mcp', 'empty', 'out'), { recursive: true });
+    put(path.join(A, 'Code - Insiders', 'User', 'mcp.json'), JSON.stringify({ servers: { ins: { command: 'a' } } }));
+    put(path.join(A, 'VSCodium', 'User', 'settings.json'), JSON.stringify({ mcp: { servers: { cod: { command: 'b' } } } }));
+    put(path.join(A, 'Trae CN', 'User', 'mcp.json'), JSON.stringify({ servers: { tr: { url: 'https://t/mcp' } } }));
+    put(path.join(A, 'Cursor', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'settings', 'cline_mcp_settings.json'), JSON.stringify({ mcpServers: { cl: { command: 'c' } } }));
+    put(path.join(h, '.gemini', 'antigravity', 'mcp_config.json'), JSON.stringify({ mcpServers: { ag: { command: 'd' } } }));
+    put(path.join(h, '.lmstudio', 'mcp.json'), JSON.stringify({ mcpServers: { lm: { command: 'e' } } }));
+    const r = await scanAll(W(h));
+    const dir = (app: string) => path.join(h, '.pencil', 'mcp', app, 'out', 'mcp-server-windows-x64.exe');
+    expect(mcp(r, 'pencil').map((m) => [m.name, m.config])).toEqual([
+      ['pencil-antigravity', { command: dir('antigravity'), args: ['--app', 'antigravity'] }],
+      ['pencil-desktop', { command: dir('desktop'), args: ['--app', 'desktop'] }],
+    ]);
+    expect(mcp(r, 'vscode-insiders').map((m) => m.name)).toEqual(['ins']);
+    expect(mcp(r, 'vscodium').map((m) => m.name)).toEqual(['cod']);
+    expect(mcp(r, 'trae').map((m) => m.config)).toEqual([{ type: 'http', url: 'https://t/mcp' }]);
+    expect(mcp(r, 'cline').map((m) => m.name)).toEqual(['cl']);
+    expect(mcp(r, 'antigravity').map((m) => m.name)).toEqual(['ag']);
+    expect(mcp(r, 'lmstudio').map((m) => m.name)).toEqual(['lm']);
+  });
+  it('one Pencil copy is just “pencil” (an empty app folder does not count); the build for this CPU is taken', async () => {
+    const h = home();
+    const out = path.join(h, '.pencil', 'mcp', 'antigravity', 'out');
+    put(path.join(out, 'mcp-server-windows-arm64.exe'), '');
+    put(path.join(out, 'mcp-server-windows-x64.exe'), '');
+    fs.mkdirSync(path.join(h, '.pencil', 'mcp', 'empty', 'out'), { recursive: true });
+    const r = mcp(await scanAll({ ...W(h), arch: 'x64' }), 'pencil');
+    expect(r.map((m) => [m.name, (m.config as any).command])).toEqual([['pencil', path.join(out, 'mcp-server-windows-x64.exe')]]);
+    expect((mcp(await scanAll({ ...W(h), arch: 'arm64' }), 'pencil')[0].config as any).command).toBe(path.join(out, 'mcp-server-windows-arm64.exe'));
+  });
+
+  it('a full-path command that is gone is flagged; names on PATH and URLs are not', () => {
+    const h = home();
+    put(path.join(h, 'here.exe'), '');
+    expect(commandMissing({ command: path.join(h, 'here.exe') })).toBe(false);
+    expect(commandMissing({ command: path.join(h, 'old', 'gone.exe') })).toBe(true);
+    expect(commandMissing({ command: 'npx' })).toBe(false);
+    expect(commandMissing({ type: 'http', url: 'https://x/mcp' })).toBe(false);
   });
 
   it('pieces: .env lines, MCP shapes, base URLs', () => {
